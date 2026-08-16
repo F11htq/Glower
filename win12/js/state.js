@@ -49,11 +49,12 @@ const DEFAULTS = {
   speed:1, reduceMotion:false, transparency:true,
   dockSize:52, dockMag:1.55, dockMagOn:true, dockAutohide:false, dockPos:'bottom',
   wctl:'win',                 // win | mac
-  showDesktopIcons:true, showDeskWidgets:true,
+  showDesktopIcons:true, showDeskWidgets:true, taskbarFull:true, trayInDock:true,
+  deskWidgets:[{t:'clock'},{t:'weather'}], autostart:[],
   font:"'Segoe UI Variable','Segoe UI',system-ui,sans-serif",
   clock24:true, showSeconds:false,
   volume:62, brightness:100, wifi:true, bluetooth:true, dnd:false, nightLight:false,
-  airdrop:true, hotcorners:true, sounds:true,
+  airdrop:true, hotcorners:true, sounds:false, soundNotif:true,
   userName:'Dymensity', city:'Москва',
   snapAssist:true, tapClickSound:false,
   pinned:['settings','notepad','files','browser','calc','term','paint','photos','music','calendar','clock','store'],
@@ -101,7 +102,8 @@ function applySettings(){
   const wp = $('#wallpaper');
   if (wp){
     const w = WALLPAPERS.find(x => x.id === S.wallpaper) || WALLPAPERS[0];
-    wp.style.backgroundImage = w.css;
+    wp.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
+      ? `url(${window.__customWall})` : w.css;
     wp.style.filter = `brightness(${S.brightness / 100}) ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
   }
   document.body.style.filter = S.nightLight ? 'sepia(.14) saturate(1.06)' : '';
@@ -186,5 +188,6 @@ const Snd = {
   open(){ this.blip(720, .09, 'sine', .04); setTimeout(() => this.blip(980, .07, 'sine', .03), 45); },
   close(){ this.blip(420, .08, 'sine', .035); },
   click(){ this.blip(1200, .03, 'square', .015); },
-  note(){ this.blip(880, .12, 'triangle', .04); }
+  note(){ if (!S.soundNotif) return; const o = S.sounds; S.sounds = true; this.blip(760, .1, 'sine', .05);
+    setTimeout(() => { this.blip(1040, .12, 'sine', .04); S.sounds = o; }, 70); }
 };

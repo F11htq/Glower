@@ -21,7 +21,7 @@ function card(title){
 }
 function toggle(get, set){
   const t = el('div', 'switch' + (get() ? ' on' : ''));
-  t.onclick = () => { const v = !t.classList.contains('on'); t.classList.toggle('on', v); set(v); Snd.click(); };
+  t.onclick = () => { const v = !t.classList.contains('on'); t.classList.toggle('on', v); set(v); };
   return t;
 }
 function slider(get, set, min, max, step, fmt){
@@ -40,7 +40,7 @@ function seg(options, get, set){
   const s = el('div', 'seg');
   options.forEach(o => {
     const b = el('button', get() === o.v ? 'on' : '', o.n);
-    b.onclick = () => { set(o.v); $$('button', s).forEach(x => x.classList.remove('on')); b.classList.add('on'); Snd.click(); };
+    b.onclick = () => { set(o.v); $$('button', s).forEach(x => x.classList.remove('on')); b.classList.add('on'); };
     s.appendChild(b);
   });
   return s;
@@ -286,7 +286,7 @@ APPS.calc = {
       return fmt(r);
     };
     const press = k => {
-      Snd.click();
+     
       if (/^[0-9]$/.test(k)){ cur = fresh || cur === '0' ? k : cur + k; fresh = false; }
       else if (k === ','){ if (fresh){ cur = '0.'; fresh = false; } else if (!cur.includes('.')) cur += '.'; }
       else if (['+','−','×','÷','^','mod'].includes(k)){
@@ -903,7 +903,7 @@ APPS.todo = {
         const n = el('div', 'td-item' + (it.d ? ' done' : ''));
         n.style.setProperty('--i', i);
         n.innerHTML = `<div class="td-box">✓</div><div class="tx">${esc(it.t)}</div><button class="td-del">×</button>`;
-        $('.td-box', n).onclick = () => { it.d = !it.d; save(); draw(); Snd.click(); };
+        $('.td-box', n).onclick = () => { it.d = !it.d; save(); draw(); };
         $('.td-del', n).onclick = () => { items.splice(i, 1); save(); draw(); };
         list.appendChild(n);
       });
@@ -1060,6 +1060,40 @@ APPS.settings = {
         .onclick = () => { cur = 'update'; drawNav(); drawMain(); };
       main.appendChild(c);
 
+      const bk = card('Резервная копия системы');
+      const exp = el('button', 'btn pri', '⬇️ Экспорт');
+      exp.onclick = () => {
+        const img = { v:1, date:Date.now(), settings:Store.s, fs:FS.root, kv:{} };
+        Object.keys(localStorage).filter(k => k.startsWith('win12.')).forEach(k => img.kv[k] = localStorage[k]);
+        const a = el('a'); a.setAttribute('download', 'windows12-backup.json');
+        a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(img));
+        document.body.appendChild(a); a.click(); a.remove();
+        Shell.toast('Резервная копия', 'Образ системы сохранён в файл', '💾');
+      };
+      const imp = el('button', 'btn', '⬆️ Импорт');
+      imp.onclick = () => {
+        const f = el('input'); f.type = 'file'; f.accept = '.json,application/json';
+        f.onchange = () => {
+          const r = new FileReader();
+          r.onload = () => {
+            try {
+              const img = JSON.parse(r.result);
+              if (!img.settings || !img.fs) throw new Error('это не образ системы');
+              if (!confirm('Заменить текущие настройки и файлы содержимым образа?')) return;
+              Object.keys(img.kv || {}).forEach(k => localStorage[k] = img.kv[k]);
+              localStorage.setItem(Store.key, JSON.stringify(img.settings));
+              localStorage.setItem(FS.key, JSON.stringify(img.fs));
+              location.reload();
+            } catch(e){ alert('Не удалось прочитать образ: ' + e.message); }
+          };
+          r.readAsText(f.files[0]);
+        };
+        f.click();
+      };
+      bk.appendChild(row('💾', 'Экспорт всей системы', 'Настройки, файлы, заметки и задачи — одним файлом', exp));
+      bk.appendChild(row('📂', 'Восстановить из файла', 'Полностью заменит текущее состояние', imp));
+      main.appendChild(bk);
+
       const st = card('Хранилище');
       const used = JSON.stringify(localStorage).length / 1024;
       st.appendChild(row('💾', 'Локальные данные', used.toFixed(1) + ' КБ в localStorage',
@@ -1106,6 +1140,19 @@ APPS.settings = {
       });
       w.appendChild(g);
       w.appendChild(row('🔀', 'Слайд-шоу', 'Менять обои каждые 30 секунд', toggle(() => S.wallShuffle, v => { set('wallShuffle', v); Shell.wallShuffle(); })));
+      const wUp = el('button', 'btn pri', '🖼 Выбрать файл…');
+      wUp.onclick = () => {
+        const f = el('input'); f.type = 'file'; f.accept = 'image/*';
+        f.onchange = async () => {
+          if (!f.files[0]) return;
+          await IDB.put('wallpaper', f.files[0]);
+          window.__customWall = URL.createObjectURL(f.files[0]);
+          set('wallpaper', 'custom'); drawMain();
+          Shell.toast('Обои', 'Своё изображение установлено', '🖼');
+        };
+        f.click();
+      };
+      w.appendChild(row('📤', 'Своё изображение', S.wallpaper === 'custom' ? 'Сейчас используется ваш файл' : 'Загрузить картинку с компьютера', wUp));
       main.appendChild(w);
 
       const t = card('Цвета и тема');
@@ -1149,6 +1196,24 @@ APPS.settings = {
       st.appendChild(row('📌', 'Закреплённые приложения', 'Нажмите, чтобы закрепить или открепить', el('span')));
       st.appendChild(pinBox);
       main.appendChild(st);
+
+      const wd = card('Виджеты рабочего стола');
+      wd.appendChild(row('🧩', 'Показывать виджеты', 'Перетаскиваются мышью, удаляются крестиком',
+        toggle(() => S.showDeskWidgets, v => { set('showDeskWidgets', v); Shell.renderDeskWidgets(); })));
+      const wdBox = el('div'); wdBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:4px 16px 14px';
+      Object.entries(WIDGETS).forEach(([k, d]) => {
+        const b = el('button', 'btn', d.e + ' ' + d.n);
+        b.onclick = () => { addWidget(k); drawMain(); };
+        wdBox.appendChild(b);
+      });
+      wd.appendChild(wdBox);
+      (S.deskWidgets || []).forEach((w2, idx) => {
+        const d = WIDGETS[w2.t]; if (!d) return;
+        const rm = el('button', 'btn', '✖ Убрать');
+        rm.onclick = () => { S.deskWidgets.splice(idx, 1); Store.save(); Shell.renderDeskWidgets(); drawMain(); };
+        wd.appendChild(row(d.e, d.n, 'На рабочем столе', rm));
+      });
+      main.appendChild(wd);
 
       const lk = card('Экран блокировки');
       lk.appendChild(row('🖼️', 'Фон блокировки', 'Совпадает с рабочим столом', el('div', 'muted tiny', 'Обои')));
@@ -1225,8 +1290,12 @@ APPS.settings = {
       d.appendChild(row('🎛', 'Кнопки окна', 'Стиль Windows или macOS',
         seg([{ n:'Windows', v:'win' }, { n:'macOS', v:'mac' }], () => S.wctl, v => set('wctl', v))));
       d.appendChild(row('📍', 'Активные углы', 'Правый верхний угол — просмотр задач', toggle(() => S.hotcorners, v => set('hotcorners', v))));
-      d.appendChild(row('⬆️', 'Скрывать верхнюю панель', 'Панель и виджеты уходят, когда открыто окно; вернуть — курсор к верхнему краю',
+      d.appendChild(row('⬆️', 'Скрывать верхнюю панель', 'Панель и виджеты уходят, когда открыто окно',
         toggle(() => S.topbarAutohide !== false, v => { set('topbarAutohide', v); Shell.updateChrome(); })));
+      d.appendChild(row('🪟', 'Панель задач как в Windows', 'При развёрнутом окне док растягивается на всю ширину',
+        toggle(() => S.taskbarFull !== false, v => { set('taskbarFull', v); Shell.updateTaskbar(); })));
+      d.appendChild(row('🕒', 'Часы и трей в панели', 'Когда верхняя панель скрыта, часы переезжают вниз',
+        toggle(() => S.trayInDock !== false, v => { set('trayInDock', v); Shell.updateTaskbar(); })));
       main.appendChild(d);
     }
 
@@ -1248,7 +1317,10 @@ APPS.settings = {
     function pSound(){
       const c = card('Вывод');
       c.appendChild(row('🔊', 'Громкость', '', slider(() => S.volume, v => set('volume', v), 0, 100, 1, v => v + '%')));
-      c.appendChild(row('🎚', 'Системные звуки', 'Щелчки и звуки окон', toggle(() => S.sounds, v => set('sounds', v))));
+      c.appendChild(row('🎚', 'Звуки интерфейса', 'Открытие и закрытие окон (по умолчанию выключены)',
+        toggle(() => S.sounds, v => set('sounds', v))));
+      c.appendChild(row('🔔', 'Звук уведомлений', 'Короткий сигнал у баннеров',
+        toggle(() => S.soundNotif !== false, v => set('soundNotif', v))));
       c.appendChild(row('🎧', 'Устройство вывода', '',
         sel([{ n:'Динамики (Realtek)', v:'sp' }, { n:'Наушники', v:'hp' }, { n:'HDMI', v:'hdmi' }], () => KV.get('out', 'sp'), v => KV.set('out', v))));
       const t = el('button', 'btn', '▶ Тест');
@@ -1322,6 +1394,23 @@ APPS.settings = {
         c.appendChild(row(a.glyph, a.name, 'Системное приложение · ' + (a.w || 800) + '×' + (a.h || 600), b));
       });
       main.appendChild(c);
+      const au = card('Автозапуск');
+      const auBox = el('div'); auBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:4px 16px 14px';
+      Object.entries(APPS).forEach(([id, a]) => {
+        const on = (S.autostart || []).includes(id);
+        const b = el('button', 'btn' + (on ? ' pri' : ''), a.glyph + ' ' + a.name);
+        b.onclick = () => {
+          S.autostart = S.autostart || [];
+          const k = S.autostart.indexOf(id);
+          if (k >= 0) S.autostart.splice(k, 1); else S.autostart.push(id);
+          Store.save(); b.classList.toggle('pri');
+        };
+        auBox.appendChild(b);
+      });
+      au.appendChild(row('🚀', 'Запускать при входе', 'Отмеченные приложения откроются сразу после загрузки', el('span')));
+      au.appendChild(auBox);
+      main.appendChild(au);
+
       const d = card('Приложения по умолчанию');
       d.appendChild(row('🌐', 'Браузер', 'Dymensity Browser', el('div', 'muted', '›')));
       d.appendChild(row('📝', 'Текстовый редактор', 'Блокнот', el('div', 'muted', '›')));

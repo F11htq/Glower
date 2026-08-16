@@ -225,7 +225,8 @@ const WM = {
       const r = win.node.getBoundingClientRect();
       win.pre = { x:r.left, y:r.top, w:r.width, h:r.height };
       win.node.classList.add('snapping', 'max');
-      Object.assign(win.node.style, { left:'0px', top:'0px', width:'100%', height:'100%' });
+      const m = WM.maxRect();
+      Object.assign(win.node.style, { left:m.left + 'px', top:m.top + 'px', width:m.width + 'px', height:m.height + 'px' });
       win.maximized = true;
     }
     setTimeout(() => { win.node.classList.remove('snapping'); if (win.app.onResize) win.app.onResize(win); }, 460);
@@ -245,6 +246,12 @@ const WM = {
     if (r.right < 80) win.node.style.left = (80 - r.width) + 'px';
   },
 
+  /* область для развёрнутого окна (снизу может стоять панель задач) */
+  maxRect(){
+    const tb = document.body.classList.contains('taskbar') ? (S.dockSize + 18) : 0;
+    return { left:0, top:0, width:innerWidth, height:innerHeight - tb };
+  },
+
   /* ---------- прилипание ---------- */
   snapZone(x, y){
     const m = 12, T = 8;
@@ -259,7 +266,7 @@ const WM = {
     const W = innerWidth - pad * 2, H = innerHeight - top - bot;
     const R = (x, y, w, h) => ({ left:x, top:y, width:w, height:h });
     switch(z){
-      case 'max':    return R(0, 0, innerWidth, innerHeight);
+      case 'max':    { const m = WM.maxRect(); return R(m.left, m.top, m.width, m.height); }
       case 'left':   return R(pad, top, W / 2 - 4, H);
       case 'right':  return R(innerWidth / 2 + 4, top, W / 2 - 4, H);
       case 'tl':     return R(pad, top, W / 2 - 4, H / 2 - 4);

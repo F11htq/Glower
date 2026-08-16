@@ -285,7 +285,7 @@ const Shell = {
     const T = (icon, title, sub, get, set) => {
       const t = el('div', 'tile btn' + (get() ? ' on' : ''));
       t.innerHTML = `<div class="tile-ico">${icon}</div><div><div class="tt">${title}</div><span class="ts">${sub(get())}</span></div>`;
-      t.onclick = () => { const v = !get(); set(v); t.classList.toggle('on', v); $('.ts', t).textContent = sub(v); Snd.click(); };
+      t.onclick = () => { const v = !get(); set(v); t.classList.toggle('on', v); $('.ts', t).textContent = sub(v); };
       return t;
     };
     grid.append(
@@ -304,7 +304,7 @@ const Shell = {
 
     const vo = $('#cc-vol');
     vo.innerHTML = `<div class="tt">Громкость</div>`;
-    const vos = slider(() => S.volume, v => { Store.set('volume', v); Snd.click(); }, 0, 100, 1, v => v + '%');
+    const vos = slider(() => S.volume, v => { Store.set('volume', v); }, 0, 100, 1, v => v + '%');
     vos.classList.add('sl-row'); $('input', vos).style.width = '100%';
     vo.appendChild(vos);
 
