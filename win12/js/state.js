@@ -42,7 +42,7 @@ const ACCENTS = [
 
 /* ---------- Настройки по умолчанию ---------- */
 const DEFAULTS = {
-  theme:'dark', autoTheme:false,
+  theme:'glass', autoTheme:false,
   accent:0, accentCustom:null,
   wallpaper:'bloom', wallShuffle:false,
   blur:34, glass:0.42, glassEdge:0.28, saturate:180, radius:18, winRadius:16,
@@ -71,6 +71,13 @@ const Store = {
   reset(){ this.s = { ...DEFAULTS }; this.save(); applySettings(); }
 };
 const S = Store.load();
+
+/* «Тёмная» из старых версий была прозрачной — переносим её в новую тему */
+if (!KV_SAFE('win12.themeMigrated') && S.theme === 'dark'){
+  S.theme = 'glass'; Store.save();
+  try { localStorage.setItem('win12.themeMigrated', 'true'); } catch(e){}
+}
+function KV_SAFE(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
 
 /* ---------- Применение настроек ---------- */
 function accentPair(){
@@ -104,7 +111,8 @@ function applySettings(){
     const w = WALLPAPERS.find(x => x.id === S.wallpaper) || WALLPAPERS[0];
     wp.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
       ? `url(${window.__customWall})` : w.css;
-    wp.style.filter = `brightness(${S.brightness / 100}) ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
+    const dim = S.theme === 'dark' ? 0.55 : 1;      // в настоящей тёмной теме обои приглушены
+    wp.style.filter = `brightness(${S.brightness / 100 * dim}) ${S.theme === 'dark' ? 'saturate(.8)' : ''} ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
   }
   document.body.style.filter = S.nightLight ? 'sepia(.14) saturate(1.06)' : '';
 }

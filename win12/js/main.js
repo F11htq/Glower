@@ -24,18 +24,7 @@
   const boot = $('#boot'), lock = $('#lock'), desktop = $('#desktop');
   const skip = KV.get('skipBoot', false);
 
-  const showDesktop = () => {
-    desktop.classList.add('on');
-    setTimeout(() => {
-      Shell.toast('Добро пожаловать', 'Win — Пуск · Win+Space — поиск · ПКМ по столу — меню', '👋', 7000);
-    }, 900);
-    setTimeout(() => {
-      if (!KV.get('seenTip', false)){
-        KV.set('seenTip', true);
-        Shell.toast('Совет', 'Параметры → Liquid Glass: там живут все настройки материала', '🫧', 8000);
-      }
-    }, 5200);
-  };
+  const showDesktop = () => { desktop.classList.add('on'); };
 
   const unlock = () => {
     if (!lock.classList.contains('gone')){

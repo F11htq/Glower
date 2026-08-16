@@ -376,7 +376,7 @@ APPS.term = {
       mkdir: a => FS.mkdir(cwd, a) ? print('Создано.', 'inf') : print('Ошибка', 'er'),
       rm: a => FS.rm(cwd, a) ? print('Удалено.', 'inf') : print('Не найдено', 'er'),
       open: a => APPS[a] ? (WM.open(a), print('Запуск ' + a + '...', 'inf')) : print('Нет такого приложения', 'er'),
-      theme: a => { if (['dark','light'].includes(a)){ Store.set('theme', a); print('Тема: ' + a, 'inf'); } else print('theme dark|light', 'er'); },
+      theme: a => { if (['glass','dark','light'].includes(a)){ Store.set('theme', a); print('Тема: ' + a, 'inf'); } else print('theme glass|dark|light', 'er'); },
       accent: a => { const i = +a; if (ACCENTS[i]){ S.accentCustom = null; Store.set('accent', i); print('Акцент: ' + ACCENTS[i].n, 'inf'); } else print('accent 0-' + (ACCENTS.length - 1), 'er'); },
       glass: a => { const v = clamp(+a, 0, 100) / 100; Store.set('glass', v); print('Стекло: ' + a + '%', 'inf'); },
       neofetch: () => print(`<span class="inf">      ▗▄▄▖▗▄▄▖ </span>   <b>${S.userName}@windows12</b>
@@ -991,7 +991,6 @@ APPS.settings = {
       { id:'home',   n:'Главная',                  e:'🏠' },
       { id:'system', n:'Система',                  e:'🖥️' },
       { id:'person', n:'Персонализация',           e:'🎨' },
-      { id:'glass',  n:'Liquid Glass',             e:'🫧' },
       { id:'dock',   n:'Рабочий стол и док',       e:'🧱' },
       { id:'motion', n:'Движение и анимации',      e:'🌀' },
       { id:'sound',  n:'Звук',                     e:'🔊' },
@@ -1015,7 +1014,7 @@ APPS.settings = {
     const navBox = el('div'); side.appendChild(navBox);
 
     const KEYS = {
-      glass:'стекло размытие прозрачность blur материал', person:'обои тема цвет акцент шрифт',
+      person:'обои тема цвет акцент шрифт стекло размытие прозрачность blur материал liquid glass',
       dock:'док панель задач иконки', motion:'анимации скорость плавность', sound:'звук громкость',
       display:'яркость масштаб ночной свет', a11y:'доступность контраст курсор', about:'версия система'
     };
@@ -1052,8 +1051,6 @@ APPS.settings = {
       const c = card('Быстрые действия');
       c.appendChild(row('🎨', 'Персонализация', 'Обои, цвета, темы', el('div', 'muted', '›'), 'clickable'))
         .onclick = () => { cur = 'person'; drawNav(); drawMain(); };
-      c.appendChild(row('🫧', 'Liquid Glass', 'Настроить материал интерфейса', el('div', 'muted', '›'), 'clickable'))
-        .onclick = () => { cur = 'glass'; drawNav(); drawMain(); };
       c.appendChild(row('🌀', 'Анимации', 'Скорость и плавность', el('div', 'muted', '›'), 'clickable'))
         .onclick = () => { cur = 'motion'; drawNav(); drawMain(); };
       c.appendChild(row('🔄', 'Обновления', 'Система обновлена', el('div', 'muted', '›'), 'clickable'))
@@ -1157,7 +1154,8 @@ APPS.settings = {
 
       const t = card('Цвета и тема');
       t.appendChild(row('🌗', 'Режим', 'Светлая или тёмная тема',
-        seg([{ n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }], () => S.theme, v => set('theme', v))));
+        seg([{ n:'Прозрачная', v:'glass' }, { n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }],
+            () => S.theme, v => { set('theme', v); drawMain(); })));
       const swWrap = el('div', 'swatches');
       ACCENTS.forEach((a, i) => {
         const s = el('div', 'sw' + (!S.accentCustom && i === S.accent ? ' on' : ''));
@@ -1171,6 +1169,8 @@ APPS.settings = {
       cp.oninput = () => { S.accentCustom = cp.value; Store.save(); applySettings(); };
       t.appendChild(row('🖌️', 'Свой цвет', 'Задать акцент вручную', cp));
       main.appendChild(t);
+
+      pGlass();                       // материал интерфейса живёт здесь, отдельного раздела нет
 
       const f = card('Шрифт и текст');
       f.appendChild(row('🔤', 'Системный шрифт', 'Гарнитура интерфейса',
@@ -1221,8 +1221,16 @@ APPS.settings = {
       main.appendChild(lk);
     }
 
-    /* --- Liquid Glass --- */
+    /* --- материал интерфейса (внутри Персонализации) --- */
     function pGlass(){
+      const hd = el('div', 'card-t', 'Материал интерфейса — Liquid Glass');
+      hd.style.cssText = 'padding:8px 2px 10px;font-size:13px;opacity:.85';
+      main.appendChild(hd);
+      if (S.theme === 'dark'){
+        const w = card('');
+        w.appendChild(row('🌑', 'Активна тёмная тема', 'Поверхности непрозрачные, поэтому параметры стекла сейчас ни на что не влияют. Выберите «Прозрачную», чтобы настроить материал.', el('span')));
+        main.appendChild(w);
+      }
       const prev = el('div', 'card'); prev.style.cssText = 'height:150px;padding:0;position:relative;overflow:hidden';
       prev.style.backgroundImage = (WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0]).css;
       prev.style.backgroundSize = 'cover';
@@ -1233,7 +1241,8 @@ APPS.settings = {
       main.appendChild(prev);
 
       const c = card('Материал');
-      c.appendChild(row('🫧', 'Прозрачность', 'Выключите для непрозрачного интерфейса', toggle(() => S.transparency, v => set('transparency', v))));
+      if (S.theme !== 'dark')
+        c.appendChild(row('🫧', 'Прозрачность', 'Выключите для непрозрачного интерфейса', toggle(() => S.transparency, v => set('transparency', v))));
       c.appendChild(row('💨', 'Размытие фона', 'blur() под панелями', slider(() => S.blur, v => set('blur', v), 0, 80, 1, v => v + 'px')));
       c.appendChild(row('🧊', 'Плотность стекла', 'Насколько материал светлее фона', slider(() => S.glass * 100, v => set('glass', v / 100), 0, 100, 1, v => v + '%')));
       c.appendChild(row('✨', 'Яркость кромки', 'Блик по краю панели', slider(() => S.glassEdge * 100, v => set('glassEdge', v / 100), 0, 100, 1, v => v + '%')));

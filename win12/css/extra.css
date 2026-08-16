@@ -100,9 +100,13 @@ body.taskbar .dock-sep{opacity:.5}
 .dock{transition:width var(--t3) var(--e-spring),border-radius var(--t3) var(--e-out),padding var(--t3) var(--e-out)}
 
 /* трей, переехавший в панель */
-#tb-tray.in-dock{margin-left:auto;background:none;backdrop-filter:none;box-shadow:none;
-  position:absolute;right:14px;top:50%;transform:translateY(-50%)}
-body.taskbar #tb-tray.in-dock{right:18px}
+/* в плавающем доке трей стоит в потоке, в панели задач — прижат вправо */
+#tb-tray.in-dock{background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
+  align-self:center;margin-left:2px;position:static;transform:none}
+#tb-tray.in-dock::before{content:'';width:1px;height:26px;margin-right:6px;
+  background:linear-gradient(transparent,rgba(var(--tint),.35),transparent)}
+body.taskbar #tb-tray.in-dock{position:absolute;right:18px;top:50%;transform:translateY(-50%);margin:0}
+body.taskbar #tb-tray.in-dock::before{display:none}
 .tb-dock-search{display:flex;align-items:center;gap:8px;height:calc(var(--dock-size) * .74);
   padding:0 14px;border-radius:12px;font-size:12.5px;color:var(--fg-dim);
   background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);
@@ -126,3 +130,77 @@ body.taskbar #tb-tray.in-dock{right:18px}
   border-radius:8px;padding:4px 6px;margin-top:2px;background:rgba(var(--tint),.08)}
 .dw-note:focus{box-shadow:inset 0 0 0 1px var(--accent)}
 .mu-time{margin-top:-6px}
+
+/* ==========================================================================
+   НАСТОЯЩАЯ ТЁМНАЯ ТЕМА
+   поверхности непрозрачные, стекло и блики отключены
+   ========================================================================== */
+[data-theme="dark"]{
+  --fg:#e9ecf3;
+  --fg-dim:rgba(233,236,243,.58);
+  --shadow:0 24px 60px rgba(0,0,0,.62), 0 3px 12px rgba(0,0,0,.5);
+  --d-1:#14161d;   /* фон окна */
+  --d-2:#1a1d26;   /* панели */
+  --d-3:#22262f;   /* поднятые элементы */
+  --d-4:#2c313c;   /* наведение */
+  --d-line:rgba(255,255,255,.08);
+}
+[data-theme="dark"] .glass,
+[data-theme="dark"] .toast{
+  background:var(--d-2);
+  backdrop-filter:blur(10px) saturate(120%);
+  -webkit-backdrop-filter:blur(10px) saturate(120%);
+  box-shadow:inset 0 0 0 1px var(--d-line), var(--shadow);
+}
+[data-theme="dark"] .lg::before,
+[data-theme="dark"] .lg::after{display:none}         /* без бликов и переливов */
+[data-theme="dark"] .win{
+  background:var(--d-1);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  box-shadow:inset 0 0 0 1px var(--d-line), var(--shadow);
+}
+[data-theme="dark"] .titlebar{background:var(--d-2);border-bottom-color:var(--d-line)}
+[data-theme="dark"] .win:not(.focus) .titlebar{background:var(--d-1)}
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .toolbar,
+[data-theme="dark"] .statusbar{background:var(--d-2);border-color:var(--d-line)}
+[data-theme="dark"] .card,
+[data-theme="dark"] .tile,
+[data-theme="dark"] .w-card,
+[data-theme="dark"] .btn,
+[data-theme="dark"] .inp,
+[data-theme="dark"] .td-item,
+[data-theme="dark"] .np-tab,
+[data-theme="dark"] .calc-keys button{
+  background:var(--d-3);box-shadow:inset 0 0 0 1px var(--d-line)}
+[data-theme="dark"] .btn:hover,
+[data-theme="dark"] .tile.btn:hover,
+[data-theme="dark"] .calc-keys button:hover,
+[data-theme="dark"] .sb-item:hover,
+[data-theme="dark"] .set-row:hover,
+[data-theme="dark"] .fe-tr:hover,
+[data-theme="dark"] .fe-it:hover,
+[data-theme="dark"] .dock-item:hover,
+[data-theme="dark"] .sg:hover,
+[data-theme="dark"] .tray-btn:hover{background:var(--d-4)}
+[data-theme="dark"] .btn.pri,
+[data-theme="dark"] .tile.on{background:linear-gradient(140deg,var(--accent),var(--accent-2))}
+[data-theme="dark"] .sb-item.on{background:var(--d-4);box-shadow:inset 0 0 0 1px var(--d-line)}
+[data-theme="dark"] .seg{background:var(--d-1)}
+[data-theme="dark"] .seg button.on{background:var(--d-4)}
+[data-theme="dark"] .switch{background:#3a4050}
+[data-theme="dark"] .ctx,
+[data-theme="dark"] .start,
+[data-theme="dark"] .cc,
+[data-theme="dark"] .widgets,
+[data-theme="dark"] .spot,
+[data-theme="dark"] .dock,
+[data-theme="dark"] .dock-prev,
+[data-theme="dark"] .run-dlg{background:var(--d-2)}
+[data-theme="dark"] .start-foot{background:var(--d-1);border-color:var(--d-line)}
+[data-theme="dark"] .term{background:#0c0e13}
+[data-theme="dark"] .taskview{background:rgba(8,9,13,.9);backdrop-filter:blur(6px)}
+[data-theme="dark"] .snap-assist{background:rgba(8,9,13,.86)}
+[data-theme="dark"] .di:hover{background:rgba(255,255,255,.1)}
+[data-theme="dark"] .wall-grain{opacity:.02}
+[data-theme="dark"] kbd{background:var(--d-4);box-shadow:none}

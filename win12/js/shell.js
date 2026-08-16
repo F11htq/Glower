@@ -214,7 +214,7 @@ const Shell = {
       });
     };
     walk(FS.root, []);
-    [['Обои','person'],['Цвет акцента','person'],['Тема','person'],['Liquid Glass','glass'],['Размытие','glass'],
+    [['Обои','person'],['Цвет акцента','person'],['Тема','person'],['Liquid Glass','person'],['Размытие','person'],
      ['Анимации','motion'],['Звук','sound'],['Яркость','display'],['Wi-Fi','net'],['Bluetooth','bt'],
      ['Уведомления','notif'],['Обновления','update'],['О системе','about'],['Док','dock']]
       .forEach(([n, sec]) => { if (n.toLowerCase().includes(q))
@@ -292,7 +292,10 @@ const Shell = {
       T('📶', 'Wi-Fi', v => v ? 'Dymensity-5G' : 'Отключено', () => S.wifi, v => Store.set('wifi', v)),
       T('🎧', 'Bluetooth', v => v ? 'Вкл' : 'Выкл', () => S.bluetooth, v => Store.set('bluetooth', v)),
       T('🌙', 'Не беспокоить', v => v ? 'Вкл' : 'Выкл', () => S.dnd, v => Store.set('dnd', v)),
-      T('🌗', 'Тёмная тема', v => v ? 'Вкл' : 'Выкл', () => S.theme === 'dark', v => Store.set('theme', v ? 'dark' : 'light'))
+      T('🌗', 'Тема', v => v ? (S.theme === 'dark' ? 'Тёмная' : 'Прозрачная') : 'Светлая',
+        () => S.theme !== 'light',
+        v => { if (v) Store.set('theme', KV.get('darkVariant', 'glass'));
+               else { KV.set('darkVariant', S.theme); Store.set('theme', 'light'); } })
     );
     $$('.tile', grid).forEach((t, i) => t.style.setProperty('--i', i));
 
@@ -310,7 +313,6 @@ const Shell = {
 
     const more = $('#cc-more');
     more.append(
-      T('🫧', 'Стекло', v => v ? 'Прозрачно' : 'Матово', () => S.transparency, v => Store.set('transparency', v)),
       T('🌡', 'Ночной свет', v => v ? 'Вкл' : 'Выкл', () => S.nightLight, v => Store.set('nightLight', v)),
       T('🔍', 'Увеличение дока', v => v ? 'Вкл' : 'Выкл', () => S.dockMagOn, v => Store.set('dockMagOn', v)),
       T('👻', 'Автоскрытие дока', v => v ? 'Вкл' : 'Выкл', () => S.dockAutohide, v => Store.set('dockAutohide', v))
@@ -369,7 +371,7 @@ const Shell = {
                                       : '<div class="w-row muted">Всё сделано 🎉</div>' },
       { t:'Система', html:`<div class="w-row"><span>Окон открыто</span><b>${WM.wins.length}</b></div>
           <div class="w-row"><span>Рабочий стол</span><b>${WM.desk + 1} / ${WM.desks}</b></div>
-          <div class="w-row"><span>Тема</span><b>${S.theme === 'dark' ? 'Тёмная' : 'Светлая'}</b></div>
+          <div class="w-row"><span>Тема</span><b>${{ dark:'Тёмная', light:'Светлая' }[S.theme] || 'Прозрачная'}</b></div>
           <div class="w-row"><span>Размытие</span><b>${S.blur}px</b></div>` }
     ];
   },
@@ -529,7 +531,6 @@ const Shell = {
         { i:'🪟', t:'Просмотр задач', f:() => this.taskview(true), k:'Win+Tab' },
         'hr',
         { i:'🖼️', t:'Сменить обои', f:() => WM.open('settings', { section:'person' }) },
-        { i:'🫧', t:'Настроить Liquid Glass', f:() => WM.open('settings', { section:'glass' }) },
         { i:'⚙️', t:'Параметры', f:() => WM.open('settings') }
       ]);
     });
@@ -601,7 +602,8 @@ const Shell = {
   autoTheme(){
     clearInterval(this._themeIv);
     if (!S.autoTheme) return;
-    const upd = () => { const h = new Date().getHours(); Store.set('theme', (h >= 8 && h < 20) ? 'light' : 'dark'); };
+    const upd = () => { const h = new Date().getHours();
+      Store.set('theme', (h >= 8 && h < 20) ? 'light' : KV.get('darkVariant', 'glass')); };
     upd(); this._themeIv = setInterval(upd, 60000);
   },
 

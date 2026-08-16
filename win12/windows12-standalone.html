@@ -907,9 +907,13 @@ body.taskbar .dock-sep{opacity:.5}
 .dock{transition:width var(--t3) var(--e-spring),border-radius var(--t3) var(--e-out),padding var(--t3) var(--e-out)}
 
 /* трей, переехавший в панель */
-#tb-tray.in-dock{margin-left:auto;background:none;backdrop-filter:none;box-shadow:none;
-  position:absolute;right:14px;top:50%;transform:translateY(-50%)}
-body.taskbar #tb-tray.in-dock{right:18px}
+/* в плавающем доке трей стоит в потоке, в панели задач — прижат вправо */
+#tb-tray.in-dock{background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
+  align-self:center;margin-left:2px;position:static;transform:none}
+#tb-tray.in-dock::before{content:'';width:1px;height:26px;margin-right:6px;
+  background:linear-gradient(transparent,rgba(var(--tint),.35),transparent)}
+body.taskbar #tb-tray.in-dock{position:absolute;right:18px;top:50%;transform:translateY(-50%);margin:0}
+body.taskbar #tb-tray.in-dock::before{display:none}
 .tb-dock-search{display:flex;align-items:center;gap:8px;height:calc(var(--dock-size) * .74);
   padding:0 14px;border-radius:12px;font-size:12.5px;color:var(--fg-dim);
   background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);
@@ -933,6 +937,80 @@ body.taskbar #tb-tray.in-dock{right:18px}
   border-radius:8px;padding:4px 6px;margin-top:2px;background:rgba(var(--tint),.08)}
 .dw-note:focus{box-shadow:inset 0 0 0 1px var(--accent)}
 .mu-time{margin-top:-6px}
+
+/* ==========================================================================
+   НАСТОЯЩАЯ ТЁМНАЯ ТЕМА
+   поверхности непрозрачные, стекло и блики отключены
+   ========================================================================== */
+[data-theme="dark"]{
+  --fg:#e9ecf3;
+  --fg-dim:rgba(233,236,243,.58);
+  --shadow:0 24px 60px rgba(0,0,0,.62), 0 3px 12px rgba(0,0,0,.5);
+  --d-1:#14161d;   /* фон окна */
+  --d-2:#1a1d26;   /* панели */
+  --d-3:#22262f;   /* поднятые элементы */
+  --d-4:#2c313c;   /* наведение */
+  --d-line:rgba(255,255,255,.08);
+}
+[data-theme="dark"] .glass,
+[data-theme="dark"] .toast{
+  background:var(--d-2);
+  backdrop-filter:blur(10px) saturate(120%);
+  -webkit-backdrop-filter:blur(10px) saturate(120%);
+  box-shadow:inset 0 0 0 1px var(--d-line), var(--shadow);
+}
+[data-theme="dark"] .lg::before,
+[data-theme="dark"] .lg::after{display:none}         /* без бликов и переливов */
+[data-theme="dark"] .win{
+  background:var(--d-1);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  box-shadow:inset 0 0 0 1px var(--d-line), var(--shadow);
+}
+[data-theme="dark"] .titlebar{background:var(--d-2);border-bottom-color:var(--d-line)}
+[data-theme="dark"] .win:not(.focus) .titlebar{background:var(--d-1)}
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .toolbar,
+[data-theme="dark"] .statusbar{background:var(--d-2);border-color:var(--d-line)}
+[data-theme="dark"] .card,
+[data-theme="dark"] .tile,
+[data-theme="dark"] .w-card,
+[data-theme="dark"] .btn,
+[data-theme="dark"] .inp,
+[data-theme="dark"] .td-item,
+[data-theme="dark"] .np-tab,
+[data-theme="dark"] .calc-keys button{
+  background:var(--d-3);box-shadow:inset 0 0 0 1px var(--d-line)}
+[data-theme="dark"] .btn:hover,
+[data-theme="dark"] .tile.btn:hover,
+[data-theme="dark"] .calc-keys button:hover,
+[data-theme="dark"] .sb-item:hover,
+[data-theme="dark"] .set-row:hover,
+[data-theme="dark"] .fe-tr:hover,
+[data-theme="dark"] .fe-it:hover,
+[data-theme="dark"] .dock-item:hover,
+[data-theme="dark"] .sg:hover,
+[data-theme="dark"] .tray-btn:hover{background:var(--d-4)}
+[data-theme="dark"] .btn.pri,
+[data-theme="dark"] .tile.on{background:linear-gradient(140deg,var(--accent),var(--accent-2))}
+[data-theme="dark"] .sb-item.on{background:var(--d-4);box-shadow:inset 0 0 0 1px var(--d-line)}
+[data-theme="dark"] .seg{background:var(--d-1)}
+[data-theme="dark"] .seg button.on{background:var(--d-4)}
+[data-theme="dark"] .switch{background:#3a4050}
+[data-theme="dark"] .ctx,
+[data-theme="dark"] .start,
+[data-theme="dark"] .cc,
+[data-theme="dark"] .widgets,
+[data-theme="dark"] .spot,
+[data-theme="dark"] .dock,
+[data-theme="dark"] .dock-prev,
+[data-theme="dark"] .run-dlg{background:var(--d-2)}
+[data-theme="dark"] .start-foot{background:var(--d-1);border-color:var(--d-line)}
+[data-theme="dark"] .term{background:#0c0e13}
+[data-theme="dark"] .taskview{background:rgba(8,9,13,.9);backdrop-filter:blur(6px)}
+[data-theme="dark"] .snap-assist{background:rgba(8,9,13,.86)}
+[data-theme="dark"] .di:hover{background:rgba(255,255,255,.1)}
+[data-theme="dark"] .wall-grain{opacity:.02}
+[data-theme="dark"] kbd{background:var(--d-4);box-shadow:none}
 
 </style>
 </head>
@@ -1157,7 +1235,7 @@ const ACCENTS = [
 
 /* ---------- Настройки по умолчанию ---------- */
 const DEFAULTS = {
-  theme:'dark', autoTheme:false,
+  theme:'glass', autoTheme:false,
   accent:0, accentCustom:null,
   wallpaper:'bloom', wallShuffle:false,
   blur:34, glass:0.42, glassEdge:0.28, saturate:180, radius:18, winRadius:16,
@@ -1186,6 +1264,13 @@ const Store = {
   reset(){ this.s = { ...DEFAULTS }; this.save(); applySettings(); }
 };
 const S = Store.load();
+
+/* «Тёмная» из старых версий была прозрачной — переносим её в новую тему */
+if (!KV_SAFE('win12.themeMigrated') && S.theme === 'dark'){
+  S.theme = 'glass'; Store.save();
+  try { localStorage.setItem('win12.themeMigrated', 'true'); } catch(e){}
+}
+function KV_SAFE(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
 
 /* ---------- Применение настроек ---------- */
 function accentPair(){
@@ -1219,7 +1304,8 @@ function applySettings(){
     const w = WALLPAPERS.find(x => x.id === S.wallpaper) || WALLPAPERS[0];
     wp.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
       ? `url(${window.__customWall})` : w.css;
-    wp.style.filter = `brightness(${S.brightness / 100}) ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
+    const dim = S.theme === 'dark' ? 0.55 : 1;      // в настоящей тёмной теме обои приглушены
+    wp.style.filter = `brightness(${S.brightness / 100 * dim}) ${S.theme === 'dark' ? 'saturate(.8)' : ''} ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
   }
   document.body.style.filter = S.nightLight ? 'sepia(.14) saturate(1.06)' : '';
 }
@@ -2033,7 +2119,7 @@ APPS.term = {
       mkdir: a => FS.mkdir(cwd, a) ? print('Создано.', 'inf') : print('Ошибка', 'er'),
       rm: a => FS.rm(cwd, a) ? print('Удалено.', 'inf') : print('Не найдено', 'er'),
       open: a => APPS[a] ? (WM.open(a), print('Запуск ' + a + '...', 'inf')) : print('Нет такого приложения', 'er'),
-      theme: a => { if (['dark','light'].includes(a)){ Store.set('theme', a); print('Тема: ' + a, 'inf'); } else print('theme dark|light', 'er'); },
+      theme: a => { if (['glass','dark','light'].includes(a)){ Store.set('theme', a); print('Тема: ' + a, 'inf'); } else print('theme glass|dark|light', 'er'); },
       accent: a => { const i = +a; if (ACCENTS[i]){ S.accentCustom = null; Store.set('accent', i); print('Акцент: ' + ACCENTS[i].n, 'inf'); } else print('accent 0-' + (ACCENTS.length - 1), 'er'); },
       glass: a => { const v = clamp(+a, 0, 100) / 100; Store.set('glass', v); print('Стекло: ' + a + '%', 'inf'); },
       neofetch: () => print(`<span class="inf">      ▗▄▄▖▗▄▄▖ </span>   <b>${S.userName}@windows12</b>
@@ -2648,7 +2734,6 @@ APPS.settings = {
       { id:'home',   n:'Главная',                  e:'🏠' },
       { id:'system', n:'Система',                  e:'🖥️' },
       { id:'person', n:'Персонализация',           e:'🎨' },
-      { id:'glass',  n:'Liquid Glass',             e:'🫧' },
       { id:'dock',   n:'Рабочий стол и док',       e:'🧱' },
       { id:'motion', n:'Движение и анимации',      e:'🌀' },
       { id:'sound',  n:'Звук',                     e:'🔊' },
@@ -2672,7 +2757,7 @@ APPS.settings = {
     const navBox = el('div'); side.appendChild(navBox);
 
     const KEYS = {
-      glass:'стекло размытие прозрачность blur материал', person:'обои тема цвет акцент шрифт',
+      person:'обои тема цвет акцент шрифт стекло размытие прозрачность blur материал liquid glass',
       dock:'док панель задач иконки', motion:'анимации скорость плавность', sound:'звук громкость',
       display:'яркость масштаб ночной свет', a11y:'доступность контраст курсор', about:'версия система'
     };
@@ -2709,8 +2794,6 @@ APPS.settings = {
       const c = card('Быстрые действия');
       c.appendChild(row('🎨', 'Персонализация', 'Обои, цвета, темы', el('div', 'muted', '›'), 'clickable'))
         .onclick = () => { cur = 'person'; drawNav(); drawMain(); };
-      c.appendChild(row('🫧', 'Liquid Glass', 'Настроить материал интерфейса', el('div', 'muted', '›'), 'clickable'))
-        .onclick = () => { cur = 'glass'; drawNav(); drawMain(); };
       c.appendChild(row('🌀', 'Анимации', 'Скорость и плавность', el('div', 'muted', '›'), 'clickable'))
         .onclick = () => { cur = 'motion'; drawNav(); drawMain(); };
       c.appendChild(row('🔄', 'Обновления', 'Система обновлена', el('div', 'muted', '›'), 'clickable'))
@@ -2814,7 +2897,8 @@ APPS.settings = {
 
       const t = card('Цвета и тема');
       t.appendChild(row('🌗', 'Режим', 'Светлая или тёмная тема',
-        seg([{ n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }], () => S.theme, v => set('theme', v))));
+        seg([{ n:'Прозрачная', v:'glass' }, { n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }],
+            () => S.theme, v => { set('theme', v); drawMain(); })));
       const swWrap = el('div', 'swatches');
       ACCENTS.forEach((a, i) => {
         const s = el('div', 'sw' + (!S.accentCustom && i === S.accent ? ' on' : ''));
@@ -2828,6 +2912,8 @@ APPS.settings = {
       cp.oninput = () => { S.accentCustom = cp.value; Store.save(); applySettings(); };
       t.appendChild(row('🖌️', 'Свой цвет', 'Задать акцент вручную', cp));
       main.appendChild(t);
+
+      pGlass();                       // материал интерфейса живёт здесь, отдельного раздела нет
 
       const f = card('Шрифт и текст');
       f.appendChild(row('🔤', 'Системный шрифт', 'Гарнитура интерфейса',
@@ -2878,8 +2964,16 @@ APPS.settings = {
       main.appendChild(lk);
     }
 
-    /* --- Liquid Glass --- */
+    /* --- материал интерфейса (внутри Персонализации) --- */
     function pGlass(){
+      const hd = el('div', 'card-t', 'Материал интерфейса — Liquid Glass');
+      hd.style.cssText = 'padding:8px 2px 10px;font-size:13px;opacity:.85';
+      main.appendChild(hd);
+      if (S.theme === 'dark'){
+        const w = card('');
+        w.appendChild(row('🌑', 'Активна тёмная тема', 'Поверхности непрозрачные, поэтому параметры стекла сейчас ни на что не влияют. Выберите «Прозрачную», чтобы настроить материал.', el('span')));
+        main.appendChild(w);
+      }
       const prev = el('div', 'card'); prev.style.cssText = 'height:150px;padding:0;position:relative;overflow:hidden';
       prev.style.backgroundImage = (WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0]).css;
       prev.style.backgroundSize = 'cover';
@@ -2890,7 +2984,8 @@ APPS.settings = {
       main.appendChild(prev);
 
       const c = card('Материал');
-      c.appendChild(row('🫧', 'Прозрачность', 'Выключите для непрозрачного интерфейса', toggle(() => S.transparency, v => set('transparency', v))));
+      if (S.theme !== 'dark')
+        c.appendChild(row('🫧', 'Прозрачность', 'Выключите для непрозрачного интерфейса', toggle(() => S.transparency, v => set('transparency', v))));
       c.appendChild(row('💨', 'Размытие фона', 'blur() под панелями', slider(() => S.blur, v => set('blur', v), 0, 80, 1, v => v + 'px')));
       c.appendChild(row('🧊', 'Плотность стекла', 'Насколько материал светлее фона', slider(() => S.glass * 100, v => set('glass', v / 100), 0, 100, 1, v => v + '%')));
       c.appendChild(row('✨', 'Яркость кромки', 'Блик по краю панели', slider(() => S.glassEdge * 100, v => set('glassEdge', v / 100), 0, 100, 1, v => v + '%')));
@@ -3412,7 +3507,7 @@ const Shell = {
       });
     };
     walk(FS.root, []);
-    [['Обои','person'],['Цвет акцента','person'],['Тема','person'],['Liquid Glass','glass'],['Размытие','glass'],
+    [['Обои','person'],['Цвет акцента','person'],['Тема','person'],['Liquid Glass','person'],['Размытие','person'],
      ['Анимации','motion'],['Звук','sound'],['Яркость','display'],['Wi-Fi','net'],['Bluetooth','bt'],
      ['Уведомления','notif'],['Обновления','update'],['О системе','about'],['Док','dock']]
       .forEach(([n, sec]) => { if (n.toLowerCase().includes(q))
@@ -3490,7 +3585,10 @@ const Shell = {
       T('📶', 'Wi-Fi', v => v ? 'Dymensity-5G' : 'Отключено', () => S.wifi, v => Store.set('wifi', v)),
       T('🎧', 'Bluetooth', v => v ? 'Вкл' : 'Выкл', () => S.bluetooth, v => Store.set('bluetooth', v)),
       T('🌙', 'Не беспокоить', v => v ? 'Вкл' : 'Выкл', () => S.dnd, v => Store.set('dnd', v)),
-      T('🌗', 'Тёмная тема', v => v ? 'Вкл' : 'Выкл', () => S.theme === 'dark', v => Store.set('theme', v ? 'dark' : 'light'))
+      T('🌗', 'Тема', v => v ? (S.theme === 'dark' ? 'Тёмная' : 'Прозрачная') : 'Светлая',
+        () => S.theme !== 'light',
+        v => { if (v) Store.set('theme', KV.get('darkVariant', 'glass'));
+               else { KV.set('darkVariant', S.theme); Store.set('theme', 'light'); } })
     );
     $$('.tile', grid).forEach((t, i) => t.style.setProperty('--i', i));
 
@@ -3508,7 +3606,6 @@ const Shell = {
 
     const more = $('#cc-more');
     more.append(
-      T('🫧', 'Стекло', v => v ? 'Прозрачно' : 'Матово', () => S.transparency, v => Store.set('transparency', v)),
       T('🌡', 'Ночной свет', v => v ? 'Вкл' : 'Выкл', () => S.nightLight, v => Store.set('nightLight', v)),
       T('🔍', 'Увеличение дока', v => v ? 'Вкл' : 'Выкл', () => S.dockMagOn, v => Store.set('dockMagOn', v)),
       T('👻', 'Автоскрытие дока', v => v ? 'Вкл' : 'Выкл', () => S.dockAutohide, v => Store.set('dockAutohide', v))
@@ -3567,7 +3664,7 @@ const Shell = {
                                       : '<div class="w-row muted">Всё сделано 🎉</div>' },
       { t:'Система', html:`<div class="w-row"><span>Окон открыто</span><b>${WM.wins.length}</b></div>
           <div class="w-row"><span>Рабочий стол</span><b>${WM.desk + 1} / ${WM.desks}</b></div>
-          <div class="w-row"><span>Тема</span><b>${S.theme === 'dark' ? 'Тёмная' : 'Светлая'}</b></div>
+          <div class="w-row"><span>Тема</span><b>${{ dark:'Тёмная', light:'Светлая' }[S.theme] || 'Прозрачная'}</b></div>
           <div class="w-row"><span>Размытие</span><b>${S.blur}px</b></div>` }
     ];
   },
@@ -3727,7 +3824,6 @@ const Shell = {
         { i:'🪟', t:'Просмотр задач', f:() => this.taskview(true), k:'Win+Tab' },
         'hr',
         { i:'🖼️', t:'Сменить обои', f:() => WM.open('settings', { section:'person' }) },
-        { i:'🫧', t:'Настроить Liquid Glass', f:() => WM.open('settings', { section:'glass' }) },
         { i:'⚙️', t:'Параметры', f:() => WM.open('settings') }
       ]);
     });
@@ -3799,7 +3895,8 @@ const Shell = {
   autoTheme(){
     clearInterval(this._themeIv);
     if (!S.autoTheme) return;
-    const upd = () => { const h = new Date().getHours(); Store.set('theme', (h >= 8 && h < 20) ? 'light' : 'dark'); };
+    const upd = () => { const h = new Date().getHours();
+      Store.set('theme', (h >= 8 && h < 20) ? 'light' : KV.get('darkVariant', 'glass')); };
     upd(); this._themeIv = setInterval(upd, 60000);
   },
 
@@ -3910,18 +4007,7 @@ const Shell = {
   const boot = $('#boot'), lock = $('#lock'), desktop = $('#desktop');
   const skip = KV.get('skipBoot', false);
 
-  const showDesktop = () => {
-    desktop.classList.add('on');
-    setTimeout(() => {
-      Shell.toast('Добро пожаловать', 'Win — Пуск · Win+Space — поиск · ПКМ по столу — меню', '👋', 7000);
-    }, 900);
-    setTimeout(() => {
-      if (!KV.get('seenTip', false)){
-        KV.set('seenTip', true);
-        Shell.toast('Совет', 'Параметры → Liquid Glass: там живут все настройки материала', '🫧', 8000);
-      }
-    }, 5200);
-  };
+  const showDesktop = () => { desktop.classList.add('on'); };
 
   const unlock = () => {
     if (!lock.classList.contains('gone')){
