@@ -188,7 +188,11 @@ body.blurred .wallpaper{filter:blur(18px) brightness(.8);transform:scale(1.12)}
 .desktop.on{opacity:1}
 
 .topbar{position:fixed;top:0;left:0;right:0;height:76px;display:flex;align-items:center;
-  justify-content:space-between;padding:12px 14px;z-index:600;pointer-events:none;gap:12px}
+  justify-content:space-between;padding:12px 14px;z-index:600;pointer-events:none;gap:12px;
+  transition:transform var(--t3) var(--e-spring),opacity var(--t2) var(--e-io)}
+body.chrome-hidden .topbar{transform:translateY(-118%);opacity:0}
+body.chrome-hidden .topbar > *{pointer-events:none}
+.top-hotzone{position:fixed;top:0;left:0;right:0;height:6px;z-index:599}
 .topbar > *{pointer-events:auto}
 .tb-left{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:16px;cursor:pointer;
   transition:transform var(--t2) var(--e-spring)}
@@ -274,7 +278,8 @@ body.start-open .start-btn{background:rgba(var(--tint),.24)}
 /* ==========================================================================
    ОКНА
    ========================================================================== */
-.windows-layer{position:absolute;inset:0;z-index:100}
+.windows-layer{position:absolute;inset:0;z-index:100;pointer-events:none}
+.win{pointer-events:auto}
 .win{
   position:absolute;display:flex;flex-direction:column;overflow:hidden;
   border-radius:var(--radius-win);min-width:320px;min-height:180px;

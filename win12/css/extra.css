@@ -1,0 +1,60 @@
+/* ==========================================================================
+   Доработки под поведение настоящих систем
+   ========================================================================== */
+
+/* ---------- Рабочий стол: свободное размещение значков ---------- */
+.desktop-icons{position:absolute;top:0;left:0;right:0;bottom:0;display:block;max-height:none;z-index:1;
+  pointer-events:none}
+.di{position:absolute;width:92px;pointer-events:auto;transition:background var(--t1),box-shadow var(--t1)}
+.di.drag{opacity:.75;z-index:9;transition:none;cursor:grabbing}
+.marquee{position:absolute;z-index:2;border-radius:4px;pointer-events:none;
+  background:rgba(var(--accent-rgb,58,134,255),.22);
+  box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb,58,134,255),.9)}
+
+/* ---------- Превью окон в доке ---------- */
+.dock-prev{position:fixed;z-index:820;min-width:220px;max-width:300px;padding:6px;border-radius:16px;
+  opacity:0;visibility:hidden;transform:translateY(10px) scale(.95);transform-origin:bottom center;
+  transition:opacity var(--t2) var(--e-io),transform var(--t2) var(--e-spring),visibility var(--t2)}
+.dock-prev.on{opacity:1;visibility:visible;transform:none}
+.dp-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:11px;font-size:12.5px;cursor:pointer;
+  transition:background var(--t1)}
+.dp-row:hover{background:rgba(var(--tint),.2)}
+.dp-thumb{width:52px;height:32px;border-radius:6px;flex:none;display:grid;place-content:center;font-size:15px;
+  box-shadow:inset 0 0 0 1px rgba(var(--tint),.2)}
+.dp-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-row .x{opacity:.4;font-size:15px;padding:0 3px}
+.dp-row .x:hover{opacity:1;color:#ff6b6b}
+.dp-head{font-size:10.5px;opacity:.55;font-weight:700;padding:5px 10px 3px;text-transform:uppercase;letter-spacing:.5px}
+
+/* ---------- Snap Assist ---------- */
+.snap-assist{position:fixed;z-index:640;display:none;align-content:center;justify-content:center;
+  flex-wrap:wrap;gap:16px;padding:24px;background:rgba(0,0,0,.28);backdrop-filter:blur(22px) saturate(140%);
+  animation:fade var(--t3) both}
+.snap-assist.on{display:flex}
+.sa-card{width:min(280px,30vw);border-radius:14px;overflow:hidden;cursor:pointer;
+  background:rgba(var(--tint),.14);box-shadow:inset 0 0 0 1px rgba(var(--tint),.2),0 12px 30px rgba(0,0,0,.32);
+  animation:sgIn var(--t3) var(--e-spring) both;animation-delay:calc(var(--i,0)*50ms);
+  transition:transform var(--t2) var(--e-spring)}
+.sa-card:hover{transform:translateY(-5px) scale(1.03)}
+.sa-head{display:flex;align-items:center;gap:8px;padding:9px 11px;font-size:12.5px;background:rgba(var(--tint),.12)}
+.sa-body{height:120px;display:grid;place-content:center;font-size:44px;opacity:.75}
+.sa-hint{position:absolute;bottom:26px;left:0;right:0;text-align:center;font-size:12.5px;opacity:.6}
+
+/* ---------- Диалог «Выполнить» ---------- */
+.run-dlg{position:fixed;left:24px;bottom:calc(var(--dock-size) + 46px);z-index:860;width:min(420px,92vw);
+  padding:16px;border-radius:18px;opacity:0;visibility:hidden;transform:translateY(14px) scale(.96);
+  transition:opacity var(--t2) var(--e-io),transform var(--t2) var(--e-spring),visibility var(--t2)}
+.run-dlg.on{opacity:1;visibility:visible;transform:none}
+.run-dlg h4{margin:0 0 4px;font-size:14px;font-weight:600}
+.run-dlg p{margin:0 0 12px;font-size:11.5px;opacity:.6;line-height:1.45}
+.run-row{display:flex;gap:8px}
+.run-row input{flex:1}
+.run-err{color:#ff8080;font-size:11.5px;margin-top:8px;min-height:14px}
+
+/* ---------- Корзина ---------- */
+.tr-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:11px;font-size:12.5px;
+  transition:background var(--t1)}
+.tr-row:hover{background:rgba(var(--tint),.12)}
+.tr-row .gl{font-size:20px}
+.tr-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr-row .from{font-size:11px;opacity:.5}

@@ -1225,6 +1225,8 @@ APPS.settings = {
       d.appendChild(row('🎛', 'Кнопки окна', 'Стиль Windows или macOS',
         seg([{ n:'Windows', v:'win' }, { n:'macOS', v:'mac' }], () => S.wctl, v => set('wctl', v))));
       d.appendChild(row('📍', 'Активные углы', 'Правый верхний угол — просмотр задач', toggle(() => S.hotcorners, v => set('hotcorners', v))));
+      d.appendChild(row('⬆️', 'Скрывать верхнюю панель', 'Панель и виджеты уходят, когда открыто окно; вернуть — курсор к верхнему краю',
+        toggle(() => S.topbarAutohide !== false, v => { set('topbarAutohide', v); Shell.updateChrome(); })));
       main.appendChild(d);
     }
 
