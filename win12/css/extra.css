@@ -436,3 +436,9 @@ body.taskbar .show-desktop{width:10px;margin-left:10px;border-radius:0}
 .fe-tr.head .sortable:hover{background:rgba(var(--tint),.16)}
 .fe-tr.head .sorted{color:var(--accent);opacity:1}
 .fe-tr.head .sorted::after{content:' ↓';font-size:9px}
+
+/* ---------- Индикатор подключения к системному агенту ---------- */
+.agent-badge .ic{stroke:#4ade80}
+.agent-badge.busy .ic{animation:pulseAgent 1s ease-in-out infinite}
+@keyframes pulseAgent{50%{opacity:.35}}
+body.native .lock-name::after{content:' · система';font-size:12px;opacity:.5}

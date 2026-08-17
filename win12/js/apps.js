@@ -1124,6 +1124,19 @@ APPS.settings = {
       m.appendChild(row('🗂', 'Каскад', 'Расположить окна лесенкой', cb));
       main.appendChild(m);
 
+      const pl2 = card('Подключение к системе');
+      const d2 = Platform.describe();
+      pl2.appendChild(row(d2.ok ? '🖴' : '🌐', d2.title, d2.text, el('div', 'muted tiny', d2.ok ? 'настоящий диск' : 'браузер')));
+      if (d2.ok){
+        const rb = el('button', 'btn', 'Перечитать диск');
+        rb.onclick = () => Platform.mount().then(() => Shell.toast('Система', 'Дерево файлов обновлено', '🖴'));
+        pl2.appendChild(row('🔄', 'Синхронизация', 'Заново прочитать рабочую папку с диска', rb));
+      } else {
+        pl2.appendChild(row('▶️', 'Как включить',
+          'Запустите в папке прототипа: node agent/server.mjs — затем откройте http://localhost:8123. Оболочка та же, но файлы будут настоящими.', el('span')));
+      }
+      main.appendChild(pl2);
+
       const p = card('Питание');
       const bl = el('div'); p.appendChild(bl);
       Real.battery().then(b => {
