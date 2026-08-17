@@ -567,7 +567,8 @@ const Shell = {
     c.innerHTML = '';
     items.forEach(it => {
       if (it === 'hr'){ c.appendChild(el('hr')); return; }
-      const b = el('button', '', `<span class="em">${it.i || ''}</span><span>${it.t}</span>${it.k ? `<span class="k">${it.k}</span>` : ''}`);
+      if (it.head){ c.appendChild(el('div', 'ctx-head', esc(it.t))); return; }
+      const b = el('button', '', `<span class="em">${it.i || ''}</span><span>${esc(it.t)}</span>${it.k ? `<span class="k">${it.k}</span>` : ''}`);
       b.onclick = () => { c.classList.remove('on'); it.f && it.f(); };
       c.appendChild(b);
     });

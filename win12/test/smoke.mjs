@@ -225,6 +225,40 @@ try {
     await page.evaluate(() => { const w = WM.wins.find(x => x.appId === 'taskmgr');
       return /FPS/.test(w.body.innerText) && /Элементов DOM/.test(w.body.innerText); }));
 
+  /* --- недавние документы, списки переходов, ярлыки --- */
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { Recent.clear();
+    Assoc.open(FS.node(['Документы','Идеи.txt']), ['Документы']); });
+  await page.waitForTimeout(600);
+  check('открытый файл попадает в недавние',
+    await page.evaluate(() => Recent.list()[0] && Recent.list()[0].name === 'Идеи.txt'));
+  await page.evaluate(() => Shell.toggleStart(true));
+  await page.waitForTimeout(500);
+  check('«Недавние» в Пуске показывают файл',
+    await page.evaluate(() => /Идеи\.txt/.test(document.querySelector('#start-reco').textContent)));
+  await page.evaluate(() => Shell.closePanels());
+
+  await page.evaluate(() => Link.toDesktop({ app:'calc' }, 'Калькулятор'));
+  await page.waitForTimeout(500);
+  check('ярлык появляется на рабочем столе',
+    await page.evaluate(() => !!document.querySelector('.di.is-link')));
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(300);
+  await page.dblclick('.di.is-link');
+  await page.waitForTimeout(700);
+  check('ярлык запускает приложение',
+    await page.evaluate(() => WM.wins.some(w => w.appId === 'calc')));
+
+  /* --- «Свернуть всё» --- */
+  check('в панели есть кнопка «Свернуть всё»', (await page.$$('.show-desktop')).length === 1);
+  await page.click('.show-desktop'); await page.waitForTimeout(600);
+  check('кнопка сворачивает окна',
+    await page.evaluate(() => WM.wins.every(w => w.minimized)));
+  await page.click('.show-desktop'); await page.waitForTimeout(600);
+  check('повторное нажатие возвращает окна',
+    await page.evaluate(() => WM.wins.every(w => !w.minimized)));
+
   /* --- в меню питания нет эмодзи --- */
   check('в меню питания нет эмодзи',
     await page.evaluate(() => ![...document.querySelectorAll('.power-actions button')]

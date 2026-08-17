@@ -377,3 +377,15 @@ body.taskbar #tb-tray.in-dock::before{display:none}
 .tm-k{font-size:11px;opacity:.6;margin-bottom:4px}
 .tm-v{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:3px}
 [data-theme="dark"] .tm-card{background:var(--d-3)}
+
+/* ---------- Ярлыки, «Свернуть всё», заголовки в меню ---------- */
+.di.is-link .glyph::after{content:'↗';position:absolute;left:2px;bottom:2px;width:16px;height:16px;
+  border-radius:4px;font-size:10px;display:grid;place-content:center;
+  background:rgba(var(--tint),.35);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+.di.is-link .glyph{position:relative}
+.ctx-head{font-size:10.5px;font-weight:700;opacity:.5;padding:8px 11px 4px;
+  text-transform:uppercase;letter-spacing:.5px}
+.show-desktop{width:8px;align-self:stretch;margin-left:6px;border-radius:4px;flex:none;
+  background:rgba(var(--tint),.12);transition:background var(--t1)}
+.show-desktop:hover{background:var(--accent)}
+body.taskbar .show-desktop{width:10px;margin-left:10px;border-radius:0}
