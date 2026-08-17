@@ -287,3 +287,17 @@ body.taskbar #tb-tray.in-dock::before{display:none}
 .all-head{display:flex;align-items:center;gap:12px;padding:2px 4px 10px;font-size:13px;font-weight:600;
   position:sticky;top:-16px;z-index:2;backdrop-filter:blur(16px)}
 [data-theme="dark"] .all-head{background:var(--d-2)}
+
+/* ---------- Подсказки внутри панелей с обрезкой ---------- */
+/* .start, .cc и .widgets скрывают переполнение, поэтому подсказка снизу обрезалась */
+.start [data-tip]::after,
+.cc [data-tip]::after,
+.widgets [data-tip]::after{top:auto;bottom:calc(100% + 9px)}
+.start [data-tip]:hover::after,
+.cc [data-tip]:hover::after,
+.widgets [data-tip]:hover::after{transform:translate(-50%,0) scale(1)}
+
+/* у правого края подсказку прижимаем к краю, иначе её срезает */
+.start-foot-r [data-tip]::after{left:auto;right:0;transform:translate(0,6px) scale(.92);
+  transform-origin:bottom right}
+.start-foot-r [data-tip]:hover::after{transform:translate(0,0) scale(1)}
