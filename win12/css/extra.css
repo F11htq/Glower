@@ -270,3 +270,20 @@ body.taskbar #tb-tray.in-dock::before{display:none}
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);transition:transform var(--t2) var(--e-spring),background var(--t1)}
 .lock-user:hover{background:rgba(var(--tint),.26);transform:translateY(-2px)}
 .lock-user .ava{width:26px;height:26px;font-size:12px}
+
+/* ---------- «Все приложения» в меню Пуск ---------- */
+.all-letter{font-size:11px;font-weight:700;opacity:.5;padding:12px 12px 5px;letter-spacing:.6px;
+  position:sticky;top:-16px;z-index:1;backdrop-filter:blur(14px)}
+.all-row{display:flex;align-items:center;gap:12px;width:100%;padding:7px 12px;border-radius:11px;
+  text-align:left;transition:background var(--t1),transform var(--t2) var(--e-spring);
+  animation:sgIn calc(.35s * var(--speed)) var(--e-out) both;animation-delay:calc(var(--i,0) * 10ms)}
+.all-row:hover{background:rgba(var(--tint),.18);transform:translateX(3px)}
+.all-row .app-ico{width:32px;height:32px;font-size:16px}
+.all-row .t{font-size:13px;display:flex;align-items:center;gap:7px}
+.all-pin{font-size:10px;opacity:.55}
+.all-count{padding:14px 12px 6px;font-size:11px;opacity:.45;text-align:center}
+[data-theme="dark"] .all-letter{background:var(--d-2)}
+[data-theme="dark"] .all-row:hover{background:var(--d-4)}
+.all-head{display:flex;align-items:center;gap:12px;padding:2px 4px 10px;font-size:13px;font-weight:600;
+  position:sticky;top:-16px;z-index:2;backdrop-filter:blur(16px)}
+[data-theme="dark"] .all-head{background:var(--d-2)}

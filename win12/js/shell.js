@@ -162,7 +162,7 @@ const Shell = {
 
   bindStart(){
     $('#start-btn').onclick = e => { e.stopPropagation(); this.toggleStart(); };
-    $('#start-all').onclick = () => { $('#start-input').value = ''; this.startSearch(' '); };
+    $('#start-all').onclick = () => { $('#start-input').value = ''; this.allApps(!this.allMode); };
     $('#start-user').onclick = () => { WM.open('settings', { section:'acc' }); this.closePanels(); };
     $$('#start [data-app]').forEach(b => b.onclick = () => { WM.open(b.dataset.app); this.closePanels(); });
     $('#power-btn').onclick = () => { this.closePanels(); $('#power-overlay').classList.add('on'); };
@@ -182,16 +182,65 @@ const Shell = {
     this.closePanels(true);
     document.body.classList.toggle('start-open', on);
     if (on){
-      $('#start-input').value = ''; this.startSearch('');
+      $('#start-input').value = ''; this.allApps(false);
       setTimeout(() => $('#start-input').focus(), 180);
       Snd.blip(880, .06, 'sine', .03);
     }
   },
 
+  /* ---- «Все приложения»: список по алфавиту ---- */
+  allApps(on){
+    this.allMode = !!on;
+    const res = $('#start-results'), body = $('#start-body'), btn = $('#start-all');
+    btn.textContent = on ? '‹ Назад' : 'Все приложения ›';
+    res.innerHTML = '';
+    if (!on){ res.hidden = true; body.hidden = false; return; }
+
+    body.hidden = true; res.hidden = false;
+
+    // собственный заголовок: кнопка в «Закреплённых» скрыта вместе со списком
+    const head = el('div', 'all-head');
+    const back = el('button', 'mini-btn', '‹ Назад');
+    back.onclick = () => this.allApps(false);
+    head.append(back, el('span', '', 'Все приложения'));
+    res.appendChild(head);
+
+    const items = Object.entries(APPS).sort((a, b) => a[1].name.localeCompare(b[1].name, 'ru'));
+    let letter = '';
+    items.forEach(([id, a], i) => {
+      const L = (a.name[0] || '#').toUpperCase();
+      if (L !== letter){ letter = L; res.appendChild(el('div', 'all-letter', L)); }
+      const b = el('button', 'all-row');
+      b.style.setProperty('--i', i);
+      b.appendChild(appIcon(a));
+      const t = el('div', 't', esc(a.name));
+      if (S.pinned.includes(id)) t.appendChild(el('span', 'all-pin', '📌'));
+      b.appendChild(t);
+      b.onclick = () => { WM.open(id); this.closePanels(); };
+      b.oncontextmenu = e => {
+        e.preventDefault();
+        const pinned = S.pinned.includes(id), inDock = S.dockApps.includes(id);
+        this.ctx(e.clientX, e.clientY, [
+          { i:a.glyph, t:'Открыть', f:() => { WM.open(id); this.closePanels(); } },
+          'hr',
+          { i:'📌', t:pinned ? 'Открепить от Пуска' : 'Закрепить в Пуске', f:() => {
+              S.pinned = pinned ? S.pinned.filter(x => x !== id) : [...S.pinned, id];
+              Store.save(); this.renderStart(); this.allApps(true); } },
+          { i:'⬇️', t:inDock ? 'Убрать из дока' : 'Добавить в док', f:() => {
+              S.dockApps = inDock ? S.dockApps.filter(x => x !== id) : [...S.dockApps, id];
+              Store.save(); this.renderDock(); } }
+        ]);
+      };
+      res.appendChild(b);
+    });
+    res.appendChild(el('div', 'all-count', `Всего приложений: ${items.length}`));
+    res.scrollTop = 0;
+  },
+
   startSearch(q){
     const res = $('#start-results'), body = $('#start-body');
     q = q.trim().toLowerCase();
-    if (!q){ res.hidden = true; body.hidden = false; return; }
+    if (!q){ if (this.allMode) return this.allApps(true); res.hidden = true; body.hidden = false; return; }
     res.hidden = false; body.hidden = true;
     res.innerHTML = '';
     const items = this.searchAll(q);

@@ -66,6 +66,28 @@ try {
   check('верхняя панель прячется при открытом окне',
     await page.evaluate(() => document.body.classList.contains('chrome-hidden')));
 
+  /* --- «Все приложения» в Пуске --- */
+  await page.evaluate(() => Shell.toggleStart(true));
+  await page.waitForTimeout(500);
+  await page.click('#start-all');
+  await page.waitForTimeout(500);
+  const all = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#start-results .all-row').length,
+    apps: Object.keys(APPS).length,
+    letters: document.querySelectorAll('#start-results .all-letter').length,
+    btn: document.querySelector('#start-all').textContent
+  }));
+  check('«Все приложения» показывает весь список',
+    all.rows === all.apps && all.rows > 0, `строк ${all.rows} при ${all.apps} приложениях`);
+  check('список сгруппирован по буквам', all.letters > 1);
+  check('в списке есть своя кнопка «Назад»',
+    await page.evaluate(() => !!document.querySelector('#start-results .all-head .mini-btn')));
+  await page.click('#start-results .all-head .mini-btn'); await page.waitForTimeout(400);
+  check('кнопка «Назад» возвращает к закреплённым',
+    await page.evaluate(() => !document.querySelector('#start-body').hidden));
+  await page.evaluate(() => Shell.closePanels());
+  await page.waitForTimeout(300);
+
   /* --- панель задач --- */
   await page.evaluate(() => WM.toggleMax(WM.top()));
   await page.waitForTimeout(800);
