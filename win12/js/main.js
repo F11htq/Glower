@@ -27,6 +27,7 @@
   const showDesktop = () => { desktop.classList.add('on'); };
 
   const unlock = () => {
+    if (window.Profiles && !Profiles.authorized()){ Profiles.focusPassword(); return; }
     if (!lock.classList.contains('gone')){
       Shell.lock(false);
       Snd.blip(660, .12, 'sine', .04);
@@ -41,6 +42,7 @@
     setTimeout(() => boot.remove(), 700);
   }, skip ? 200 : 1900);
 
+  window.__unlock = unlock;
   lock.addEventListener('click', unlock);
   $('#lock-enter').addEventListener('click', e => { e.stopPropagation(); unlock(); });
   addEventListener('keydown', function once(e){

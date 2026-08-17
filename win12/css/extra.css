@@ -250,3 +250,23 @@ body.taskbar #tb-tray.in-dock::before{display:none}
 .pal:hover{flex:1.5}
 .pal span{font-size:11px;letter-spacing:.5px;padding:4px 9px;border-radius:8px;
   background:rgba(0,0,0,.35);color:#fff;backdrop-filter:blur(8px);text-transform:uppercase}
+
+/* ---------- Экран блокировки: профили ---------- */
+.lock-pw{display:flex;gap:6px;align-items:center;padding:5px;border-radius:14px;
+  background:rgba(var(--tint),.16);backdrop-filter:blur(20px);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.lock-pw input{width:190px;padding:8px 14px;border:0;outline:0;background:none;font-size:14px;color:var(--fg)}
+.lock-pw input::placeholder{color:var(--fg-dim)}
+.lock-pw button{width:34px;height:34px;border-radius:10px;background:rgba(var(--tint),.22);font-size:15px;
+  transition:background var(--t1)}
+.lock-pw button:hover{background:var(--accent);color:#fff}
+.lock-pw.shake{animation:shk .4s}
+@keyframes shk{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+.lock-err{font-size:12px;color:#ff8080;min-height:16px}
+.lock-sw-t{font-size:11px;opacity:.5;margin-top:14px;text-transform:uppercase;letter-spacing:.6px}
+.lock-users{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.lock-user{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:22px;font-size:13px;
+  background:rgba(var(--tint),.14);backdrop-filter:blur(16px);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);transition:transform var(--t2) var(--e-spring),background var(--t1)}
+.lock-user:hover{background:rgba(var(--tint),.26);transform:translateY(-2px)}
+.lock-user .ava{width:26px;height:26px;font-size:12px}

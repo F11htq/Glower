@@ -1637,18 +1637,100 @@ APPS.settings = {
 
     /* --- Учётные записи --- */
     function pAcc(){
+      const me = Profiles.current();
       const hero = el('div', 'set-hero');
-      hero.innerHTML = `<div class="ava">${esc(S.userName[0])}</div><div><b style="font-size:17px">${esc(S.userName)}</b>
-        <div class="muted tiny">Локальная учётная запись · Администратор</div></div>`;
+      hero.innerHTML = `<div class="ava">${esc(me.emoji || me.name[0])}</div>
+        <div><b style="font-size:17px">${esc(me.name)}</b>
+        <div class="muted tiny">${me.hash ? '🔒 Вход по паролю' : 'Без пароля'} · создан ${new Date(me.created).toLocaleDateString('ru-RU')}</div></div>`;
       main.appendChild(hero);
+
       const c = card('Профиль');
-      const i = el('input', 'inp'); i.value = S.userName;
-      i.onchange = () => { set('userName', i.value || 'User'); Shell.renderShell(); };
-      c.appendChild(row('👤', 'Имя пользователя', 'Отображается в Пуске и на экране блокировки', i));
-      c.appendChild(row('🔑', 'Пароль', 'Не задан', el('button', 'btn', 'Изменить')));
-      c.appendChild(row('👁', 'Windows Hello', 'Вход по лицу недоступен в браузере', el('div', 'muted tiny', 'Недоступно')));
-      c.appendChild(row('☁️', 'Синхронизация', 'Настройки хранятся в localStorage', el('div', 'muted tiny', 'Локально')));
+      const ni = el('input', 'inp'); ni.value = me.name; ni.style.width = '160px';
+      ni.onchange = () => {
+        const l = Profiles.list(); const p = l.find(x => x.id === me.id);
+        p.name = ni.value || 'Пользователь'; Profiles.save(l);
+        set('userName', p.name); Shell.renderShell(); Profiles.buildLock(); drawMain();
+      };
+      c.appendChild(row('👤', 'Имя', 'Показывается в Пуске и на экране блокировки', ni));
+
+      const ei = el('input', 'inp'); ei.value = me.emoji || me.name[0]; ei.style.width = '64px'; ei.maxLength = 2;
+      ei.onchange = () => {
+        const l = Profiles.list(); const p = l.find(x => x.id === me.id);
+        p.emoji = ei.value || p.name[0]; Profiles.save(l);
+        Shell.renderShell(); Profiles.buildLock(); drawMain();
+      };
+      c.appendChild(row('🙂', 'Значок', 'Буква или эмодзи', ei));
       main.appendChild(c);
+
+      const pw = card('Пароль');
+      const p1 = el('input', 'inp'); p1.type = 'password'; p1.placeholder = me.hash ? 'Новый пароль' : 'Пароль'; p1.style.width = '150px';
+      const p2 = el('input', 'inp'); p2.type = 'password'; p2.placeholder = 'Ещё раз'; p2.style.width = '150px';
+      const sv = el('button', 'btn pri', 'Сохранить');
+      sv.onclick = async () => {
+        if (p1.value !== p2.value) return Shell.toast('Учётная запись', 'Пароли не совпадают', '⚠️');
+        if (!p1.value) return Shell.toast('Учётная запись', 'Пустой пароль — используйте «Убрать»', '⚠️');
+        await Profiles.setPassword(me.id, p1.value);
+        Profiles.ok = true; Profiles.buildLock(); drawMain();
+        Shell.toast('Учётная запись', 'Пароль установлен', '🔒');
+      };
+      const rw = row('🔑', me.hash ? 'Сменить пароль' : 'Установить пароль',
+        'Запрашивается на экране блокировки и при смене пользователя', el('span'));
+      rw.querySelector('.ctl').append(p1, p2, sv);
+      pw.appendChild(rw);
+      if (me.hash){
+        const del = el('button', 'btn', 'Убрать');
+        del.onclick = async () => {
+          if (!confirm('Входить без пароля?')) return;
+          await Profiles.setPassword(me.id, null); Profiles.buildLock(); drawMain();
+          Shell.toast('Учётная запись', 'Пароль удалён', '🔓');
+        };
+        pw.appendChild(row('🔓', 'Убрать пароль', 'Вход станет свободным', del));
+      }
+      pw.appendChild(row('ℹ️', 'Что даёт пароль честно',
+        'Это блокировка экрана внутри прототипа: хеш SHA-256 хранится локально, сами данные не шифруются и видны через инструменты разработчика браузера. Защита от случайного взгляда, а не от того, у кого есть доступ к компьютеру.', el('span')));
+      main.appendChild(pw);
+
+      const others = Profiles.list().filter(x => x.id !== me.id);
+      const u = card('Другие пользователи');
+      others.forEach(o => {
+        const go = el('button', 'btn', 'Войти');
+        go.onclick = () => Profiles.switchTo(o.id);
+        const rm = el('button', 'btn', '🗑');
+        rm.onclick = () => {
+          if (!confirm('Удалить профиль «' + o.name + '» вместе со всеми его файлами и настройками?')) return;
+          Profiles.remove(o.id); Profiles.buildLock(); drawMain();
+          Shell.toast('Учётные записи', 'Профиль удалён', '🗑️');
+        };
+        const r2 = row(o.emoji || '👤', o.name, (o.hash ? '🔒 с паролем' : 'без пароля') +
+          ' · свои файлы и настройки', go);
+        r2.querySelector('.ctl').appendChild(rm);
+        u.appendChild(r2);
+      });
+      if (!others.length) u.appendChild(row('👤', 'Пока только вы', 'Добавьте профиль — у него будут отдельные файлы, обои и настройки', el('span')));
+
+      const nn = el('input', 'inp'); nn.placeholder = 'Имя'; nn.style.width = '130px';
+      const ne = el('input', 'inp'); ne.placeholder = '🙂'; ne.style.width = '56px'; ne.maxLength = 2;
+      const np = el('input', 'inp'); np.type = 'password'; np.placeholder = 'Пароль (необязательно)'; np.style.width = '160px';
+      const add = el('button', 'btn pri', '＋ Создать');
+      add.onclick = async () => {
+        if (!nn.value.trim()) return Shell.toast('Учётные записи', 'Введите имя', '⚠️');
+        const id = await Profiles.add(nn.value.trim(), ne.value.trim(), np.value);
+        Profiles.buildLock(); drawMain();
+        Shell.toast('Учётные записи', 'Профиль создан. Войти можно с экрана блокировки', '👥');
+      };
+      const ar = row('➕', 'Новый профиль', 'Отдельные файловая система, обои и параметры', el('span'));
+      ar.querySelector('.ctl').append(nn, ne, np, add);
+      u.appendChild(ar);
+      main.appendChild(u);
+
+      const d = card('Данные профиля');
+      const used = Object.keys(localStorage)
+        .filter(k => k.startsWith('win12.' + (window.__ns || '')) )
+        .reduce((s2, k) => s2 + (localStorage[k] || '').length, 0);
+      d.appendChild(row('🗄', 'Хранилище этого профиля', 'Файлы, настройки и данные приложений',
+        el('div', 'muted tiny', (used / 1024).toFixed(1) + ' КБ')));
+      d.appendChild(row('🔀', 'Изоляция', 'У каждого профиля свой рабочий стол, Проводник, корзина, задачи и заметки — они не пересекаются', el('span')));
+      main.appendChild(d);
     }
 
     /* --- Время --- */

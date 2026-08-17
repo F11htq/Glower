@@ -55,14 +55,14 @@ const DEFAULTS = {
   clock24:true, showSeconds:false,
   volume:62, brightness:100, wifi:true, bluetooth:true, dnd:false, nightLight:false,
   airdrop:true, hotcorners:true, sounds:false, soundNotif:true,
-  userName:'Dymensity', city:'Москва',
+  userName:((window.__profiles || []).find(p => p.id === window.__profile) || {}).name || 'Dymensity', city:'Москва',
   snapAssist:true, tapClickSound:false,
   pinned:['settings','notepad','files','browser','calc','term','paint','photos','music','calendar','clock','store'],
   dockApps:['browser','files','notepad','settings','music','term','paint','calc']
 };
 
 const Store = {
-  key:'win12.settings.v1',
+  key:'win12.' + (window.__ns || '') + 'settings.v1',
   s:{},
   load(){ try{ this.s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(this.key) || '{}') }; }
           catch(e){ this.s = { ...DEFAULTS }; } return this.s; },
@@ -126,7 +126,7 @@ function hexToRgb(h){
    Виртуальная файловая система
    ========================================================================== */
 const FS = {
-  key:'win12.fs.v1',
+  key:'win12.' + (window.__ns || '') + 'fs.v1',
   root:null,
   load(){
     try { this.root = JSON.parse(localStorage.getItem(this.key)); } catch(e){}
@@ -176,8 +176,9 @@ FS.load();
 
 /* ---------- Мелкие хранилища ---------- */
 const KV = {
-  get(k, def){ try{ const v = localStorage.getItem('win12.' + k); return v == null ? def : JSON.parse(v); }catch(e){ return def; } },
-  set(k, v){ try{ localStorage.setItem('win12.' + k, JSON.stringify(v)); }catch(e){} }
+  p(k){ return 'win12.' + (window.__ns || '') + k; },
+  get(k, def){ try{ const v = localStorage.getItem(this.p(k)); return v == null ? def : JSON.parse(v); }catch(e){ return def; } },
+  set(k, v){ try{ localStorage.setItem(this.p(k), JSON.stringify(v)); }catch(e){} }
 };
 
 /* ---------- Звук (WebAudio, без файлов) ---------- */
