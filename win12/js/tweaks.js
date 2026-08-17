@@ -78,7 +78,7 @@ const WIDGETS = {
     return `<div class="w-t">Часы</div><div class="w-big dw-clock">${pad2(d.getHours())}:${pad2(d.getMinutes())}</div>
       <div class="tiny muted">${d.toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long' })}</div>`; } },
   weather:{ n:'Погода', e:'🌤', h(){ const w = Shell.weather();
-    return `<div class="w-t">Погода · ${esc(S.city)}</div><div class="row"><div style="font-size:30px">${w.ico}</div>
+    return `<div class="w-t">Погода · ${esc(S.city)}${w.real ? '' : ' · демо'}</div><div class="row"><div style="font-size:30px">${w.ico}</div>
       <div><div class="w-big">${w.t > 0 ? '+' : ''}${w.t}°</div><div class="tiny muted">${w.desc}</div></div></div>`; } },
   calendar:{ n:'Календарь', e:'📅', h(){ const d = new Date();
     const ev = Object.entries(KV.get('cal.events', {})).slice(0, 2);

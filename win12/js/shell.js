@@ -288,9 +288,25 @@ const Shell = {
       t.onclick = () => { const v = !get(); set(v); t.classList.toggle('on', v); $('.ts', t).textContent = sub(v); };
       return t;
     };
+    // сеть и устройства показывают настоящее состояние и ведут в Параметры
+    const netTile = el('div', 'tile btn');
+    const paintNet = () => {
+      const on = navigator.onLine;
+      netTile.classList.toggle('on', on);
+      netTile.innerHTML = `<div class="tile-ico">${on ? '📶' : '📴'}</div>
+        <div><div class="tt">Сеть</div><span class="ts">${on ? 'подключено' : 'нет подключения'}</span></div>`;
+    };
+    paintNet();
+    addEventListener('online', paintNet); addEventListener('offline', paintNet);
+    netTile.onclick = () => { WM.open('settings', { section:'net' }); this.closePanels(); };
+
+    const devTile = el('div', 'tile btn');
+    devTile.innerHTML = `<div class="tile-ico">🎧</div><div><div class="tt">Устройства</div>
+      <span class="ts">камеры, звук, батарея</span></div>`;
+    devTile.onclick = () => { WM.open('settings', { section:'bt' }); this.closePanels(); };
+
     grid.append(
-      T('📶', 'Wi-Fi', v => v ? 'Dymensity-5G' : 'Отключено', () => S.wifi, v => Store.set('wifi', v)),
-      T('🎧', 'Bluetooth', v => v ? 'Вкл' : 'Выкл', () => S.bluetooth, v => Store.set('bluetooth', v)),
+      netTile, devTile,
       T('🌙', 'Не беспокоить', v => v ? 'Вкл' : 'Выкл', () => S.dnd, v => Store.set('dnd', v)),
       T('🌗', 'Тема', v => v ? (S.theme === 'dark' ? 'Тёмная' : 'Прозрачная') : 'Светлая',
         () => S.theme !== 'light',

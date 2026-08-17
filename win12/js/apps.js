@@ -996,14 +996,14 @@ APPS.settings = {
       { id:'sound',  n:'Звук',                     e:'🔊' },
       { id:'display',n:'Дисплей',                  e:'💡' },
       { id:'net',    n:'Сеть и Интернет',          e:'📶' },
-      { id:'bt',     n:'Bluetooth и устройства',   e:'🎧' },
+      { id:'bt',     n:'Устройства и датчики',     e:'🎧' },
       { id:'notif',  n:'Уведомления и фокус',      e:'🔔' },
       { id:'apps',   n:'Приложения',               e:'📦' },
       { id:'acc',    n:'Учётные записи',           e:'👤' },
       { id:'time',   n:'Время и язык',             e:'🌍' },
       { id:'a11y',   n:'Спец. возможности',        e:'♿' },
       { id:'privacy',n:'Конфиденциальность',       e:'🔐' },
-      { id:'update', n:'Центр обновления',         e:'🔄' },
+      { id:'update', n:'Сборка',                    e:'📦' },
       { id:'about',  n:'О системе',                e:'ℹ️' }
     ];
     let cur = (opts && opts.section) || 'home';
@@ -1092,10 +1092,15 @@ APPS.settings = {
       main.appendChild(bk);
 
       const st = card('Хранилище');
-      const used = JSON.stringify(localStorage).length / 1024;
-      st.appendChild(row('💾', 'Локальные данные', used.toFixed(1) + ' КБ в localStorage',
-        (() => { const b = el('button', 'btn', 'Очистить всё'); b.onclick = () => {
-          if (confirm('Сбросить все настройки и файлы?')){ localStorage.clear(); location.reload(); } }; return b; })()));
+      const used = el('div', 'muted tiny', 'считаю…');
+      st.appendChild(row('💾', 'Занято данными системы', 'Оценка браузера по localStorage и IndexedDB', used));
+      Real.storage().then(x => used.textContent = x.usage != null
+        ? (x.usage / 1048576).toFixed(1) + ' МБ из ' + (x.quota / 1048576).toFixed(0) + ' МБ'
+        : (x.ls / 1024).toFixed(1) + ' КБ');
+      const cl = el('button', 'btn', 'Очистить всё');
+      cl.onclick = () => { if (confirm('Сбросить все настройки и файлы?')){
+        localStorage.clear(); try { indexedDB.deleteDatabase('win12'); } catch(e){} location.reload(); } };
+      st.appendChild(row('🧹', 'Сброс системы', 'Настройки, файлы и загруженное аудио', cl));
       main.appendChild(st);
     }
 
@@ -1103,7 +1108,7 @@ APPS.settings = {
     function pSystem(){
       const c = card('Система');
       c.appendChild(row('💡', 'Дисплей', 'Яркость, ночной свет', el('div', 'muted', '›'), 'clickable')).onclick = () => { cur = 'display'; drawNav(); drawMain(); };
-      c.appendChild(row('🔊', 'Звук', 'Громкость и устройства', el('div', 'muted', '›'), 'clickable')).onclick = () => { cur = 'sound'; drawNav(); drawMain(); };
+      c.appendChild(row('🔊', 'Звук', 'Громкость и аудиоустройства', el('div', 'muted', '›'), 'clickable')).onclick = () => { cur = 'sound'; drawNav(); drawMain(); };
       c.appendChild(row('🔔', 'Уведомления', 'Баннеры, фокусировка', el('div', 'muted', '›'), 'clickable')).onclick = () => { cur = 'notif'; drawNav(); drawMain(); };
       main.appendChild(c);
 
@@ -1118,10 +1123,21 @@ APPS.settings = {
       main.appendChild(m);
 
       const p = card('Питание');
-      p.appendChild(row('🔋', 'Режим питания', 'Баланс производительности',
-        sel([{ n:'Экономия', v:'eco' }, { n:'Сбалансированный', v:'bal' }, { n:'Максимум', v:'max' }],
-            () => KV.get('power', 'bal'), v => { KV.set('power', v); Shell.toast('Питание', 'Режим изменён', '🔋'); })));
-      p.appendChild(row('😴', 'Спящий режим', 'Через 15 минут бездействия', toggle(() => KV.get('sleep', false), v => KV.set('sleep', v))));
+      const bl = el('div'); p.appendChild(bl);
+      Real.battery().then(b => {
+        bl.innerHTML = '';
+        if (!b){ bl.appendChild(row('🔋', 'Состояние батареи недоступно',
+          'Браузер не отдаёт Battery API — управлять питанием со страницы тоже нельзя', el('span'))); return; }
+        bl.appendChild(row(b.charging ? '🔌' : '🔋', 'Батарея',
+          b.charging ? 'Заряжается' : 'Работа от батареи', el('div', 'muted tiny', b.level + '%')));
+      });
+      p.appendChild(row('⚡', 'Экономия ресурсов', 'Уменьшает нагрузку на видеокарту: отключает размытие и ускоряет анимации',
+        toggle(() => KV.get('ecoMode', false), v => {
+          KV.set('ecoMode', v);
+          if (v){ KV.set('ecoPrev', { blur:S.blur, speed:S.speed }); S.blur = 0; S.speed = .6; }
+          else { const pr = KV.get('ecoPrev', { blur:34, speed:1 }); S.blur = pr.blur; S.speed = pr.speed; }
+          Store.save(); applySettings();
+        })));
       main.appendChild(p);
     }
 
@@ -1324,62 +1340,236 @@ APPS.settings = {
 
     /* --- Звук --- */
     function pSound(){
-      const c = card('Вывод');
-      c.appendChild(row('🔊', 'Громкость', '', slider(() => S.volume, v => set('volume', v), 0, 100, 1, v => v + '%')));
-      c.appendChild(row('🎚', 'Звуки интерфейса', 'Открытие и закрытие окон (по умолчанию выключены)',
-        toggle(() => S.sounds, v => set('sounds', v))));
+      const c = card('Громкость и звуки системы');
+      c.appendChild(row('🔊', 'Общая громкость', 'Влияет на звуки системы и приложение Музыка',
+        slider(() => S.volume, v => set('volume', v), 0, 100, 1, v => v + '%')));
+      c.appendChild(row('🎚', 'Звуки интерфейса', 'Открытие и закрытие окон', toggle(() => S.sounds, v => set('sounds', v))));
       c.appendChild(row('🔔', 'Звук уведомлений', 'Короткий сигнал у баннеров',
         toggle(() => S.soundNotif !== false, v => set('soundNotif', v))));
-      c.appendChild(row('🎧', 'Устройство вывода', '',
-        sel([{ n:'Динамики (Realtek)', v:'sp' }, { n:'Наушники', v:'hp' }, { n:'HDMI', v:'hdmi' }], () => KV.get('out', 'sp'), v => KV.set('out', v))));
-      const t = el('button', 'btn', '▶ Тест');
-      t.onclick = () => [0, 1, 2, 3].forEach(i => setTimeout(() => Snd.blip(440 * Math.pow(1.26, i), .18, 'triangle', .07), i * 150));
-      c.appendChild(row('🎵', 'Проверить звук', 'Воспроизвести тестовый сигнал', t));
+      const t = el('button', 'btn', '▶ Проиграть');
+      t.onclick = () => { const o = S.sounds; S.sounds = true;
+        [0,1,2,3].forEach(k => setTimeout(() => Snd.blip(440 * Math.pow(1.26, k), .18, 'triangle', .07), k * 150));
+        setTimeout(() => S.sounds = o, 800); };
+      c.appendChild(row('🎵', 'Проверить вывод', 'Четыре тона через WebAudio', t));
       main.appendChild(c);
+
+      const d = card('Аудиоустройства системы');
+      const info = el('div', 'set-row');
+      info.innerHTML = '<div class="emo">🎧</div><div class="l"><b>Опрос устройств…</b></div>';
+      d.appendChild(info);
+      main.appendChild(d);
+
+      const fill = () => Real.media().then(list => {
+        const outs = list.filter(x => x.kind === 'audiooutput');
+        const ins  = list.filter(x => x.kind === 'audioinput');
+        d.innerHTML = '';
+        d.appendChild(el('div', 'card-t', 'Аудиоустройства системы'));
+        if (!list.length){
+          d.appendChild(row('🚫', 'Список недоступен', 'Браузер не отдаёт устройства на этой странице', el('span')));
+          return;
+        }
+        const named = outs.concat(ins).some(x => x.label);
+        [['🔈','Вывод', outs], ['🎙','Ввод', ins]].forEach(([e, t2, arr]) => {
+          if (!arr.length) return;
+          arr.forEach((x, k) => d.appendChild(row(e, x.label || (t2 + ' ' + (k + 1) + ' — название скрыто'),
+            t2 + ' · ' + (x.deviceId === 'default' ? 'по умолчанию' : x.deviceId.slice(0, 8)), el('span'))));
+        });
+        if (!named){
+          const b = el('button', 'btn', 'Показать названия');
+          b.onclick = () => Real.askMic().then(ok => ok ? fill() : Shell.toast('Звук', 'Доступ к микрофону отклонён', '🚫'));
+          d.appendChild(row('🔓', 'Названия устройств скрыты', 'Браузер раскрывает их только после доступа к микрофону', b));
+        }
+      });
+      fill();
     }
 
     /* --- Дисплей --- */
     function pDisplay(){
       const c = card('Яркость и цвет');
-      c.appendChild(row('☀️', 'Яркость', '', slider(() => S.brightness, v => set('brightness', v), 30, 100, 1, v => v + '%')));
-      c.appendChild(row('🌙', 'Ночной свет', 'Тёплые тона для вечера', toggle(() => S.nightLight, v => set('nightLight', v))));
-      c.appendChild(row('🌗', 'Тема по времени суток', 'Светлая днём, тёмная ночью', toggle(() => S.autoTheme, v => { set('autoTheme', v); Shell.autoTheme(); })));
-      main.appendChild(c);
-      const m = card('Масштаб и разрешение');
-      m.appendChild(row('🔎', 'Масштаб', 'Размер текста и элементов',
+      c.appendChild(row('☀️', 'Яркость', 'Программное затемнение картинки, не аппаратная подсветка',
+        slider(() => S.brightness, v => set('brightness', v), 30, 100, 1, v => v + '%')));
+      c.appendChild(row('🌙', 'Ночной свет', 'Тёплые тона', toggle(() => S.nightLight, v => set('nightLight', v))));
+      c.appendChild(row('🌗', 'Тема по времени суток', 'Светлая днём, тёмная ночью',
+        toggle(() => S.autoTheme, v => { set('autoTheme', v); Shell.autoTheme(); })));
+      const fs = el('button', 'btn', document.fullscreenElement ? 'Выйти' : 'Включить');
+      fs.onclick = () => { if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen().catch(() => {});
+        setTimeout(drawMain, 300); };
+      c.appendChild(row('⛶', 'Полноэкранный режим', 'Настоящий Fullscreen API · клавиша F11', fs));
+      c.appendChild(row('🔎', 'Масштаб интерфейса', 'Размер текста и элементов',
         seg([{ n:'90%', v:.9 }, { n:'100%', v:1 }, { n:'110%', v:1.1 }, { n:'125%', v:1.25 }],
             () => KV.get('zoom', 1), v => { KV.set('zoom', v); document.documentElement.style.fontSize = (16 * v) + 'px'; })));
-      m.appendChild(row('🖥️', 'Разрешение', 'Окно браузера', el('div', 'muted tiny', innerWidth + ' × ' + innerHeight)));
+      main.appendChild(c);
+
+      const d = Real.display();
+      const m = card('Характеристики экрана');
+      [['🖥️','Разрешение экрана', d.w + ' × ' + d.h + ' px'],
+       ['🪟','Область окна', d.aw + ' × ' + d.ah + ' px'],
+       ['🔬','Плотность пикселей', d.dpr + '× (' + Math.round(d.w * d.dpr) + ' × ' + Math.round(d.h * d.dpr) + ' физических)'],
+       ['🎨','Глубина цвета', d.depth + ' бит'],
+       ['🔄','Ориентация', d.orient],
+       ['✨','Расширенный диапазон (HDR)', d.hdr ? 'поддерживается' : 'нет']
+      ].forEach(([e, n, v]) => m.appendChild(row(e, n, '', el('div', 'muted tiny', v))));
+      const hz = el('div', 'muted tiny', 'измеряю…');
+      m.appendChild(row('⚡', 'Частота обновления', 'Замер по кадрам анимации', hz));
+      Real.refreshRate().then(v => hz.textContent = v + ' Гц');
       main.appendChild(m);
+
+      const p = card('Системные предпочтения браузера');
+      p.appendChild(row('🌓', 'Тема системы', 'Что запрашивает ваша ОС',
+        el('div', 'muted tiny', d.dark ? 'тёмная' : 'светлая')));
+      const ap = el('button', 'btn', 'Применить');
+      ap.onclick = () => { set('theme', d.dark ? KV.get('darkVariant', 'glass') : 'light'); drawMain(); };
+      p.appendChild(row('🎯', 'Подстроить под систему', 'Переключить тему прототипа под настройку ОС', ap));
+      p.appendChild(row('🌀', 'Уменьшенное движение', 'Системная настройка доступности',
+        el('div', 'muted tiny', d.reduce ? 'включено в ОС' : 'выключено')));
+      p.appendChild(row('◐', 'Повышенный контраст', '', el('div', 'muted tiny', d.contrast ? 'включён в ОС' : 'выключен')));
+      main.appendChild(p);
     }
 
     /* --- Сеть --- */
     function pNet(){
-      const c = card('Wi-Fi');
-      c.appendChild(row('📶', 'Wi-Fi', S.wifi ? 'Подключено к Dymensity-5G' : 'Отключено', toggle(() => S.wifi, v => { set('wifi', v); drawMain(); })));
-      if (S.wifi){
-        [['Dymensity-5G', '▮▮▮▮', true], ['Home_Net', '▮▮▮', false], ['Guest', '▮▮', false], ['MosMetro_Free', '▮', false]]
-          .forEach(([n, s, on]) => c.appendChild(row(on ? '✅' : '📡', n, on ? 'Подключено, защищено' : 'Защищено (WPA2)', el('div', 'muted', s))));
+      const n = Real.net();
+      const c = card('Состояние подключения');
+      const st = el('div', 'muted tiny', n.online ? '✅ В сети' : '⚠️ Нет подключения');
+      c.appendChild(row(n.online ? '📶' : '📴', 'Интернет', 'Событие online/offline от браузера', st));
+      if (n.supported){
+        c.appendChild(row('🚀', 'Тип соединения', 'Оценка браузера (Network Information API)',
+          el('div', 'muted tiny', String(n.type || 'н/д').toUpperCase())));
+        c.appendChild(row('⬇️', 'Пропускная способность', 'Оценка, а не замер',
+          el('div', 'muted tiny', n.downlink ? n.downlink + ' Мбит/с' : 'н/д')));
+        c.appendChild(row('⏱', 'Задержка', 'Круговая задержка по оценке браузера',
+          el('div', 'muted tiny', n.rtt ? n.rtt + ' мс' : 'н/д')));
+        c.appendChild(row('🪶', 'Экономия трафика', '', el('div', 'muted tiny', n.saveData ? 'включена' : 'выключена')));
+      } else {
+        c.appendChild(row('ℹ️', 'Подробности недоступны', 'Этот браузер не поддерживает Network Information API — показываем только статус', el('span')));
       }
+      const ping = el('button', 'btn', 'Проверить');
+      const pingRes = el('div', 'muted tiny', '');
+      ping.onclick = async () => {
+        pingRes.textContent = 'запрос…';
+        const t0 = performance.now();
+        try {
+          await fetch('https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m',
+            { cache:'no-store' });
+          pingRes.textContent = Math.round(performance.now() - t0) + ' мс';
+        } catch(e){ pingRes.textContent = 'нет ответа'; }
+      };
+      const pr = row('🛰', 'Реальный запрос в сеть', 'Обращение к api.open-meteo.com и замер времени ответа', ping);
+      pr.querySelector('.ctl').appendChild(pingRes);
+      c.appendChild(pr);
       main.appendChild(c);
-      const v = card('VPN и прокси');
-      v.appendChild(row('🛡', 'VPN', 'Не подключено', toggle(() => KV.get('vpn', false), x => KV.set('vpn', x))));
-      v.appendChild(row('🌐', 'Прокси-сервер', 'Определять автоматически', toggle(() => KV.get('proxy', true), x => KV.set('proxy', x))));
-      v.appendChild(row('✈️', 'Режим полёта', '', toggle(() => KV.get('air', false), x => { KV.set('air', x); if (x){ set('wifi', false); set('bluetooth', false); } drawMain(); })));
-      main.appendChild(v);
+
+      const w = card('Погода');
+      const d = Weather.data();
+      const wst = el('div', 'muted tiny', d && d.real ? '✅ настоящие данные' : 'демо-данные');
+      w.appendChild(row('🌤', 'Источник', d && d.real
+        ? 'Open-Meteo, обновлено ' + new Date(d.ts).toLocaleTimeString('ru-RU')
+        : 'Сеть недоступна — показывается заглушка', wst));
+      const ci = el('input', 'inp'); ci.value = S.city; ci.style.width = '150px';
+      ci.onchange = () => { set('city', ci.value); Weather.load(true).then(drawMain); };
+      w.appendChild(row('🏙', 'Город', 'Ищется по названию через геокодер Open-Meteo', ci));
+      const up = el('button', 'btn', '🔄 Обновить');
+      up.onclick = () => { up.textContent = 'загрузка…';
+        Weather.load(true).then(() => { drawMain(); Shell.renderDeskWidgets(); }); };
+      w.appendChild(row('♻️', 'Обновить прогноз', 'Запрос выполняется прямо сейчас', up));
+      const geo = el('button', 'btn', '📍 Определить');
+      geo.onclick = () => Real.askGeo().then(p => {
+        if (!p) return Shell.toast('Геолокация', 'Доступ отклонён или недоступен', '🚫');
+        Shell.toast('Геолокация', 'Координаты: ' + p.lat.toFixed(3) + ', ' + p.lon.toFixed(3) +
+          ' (±' + Math.round(p.acc) + ' м)', '📍');
+      });
+      w.appendChild(row('🛰', 'Моё местоположение', 'Настоящий запрос геолокации браузера', geo));
+      main.appendChild(w);
+
+      const h = card('Об этой странице');
+      const sy = Real.system();
+      [['🔐','Защищённый контекст', sy.secure ? 'да' : 'нет (часть API недоступна)'],
+       ['🍪','Cookie', sy.cookies ? 'разрешены' : 'запрещены'],
+       ['🌍','Часовой пояс', sy.tz],
+       ['🗣','Языки', (sy.langs || [sy.lang]).join(', ')]
+      ].forEach(([e, k, v]) => h.appendChild(row(e, k, '', el('div', 'muted tiny', v))));
+      main.appendChild(h);
     }
 
-    /* --- Bluetooth --- */
+    /* --- Устройства --- */
     function pBt(){
-      const c = card('Устройства');
-      c.appendChild(row('🎧', 'Bluetooth', S.bluetooth ? 'Включён' : 'Выключен', toggle(() => S.bluetooth, v => { set('bluetooth', v); drawMain(); })));
-      if (S.bluetooth) [['🎧','Dymensity Buds','Подключены · 82%'],['⌨️','Клавиатура K380','Сопряжено'],['🖱','Magic Mouse','Сопряжено'],['📱','Телефон','Не подключён']]
-        .forEach(([e, n, s]) => c.appendChild(row(e, n, s, el('button', 'btn', '⋯'))));
+      const inp = Real.input(), sy = Real.system();
+      const c = card('Ввод');
+      c.appendChild(row('🖱', 'Точный указатель', 'Мышь или трекпад', el('div', 'muted tiny', inp.fine ? 'есть' : 'нет')));
+      c.appendChild(row('👆', 'Сенсорный экран', 'Максимум точек касания',
+        el('div', 'muted tiny', inp.touch ? inp.points + ' точек' : 'не обнаружен')));
+      c.appendChild(row('🖥', 'Наведение', 'Поддерживает ли устройство hover',
+        el('div', 'muted tiny', inp.hover ? 'да' : 'нет')));
       main.appendChild(c);
-      const a = card('Общий доступ');
-      a.appendChild(row('📤', 'AirDrop / Обмен с окружением', 'Видимость для устройств рядом', toggle(() => S.airdrop, v => set('airdrop', v))));
-      a.appendChild(row('🖨', 'Принтеры и сканеры', 'Устройств не найдено', el('button', 'btn', 'Добавить')));
-      main.appendChild(a);
+
+      const g = card('Геймпады');
+      const gl = el('div');
+      g.appendChild(gl);
+      const drawPads = () => {
+        const pads = Real.gamepads();
+        gl.innerHTML = '';
+        if (!pads.length){
+          gl.appendChild(row('🎮', 'Геймпады не найдены', 'Подключите контроллер и нажмите любую кнопку — он появится здесь', el('span')));
+        } else pads.forEach(p => gl.appendChild(row('🎮', p.id.slice(0, 42),
+          'кнопок: ' + p.buttons.length + ' · осей: ' + p.axes.length,
+          el('div', 'muted tiny', 'подключён'))));
+      };
+      drawPads();
+      addEventListener('gamepadconnected', drawPads, { once:true });
+      main.appendChild(g);
+
+      const bt = card('Bluetooth');
+      const b = Real.bluetooth();
+      if (b.api){
+        const pick = el('button', 'btn pri', 'Выбрать устройство');
+        const res = el('div', 'muted tiny', '');
+        pick.onclick = async () => { res.textContent = 'открываю системный диалог…';
+          const r = await Real.btPick();
+          res.textContent = r.error ? r.error : 'выбрано: ' + r.name; };
+        const rr = row('🎧', 'Подключить по Bluetooth', 'Откроется настоящий системный список устройств', pick);
+        rr.querySelector('.ctl').appendChild(res);
+        bt.appendChild(rr);
+      } else {
+        bt.appendChild(row('🚫', 'Web Bluetooth недоступен',
+          b.secure ? 'Браузер не поддерживает этот API' : 'Нужен защищённый контекст (https)', el('span')));
+      }
+      main.appendChild(bt);
+
+      const md = card('Камеры, микрофоны и динамики');
+      const mdl = el('div'); md.appendChild(mdl);
+      Real.media().then(list => {
+        mdl.innerHTML = '';
+        const groups = [['📷','Камеры','videoinput'],['🎙','Микрофоны','audioinput'],['🔈','Динамики','audiooutput']];
+        groups.forEach(([e, n, kind]) => {
+          const arr = list.filter(x => x.kind === kind);
+          mdl.appendChild(row(e, n, arr.length ? 'названия видны после выдачи доступа' : 'не обнаружены',
+            el('div', 'muted tiny', arr.length ? arr.length + ' шт.' : '0')));
+        });
+      });
+      main.appendChild(md);
+
+      const p = card('Питание');
+      const pl = el('div'); p.appendChild(pl);
+      Real.battery().then(b2 => {
+        pl.innerHTML = '';
+        if (!b2){ pl.appendChild(row('🔋', 'Battery API недоступен', 'Этот браузер не сообщает состояние батареи', el('span'))); return; }
+        pl.appendChild(row(b2.charging ? '🔌' : '🔋', 'Заряд батареи',
+          b2.charging ? 'Заряжается' : 'От батареи', el('div', 'muted tiny', b2.level + '%')));
+        const left = b2.charging ? b2.timeFull : b2.timeLeft;
+        if (isFinite(left) && left > 0)
+          pl.appendChild(row('⏳', b2.charging ? 'До полной зарядки' : 'Осталось работы', '',
+            el('div', 'muted tiny', Math.floor(left / 3600) + ' ч ' + Math.round(left % 3600 / 60) + ' мин')));
+      });
+      main.appendChild(p);
+
+      const h = card('Оборудование');
+      [['⚙️','Логических ядер', sy.cores || 'н/д'],
+       ['🧠','Оперативная память', sy.mem ? sy.mem + ' ГБ (округлено браузером)' : 'н/д'],
+       ['💻','Платформа', sy.platform],
+       ['📱','Мобильное устройство', sy.mobile ? 'да' : 'нет']
+      ].forEach(([e, k, v]) => h.appendChild(row(e, k, '', el('div', 'muted tiny', String(v)))));
+      main.appendChild(h);
     }
 
     /* --- Уведомления --- */
@@ -1387,9 +1577,27 @@ APPS.settings = {
       const c = card('Уведомления');
       c.appendChild(row('🔔', 'Уведомления', 'Показывать баннеры приложений', toggle(() => KV.get('notif', true), v => KV.set('notif', v))));
       c.appendChild(row('🌙', 'Не беспокоить', 'Скрывать баннеры и звуки', toggle(() => S.dnd, v => { set('dnd', v); Shell.updateCC(); })));
-      c.appendChild(row('🎯', 'Фокусировка', 'Сессия концентрации',
-        sel([{ n:'Выключено', v:'off' }, { n:'25 минут', v:'25' }, { n:'50 минут', v:'50' }],
-            () => KV.get('focus', 'off'), v => { KV.set('focus', v); if (v !== 'off') Shell.toast('Фокусировка', v + ' минут концентрации', '🎯'); })));
+      const fs = el('div', 'row');
+      const fsel = sel([{ n:'25 минут', v:'25' }, { n:'50 минут', v:'50' }, { n:'90 минут', v:'90' }],
+        () => KV.get('focusLen', '25'), v => KV.set('focusLen', v));
+      const fbtn = el('button', 'btn pri', 'Начать');
+      const fout = el('div', 'muted tiny', '');
+      let fiv = null;
+      const stopFocus = () => { clearInterval(fiv); fiv = null; fbtn.textContent = 'Начать';
+        fout.textContent = ''; Store.set('dnd', false); Shell.updateCC(); };
+      fbtn.onclick = () => {
+        if (fiv) return stopFocus();
+        let left = +fsel.value * 60;
+        Store.set('dnd', true); Shell.updateCC();
+        fbtn.textContent = 'Прервать';
+        fiv = setInterval(() => {
+          if (--left <= 0){ stopFocus(); Shell.toast('Фокусировка', 'Сессия завершена', '🎯'); Snd.note(); return; }
+          fout.textContent = Math.floor(left / 60) + ':' + pad2(left % 60);
+        }, 1000);
+        Shell.toast('Фокусировка', 'Уведомления выключены на ' + fsel.value + ' мин', '🎯');
+      };
+      fs.append(fsel, fbtn, fout);
+      c.appendChild(row('🎯', 'Фокусировка', 'Реально включает «Не беспокоить» на заданное время', fs));
       const t = el('button', 'btn', 'Показать'); t.onclick = () => Shell.toast('Тестовое уведомление', 'Так выглядят баннеры Windows 12', '🔔');
       c.appendChild(row('🧪', 'Проверить', 'Показать пример уведомления', t));
       main.appendChild(c);
@@ -1477,38 +1685,95 @@ APPS.settings = {
 
     /* --- Приватность --- */
     function pPrivacy(){
-      const c = card('Разрешения');
-      [['📍','Геолокация','Для виджета погоды'],['📷','Камера','Нет приложений'],['🎤','Микрофон','Нет приложений'],
-       ['📋','Буфер обмена','Копирование имён файлов'],['📊','Диагностика','Не отправляется']]
-        .forEach(([e, n, d]) => c.appendChild(row(e, n, d, toggle(() => KV.get('perm.' + n, true), v => KV.set('perm.' + n, v)))));
+      const c = card('Разрешения браузера');
+      const box = el('div'); c.appendChild(box);
+      const items = [
+        ['📷','Камера','camera', () => Real.askCamera()],
+        ['🎤','Микрофон','microphone', () => Real.askMic()],
+        ['📍','Геолокация','geolocation', () => Real.askGeo().then(Boolean)],
+        ['🔔','Уведомления','notifications', () => Notification.requestPermission().then(r => r === 'granted')]
+      ];
+      const RU = { granted:'разрешено', denied:'запрещено', prompt:'спросит при обращении', unknown:'неизвестно' };
+      const draw = () => {
+        box.innerHTML = '';
+        items.forEach(([e, n, perm, ask]) => {
+          const st = el('div', 'muted tiny', '…');
+          const b = el('button', 'btn', 'Запросить');
+          b.onclick = () => ask().then(() => setTimeout(draw, 300));
+          const r = row(e, n, 'Настоящее разрешение этой страницы', b);
+          r.querySelector('.ctl').insertBefore(st, b);
+          box.appendChild(r);
+          Real.perm(perm).then(v => {
+            st.textContent = RU[v] || v;
+            if (v === 'granted' || v === 'denied') b.style.display = 'none';
+          });
+        });
+      };
+      draw();
       main.appendChild(c);
-      const s = card('Безопасность');
-      s.appendChild(row('🛡', 'Защитник Windows', 'Угроз не найдено', el('div', 'muted tiny', '✅ Активен')));
-      s.appendChild(row('🔥', 'Брандмауэр', 'Все сети защищены', el('div', 'muted tiny', '✅ Включён')));
-      s.appendChild(row('🔐', 'Шифрование устройства', 'BitLocker недоступен в браузере', el('div', 'muted tiny', '—')));
-      main.appendChild(s);
+
+      const d = card('Данные прототипа');
+      d.appendChild(row('🔒', 'Всё хранится только у вас', 'Настройки и файлы лежат в localStorage и IndexedDB этого браузера. Ни один байт никуда не отправляется — сетевые запросы делает только погода и проверка соединения, по вашему действию.', el('span')));
+      const stEl = el('div', 'muted tiny', 'считаю…');
+      d.appendChild(row('💾', 'Занято хранилища', 'Оценка браузера по всем данным сайта', stEl));
+      Real.storage().then(x => {
+        stEl.textContent = x.usage != null
+          ? (x.usage / 1048576).toFixed(1) + ' МБ из ' + (x.quota / 1048576).toFixed(0) + ' МБ'
+          : (x.ls / 1024).toFixed(1) + ' КБ (localStorage)';
+      });
+      const wipe = el('button', 'btn', 'Стереть всё');
+      wipe.onclick = async () => {
+        if (!confirm('Удалить все настройки, файлы и загруженное аудио?')) return;
+        localStorage.clear();
+        try { indexedDB.deleteDatabase('win12'); } catch(e){}
+        location.reload();
+      };
+      d.appendChild(row('🧹', 'Полная очистка', 'Вернуть систему в исходное состояние', wipe));
+      main.appendChild(d);
+
+      const s2 = card('Что прототип не умеет');
+      s2.appendChild(row('🛡', 'Антивирус, брандмауэр, шифрование диска',
+        'Веб-страница не имеет доступа к этим механизмам вашей ОС, поэтому таких разделов здесь нет — вместо имитации показываем только то, что действительно работает.', el('span')));
+      main.appendChild(s2);
     }
 
-    /* --- Обновления --- */
+    /* --- Сборка --- */
     function pUpdate(){
-      const c = card('Центр обновления Windows');
-      const st = el('div'); st.innerHTML = `<div style="padding:18px 16px;display:flex;gap:14px;align-items:center">
-        <div style="font-size:34px">✅</div><div><b>Установлены все обновления</b>
-        <div class="muted tiny">Последняя проверка: сегодня, ${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}</div></div></div>`;
-      c.appendChild(st);
-      const b = el('button', 'btn pri', 'Проверить наличие обновлений');
-      b.onclick = () => {
-        b.textContent = 'Проверка…'; b.disabled = true;
-        setTimeout(() => { b.textContent = 'Проверить наличие обновлений'; b.disabled = false;
-          Shell.toast('Центр обновления', 'Обновлений нет — вы на последней версии', '🔄'); }, 1600);
-      };
-      c.appendChild(row('🔄', 'Проверка', '', b));
-      c.appendChild(row('⏰', 'Часы активности', '08:00 — 23:00', el('div', 'muted', '›')));
-      c.appendChild(row('🧪', 'Программа предварительной оценки', 'Канал Dev', el('div', 'muted tiny', 'Участник')));
+      const c = card('Сборка');
+      c.appendChild(row('📦', 'Windows 12 Prototype', 'Версия 12.0 (сборка 1200)', el('div', 'muted tiny', 'локальная')));
+      c.appendChild(row('🔄', 'Автоматических обновлений нет',
+        'Это страница, которая целиком лежит у вас: обновление — это новая версия файла. Кнопки «Проверить обновления» здесь не будет, потому что проверять нечего.', el('span')));
+      const rl = el('button', 'btn', 'Перезагрузить');
+      rl.onclick = () => location.reload();
+      c.appendChild(row('♻️', 'Перезапустить систему', 'Перечитает файлы с диска', rl));
       main.appendChild(c);
-      const h = card('Журнал обновлений');
-      [['12.0.1200','Прототип оболочки Liquid Glass'],['12.0.1180','Улучшения дока и анимаций'],['12.0.1150','Первая сборка']]
-        .forEach(([v, d]) => h.appendChild(row('📦', 'Windows 12 · ' + v, d, el('div', 'muted tiny', 'Установлено'))));
+
+      const st = card('Хранилище и сохранность');
+      const info = el('div', 'muted tiny', 'считаю…');
+      st.appendChild(row('💾', 'Занято', 'localStorage + IndexedDB', info));
+      const pb = el('button', 'btn', 'Закрепить');
+      const pst = el('div', 'muted tiny', '');
+      pb.onclick = () => Real.persist().then(ok => {
+        pst.textContent = ok ? 'закреплено' : 'браузер отказал';
+        Shell.toast('Хранилище', ok ? 'Данные защищены от автоочистки' : 'Браузер не дал закрепить', ok ? '🔒' : '⚠️');
+      });
+      const pr = row('🔒', 'Защитить от автоочистки', 'Браузер может удалять данные сайтов при нехватке места', pb);
+      pr.querySelector('.ctl').insertBefore(pst, pb);
+      st.appendChild(pr);
+      Real.storage().then(x => {
+        info.textContent = x.usage != null
+          ? (x.usage / 1048576).toFixed(1) + ' МБ из ' + (x.quota / 1048576).toFixed(0) + ' МБ'
+          : (x.ls / 1024).toFixed(1) + ' КБ';
+        if (x.persisted) pst.textContent = 'уже закреплено';
+      });
+      main.appendChild(st);
+
+      const h = card('История версий');
+      [['12.0.1200','Честные разделы: реальные сеть, устройства, разрешения и погода'],
+       ['12.0.1190','Панель задач Windows, виджеты, свои аудиофайлы, тёмная тема'],
+       ['12.0.1180','Проводник, корзина, мост с настоящей ОС'],
+       ['12.0.1150','Первая сборка оболочки']
+      ].forEach(([v, d]) => h.appendChild(row('📦', 'Сборка ' + v, d, el('div', 'muted tiny', 'установлена'))));
       main.appendChild(h);
     }
 
