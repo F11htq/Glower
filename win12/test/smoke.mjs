@@ -297,6 +297,34 @@ try {
   await page.evaluate(() => { FS.rm(['Документы'], 'переименован.txt', true);
     FS.rm(['Документы'], 'дубль.txt', true); FS.rm(['Загрузки'], 'дубль.txt', true); });
 
+  /* --- вкладки, адресная строка, поиск везде --- */
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => WM.open('files', { path:['Документы'] }));
+  await page.waitForTimeout(800);
+  check('у Проводника есть вкладки', (await page.$$('.fe-tab')).length === 1);
+  await page.click('.fe-tab-add'); await page.waitForTimeout(700);
+  check('вкладка добавляется', (await page.$$('.fe-tab')).length === 2);
+  await page.click('.fe-tab:first-child'); await page.waitForTimeout(600);
+  check('переключение вкладок работает',
+    await page.evaluate(() => document.querySelector('.fe-tab').classList.contains('on')));
+  await page.click('.fe-tab:nth-child(2) .x'); await page.waitForTimeout(600);
+  check('вкладка закрывается', (await page.$$('.fe-tab')).length === 1);
+
+  await page.click('.fe-path-edit'); await page.waitForTimeout(400);
+  check('адресная строка редактируется', (await page.$$('.fe-path-inp')).length === 1);
+  await page.fill('.fe-path-inp', '/Изображения');
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700);
+  check('переход по введённому пути',
+    await page.evaluate(() => String(WM.wins.find(w => w.appId === 'files').data.path) === 'Изображения'));
+
+  await page.click('.fe-all'); await page.waitForTimeout(300);
+  await page.fill('.fe-find', 'readme');
+  await page.waitForTimeout(700);
+  check('поиск по всему компьютеру находит вложенный файл',
+    await page.evaluate(() => /readme\.md/.test(document.querySelector('.scroll').textContent)
+      && /Проекты/.test(document.querySelector('.scroll').textContent)));
+
   /* --- в меню питания нет эмодзи --- */
   check('в меню питания нет эмодзи',
     await page.evaluate(() => ![...document.querySelectorAll('.power-actions button')]

@@ -406,3 +406,33 @@ body.taskbar .show-desktop{width:10px;margin-left:10px;border-radius:0}
   box-shadow:0 0 0 2px var(--accent)}
 .fe-tr .inline-edit{text-align:left;max-width:220px}
 .dock-item.drop-target{background:var(--accent);transform:scale(1.15) translateY(-8px)}
+
+/* ---------- Вкладки Проводника ---------- */
+.fe-tabs{display:flex;align-items:center;gap:3px;padding:6px 8px 0;flex:none;overflow:auto}
+.fe-tab{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px 10px 0 0;font-size:12px;
+  white-space:nowrap;cursor:pointer;max-width:180px;background:rgba(var(--tint),.07);
+  transition:background var(--t1)}
+.fe-tab:hover{background:rgba(var(--tint),.14)}
+.fe-tab.on{background:rgba(var(--tint),.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+.fe-tab .nm{overflow:hidden;text-overflow:ellipsis}
+.fe-tab .x{opacity:.45;font-size:14px;line-height:1;padding:0 2px;border-radius:4px}
+.fe-tab .x:hover{opacity:1;background:rgba(255,255,255,.2)}
+.fe-tab-add{width:26px;height:26px;border-radius:8px;font-size:15px;opacity:.7;transition:background var(--t1)}
+.fe-tab-add:hover{background:rgba(var(--tint),.18);opacity:1}
+[data-theme="dark"] .fe-tab{background:var(--d-1)}
+[data-theme="dark"] .fe-tab.on{background:var(--d-3)}
+
+/* адресная строка и поиск везде */
+.fe-path-edit{width:26px;height:26px;border-radius:7px;font-size:12px;opacity:.55;flex:none;
+  transition:background var(--t1),opacity var(--t1)}
+.fe-path-edit:hover{background:rgba(var(--tint),.18);opacity:1}
+.fe-path-inp{flex:1;min-width:180px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px}
+.fe-all{flex:none}
+.fe-search-head{padding:10px 14px 4px;font-size:11px;opacity:.6}
+
+/* сортировка по заголовкам */
+.fe-tr.head .sortable{cursor:pointer;border-radius:6px;padding:2px 4px;margin:-2px -4px;
+  transition:background var(--t1)}
+.fe-tr.head .sortable:hover{background:rgba(var(--tint),.16)}
+.fe-tr.head .sorted{color:var(--accent);opacity:1}
+.fe-tr.head .sorted::after{content:' ↓';font-size:9px}

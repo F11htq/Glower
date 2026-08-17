@@ -225,7 +225,8 @@ const Menu = {
       };
       bar.appendChild(b);
     });
-    win.body.prepend(bar);              // меню всегда самое верхнее в окне
+    win.body.style.flexDirection = 'column';   // тело окна — flex-строка, разворачиваем в колонку
+    win.body.prepend(bar);                     // меню всегда самое верхнее в окне
     return bar;
   }
 };
