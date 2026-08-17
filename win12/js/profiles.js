@@ -142,7 +142,7 @@ window.Profiles = Profiles;
 
   // питание: смена пользователя
   const box = $('#power-overlay .power-actions');
-  const sw = el('button', '', '👥 Сменить пользователя');
+  const sw = el('button', '', `<svg viewBox="0 0 24 24" class="ic"><circle cx="9" cy="9" r="3.3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.2a3.2 3.2 0 0 1 0 5.9"/><path d="M17.5 14.4a5.5 5.5 0 0 1 3 4.6"/></svg><span>Сменить пользователя</span>`);
   sw.onclick = () => {
     $('#power-overlay').classList.remove('on');
     Profiles.ok = false; Profiles.buildLock(); Shell.lock(true);

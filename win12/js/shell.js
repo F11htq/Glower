@@ -15,7 +15,6 @@ const Shell = {
     this.bindSpot();
     this.bindDesktop();
     this.bindKeys();
-    this.bindGlassPointer();
     this.clock();
     setInterval(() => this.clock(), 1000);
     this.wallShuffle();

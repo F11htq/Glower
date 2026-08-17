@@ -306,7 +306,7 @@ APPS.files = {
             { i:'⬇️', t:'Скачать на компьютер', f:() => act('dl') },
             'hr',
             { i:'🗑️', t:'Удалить', f:() => act('del'), k:'Del' },
-            { i:'ℹ️', t:'Свойства', f:() => props(it) }
+            { i:'ℹ️', t:'Свойства', f:() => window.WM.open('props', { node:it, path:path.slice() }) }
           ]);
         };
         cont.appendChild(n);
@@ -333,6 +333,7 @@ APPS.files = {
     function open(it){
       if (it.type === 'dir') return go([...path, it.name]);
       if (opts && opts.pick){ opts.pick({ name:it.name, path:path.slice(), body:it.body }); win.close(); return; }
+      if (window.Assoc) return Assoc.open(it, path.slice());      // файловые ассоциации
       if (it.img) WM.open('photos', { img:it.img, name:it.name });
       else WM.open('notepad', { file:{ name:it.name, path:path.slice(), body:it.body } });
     }

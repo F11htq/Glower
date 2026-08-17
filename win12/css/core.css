@@ -105,15 +105,7 @@ body.blurred .wallpaper{filter:blur(18px) brightness(.8);transform:scale(1.12)}
     var(--shadow);
 }
 
-/* блик, следующий за курсором + бегущая полоса преломления */
-.lg::before{
-  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;
-  background:radial-gradient(180px circle at var(--mx,50%) var(--my,0%),
-      rgba(255,255,255,.30), rgba(255,255,255,.08) 42%, transparent 70%);
-  opacity:0;transition:opacity var(--t3) var(--e-out);
-  mix-blend-mode:screen;
-}
-.lg:hover::before{opacity:1}
+/* бегущая полоса преломления (блик за курсором убран) */
 .lg::after{
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:1;
   background:
@@ -541,8 +533,10 @@ body.panel-open .toasts{transform:translateX(-352px)}
 .power-overlay.on .power-box{transform:none}
 .power-title{font-size:16px;margin-bottom:16px}
 .power-actions{display:grid;gap:8px}
-.power-actions button{padding:12px;border-radius:12px;background:rgba(var(--tint),.14);font-size:13.5px;text-align:left;
+.power-actions button{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;
+  background:rgba(var(--tint),.14);font-size:13.5px;text-align:left;
   transition:background var(--t1),transform var(--t2) var(--e-spring)}
+.power-actions .ic{width:17px;height:17px;opacity:.85}
 .power-actions button:hover{background:rgba(var(--tint),.26);transform:translateX(4px)}
 .power-cancel{margin-top:14px;font-size:12.5px;opacity:.6}
 .shutdown-fade{position:fixed;inset:0;z-index:3000;background:#000;opacity:0;animation:sd 1.4s forwards;display:grid;place-content:center;color:#fff}

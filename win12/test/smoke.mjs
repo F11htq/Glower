@@ -195,6 +195,43 @@ try {
   await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); Session.save(); });
   await page.waitForTimeout(400);
 
+  /* --- ассоциации, свойства, меню, диспетчер --- */
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(400);
+  check('ассоциации по расширению',
+    await page.evaluate(() => Assoc.appFor({ name:'a.png' }) === 'photos'
+      && Assoc.appFor({ name:'b.txt' }) === 'notepad'
+      && Assoc.appFor({ name:'c.html' }) === 'browser'));
+  await page.evaluate(() => Assoc.set('txt', 'browser'));
+  check('ассоциацию можно переназначить',
+    await page.evaluate(() => Assoc.appFor({ name:'b.txt' }) === 'browser'));
+  await page.evaluate(() => { const m = KV.get('assoc', {}); delete m.txt; KV.set('assoc', m); });
+
+  await page.evaluate(() => WM.open('props', { node:FS.node(['Документы','Идеи.txt']), path:['Документы'] }));
+  await page.waitForTimeout(600);
+  check('свойства открываются отдельным окном',
+    await page.evaluate(() => { const w = WM.wins.find(x => x.appId === 'props');
+      return !!w && /Расположение/.test(w.body.innerText) && /Изменён/.test(w.body.innerText); }));
+
+  await page.evaluate(() => WM.open('notepad'));
+  await page.waitForTimeout(600);
+  check('в Блокноте есть меню Файл/Правка/Вид',
+    await page.evaluate(() => { const w = WM.wins.find(x => x.appId === 'notepad');
+      return [...w.body.querySelectorAll('.menu-b')].map(b => b.textContent).join(',') === 'Файл,Правка,Вид'; }));
+
+  await page.evaluate(() => WM.open('taskmgr'));
+  await page.waitForTimeout(1800);
+  check('диспетчер показывает настоящие метрики',
+    await page.evaluate(() => { const w = WM.wins.find(x => x.appId === 'taskmgr');
+      return /FPS/.test(w.body.innerText) && /Элементов DOM/.test(w.body.innerText); }));
+
+  /* --- в меню питания нет эмодзи --- */
+  check('в меню питания нет эмодзи',
+    await page.evaluate(() => ![...document.querySelectorAll('.power-actions button')]
+      .some(b => /\p{Extended_Pictographic}/u.test(b.textContent))));
+  check('свечение вокруг курсора убрано',
+    await page.evaluate(() => !getComputedStyle(document.querySelector('.dock'), '::before').background.includes('radial-gradient')));
+
   /* --- темы --- */
   for (const t of ['dark', 'light', 'glass']){
     await page.evaluate(x => Store.set('theme', x), t);
