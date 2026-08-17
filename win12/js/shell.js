@@ -80,6 +80,7 @@ const Shell = {
     box.innerHTML = '';
     extra.forEach(id => {
       const a = APPS[id];
+      if (!a) return;                       // приложение удалено, окна ещё закрываются
       const b = el('button', 'dock-item run' + (active && active.appId === id ? ' active' : ''));
       b.dataset.app = id; b.dataset.tip = a.name;
       b.appendChild(appIcon(a));

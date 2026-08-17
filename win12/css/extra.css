@@ -204,3 +204,49 @@ body.taskbar #tb-tray.in-dock::before{display:none}
 [data-theme="dark"] .di:hover{background:rgba(255,255,255,.1)}
 [data-theme="dark"] .wall-grain{opacity:.02}
 [data-theme="dark"] kbd{background:var(--d-4);box-shadow:none}
+
+/* ---------- Магазин и приложения из каталога ---------- */
+.st-grid{margin-bottom:14px}
+.st-card{align-content:start}
+.st-card .row{gap:6px;margin-top:2px}
+.pkg-code{margin:0 16px 16px;padding:12px 14px;border-radius:12px;font-size:11px;line-height:1.5;
+  background:rgba(0,0,0,.28);overflow:auto;max-height:220px;user-select:text;
+  font-family:'Cascadia Code',Consolas,monospace;white-space:pre-wrap}
+[data-theme="light"] .pkg-code{background:rgba(0,0,0,.06)}
+
+/* Помидор */
+.pomo-ring{width:190px;height:190px;border-radius:50%;display:grid;place-content:center;
+  background:conic-gradient(var(--accent) var(--p,0%), rgba(var(--tint),.14) 0);
+  box-shadow:inset 0 0 0 12px rgba(var(--tint),.06);transition:background .4s linear}
+.pomo-ring span{font-size:38px;font-weight:250;font-variant-numeric:tabular-nums;
+  width:150px;height:150px;border-radius:50%;display:grid;place-content:center;
+  background:var(--d-1,rgba(20,24,34,.55));backdrop-filter:blur(12px)}
+[data-theme="light"] .pomo-ring span{background:rgba(255,255,255,.85)}
+
+/* 2048 */
+.g-score{padding:6px 14px;border-radius:10px;background:rgba(var(--tint),.14);font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.5px;opacity:.85;text-align:center}
+.g-score b{display:block;font-size:17px;letter-spacing:0}
+.g-board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;aspect-ratio:1;padding:8px;
+  border-radius:14px;background:rgba(var(--tint),.1)}
+.g-cell{border-radius:10px;display:grid;place-content:center;font-size:23px;font-weight:600;
+  background:rgba(var(--tint),.07);transition:transform .12s var(--e-spring),background .15s}
+.g-cell.v2{background:#eee4da;color:#776e65}.g-cell.v4{background:#ede0c8;color:#776e65}
+.g-cell.v8{background:#f2b179;color:#fff}.g-cell.v16{background:#f59563;color:#fff}
+.g-cell.v32{background:#f67c5f;color:#fff}.g-cell.v64{background:#f65e3b;color:#fff}
+.g-cell.v128{background:#edcf72;color:#fff;font-size:20px}.g-cell.v256{background:#edcc61;color:#fff;font-size:20px}
+.g-cell.v512{background:#edc850;color:#fff;font-size:20px}.g-cell.v1024{background:#edc53f;color:#fff;font-size:17px}
+.g-cell.v2048{background:linear-gradient(140deg,var(--accent),var(--accent-2));color:#fff;font-size:17px}
+
+/* Конвертер */
+.conv-row{display:flex;justify-content:space-between;padding:9px 13px;border-radius:10px;
+  background:rgba(var(--tint),.09);font-size:13px}
+.conv-row b{font-variant-numeric:tabular-nums}
+
+/* Палитра */
+.pal-grid{flex:1;display:flex;min-height:0}
+.pal{flex:1;display:flex;align-items:flex-end;justify-content:center;padding-bottom:18px;cursor:pointer;
+  transition:flex .3s var(--e-out)}
+.pal:hover{flex:1.5}
+.pal span{font-size:11px;letter-spacing:.5px;padding:4px 9px;border-radius:8px;
+  background:rgba(0,0,0,.35);color:#fff;backdrop-filter:blur(8px);text-transform:uppercase}
