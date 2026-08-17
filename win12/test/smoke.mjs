@@ -259,6 +259,44 @@ try {
   check('повторное нажатие возвращает окна',
     await page.evaluate(() => WM.wins.every(w => !w.minimized)));
 
+  /* --- конфликт при вставке и переименование на месте --- */
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    FS.write(['Документы'], 'дубль.txt', 'исходный');
+    FS.write(['Загрузки'], 'дубль.txt', 'новый');
+    WM.open('files', { path:['Загрузки'] });
+  });
+  await page.waitForTimeout(800);
+  await page.click('.fe-it[data-name="дубль.txt"], .fe-tr[data-name="дубль.txt"]');
+  await page.click('[data-a="copy"]');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { const w = WM.wins.find(x => x.appId === 'files');
+    w.body.querySelectorAll('.sb-item')[2].click(); });        // Документы
+  await page.waitForTimeout(600);
+  await page.click('[data-a="paste"]');
+  await page.waitForTimeout(600);
+  check('вставка поверх существующего спрашивает, что делать',
+    await page.evaluate(() => !!document.querySelector('.conflict')));
+  await page.click('.conflict-b:nth-child(2)');                // «оставить оба»
+  await page.waitForTimeout(600);
+  check('«оставить оба» создаёт копию с номером',
+    await page.evaluate(() => !!FS.node(['Документы', 'дубль (1).txt'])
+      && FS.node(['Документы', 'дубль.txt']).body === 'исходный'));
+
+  await page.click('.fe-it[data-name="дубль (1).txt"], .fe-tr[data-name="дубль (1).txt"]');
+  await page.keyboard.press('F2');
+  await page.waitForTimeout(400);
+  check('F2 переименовывает прямо на значке',
+    await page.evaluate(() => !!document.querySelector('.inline-edit')));
+  await page.fill('.inline-edit', 'переименован.txt');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  check('новое имя сохраняется',
+    await page.evaluate(() => !!FS.node(['Документы', 'переименован.txt'])));
+  await page.evaluate(() => { FS.rm(['Документы'], 'переименован.txt', true);
+    FS.rm(['Документы'], 'дубль.txt', true); FS.rm(['Загрузки'], 'дубль.txt', true); });
+
   /* --- в меню питания нет эмодзи --- */
   check('в меню питания нет эмодзи',
     await page.evaluate(() => ![...document.querySelectorAll('.power-actions button')]

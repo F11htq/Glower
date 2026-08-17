@@ -389,3 +389,20 @@ body.taskbar #tb-tray.in-dock::before{display:none}
   background:rgba(var(--tint),.12);transition:background var(--t1)}
 .show-desktop:hover{background:var(--accent)}
 body.taskbar .show-desktop{width:10px;margin-left:10px;border-radius:0}
+
+/* ---------- Конфликт при вставке, переименование на месте, drop на док ---------- */
+.conflict{display:flex;flex-direction:column;gap:6px}
+.conflict-b{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:12px;text-align:left;
+  font-size:12.5px;background:rgba(var(--tint),.1);box-shadow:inset 0 0 0 1px rgba(var(--tint),.12);
+  transition:background var(--t1),transform var(--t2) var(--e-spring)}
+.conflict-b:hover{background:rgba(var(--tint),.22);transform:translateX(3px)}
+.conflict-b .em{font-size:17px;width:22px;text-align:center}
+.conflict-all{display:flex;align-items:center;gap:9px;font-size:12px;opacity:.75;padding:6px 4px 0;cursor:pointer}
+[data-theme="dark"] .conflict-b{background:var(--d-3)}
+[data-theme="dark"] .conflict-b:hover{background:var(--d-4)}
+
+.inline-edit{width:100%;max-width:150px;padding:3px 6px;border:0;outline:0;font:inherit;font-size:11.5px;
+  border-radius:6px;text-align:center;background:#fff;color:#111;
+  box-shadow:0 0 0 2px var(--accent)}
+.fe-tr .inline-edit{text-align:left;max-width:220px}
+.dock-item.drop-target{background:var(--accent);transform:scale(1.15) translateY(-8px)}
