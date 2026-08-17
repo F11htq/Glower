@@ -148,12 +148,61 @@ try {
   await page.waitForTimeout(500);
   check('приложение удаляется', await page.evaluate(() => !APPS['smoke-app']));
 
+  /* --- системные диалоги вместо браузерных --- */
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => WM.open('files', { path:['Документы'] }));
+  await page.waitForTimeout(700);
+  await page.click('[data-a="nf"]');
+  await page.waitForTimeout(500);
+  check('создание папки открывает системный диалог, а не браузерный',
+    await page.evaluate(() => !!document.querySelector('.dlg-ov.on .dlg')));
+  await page.fill('.dlg input', 'Из диалога');
+  await page.click('.dlg-foot .btn.pri');
+  await page.waitForTimeout(500);
+  check('диалог создаёт папку',
+    await page.evaluate(() => !!FS.node(['Документы', 'Из диалога'])));
+  check('диалог закрылся', (await page.$$('.dlg-ov')).length === 0);
+
+  /* --- центр уведомлений --- */
+  await page.evaluate(() => { Notif.clear(); Shell.toast('Проверка', 'Запись в журнале', '🧪'); });
+  await page.waitForTimeout(400);
+  check('уведомление попадает в журнал',
+    await page.evaluate(() => Notif.list().length === 1));
+  await page.evaluate(() => Shell.panel('#widgets'));
+  await page.waitForTimeout(500);
+  check('журнал виден в панели',
+    await page.evaluate(() => !!document.querySelector('#notif-box .nc-item')));
+  await page.evaluate(() => { Notif.clear(); Shell.closePanels(); });
+  await page.waitForTimeout(300);
+
+  /* --- индикатор громкости --- */
+  await page.evaluate(() => Store.set('volume', 30));
+  await page.waitForTimeout(300);
+  check('громкость показывает индикатор',
+    await page.evaluate(() => document.querySelector('.osd.on') !== null));
+
+  /* --- восстановление сеанса --- */
+  await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { WM.open('calc'); WM.open('clock'); Session.save(); });
+  await page.waitForTimeout(700);
+  await page.reload();
+  await page.waitForTimeout(2500); await page.keyboard.press('Enter'); await page.waitForTimeout(2200);
+  check('окна восстанавливаются после перезагрузки',
+    await page.evaluate(() => ['calc','clock'].every(a => WM.wins.some(w => w.appId === a))),
+    await page.evaluate(() => WM.wins.map(w => w.appId).join(',')));
+  await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); Session.save(); });
+  await page.waitForTimeout(400);
+
   /* --- темы --- */
   for (const t of ['dark', 'light', 'glass']){
     await page.evaluate(x => Store.set('theme', x), t);
     await page.waitForTimeout(250);
   }
   check('темы переключаются без ошибок', await page.evaluate(() => S.theme === 'glass'));
+  await page.evaluate(() => { if (!WM.wins.length) WM.open('calc'); });
+  await page.waitForTimeout(500);
   const darkOpaque = await page.evaluate(async () => {
     Store.set('theme', 'dark'); await new Promise(r => setTimeout(r, 250));
     const bg = getComputedStyle(document.querySelector('.win')).backgroundColor;

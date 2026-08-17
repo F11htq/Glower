@@ -301,3 +301,58 @@ body.taskbar #tb-tray.in-dock::before{display:none}
 .start-foot-r [data-tip]::after{left:auto;right:0;transform:translate(0,6px) scale(.92);
   transform-origin:bottom right}
 .start-foot-r [data-tip]:hover::after{transform:translate(0,0) scale(1)}
+
+/* ==========================================================================
+   СИСТЕМНЫЕ ДИАЛОГИ, ЦЕНТР УВЕДОМЛЕНИЙ, OSD
+   ========================================================================== */
+.dlg-ov{position:absolute;inset:0;z-index:1100;display:grid;place-content:center;
+  background:rgba(0,0,0,.35);backdrop-filter:blur(6px);
+  opacity:0;transition:opacity var(--t2) var(--e-io)}
+.dlg-ov.on{opacity:1}
+.dlg{width:min(420px,88vw);padding:22px;border-radius:20px;display:flex;flex-direction:column;gap:16px;
+  transform:scale(.92) translateY(10px);transition:transform var(--t3) var(--e-spring)}
+.dlg-ov.on .dlg{transform:none}
+.dlg-head{display:flex;gap:14px;align-items:flex-start}
+.dlg-ico{font-size:28px;line-height:1;flex:none}
+.dlg-t{font-size:15px;font-weight:600;line-height:1.3}
+.dlg-x{font-size:12.5px;opacity:.7;line-height:1.45;margin-top:5px}
+.dlg .inp{width:100%;font-size:14px;padding:10px 13px}
+.dlg-foot{display:flex;gap:8px;justify-content:flex-end}
+.dlg-foot .btn{min-width:96px;text-align:center;padding:9px 16px}
+.btn.danger{background:linear-gradient(140deg,#ef4444,#b91c1c)}
+[data-theme="dark"] .dlg{background:var(--d-2)}
+[data-theme="dark"] .btn.danger{background:linear-gradient(140deg,#ef4444,#b91c1c)}
+
+/* центр уведомлений */
+.nc{margin-bottom:14px}
+.nc-head{display:flex;align-items:center;justify-content:space-between;
+  font-size:11.5px;font-weight:600;opacity:.65;padding:0 2px 8px}
+.nc-empty{text-align:center;padding:22px 0;font-size:26px;opacity:.35}
+.nc-empty div{font-size:12px;margin-top:6px}
+.nc-item{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;border-radius:14px;margin-bottom:7px;
+  background:rgba(var(--tint),.1);box-shadow:inset 0 0 0 1px rgba(var(--tint),.1);
+  animation:sgIn .35s var(--e-out) both}
+.nc-item .app-ico{width:32px;height:32px;font-size:15px;
+  background:linear-gradient(140deg,var(--accent),var(--accent-2))}
+.nc-item .tx{flex:1;font-size:12px;line-height:1.4;min-width:0}
+.nc-item .tx b{display:block;font-size:12.5px;margin-bottom:2px}
+.nc-x{width:20px;height:20px;border-radius:50%;background:rgba(var(--tint),.18);font-size:13px;flex:none;
+  opacity:0;transition:opacity var(--t1),background var(--t1)}
+.nc-item:hover .nc-x{opacity:1}
+.nc-x:hover{background:#e81123;color:#fff}
+[data-theme="dark"] .nc-item{background:var(--d-3)}
+#tray-widgets.has-notif::before{content:'';position:absolute;top:5px;right:5px;width:6px;height:6px;
+  border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
+#tray-widgets{position:relative}
+
+/* индикатор громкости и яркости */
+.osd{position:fixed;left:50%;bottom:22%;transform:translate(-50%,14px) scale(.94);z-index:1150;
+  display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:20px;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--t2) var(--e-io),transform var(--t3) var(--e-spring),visibility var(--t2)}
+.osd.on{opacity:1;visibility:visible;transform:translate(-50%,0) scale(1)}
+.osd-ico{font-size:24px}
+.osd-bar{width:170px;height:6px;border-radius:6px;background:rgba(var(--tint),.22);overflow:hidden}
+.osd-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transition:width var(--t2) var(--e-out)}
+.osd-v{font-size:12.5px;width:38px;text-align:right;font-variant-numeric:tabular-nums;opacity:.8}

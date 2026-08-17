@@ -1114,6 +1114,8 @@ APPS.settings = {
 
       const m = card('Многозадачность');
       m.appendChild(row('🪟', 'Подсказки прилипания', 'Показывать зоны при перетаскивании к краю', toggle(() => S.snapAssist, v => set('snapAssist', v))));
+      m.appendChild(row('♻️', 'Восстанавливать сеанс', 'После перезагрузки окна откроются там же, где были',
+        toggle(() => S.restoreSession !== false, v => set('restoreSession', v))));
       m.appendChild(row('🖥️', 'Виртуальные рабочие столы', 'Ctrl + Alt + ← / →',
         seg([{ n:'2', v:2 }, { n:'3', v:3 }, { n:'4', v:4 }], () => WM.desks, v => { WM.desks = v; Shell.renderTaskview(); })));
       const tb = el('button', 'btn', 'Разложить окна'); tb.onclick = () => WM.tile();
