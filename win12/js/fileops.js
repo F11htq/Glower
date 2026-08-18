@@ -101,11 +101,7 @@ window.Clip2 = Clip2;
    Подключение к Проводнику
    ========================================================================== */
 (function wireExplorer(){
-  const filesRender = APPS.files.render;
-
-  APPS.files.render = function(win, opts){
-    filesRender.call(this, win, opts);
-
+  APPS.files.use('операции с файлами', function(win, opts){
     const bar2 = $$('.toolbar', win.body)[1];
     const status = $('.statusbar', win.body);
     if (!bar2) return;
@@ -186,7 +182,7 @@ window.Clip2 = Clip2;
       window.__dragFiles = { path:path().slice(), names:sel().length ? sel() : [it.dataset.name] };
     }, true);
     win.body.addEventListener('dragend', () => { window.__dragFiles = null; }, true);
-  };
+  });
 })();
 
 /* ==========================================================================

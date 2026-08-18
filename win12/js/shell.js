@@ -749,6 +749,8 @@ const Shell = {
     const l = $('#lock');
     l.classList.toggle('gone', !on);
     document.body.classList.toggle('blurred', on);
+    /* заблокированный экран не должен показывать чужие окна и файлы */
+    document.body.classList.toggle('locked', on);
     if (on) this.closePanels();
   }
 };

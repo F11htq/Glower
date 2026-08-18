@@ -495,6 +495,76 @@ try {
       return !!f && !!f.hit && f.hit.includes('барсук');
     }));
 
+  /* --- Проводник: один конвейер вместо цепочки обёрток --- */
+  check('дополнения Проводника выстроены в очередь, а не обёрнуты друг в друга',
+    await page.evaluate(() => {
+      const names = APPS.files.parts.map(p => p.name);
+      return typeof APPS.files.paint === 'function' && names.length === 3
+        && names[0] === 'диалоги' && names[2] === 'вкладки и адресная строка';
+    }));
+
+  check('сбой одного дополнения не ломает Проводник целиком',
+    await page.evaluate(async () => {
+      const ce = console.error;
+      console.error = () => {};                      // ошибку ждём намеренно
+      APPS.files.use('поломанное', () => { throw new Error('специально'); });
+      WM.open('files', { path:['Документы'] });
+      await new Promise(r => setTimeout(r, 700));
+      const w = WM.wins.find(x => x.appId === 'files');
+      const alive = !!w && !!w.body.querySelector('.fe-tabs') && !!w.body.querySelector('.sidebar');
+      APPS.files.parts.pop();
+      console.error = ce;
+      WM.close(w);
+      await new Promise(r => setTimeout(r, 300));
+      return alive;
+    }));
+
+  /* --- экран блокировки --- */
+  check('экран блокировки: уведомления, плеер и скрытый рабочий стол',
+    await page.evaluate(async () => {
+      Shell.nowPlaying = { t:'Дорога домой', a:'Прототип', e:'🎵' };
+      Notif.add('Календарь', 'Встреча в 14:00', '📅');
+      Profiles.lock();
+      await new Promise(r => setTimeout(r, 500));
+      const media = !!document.querySelector('#lock-extra .lock-media');
+      const notif = (document.querySelectorAll('#lock-extra .lock-notif').length > 0)
+        && document.querySelector('#lock-extra .lock-notif').textContent.includes('Встреча');
+      KV.set('lockNotifText', false); LockScreen.paint();
+      const hidden = document.querySelector('#lock-extra .lock-notif').textContent.includes('скрыто');
+      KV.set('lockNotifText', true);
+      const hiddenDesktop = document.body.classList.contains('locked');
+      window.__unlock && window.__unlock();
+      await new Promise(r => setTimeout(r, 700));
+      Shell.nowPlaying = null;
+      const shown = !document.body.classList.contains('locked');
+      return media && notif && hidden && hiddenDesktop && shown;
+    }));
+
+  /* --- переключение окон --- */
+  check('Alt + ` переключает окна системы',
+    await page.evaluate(async () => {
+      WM.open('notepad'); await new Promise(r => setTimeout(r, 400));
+      WM.open('calc');    await new Promise(r => setTimeout(r, 400));
+      const first = WM.top().appId;
+      dispatchEvent(new KeyboardEvent('keydown', { key:'`', code:'Backquote', altKey:true, bubbles:true }));
+      await new Promise(r => setTimeout(r, 250));
+      const second = WM.top().appId;
+      const osd = !!document.querySelector('.switcher');
+      WM.wins.forEach(w => WM.close(w));
+      await new Promise(r => setTimeout(r, 300));
+      return first !== second && osd;
+    }));
+
+  check('Параметры честно объясняют, какие сочетания забирает браузер',
+    await page.evaluate(async () => {
+      WM.open('settings', { section:'keys' });
+      await new Promise(r => setTimeout(r, 700));
+      const t = WM.wins.find(w => w.appId === 'settings').body.innerText;
+      WM.wins.forEach(w => WM.close(w));
+      await new Promise(r => setTimeout(r, 250));
+      return t.includes('Alt + Tab') && t.includes('Alt + `') && /забира/.test(t);
+    }));
+
   check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
   check('по умолчанию латиница — набор не подменяется',
     await page.evaluate(() => Layouts.current() === 'en' && document.querySelector('#kb-badge').textContent === 'ENG'));

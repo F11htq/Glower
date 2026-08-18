@@ -7,13 +7,11 @@
 
 (function explorer(){
 
-const baseRender = APPS.files.render;          // вся цепочка предыдущих доработок
-
-/* перерисовать окно на нужном пути, не создавая новое */
+/* перерисовать окно на нужном пути, не создавая новое:
+   базовая отрисовка плюс все дополнения из очереди — включая это */
 function mount(win, path){
   win.body.replaceChildren();
-  baseRender.call(APPS.files, win, { path });
-  decorate(win);
+  APPS.files.render(win, { path });
 }
 
 /* ==========================================================================
@@ -208,10 +206,7 @@ function decorate(win){
   }
 }
 
-/* открытие папки из другого места добавляет вкладку в активном окне */
-APPS.files.render = function(win, opts){
-  baseRender.call(this, win, opts);
-  decorate(win);
-};
+/* вкладки и адресная строка — последнее дополнение в очереди */
+APPS.files.use('вкладки и адресная строка', decorate);
 
 })();

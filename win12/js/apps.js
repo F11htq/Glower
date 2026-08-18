@@ -159,104 +159,9 @@ APPS.notepad = {
 /* ==========================================================================
    ПРОВОДНИК
    ========================================================================== */
-APPS.files = {
-  name:'Проводник', glyph:'📁', bg:'linear-gradient(140deg,#fcd34d,#f59e0b)', w:880, h:580,
-  render(win, opts){
-    let path = [], view = KV.get('files.view', 'grid'), sel = null;
-    const wrap = el('div', 'app'); win.body.appendChild(wrap);
-    const side = el('div', 'sidebar');
-    const main = el('div', 'col grow');
-    const bar = el('div', 'toolbar');
-    const list = el('div', 'scroll');
-    const status = el('div', 'statusbar');
-    main.append(bar, list, status); wrap.append(side, main);
+/* Проводник целиком живёт в fs2.js: здесь была первая версия, которую
+   следующий файл всё равно заменял целиком — мёртвый код убран. */
 
-    const quick = [['🏠','Этот компьютер',[]],['🖥️','Рабочий стол',['Рабочий стол']],['📄','Документы',['Документы']],
-                   ['🖼️','Изображения',['Изображения']],['🎵','Музыка',['Музыка']],['⬇️','Загрузки',['Загрузки']]];
-    side.appendChild(el('div', 'sb-title', 'Быстрый доступ'));
-    quick.forEach(([e, n, p]) => {
-      const b = el('button', 'sb-item', `<span>${e}</span><span>${n}</span>`);
-      b.onclick = () => go(p);
-      side.appendChild(b);
-    });
-
-    bar.innerHTML = `<button class="btn" data-a="up">↑</button>
-      <div class="fe-crumbs"></div>
-      <button class="btn" data-a="nf">＋ Папка</button>
-      <button class="btn" data-a="nt">📄 Файл</button>
-      <button class="btn" data-a="view">▦</button>`;
-    const crumbs = $('.fe-crumbs', bar);
-
-    const go = p => { path = p.slice(); sel = null; draw(); };
-
-    function draw(){
-      const node = FS.node(path) || FS.root;
-      win.setTitle((path.length ? path[path.length - 1] : 'Этот компьютер') + ' — Проводник');
-      win.setSub('/' + path.join('/'));
-      crumbs.innerHTML = '';
-      const home = el('button', '', 'Этот компьютер'); home.onclick = () => go([]); crumbs.appendChild(home);
-      path.forEach((p, i) => {
-        crumbs.appendChild(el('span', 'muted', '›'));
-        const b = el('button', '', esc(p)); b.onclick = () => go(path.slice(0, i + 1)); crumbs.appendChild(b);
-      });
-
-      const items = Object.values(node.children || {})
-        .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1));
-      list.className = 'scroll';
-      list.innerHTML = '';
-      const cont = el('div', view === 'grid' ? 'fe-grid' : 'fe-list');
-      items.forEach(it => {
-        const isDir = it.type === 'dir';
-        const gl = isDir ? '📁' : it.img ? '🖼️' : /\.(md|txt)$/i.test(it.name) ? '📄' : '📄';
-        const n = el('div', view === 'grid' ? 'fe-it' : 'fe-lr');
-        n.innerHTML = view === 'grid'
-          ? `<div class="gl">${gl}</div><div class="nm">${esc(it.name)}</div>`
-          : `<div class="gl">${gl}</div><div>${esc(it.name)}</div><div class="sz">${isDir ? Object.keys(it.children).length + ' эл.' : ((it.body || '').length + ' Б')}</div>`;
-        n.onclick = e => { e.stopPropagation(); $$('.sel', list).forEach(x => x.classList.remove('sel')); n.classList.add('sel'); sel = it; upd(); };
-        n.ondblclick = () => openItem(it);
-        n.oncontextmenu = e => {
-          e.preventDefault(); e.stopPropagation();
-          Shell.ctx(e.clientX, e.clientY, [
-            { i:'📂', t:'Открыть', f:() => openItem(it) },
-            { i:'✏️', t:'Переименовать', f:() => { const nn = prompt('Новое имя', it.name); if (nn) { FS.rename(path, it.name, nn); draw(); } } },
-            { i:'📋', t:'Копировать имя', f:() => navigator.clipboard && navigator.clipboard.writeText(it.name) },
-            'hr',
-            { i:'🗑️', t:'Удалить', f:() => { if (confirm('Удалить «' + it.name + '»?')){ FS.rm(path, it.name); draw(); } } }
-          ]);
-        };
-        cont.appendChild(n);
-      });
-      if (!items.length) cont.appendChild(el('div', 'empty', 'Папка пуста'));
-      list.appendChild(cont);
-      upd();
-    }
-    function upd(){
-      const node = FS.node(path) || FS.root;
-      status.innerHTML = `<span>Элементов: ${Object.keys(node.children || {}).length}</span>
-        <span class="grow"></span><span>${sel ? esc(sel.name) : ''}</span>`;
-    }
-    function openItem(it){
-      if (it.type === 'dir'){ go([...path, it.name]); return; }
-      if (opts && opts.pick){ opts.pick({ name:it.name, path:path.slice(), body:it.body }); win.close(); return; }
-      if (it.img) WM.open('photos', { img:it.img, name:it.name });
-      else WM.open('notepad', { file:{ name:it.name, path:path.slice(), body:it.body } });
-    }
-
-    bar.querySelector('[data-a="up"]').onclick = () => go(path.slice(0, -1));
-    bar.querySelector('[data-a="nf"]').onclick = () => { const n = prompt('Имя папки', 'Новая папка'); if (n){ FS.mkdir(path, n); draw(); } };
-    bar.querySelector('[data-a="nt"]').onclick = () => { const n = prompt('Имя файла', 'Новый.txt'); if (n){ FS.write(path, n, ''); draw(); } };
-    bar.querySelector('[data-a="view"]').onclick = e => { view = view === 'grid' ? 'list' : 'grid'; KV.set('files.view', view); e.target.textContent = view === 'grid' ? '▦' : '☰'; draw(); };
-    list.oncontextmenu = e => { e.preventDefault();
-      Shell.ctx(e.clientX, e.clientY, [
-        { i:'📁', t:'Создать папку', f:() => { const n = prompt('Имя папки', 'Новая папка'); if (n){ FS.mkdir(path, n); draw(); } } },
-        { i:'📄', t:'Создать файл', f:() => { const n = prompt('Имя файла', 'Новый.txt'); if (n){ FS.write(path, n, ''); draw(); } } },
-        'hr', { i:'🔄', t:'Обновить', f:draw }
-      ]);
-    };
-
-    go(opts && opts.path ? opts.path : ['Документы']);
-  }
-};
 
 /* ==========================================================================
    КАЛЬКУЛЯТОР
@@ -1013,6 +918,7 @@ APPS.settings = {
       { id:'apps',   n:'Приложения',               e:'📦' },
       { id:'acc',    n:'Учётные записи',           e:'👤' },
       { id:'time',   n:'Время и язык',             e:'🌍' },
+      { id:'keys',   n:'Клавиатура',               e:'⌨️' },
       { id:'a11y',   n:'Спец. возможности',        e:'♿' },
       { id:'privacy',n:'Конфиденциальность',       e:'🔐' },
       { id:'update', n:'Сборка',                    e:'📦' },
@@ -1049,7 +955,7 @@ APPS.settings = {
       win.setSub(sec.n);
       main.appendChild(el('h2', '', sec.e + ' ' + sec.n)).style.cssText = 'margin:0 0 16px;font-size:22px;font-weight:600';
       ({ home:pHome, system:pSystem, person:pPerson, glass:pGlass, dock:pDock, motion:pMotion, sound:pSound,
-         display:pDisplay, net:pNet, bt:pBt, notif:pNotif, apps:pApps, acc:pAcc, time:pTime, a11y:pA11y,
+         display:pDisplay, net:pNet, bt:pBt, notif:pNotif, apps:pApps, acc:pAcc, time:pTime, keys:pKeys, a11y:pA11y,
          privacy:pPrivacy, update:pUpdate, about:pAbout })[cur]();
       main.scrollTop = 0;
     }
@@ -1261,6 +1167,12 @@ APPS.settings = {
       const lk = card('Экран блокировки');
       lk.appendChild(row('🖼️', 'Фон блокировки', 'Совпадает с рабочим столом', el('div', 'muted tiny', 'Обои')));
       lk.appendChild(row('🌤', 'Погода на экране блокировки', '', toggle(() => KV.get('lockWeather', true), v => KV.set('lockWeather', v))));
+      lk.appendChild(row('🔔', 'Уведомления на экране блокировки', 'Видно, что пришло, не разблокировав систему',
+        toggle(() => KV.get('lockNotif', true), v => { KV.set('lockNotif', v); LockScreen.paint(); })));
+      lk.appendChild(row('🙈', 'Скрывать содержимое уведомлений', 'Останутся только названия приложений',
+        toggle(() => !KV.get('lockNotifText', true), v => { KV.set('lockNotifText', !v); LockScreen.paint(); })));
+      lk.appendChild(row('🎵', 'Плеер на экране блокировки', 'Управление музыкой без разблокировки',
+        toggle(() => KV.get('lockMedia', true), v => { KV.set('lockMedia', v); LockScreen.paint(); })));
       main.appendChild(lk);
     }
 
@@ -1814,6 +1726,32 @@ APPS.settings = {
     }
 
     /* --- Доступность --- */
+    /* --- Клавиатура и сочетания --- */
+    function pKeys(){
+      const c = card('Сочетания клавиш системы');
+      [['🪟','Win','Меню Пуск'], ['🔍','Win + Space','Поиск'], ['🗂','Win + Tab','Просмотр задач'],
+       ['↔️','Alt + `','Переключение между окнами'], ['🧲','Win + ← / →','Прилипание окна'],
+       ['⬆️','Win + ↑ / ↓','Развернуть или свернуть'], ['🖥','Win + D','Свернуть всё'],
+       ['🖇','Ctrl + Alt + ← / →','Виртуальные рабочие столы'], ['▶️','Win + R','Выполнить'],
+       ['📁','Win + E','Проводник'], ['📊','Ctrl + Shift + Esc','Диспетчер задач'],
+       ['🔒','Win + L','Заблокировать экран'], ['⌨️','Alt + Shift','Сменить раскладку']
+      ].forEach(([e, k, v]) => c.appendChild(row(e, k, v, el('span'))));
+      main.appendChild(c);
+
+      const b = card('Что забирает себе браузер');
+      b.appendChild(el('div', 'set-note',
+        'Система работает страницей внутри браузера, а часть сочетаний браузер и операционная ' +
+        'система забирают раньше — до страницы они просто не доходят. Это не недоделка: ' +
+        'перехватить их со стороны страницы нечем.'));
+      [['⇥','Alt + Tab','Переключает окна вашей настоящей системы. Внутри системы ту же роль играет Alt + `'],
+       ['✖️','Alt + F4','Закрывает окно браузера. Окно системы закрывается своей кнопкой или Ctrl + W внутри приложения'],
+       ['🔄','F5 и Ctrl + R','Перезагружают страницу. Рабочий стол обновляется правой кнопкой → Обновить'],
+       ['🗔','F11','Полноэкранный режим самого браузера'],
+       ['🔤','Ctrl + T, Ctrl + N, Ctrl + Shift + T','Вкладки и окна браузера']
+      ].forEach(([e, k, v]) => b.appendChild(row(e, k, v, el('span'))));
+      main.appendChild(b);
+    }
+
     function pA11y(){
       const c = card('Зрение');
       c.appendChild(row('🔍', 'Масштаб текста', '',

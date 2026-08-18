@@ -241,9 +241,7 @@ window.OSD = OSD;
 (function patchDialogs(){
 
   /* --- Проводник: создание, переименование, удаление, свойства --- */
-  const filesRender = APPS.files.render;
-  APPS.files.render = function(win, opts){
-    filesRender.call(this, win, opts);
+  APPS.files.use('диалоги', function(win, opts){
     const bar2 = $$('.toolbar', win.body)[1];
     if (!bar2) return;
     const path = () => win.data.path || [];
@@ -275,7 +273,7 @@ window.OSD = OSD;
       s.forEach(n => FS.rm(path(), n));
       refresh(); Shell.renderIcons();
     };
-  };
+  });
 
   /* --- Рабочий стол: контекстное меню и значки --- */
   const icons = Shell.renderIcons.bind(Shell);
