@@ -16,7 +16,7 @@ const Dlg = {
       box.innerHTML = `
         <div class="dlg-head">
           <div class="dlg-ico">${opts.icon || 'ℹ️'}</div>
-          <div><div class="dlg-t">${esc(opts.title || 'Windows 12')}</div>
+          <div><div class="dlg-t">${esc(opts.title || Brand.name)}</div>
           ${opts.text ? `<div class="dlg-x">${esc(opts.text)}</div>` : ''}</div>
         </div>`;
 

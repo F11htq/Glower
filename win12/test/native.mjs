@@ -95,6 +95,23 @@ try {
   check('файл, созданный вне оболочки, появляется после синхронизации',
     await page.evaluate(() => !!FS.node(['Документы', 'снаружи.txt'])));
 
+  /* --- слежение: правку снаружи оболочка подхватывает сама --- */
+  await writeFile(join(WS, 'Документы', 'сам-подхватил.txt'), 'без ручной синхронизации', 'utf8');
+  let seen = false;
+  for (let i = 0; i < 12 && !seen; i++){
+    await page.waitForTimeout(1000);
+    seen = await page.evaluate(() => !!FS.node(['Документы', 'сам-подхватил.txt']));
+  }
+  check('правка папки снаружи подхватывается без ручной синхронизации', seen);
+
+  /* --- открытие в системе выключено, пока не разрешили ключом --- */
+  const openBlocked = await page.evaluate(async () => {
+    try { await Platform.open(['Документы', 'с-диска.txt']); return 'открыл'; }
+    catch(e){ return e.message; }
+  });
+  check('без ключа --allow-open агент файлы в системе не открывает',
+    /--allow-open/.test(openBlocked), openBlocked);
+
   /* --- граница доверия --- */
   const escape = await page.evaluate(async () => {
     try { await Platform.rpc('fs.read', { path:['..', '..', 'etc', 'passwd'] }); return 'прочитал'; }

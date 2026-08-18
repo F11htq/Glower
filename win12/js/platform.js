@@ -12,6 +12,7 @@ const Platform = {
   url:null,
   info:null,
   pending:0,
+  rev:0,
 
   /* адрес агента: тот же origin (агент раздаёт оболочку) или ?agent=... */
   candidates(){
@@ -49,6 +50,7 @@ const Platform = {
   /* дерево с диска заменяет виртуальную ФС */
   async mount(){
     const { root } = await this.rpc('fs.tree');
+    try { this.rev = (await this.rpc('fs.rev')).rev; } catch(e){}
     FS.root = root;
     FS.save();
     this.patchFS();
@@ -66,7 +68,10 @@ const Platform = {
       P.pending++; P.badge();
       P.rpc(method, params)
         .catch(e => Shell.toast('Агент', 'Не удалось записать на диск: ' + e.message, '⚠️'))
-        .finally(() => { P.pending--; P.badge(); });
+        .finally(() => {
+          P.pending--; P.badge();
+          P.rpc('fs.rev').then(r => { P.rev = r.rev; }).catch(() => {});
+        });
     };
 
     const write = FS.write.bind(FS);
@@ -104,6 +109,27 @@ const Platform = {
     };
   },
 
+  /* папку правили снаружи — подтягиваем изменения сами */
+  watch(){
+    if (this._watching) return;
+    this._watching = true;
+    setInterval(async () => {
+      if (this.mode !== 'native' || this.pending > 0 || document.hidden) return;
+      try {
+        const { rev } = await this.rpc('fs.rev');
+        if (rev === this.rev) return;
+        this.rev = rev;
+        await this.mount();
+      } catch(e){}
+    }, 2500);
+  },
+
+  /* открыть файл в настоящей системе (если агент запущен с --allow-open) */
+  async open(path){
+    if (this.mode !== 'native') throw new Error('агент не запущен');
+    return this.rpc('sys.open', { path });
+  },
+
   /* индикатор в трее */
   badge(){
     let b = $('#agent-badge');
@@ -137,6 +163,7 @@ window.Platform = Platform;
   try {
     await Platform.mount();
     Platform.badge();
+    Platform.watch();
     Shell.toast('Система', 'Подключено к настоящему диску: ' + Platform.info.root, '🖴', 5000);
   } catch(e){
     Shell.toast('Агент', 'Не удалось прочитать диск: ' + e.message, '⚠️');
@@ -164,6 +191,17 @@ window.Platform = Platform;
       if (Platform.mode !== 'native'){
         print('Агент не запущен. Файлы хранятся в браузере.', 'er');
         print('Запустите:  node agent/server.mjs   и откройте http://localhost:8123');
+        return;
+      }
+      const sub = line.slice(5).trim();
+      if (sub.startsWith('open ')){
+        const rel = sub.slice(5).trim().split('/').filter(Boolean);
+        if (!Platform.info.canOpen){
+          print('Открытие файлов в системе выключено. Запустите агент с ключом --allow-open.', 'er');
+          return;
+        }
+        try { const r = await Platform.open(rel); print('Открыто в системе: ' + esc(r.opened)); }
+        catch(err){ print('open: ' + esc(err.message), 'er'); }
         return;
       }
       const d = Platform.describe();

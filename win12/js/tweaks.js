@@ -189,7 +189,7 @@ APPS.term = {
     const inp = el('input'); inp.spellcheck = false; inp.autocapitalize = 'off';
     inLine.append(prompt, inp); out.appendChild(inLine);
     const print = (t, c = '') => { const l = el('div', 'term-line ' + c); l.innerHTML = t; out.insertBefore(l, inLine); out.scrollTop = out.scrollHeight; };
-    const upd = () => prompt.textContent = `${S.userName.toLowerCase()}@windows12:/${cwd.join('/')}$`;
+    const upd = () => prompt.textContent = `${S.userName.toLowerCase()}@${Brand.short.toLowerCase()}:/${cwd.join('/')}$`;
     const P = (...p) => [...cwd, ...p.filter(Boolean)];
     const resolve = a => {
       if (!a) return cwd.slice();
@@ -291,13 +291,13 @@ APPS.term = {
     def('open', 'запустить приложение', a => APPS[a] ? (WM.open(a), print('Запуск ' + a, 'inf'))
       : print('open: нет приложения. Доступны: ' + Object.keys(APPS).join(', '), 'er'));
     def('sysinfo', 'сведения о системе', () => print(
-      `  ОС:        Windows 12 Prototype (сборка 1200)\n  Ядро:      ${navigator.userAgent.includes('Firefox') ? 'Gecko' : 'Blink'}\n` +
+      `  ОС:        ${Brand.full()} ${Brand.versionLine()}\n  Ядро:      ${navigator.userAgent.includes('Firefox') ? 'Gecko' : 'Blink'}\n` +
       `  Экран:     ${screen.width}×${screen.height} @${devicePixelRatio}x\n  Ядер ЦП:   ${navigator.hardwareConcurrency || '?'}\n` +
       `  Память:    ${navigator.deviceMemory ? navigator.deviceMemory + ' ГБ' : 'н/д'}\n  Сеть:      ${navigator.onLine ? 'подключено' : 'нет сети'}\n` +
       `  Хранилище: ${(JSON.stringify(localStorage).length / 1024).toFixed(1)} КБ`));
-    def('neofetch', 'логотип и сводка', () => print(`<span class="inf">   ▗▄▄▖▗▄▄▖ </span>  <b>${S.userName}@windows12</b>
+    def('neofetch', 'логотип и сводка', () => print(`<span class="inf">   ▗▄▄▖▗▄▄▖ </span>  <b>${S.userName}@${Brand.short.toLowerCase()}</b>
 <span class="inf">   ▝▀▀▘▝▀▀▘ </span>  ──────────────────
-<span class="inf">   ▗▄▄▖▗▄▄▖ </span>  ОС:     Windows 12 Prototype
+<span class="inf">   ▗▄▄▖▗▄▄▖ </span>  ОС:     ${Brand.full()}
 <span class="inf">   ▝▀▀▘▝▀▀▘ </span>  Тема:   ${S.theme} · акцент ${accentPair().a}
                   Стекло: ${S.blur}px / ${Math.round(S.glass * 100)}%
                   Окон:   ${WM.wins.length}`));
@@ -305,7 +305,7 @@ APPS.term = {
       const s = Math.round(performance.now() / 1000);
       print(`работает ${Math.floor(s / 3600)} ч ${Math.floor(s / 60) % 60} мин ${s % 60} с`); });
     def('whoami', 'текущий пользователь', () => print(S.userName));
-    def('hostname', 'имя устройства', () => print('DYMENSITY-PC'));
+    def('hostname', 'имя устройства', () => print(Brand.hostname));
     def('date', 'дата и время', () => print(new Date().toLocaleString('ru-RU')));
     def('free', 'использование хранилища', () => {
       const used = JSON.stringify(localStorage).length;
@@ -364,7 +364,7 @@ APPS.term = {
       print(cut ? 'Перемещено.' : 'Скопировано.', 'inf'); Shell.renderIcons();
     }
 
-    print('<b class="inf">Windows 12</b> [Версия 12.0.1200] — Терминал');
+    print(`<b class="inf">${Brand.name}</b> ${Brand.versionLine()} — Терминал`);
     print('Введите <b>help</b> для списка команд, Tab — автодополнение.\n');
 
     inp.addEventListener('keydown', e => {

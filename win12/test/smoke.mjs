@@ -122,7 +122,9 @@ try {
     await page.keyboard.type(cmd); await page.keyboard.press('Enter'); await page.waitForTimeout(160);
   }
   const term = await page.evaluate(() => WM.wins.find(x => x.appId === 'term').body.innerText);
-  check('терминал выполняет команды', /^42$/m.test(term) && /Windows 12 Prototype/.test(term));
+  const brand = await page.evaluate(() => Brand.name);
+  check('терминал выполняет команды', /^42$/m.test(term) && term.includes(brand),
+    'бренд «' + brand + '» в выводе: ' + term.includes(brand));
 
   /* --- файловая система --- */
   const fsOk = await page.evaluate(() => {
@@ -324,6 +326,53 @@ try {
   check('поиск по всему компьютеру находит вложенный файл',
     await page.evaluate(() => /readme\.md/.test(document.querySelector('.scroll').textContent)
       && /Проекты/.test(document.querySelector('.scroll').textContent)));
+
+  /* --- бренд, языки, раскладки --- */
+  check('система называется собственным именем',
+    await page.evaluate(() => Brand.name === 'Glower OS' && document.title === 'Glower OS'
+      && !document.body.innerText.includes('Windows 12')));
+
+  check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
+  check('по умолчанию латиница — набор не подменяется',
+    await page.evaluate(() => Layouts.current() === 'en' && document.querySelector('#kb-badge').textContent === 'ENG'));
+
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { Layouts.set('ru'); WM.open('notepad'); });
+  await page.waitForTimeout(800);
+  check('переключение раскладки меняет индикатор',
+    await page.evaluate(() => document.querySelector('#kb-badge').textContent === 'РУС'));
+  await page.click('.np-area');
+  await page.keyboard.type('ghbdtn');          // на ЙЦУКЕН это «привет»
+  await page.waitForTimeout(300);
+  check('русская раскладка даёт кириллицу по расположению клавиш',
+    await page.evaluate(() => document.querySelector('.np-area').value === 'привет'),
+    await page.evaluate(() => document.querySelector('.np-area').value));
+  await page.evaluate(() => Layouts.set('en'));
+  await page.keyboard.type('ok');
+  await page.waitForTimeout(300);
+  check('латинская раскладка ничего не меняет',
+    await page.evaluate(() => document.querySelector('.np-area').value.endsWith('ok')));
+
+  /* --- английский интерфейс --- */
+  await page.evaluate(() => { KV.set('lang', 'en'); });
+  await page.reload();
+  await page.waitForTimeout(2600); await page.keyboard.press('Enter'); await page.waitForTimeout(1200);
+  await page.evaluate(() => Shell.toggleStart(true));
+  await page.waitForTimeout(600);
+  const enUI = await page.evaluate(() => ({
+    start: document.querySelector('#start-all').textContent,
+    search: document.querySelector('#start-input').placeholder,
+    pinned: document.querySelector('.start-head span').textContent
+  }));
+  check('интерфейс переключается на английский',
+    enUI.start.includes('All apps') && /Search/.test(enUI.search) && enUI.pinned === 'Pinned',
+    JSON.stringify(enUI));
+  await page.evaluate(() => { KV.set('lang', 'ru'); });
+  await page.reload();
+  await page.waitForTimeout(2600); await page.keyboard.press('Enter'); await page.waitForTimeout(900);
+  check('возврат на русский', await page.evaluate(() => document.querySelector('#start-input')
+    .placeholder.includes('Поиск')));
 
   /* --- в меню питания нет эмодзи --- */
   check('в меню питания нет эмодзи',

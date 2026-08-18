@@ -339,7 +339,7 @@ APPS.term = {
     inLine.append(prompt, inp); out.appendChild(inLine);
     const upd = () => prompt.textContent = `D:\\${cwd.join('\\')}>`;
 
-    print(`<b>Windows 12</b> [Версия 12.0.1200] — Терминал`, 'inf');
+    print(`<b>${Brand.name}</b> ${Brand.versionLine()} — Терминал`, 'inf');
     print(`Введите <b>help</b> для списка команд.\n`, '');
 
     const hist = []; let hi = 0;
@@ -381,7 +381,7 @@ APPS.term = {
       glass: a => { const v = clamp(+a, 0, 100) / 100; Store.set('glass', v); print('Стекло: ' + a + '%', 'inf'); },
       neofetch: () => print(`<span class="inf">      ▗▄▄▖▗▄▄▖ </span>   <b>${S.userName}@windows12</b>
 <span class="inf">      ▝▀▀▘▝▀▀▘ </span>   ──────────────────
-<span class="inf">      ▗▄▄▖▗▄▄▖ </span>   ОС:      Windows 12 Prototype
+<span class="inf">      ▗▄▄▖▗▄▄▖ </span>   ОС:      ${Brand.full()}
 <span class="inf">      ▝▀▀▘▝▀▀▘ </span>   Оболочка: Liquid Glass Shell
                      Тема:    ${S.theme}
                      Стекло:  blur ${S.blur}px / ${Math.round(S.glass * 100)}%
@@ -815,7 +815,7 @@ APPS.browser = {
 
     const PAGES = {
       'dymensity://home': () => `
-        <div class="br-hero"><h1>Dymensity</h1><p class="muted">Внутренняя сеть прототипа Windows 12</p></div>
+        <div class="br-hero"><h1>Dymensity</h1><p class="muted">Внутренняя сеть ${Brand.name}</p></div>
         <div class="br-tiles">
           ${[['📰','Новости','dymensity://news'],['📚','Документация','dymensity://docs'],['🎨','Галерея','dymensity://gallery'],
              ['⚙️','О системе','dymensity://about'],['🧪','Тест стекла','dymensity://glass'],['🕹','Игра','dymensity://game']]
@@ -823,7 +823,7 @@ APPS.browser = {
         </div>`,
       'dymensity://news': () => `<h2>Новости</h2>
         <p class="muted">Лента прототипа — статический контент.</p>
-        ${[['Windows 12: плавающая оболочка','Панель задач отделилась от края экрана и превратилась в док.'],
+        ${[[Brand.name + ': плавающая оболочка','Панель задач отделилась от края экрана и превратилась в док.'],
            ['Liquid Glass везде','Материал реагирует на курсор бликом и лёгкой дисперсией по кромке.'],
            ['Снап-зоны','Потяните окно к краю экрана — появится подсказка размещения.']]
           .map(([t, d]) => `<div class="card" style="padding:16px"><b>${t}</b><div class="muted" style="margin-top:6px">${d}</div></div>`).join('')}`,
@@ -836,7 +836,7 @@ APPS.browser = {
       'dymensity://gallery': () => `<h2>Галерея</h2><div class="ph-grid" style="padding:0">
         ${WALLPAPERS.map(w => `<div class="ph" style="background-image:${w.css}"></div>`).join('')}</div>`,
       'dymensity://about': () => `<div class="about-logo"><div class="win-logo"><i></i><i></i><i></i><i></i></div>
-        <h2 style="margin:0">Windows 12 Prototype</h2><p class="muted">HTML + CSS + JS, без внешних зависимостей</p></div>`,
+        <h2 style="margin:0">${Brand.name}</h2><p class="muted">${Brand.tagline}</p></div>`,
       'dymensity://glass': () => `<h2>Тест материала</h2>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
         ${[0,1,2,3,4,5].map(i => `<div class="glass lg" style="height:110px;border-radius:18px;background-image:${WALLPAPERS[i].css};opacity:.9"></div>`).join('')}</div>`,
@@ -1046,7 +1046,7 @@ APPS.settings = {
     function pHome(){
       const hero = el('div', 'set-hero');
       hero.innerHTML = `<div class="ava">${S.userName[0]}</div>
-        <div><b style="font-size:17px">${esc(S.userName)}</b><div class="muted tiny">Локальная учётная запись · Windows 12 Pro</div></div>`;
+        <div><b style="font-size:17px">${esc(S.userName)}</b><div class="muted tiny">Локальная учётная запись · ${Brand.full()}</div></div>`;
       main.appendChild(hero);
       const c = card('Быстрые действия');
       c.appendChild(row('🎨', 'Персонализация', 'Обои, цвета, темы', el('div', 'muted', '›'), 'clickable'))
@@ -1288,7 +1288,7 @@ APPS.settings = {
       const p = card('Пресеты');
       const pr = el('div'); pr.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px 14px';
       [['Максимум стекла', { blur:60, glass:.5, glassEdge:.45, saturate:220, transparency:true, radius:22, winRadius:20 }],
-       ['Windows 12', { blur:34, glass:.42, glassEdge:.28, saturate:180, transparency:true, radius:18, winRadius:16 }],
+       [Brand.name, { blur:34, glass:.42, glassEdge:.28, saturate:180, transparency:true, radius:18, winRadius:16 }],
        ['macOS', { blur:44, glass:.34, glassEdge:.5, saturate:200, transparency:true, radius:14, winRadius:12 }],
        ['Матовое', { blur:22, glass:.7, glassEdge:.16, saturate:120, transparency:true, radius:16, winRadius:14 }],
        ['Без стекла', { blur:0, glass:.9, glassEdge:.1, saturate:100, transparency:false, radius:12, winRadius:10 }]
@@ -1613,7 +1613,7 @@ APPS.settings = {
       };
       fs.append(fsel, fbtn, fout);
       c.appendChild(row('🎯', 'Фокусировка', 'Реально включает «Не беспокоить» на заданное время', fs));
-      const t = el('button', 'btn', 'Показать'); t.onclick = () => Shell.toast('Тестовое уведомление', 'Так выглядят баннеры Windows 12', '🔔');
+      const t = el('button', 'btn', 'Показать'); t.onclick = () => Shell.toast('Тестовое уведомление', 'Так выглядят баннеры ' + Brand.name, '🔔');
       c.appendChild(row('🧪', 'Проверить', 'Показать пример уведомления', t));
       main.appendChild(c);
     }
@@ -1756,7 +1756,25 @@ APPS.settings = {
       c.appendChild(row('🌍', 'Часовой пояс', Intl.DateTimeFormat().resolvedOptions().timeZone, el('div', 'muted tiny', new Date().toString().match(/GMT[+-]\d+/) || '')));
       main.appendChild(c);
       const l = card('Язык и регион');
-      l.appendChild(row('🗣', 'Язык интерфейса', 'Русский (Россия)', el('div', 'muted', '›')));
+      const lsel = sel(Object.entries(I18N.LANGS).map(([k, v]) => ({ n:v.name, v:k })),
+        () => I18N.lang(), v => I18N.set(v));
+      l.appendChild(row('🗣', 'Язык интерфейса',
+        I18N.lang() === 'ru'
+          ? 'Русский — исходный язык системы'
+          : `Переведено ${I18N.coverage()} строк интерфейса. Всё, чего нет в словаре, остаётся на русском — это видно сразу и не выдаётся за готовый перевод.`,
+        lsel));
+
+      const kb = card('Раскладки клавиатуры');
+      kb.appendChild(row('⌨️', 'Переключение', 'Alt + Shift или щелчок по индикатору в панели',
+        el('div', 'muted tiny', Layouts.def().code)));
+      Object.entries(Layouts.ALL).forEach(([id, d]) => {
+        const on = Layouts.enabled().includes(id);
+        kb.appendChild(row(d.flag, d.name, id === Layouts.current() ? 'Активна' : (on ? 'Включена' : 'Выключена'),
+          toggle(() => Layouts.enabled().includes(id), () => { Layouts.toggle(id); drawMain(); })));
+      });
+      kb.appendChild(row('ℹ️', 'Что раскладка делает на самом деле',
+        'Пока выбрана нелатинская раскладка, буквы с физической клавиатуры превращаются в её символы внутри окон системы. Разложить клавиатуру самой вашей ОС страница не может — и не притворяется.', el('span')));
+      main.appendChild(kb);
       const ci = el('input', 'inp'); ci.value = S.city;
       ci.onchange = () => { set('city', ci.value); Shell.renderShell(); };
       l.appendChild(row('🏙', 'Город для погоды', 'Влияет на виджет погоды', ci));
@@ -1837,7 +1855,7 @@ APPS.settings = {
     /* --- Сборка --- */
     function pUpdate(){
       const c = card('Сборка');
-      c.appendChild(row('📦', 'Windows 12 Prototype', 'Версия 12.0 (сборка 1200)', el('div', 'muted tiny', 'локальная')));
+      c.appendChild(row('📦', Brand.full(), Brand.versionLine(), el('div', 'muted tiny', 'локальная')));
       c.appendChild(row('🔄', 'Автоматических обновлений нет',
         'Это страница, которая целиком лежит у вас: обновление — это новая версия файла. Кнопки «Проверить обновления» здесь не будет, потому что проверять нечего.', el('span')));
       const rl = el('button', 'btn', 'Перезагрузить');
@@ -1866,7 +1884,7 @@ APPS.settings = {
       main.appendChild(st);
 
       const h = card('История версий');
-      [['12.0.1200','Честные разделы: реальные сеть, устройства, разрешения и погода'],
+      [[Brand.version + '.' + Brand.build,'Честные разделы: реальные сеть, устройства, разрешения и погода'],
        ['12.0.1190','Панель задач Windows, виджеты, свои аудиофайлы, тёмная тема'],
        ['12.0.1180','Проводник, корзина, мост с настоящей ОС'],
        ['12.0.1150','Первая сборка оболочки']
@@ -1879,11 +1897,11 @@ APPS.settings = {
       const box = el('div', 'card');
       box.innerHTML = `<div class="about-logo">
         <div class="win-logo"><i></i><i></i><i></i><i></i></div>
-        <h2 style="margin:0">Windows 12 Pro</h2>
-        <div class="muted">Версия 12.0 (сборка 1200) · Прототип</div></div>`;
+        <h2 style="margin:0">${Brand.full()}</h2>
+        <div class="muted">${Brand.versionLine()}</div></div>`;
       main.appendChild(box);
       const c = card('Характеристики устройства');
-      [['💻','Имя устройства','DYMENSITY-PC'],
+      [['💻','Имя устройства', Brand.hostname],
        ['⚙️','Процессор', (navigator.hardwareConcurrency || 8) + ' логических ядер'],
        ['🧠','Память', (navigator.deviceMemory ? navigator.deviceMemory + ' ГБ' : 'н/д')],
        ['🖥️','Экран', screen.width + ' × ' + screen.height + ' @ ' + (devicePixelRatio || 1) + 'x'],

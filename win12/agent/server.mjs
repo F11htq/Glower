@@ -25,6 +25,11 @@ const arg = (name, def) => {
 const PORT = +arg('port', 8123);
 const ROOT = resolve(arg('root', join(homedir(), 'Windows12')));
 const MAX_INLINE = 256 * 1024;          // файлы больше не грузим в дерево целиком
+const ALLOW_OPEN = process.argv.includes('--allow-open');   // разрешить открытие в системе
+
+/* счётчик изменений: оболочка по нему понимает, что папку правили снаружи */
+let rev = 0;
+const bump = () => { rev++; };
 
 const TEXT = /\.(txt|md|log|json|js|css|html?|xml|csv|ini|conf|yml|yaml|py|sh|ts|jsx?)$/i;
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i;
@@ -71,33 +76,63 @@ async function tree(dir = ROOT, depth = 0){
   return out;
 }
 
+/* ---------- слежение за рабочей папкой ---------- */
+import { watch } from 'node:fs';
+let watcher = null;
+function startWatch(){
+  try {
+    watcher = watch(ROOT, { recursive:true }, () => bump());
+    watcher.on('error', () => { watcher = null; startPoll(); });
+  } catch(e){ startPoll(); }
+}
+function startPoll(){                   // если рекурсивное слежение недоступно
+  let last = '';
+  setInterval(async () => {
+    const sig = JSON.stringify(await tree()).length + ':' + Date.now().toString().slice(0, 8);
+    const short = sig.split(':')[0];
+    if (last && short !== last) bump();
+    last = short;
+  }, 3000);
+}
+
 /* ---------- методы, доступные оболочке ---------- */
 const API = {
   async ping(){
-    return { ok:true, agent:'win12-agent', version:'1.0', root:ROOT,
-             platform:process.platform, node:process.version, pid:process.pid };
+    return { ok:true, agent:'win12-agent', version:'1.1', root:ROOT,
+             platform:process.platform, node:process.version, pid:process.pid,
+             canOpen:ALLOW_OPEN, rev };
   },
+  async 'fs.rev'(){ return { rev }; },
   async 'fs.tree'(){ return { root:{ type:'dir', name:'', children: await tree() } }; },
   async 'fs.read'({ path }){ return { body: await readFile(safe(path), 'utf8') }; },
   async 'fs.write'({ path, body }){
     const p = safe(path);
     await mkdir(dirname(p), { recursive:true });
     await writeFile(p, body ?? '', 'utf8');
-    return { ok:true };
+    bump(); return { ok:true };
   },
   async 'fs.writeDataUrl'({ path, dataUrl }){
     const p = safe(path);
     await mkdir(dirname(p), { recursive:true });
     const b64 = String(dataUrl).split(',')[1] || '';
     await writeFile(p, Buffer.from(b64, 'base64'));
-    return { ok:true };
+    bump(); return { ok:true };
   },
-  async 'fs.mkdir'({ path }){ await mkdir(safe(path), { recursive:true }); return { ok:true }; },
-  async 'fs.remove'({ path }){ await rm(safe(path), { recursive:true, force:true }); return { ok:true }; },
-  async 'fs.rename'({ from, to }){ await rename(safe(from), safe(to)); return { ok:true }; },
+  async 'fs.mkdir'({ path }){ await mkdir(safe(path), { recursive:true }); bump(); return { ok:true }; },
+  async 'fs.remove'({ path }){ await rm(safe(path), { recursive:true, force:true }); bump(); return { ok:true }; },
+  async 'fs.rename'({ from, to }){ await rename(safe(from), safe(to)); bump(); return { ok:true }; },
   async 'fs.stat'({ path }){
     const st = await stat(safe(path));
     return { size:st.size, dir:st.isDirectory(), ctime:+st.birthtimeMs || +st.ctimeMs, mtime:+st.mtimeMs };
+  },
+  async 'sys.open'({ path }){
+    if (!ALLOW_OPEN) throw new Error('открытие в системе выключено: запустите агент с ключом --allow-open');
+    const p = safe(path);
+    const { spawn } = await import('node:child_process');
+    const cmd = process.platform === 'darwin' ? 'open'
+              : process.platform === 'win32' ? 'explorer' : 'xdg-open';
+    spawn(cmd, [p], { detached:true, stdio:'ignore' }).unref();
+    return { ok:true, opened:p, via:cmd };
   },
   async 'sys.info'(){
     const { totalmem, freemem, cpus, hostname, userInfo, uptime, release } = await import('node:os');
@@ -153,10 +188,13 @@ if (!existsSync(join(ROOT, 'Документы'))){
     'Это настоящий файл на вашем диске.\n\nОткройте его, поправьте, сохраните — и посмотрите в папке ' + ROOT + '\n', 'utf8');
 }
 
+startWatch();
+
 server.listen(PORT, () => {
   console.log(`\n  Агент Windows 12 запущен`);
   console.log(`  Оболочка:      http://localhost:${PORT}`);
   console.log(`  Рабочая папка: ${ROOT}`);
   console.log(`  Разрешено: чтение и запись только внутри этой папки.`);
-  console.log(`  Запуск программ и сеть агенту недоступны.\n`);
+  console.log(`  Открытие файлов в системе: ${ALLOW_OPEN ? 'разрешено ключом --allow-open' : 'выключено'}`);
+  console.log(`  Запуск произвольных программ и сеть агенту недоступны.\n`);
 });
