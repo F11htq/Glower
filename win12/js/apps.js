@@ -155,10 +155,11 @@ APPS.notepad = {
       if ((e.ctrlKey || e.metaKey) && e.key === 's'){ e.preventDefault(); doSave(); }
     });
 
-    const doSave = () => {
+    const doSave = async () => {
       const t = tabs[cur];
       if (!t.path || !t.path.length){
-        const name = prompt('Имя файла:', t.name) || t.name;
+        const name = await Dlg.prompt('Сохранить файл', 'Файл будет сохранён в Документы', t.name, '💾');
+        if (!name) return;
         t.name = name; t.path = ['Документы'];
       }
       FS.write(t.path, t.name, area.value);
@@ -381,8 +382,9 @@ APPS.paint = {
     bar.append(el('div', 'grow'), undoB, clrB, saveB);
     undoB.onclick = () => { const d = undoStack.pop(); if (d) ctx.putImageData(d, 0, 0); };
     clrB.onclick = () => { pushUndo(); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); };
-    saveB.onclick = () => {
-      const name = prompt('Имя изображения', 'Рисунок.png'); if (!name) return;
+    saveB.onclick = async () => {
+      const name = await Dlg.prompt('Сохранить рисунок', 'Файл появится в папке «Изображения»', 'Рисунок.png', '🖼️');
+      if (!name) return;
       const d = FS.node(['Изображения']); d.children[name] = { type:'file', name, img:cv.toDataURL(), body:'' }; FS.save();
       Shell.toast('Сохранено', 'Изображения/' + name, '🖼️');
     };
@@ -1011,16 +1013,18 @@ APPS.settings = {
         const f = el('input'); f.type = 'file'; f.accept = '.json,application/json';
         f.onchange = () => {
           const r = new FileReader();
-          r.onload = () => {
+          r.onload = async () => {
             try {
               const img = JSON.parse(r.result);
               if (!img.settings || !img.fs) throw new Error('это не образ системы');
-              if (!confirm('Заменить текущие настройки и файлы содержимым образа?')) return;
+              if (!await Dlg.confirm('Восстановление из образа',
+                  'Текущие настройки и файлы будут заменены содержимым образа. Отменить это будет нечем.',
+                  { icon:'📂', okText:'Заменить', danger:true })) return;
               Object.keys(img.kv || {}).forEach(k => localStorage[k] = img.kv[k]);
               localStorage.setItem(Store.key, JSON.stringify(img.settings));
               localStorage.setItem(FS.key, JSON.stringify(img.fs));
               location.reload();
-            } catch(e){ alert('Не удалось прочитать образ: ' + e.message); }
+            } catch(e){ Dlg.alert('Образ не прочитан', String(e.message || e), '⚠️'); }
           };
           r.readAsText(f.files[0]);
         };
@@ -1037,8 +1041,13 @@ APPS.settings = {
         ? (x.usage / 1048576).toFixed(1) + ' МБ из ' + (x.quota / 1048576).toFixed(0) + ' МБ'
         : (x.ls / 1024).toFixed(1) + ' КБ');
       const cl = el('button', 'btn', 'Очистить всё');
-      cl.onclick = () => { if (confirm('Сбросить все настройки и файлы?')){
-        localStorage.clear(); try { indexedDB.deleteDatabase('win12'); } catch(e){} location.reload(); } };
+      cl.onclick = async () => {
+        if (!await Dlg.confirm('Сброс системы',
+            'Будут удалены все настройки, файлы, заметки, задачи и загруженное аудио. Восстановить их можно только из образа, если вы его сохраняли.',
+            { icon:'🧹', okText:'Стереть всё', danger:true })) return;
+        localStorage.clear(); try { indexedDB.deleteDatabase('win12'); } catch(e){}
+        location.reload();
+      };
       st.appendChild(row('🧹', 'Сброс системы', 'Настройки, файлы и загруженное аудио', cl));
       main.appendChild(st);
     }
@@ -1660,7 +1669,9 @@ APPS.settings = {
       if (me.hash){
         const del = el('button', 'btn', 'Убрать');
         del.onclick = async () => {
-          if (!confirm('Входить без пароля?')) return;
+          if (!await Dlg.confirm('Убрать пароль',
+              'Вход станет свободным: экран блокировки перестанет что-либо спрашивать.',
+              { icon:'🔓', okText:'Убрать' })) return;
           await Profiles.setPassword(me.id, null); Profiles.buildLock(); drawMain();
           Shell.toast('Учётная запись', 'Пароль удалён', '🔓');
         };
@@ -1676,8 +1687,10 @@ APPS.settings = {
         const go = el('button', 'btn', 'Войти');
         go.onclick = () => Profiles.switchTo(o.id);
         const rm = el('button', 'btn', '🗑');
-        rm.onclick = () => {
-          if (!confirm('Удалить профиль «' + o.name + '» вместе со всеми его файлами и настройками?')) return;
+        rm.onclick = async () => {
+          if (!await Dlg.confirm('Удалить профиль',
+              `«${o.name}» будет удалён вместе со своими файлами, настройками и заметками.`,
+              { icon:'🗑️', okText:'Удалить', danger:true })) return;
           Profiles.remove(o.id); Profiles.buildLock(); drawMain();
           Shell.toast('Учётные записи', 'Профиль удалён', '🗑️');
         };
@@ -1836,7 +1849,9 @@ APPS.settings = {
       });
       const wipe = el('button', 'btn', 'Стереть всё');
       wipe.onclick = async () => {
-        if (!confirm('Удалить все настройки, файлы и загруженное аудио?')) return;
+        if (!await Dlg.confirm('Стереть всё',
+            'Настройки, файлы, заметки, задачи и загруженное аудио будут удалены без возможности вернуть.',
+            { icon:'🧹', okText:'Стереть всё', danger:true })) return;
         localStorage.clear();
         try { indexedDB.deleteDatabase('win12'); } catch(e){}
         location.reload();
@@ -1909,7 +1924,13 @@ APPS.settings = {
       main.appendChild(c);
       const r = card('Сброс');
       const b = el('button', 'btn', 'Сбросить настройки');
-      b.onclick = () => { if (confirm('Вернуть настройки по умолчанию?')){ Store.reset(); Shell.renderShell(); drawMain(); Shell.toast('Готово', 'Настройки сброшены', '🔄'); } };
+      b.onclick = async () => {
+        if (!await Dlg.confirm('Настройки по умолчанию',
+            'Внешний вид, звук и поведение вернутся к исходным. Файлы останутся на месте.',
+            { icon:'♻️', okText:'Вернуть' })) return;
+        Store.reset(); Shell.renderShell(); drawMain();
+        Shell.toast('Готово', 'Настройки сброшены', '🔄');
+      };
       r.appendChild(row('♻️', 'Настройки по умолчанию', 'Файлы останутся на месте', b));
       main.appendChild(r);
     }

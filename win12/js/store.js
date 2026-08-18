@@ -359,7 +359,11 @@ APPS.store = {
         row2.appendChild(open);
         if (a.removable !== false){
           const del = el('button', 'btn', '🗑');
-          del.onclick = () => { if (confirm('Удалить «' + a.name + '»?')) { AppStore.uninstall(a.id); draw(); } };
+          del.onclick = async () => {
+            if (!await Dlg.confirm('Удалить приложение', `«${a.name}» будет удалено из системы.`,
+                { icon:'🗑️', okText:'Удалить', danger:true })) return;
+            AppStore.uninstall(a.id); draw();
+          };
           row2.appendChild(del);
         }
       } else {

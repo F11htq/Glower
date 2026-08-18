@@ -587,6 +587,42 @@ try {
       return closed && opened && closedAgain;
     }));
 
+  check('система не показывает окон самого браузера',
+    await page.evaluate(async () => {
+      /* если что-то позовёт prompt/confirm/alert — засчитаем как провал */
+      let native = 0;
+      ['prompt', 'confirm', 'alert'].forEach(k => { window[k] = () => { native++; return null; }; });
+
+      const seen = [];
+      const openDlg = async fn => {
+        fn();
+        await new Promise(r => setTimeout(r, 350));
+        const d = document.querySelector('.dlg-ov');
+        seen.push(!!d);
+        if (d){ const c = d.querySelector('.dlg-foot .btn'); if (c) c.click(); }
+        await new Promise(r => setTimeout(r, 350));
+      };
+
+      WM.open('files', { path:['Документы'] });
+      await new Promise(r => setTimeout(r, 800));
+      const w = WM.wins.find(x => x.appId === 'files');
+      const bar2 = w.body.querySelectorAll('.toolbar')[1];
+
+      await openDlg(() => bar2.querySelector('[data-a="nf"]').click());
+      await openDlg(() => bar2.querySelector('[data-a="nt"]').click());
+      WM.close(w);
+      await new Promise(r => setTimeout(r, 300));
+
+      WM.open('paint');
+      await new Promise(r => setTimeout(r, 700));
+      const pw = WM.wins.find(x => x.appId === 'paint');
+      await openDlg(() => [...pw.body.querySelectorAll('.btn')].find(b => b.textContent.includes('В файлы')).click());
+      WM.wins.forEach(x => WM.close(x));
+      await new Promise(r => setTimeout(r, 300));
+
+      return native === 0 && seen.length === 3 && seen.every(Boolean);
+    }));
+
   check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
   check('по умолчанию латиница — набор не подменяется',
     await page.evaluate(() => Layouts.current() === 'en' && document.querySelector('#kb-badge').textContent === 'ENG'));

@@ -338,27 +338,27 @@ APPS.files = {
       else WM.open('notepad', { file:{ name:it.name, path:path.slice(), body:it.body } });
     }
 
-    function props(it){
-      alert(`Свойства\n\nИмя: ${it.name}\nТип: ${extOf(it)}\nРазмер: ${fmtSize(sizeOf(it))}\n` +
-        `Расположение: /${path.join('/')}\nСоздан: ${fmtDate(it.ctime)}\nИзменён: ${fmtDate(it.mtime)}` +
-        (it.type === 'dir' ? `\nЭлементов внутри: ${Object.keys(it.children || {}).length}` : ''));
-    }
 
     /* --- действия --- */
-    function act(a){
+    async function act(a){
       switch(a){
         case 'back': if (hp > 0){ hp--; go(hist[hp], false); } break;
         case 'fwd':  if (hp < hist.length - 1){ hp++; go(hist[hp], false); } break;
         case 'up':   if (path.length) go(path.slice(0, -1)); break;
-        case 'nf': { const n = prompt('Имя папки', 'Новая папка'); if (n){ FS.mkdir(path, FS.uniqueName(path, n)); draw(); } break; }
-        case 'nt': { const n = prompt('Имя файла', 'Новый.txt'); if (n){ FS.write(path, FS.uniqueName(path, n), ''); draw(); } break; }
+        case 'nf': { const n = await Dlg.prompt('Создать папку', 'Имя новой папки', 'Новая папка', '📁');
+          if (n){ FS.mkdir(path, FS.uniqueName(path, n)); draw(); } break; }
+        case 'nt': { const n = await Dlg.prompt('Создать файл', 'Имя нового файла', 'Новый.txt', '📄');
+          if (n){ FS.write(path, FS.uniqueName(path, n), ''); draw(); } break; }
         case 'copy': if (sel.length){ Clip.copy(path, sel); paint(); Shell.toast('Скопировано', sel.length + ' эл. в буфере', '⧉'); } break;
         case 'cut':  if (sel.length){ Clip.take(path, sel); paint(); } break;
         case 'paste': { const k = Clip.paste(path); if (k){ draw(); Shell.toast('Вставлено', k + ' эл.', '📋'); } break; }
         case 'ren': { if (sel.length !== 1) return;
-          const nn = prompt('Новое имя', sel[0]); if (nn && nn !== sel[0]){ FS.rename(path, sel[0], nn); sel = [nn]; draw(); } break; }
+          const nn = await Dlg.prompt('Переименовать', 'Новое имя', sel[0], '✏️');
+          if (nn && nn !== sel[0]){ FS.rename(path, sel[0], nn); sel = [nn]; draw(); } break; }
         case 'del': { if (!sel.length) return;
-          if (!confirm(`Переместить в корзину: ${sel.length} эл.?`)) return;
+          if (!await Dlg.confirm('Удалить в корзину',
+              sel.length === 1 ? `«${sel[0]}» будет перемещён в корзину.` : `${sel.length} элементов будет перемещено в корзину.`,
+              { icon:'🗑️', okText:'Удалить', danger:true })) return;
           sel.forEach(n => FS.rm(path, n)); sel = []; draw(); Shell.renderIcons(); break; }
         case 'dl': { sel.forEach(n => { const x = FS.node([...path, n]); if (x && x.type === 'file') download(x); }); break; }
         case 'view': view = view === 'grid' ? 'table' : 'grid'; KV.set('files.view', view);

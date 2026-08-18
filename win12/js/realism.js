@@ -89,7 +89,11 @@ APPS.trash = {
       });
       Shell.renderIcons();
     };
-    empty.onclick = () => { if (confirm('Безвозвратно очистить корзину?')){ KV.set('trash', []); draw(); } };
+    empty.onclick = async () => {
+      if (!await Dlg.confirm('Очистить корзину', 'Все элементы будут удалены безвозвратно.',
+          { icon:'🧹', okText:'Очистить', danger:true })) return;
+      KV.set('trash', []); draw();
+    };
     restoreAll.onclick = () => { const t = KV.get('trash', []); t.forEach(restore); KV.set('trash', []); draw(); Shell.renderIcons(); };
     draw();
   }
@@ -187,8 +191,8 @@ Shell.renderIcons = function(){
     box.appendChild(n);
   });
 
-  function renameIcon(it){
-    const nn = prompt('Новое имя', it.n);
+  async function renameIcon(it){
+    const nn = await Dlg.prompt('Переименовать', 'Новое имя', it.n, '✏️');
     if (!nn || nn === it.n) return;
     FS.rename(['Рабочий стол'], it.n, nn);
     const P = KV.get('iconPos', {});

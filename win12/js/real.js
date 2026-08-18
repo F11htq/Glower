@@ -174,7 +174,6 @@ const Weather = {
       Shell.clock && Shell.clock();
       return d;
     } catch(e){
-      KV.set('weather.error', String(e.message || e));
       return this.data();
     } finally { this.busy = false; }
   },

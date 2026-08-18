@@ -492,7 +492,9 @@ const Shell = {
         e.preventDefault(); e.stopPropagation();
         this.ctx(e.clientX, e.clientY, [
           { i:'📂', t:'Открыть', f:it.f },
-          ...(it.node ? [{ i:'✏️', t:'Переименовать', f:() => { const nn = prompt('Новое имя', it.n); if (nn){ FS.rename(['Рабочий стол'], it.n, nn); this.renderIcons(); } } },
+          ...(it.node ? [{ i:'✏️', t:'Переименовать', f: async () => {
+            const nn = await Dlg.prompt('Переименовать', 'Новое имя', it.n, '✏️');
+            if (nn){ FS.rename(['Рабочий стол'], it.n, nn); this.renderIcons(); } } },
                          { i:'🗑️', t:'Удалить', f:() => { FS.rm(['Рабочий стол'], it.n); this.renderIcons(); } }] : [])
         ]);
       };
@@ -590,8 +592,12 @@ const Shell = {
       e.preventDefault();
       this.ctx(e.clientX, e.clientY, [
         { i:'🔄', t:'Обновить', f:() => this.renderShell() },
-        { i:'📄', t:'Создать текстовый файл', f:() => { const n = prompt('Имя файла', 'Новый.txt'); if (n){ FS.write(['Рабочий стол'], n, ''); this.renderIcons(); } } },
-        { i:'📁', t:'Создать папку', f:() => { const n = prompt('Имя папки', 'Новая папка'); if (n){ FS.mkdir(['Рабочий стол'], n); this.renderIcons(); } } },
+        { i:'📄', t:'Создать текстовый файл', f: async () => {
+            const n = await Dlg.prompt('Создать файл', 'Имя нового файла', 'Новый.txt', '📄');
+            if (n){ FS.write(['Рабочий стол'], FS.uniqueName(['Рабочий стол'], n), ''); this.renderIcons(); } } },
+        { i:'📁', t:'Создать папку', f: async () => {
+            const n = await Dlg.prompt('Создать папку', 'Имя новой папки', 'Новая папка', '📁');
+            if (n){ FS.mkdir(['Рабочий стол'], FS.uniqueName(['Рабочий стол'], n)); this.renderIcons(); } } },
         'hr',
         { i:'▦', t:'Разложить окна', f:() => WM.tile(), k:'' },
         { i:'🗂', t:'Каскад окон', f:() => WM.cascade() },
