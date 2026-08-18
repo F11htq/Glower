@@ -329,8 +329,31 @@ try {
 
   /* --- бренд, языки, раскладки --- */
   check('система называется собственным именем',
-    await page.evaluate(() => Brand.name === 'Glower OS' && document.title === 'Glower OS'
+    await page.evaluate(() => Brand.name === 'GlowerOS' && document.title === 'GlowerOS'
       && !document.body.innerText.includes('Windows 12')));
+
+  check('в панели поиска нет чужого имени системы',
+    await page.evaluate(() => {
+      const t = document.querySelector('#tb-search').textContent;
+      return t.includes('GlowerOS') && !/Windows/.test(t);
+    }));
+
+  check('фирменный логотип загружен и виден',
+    await page.evaluate(() => {
+      const imgs = [...document.querySelectorAll('img.os-logo')];
+      return imgs.length >= 1 && imgs.every(i => i.complete && i.naturalWidth > 0);
+    }));
+
+  check('в Параметрах нет настройки полноэкранного режима',
+    await page.evaluate(async () => {
+      WM.open('settings', { section:'display' });
+      await new Promise(r => setTimeout(r, 700));
+      const w = WM.wins.find(w => w.appId === 'settings');
+      return !w.body.innerText.includes('Полноэкранный');
+    }));
+
+  await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
+  await page.waitForTimeout(300);
 
   check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
   check('по умолчанию латиница — набор не подменяется',

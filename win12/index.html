@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Glower OS</title>
+<title>GlowerOS</title>
+<link rel="icon" href="assets/logo-64.png" type="image/png">
 <link rel="stylesheet" href="css/core.css">
 <link rel="stylesheet" href="css/apps.css">
 <link rel="stylesheet" href="css/extra.css">
@@ -33,10 +34,10 @@
 <!-- ===== ЗАГРУЗКА ===== -->
 <div id="boot" class="boot">
   <div class="boot-logo">
-    <div class="win-logo"><i></i><i></i><i></i><i></i></div>
+    <img class="os-logo" src="assets/logo.png" alt="" draggable="false">
   </div>
   <div class="boot-ring"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"/></svg></div>
-  <div class="boot-text">Запуск Glower OS</div>
+  <div class="boot-text">Запуск GlowerOS</div>
 </div>
 
 <!-- ===== ЭКРАН БЛОКИРОВКИ ===== -->
@@ -72,7 +73,7 @@
 
     <button class="tb-search glass lg" id="tb-search">
       <svg viewBox="0 0 24 24" class="ic"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <span>Поиск в Windows</span>
+      <span id="tb-search-label">Поиск в GlowerOS</span>
       <kbd>Win</kbd>
     </button>
 
@@ -102,7 +103,7 @@
   <div class="dock-wrap" id="dock-wrap">
     <nav class="dock glass lg" id="dock">
       <button class="dock-item start-btn" id="start-btn" data-tip="Пуск">
-        <div class="win-logo sm"><i></i><i></i><i></i><i></i></div>
+        <img class="os-logo sm" src="assets/logo.png" alt="" draggable="false">
       </button>
       <div class="dock-sep"></div>
       <div class="dock-items" id="dock-items"></div>

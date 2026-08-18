@@ -16,7 +16,7 @@ const I18N = {
 
   DICT:{ en:{
     /* оболочка */
-    'Пуск':'Start', 'Поиск':'Search', 'Поиск в Windows':'Search', 'Поиск в Glower OS':'Search',
+    'Пуск':'Start', 'Поиск':'Search', 'Поиск в GlowerOS':'Search',
     'Поиск приложений, файлов и параметров':'Search apps, files and settings',
     'Все приложения ›':'All apps ›', '‹ Назад':'‹ Back', 'Все приложения':'All apps',
     'Закреплённые':'Pinned', 'Недавние':'Recent', 'Рекомендуем':'Recommended',

@@ -136,7 +136,7 @@ const FS = {
   seed(){
     return { type:'dir', name:'', children:{
       'Рабочий стол':{ type:'dir', name:'Рабочий стол', children:{
-        'Заметка.txt':{ type:'file', name:'Заметка.txt', body:'Привет!\n\nЭто Glower OS.\nWin — меню Пуск, Win+Space — поиск, ПКМ по столу — меню.' }
+        'Заметка.txt':{ type:'file', name:'Заметка.txt', body:'Привет!\n\nЭто GlowerOS.\nWin — меню Пуск, Win+Space — поиск, ПКМ по столу — меню.' }
       }},
       'Документы':{ type:'dir', name:'Документы', children:{
         'Идеи.txt':{ type:'file', name:'Идеи.txt', body:'— добавить свои обои\n— поиграть с Liquid Glass в Параметрах\n— написать что-нибудь тут' },

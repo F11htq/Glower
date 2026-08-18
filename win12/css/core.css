@@ -137,13 +137,13 @@ body.blurred .wallpaper{filter:blur(18px) brightness(.8);transform:scale(1.12)}
 /* ==========================================================================
    BOOT + LOCK
    ========================================================================== */
-.win-logo{display:grid;grid-template-columns:1fr 1fr;gap:5px;width:52px;height:52px;transform:perspective(320px) rotateY(-8deg)}
-.win-logo i{background:linear-gradient(140deg,#7fd4ff,#2f7bff);border-radius:5px;box-shadow:0 4px 14px rgba(47,123,255,.5)}
-.win-logo i:nth-child(2){background:linear-gradient(140deg,#a78bfa,#6d3cff)}
-.win-logo i:nth-child(3){background:linear-gradient(140deg,#67e8f9,#2fb0ff)}
-.win-logo i:nth-child(4){background:linear-gradient(140deg,#c4b5fd,#7c3aed)}
-.win-logo.sm{width:24px;height:24px;gap:3px}
-.win-logo.sm i{border-radius:3px}
+/* фирменный знак системы */
+.os-logo{width:96px;height:96px;display:block;user-select:none;-webkit-user-drag:none;
+  filter:drop-shadow(0 8px 26px rgba(70,120,255,.5))}
+.os-logo.sm{width:30px;height:30px;filter:drop-shadow(0 0 7px rgba(120,170,255,.85)) brightness(1.12)}
+.boot .os-logo{animation:logo-breath 2.6s var(--e-out) infinite}
+@keyframes logo-breath{0%,100%{transform:scale(1);filter:drop-shadow(0 8px 26px rgba(70,120,255,.45))}
+  50%{transform:scale(1.045);filter:drop-shadow(0 8px 34px rgba(110,150,255,.75))}}
 
 .boot{position:fixed;inset:0;z-index:2000;background:#05070d;display:grid;place-content:center;justify-items:center;gap:26px;
   transition:opacity .6s var(--e-io), visibility .6s}
@@ -257,8 +257,9 @@ body.dock-hidden .dock{transform:translateY(140%);opacity:0}
 .dock-item.run::after{content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
   width:5px;height:5px;border-radius:50%;background:var(--fg);opacity:.85;transition:width var(--t2) var(--e-spring)}
 .dock-item.active::after{width:18px;border-radius:3px}
-.start-btn .win-logo{transition:transform var(--t3) var(--e-spring)}
-.start-btn:hover .win-logo{transform:perspective(320px) rotateY(-18deg) scale(1.08)}
+.start-btn .os-logo{transition:transform var(--t3) var(--e-spring)}
+.start-btn:hover .os-logo{transform:rotate(-25deg) scale(1.1)}
+body.start-open .start-btn .os-logo{transform:rotate(-90deg) scale(1.05)}
 body.start-open .start-btn{background:rgba(var(--tint),.24)}
 .dock-item.bounce{animation:bounce .7s var(--e-spring)}
 @keyframes bounce{0%,100%{transform:translateY(0)}30%{transform:translateY(-24px) scaleY(1.06)}60%{transform:translateY(-6px)}}

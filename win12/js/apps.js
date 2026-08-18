@@ -835,7 +835,7 @@ APPS.browser = {
           .map(([k, v]) => `<div class="set-row"><div class="l"><b>${k}</b></div><div class="ctl muted">${v}</div></div>`).join('')}</div>`,
       'dymensity://gallery': () => `<h2>Галерея</h2><div class="ph-grid" style="padding:0">
         ${WALLPAPERS.map(w => `<div class="ph" style="background-image:${w.css}"></div>`).join('')}</div>`,
-      'dymensity://about': () => `<div class="about-logo"><div class="win-logo"><i></i><i></i><i></i><i></i></div>
+      'dymensity://about': () => `<div class="about-logo"><img class="os-logo" src="assets/logo.png" alt="" draggable="false">
         <h2 style="margin:0">${Brand.name}</h2><p class="muted">${Brand.tagline}</p></div>`,
       'dymensity://glass': () => `<h2>Тест материала</h2>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
@@ -1406,11 +1406,6 @@ APPS.settings = {
       c.appendChild(row('🌙', 'Ночной свет', 'Тёплые тона', toggle(() => S.nightLight, v => set('nightLight', v))));
       c.appendChild(row('🌗', 'Тема по времени суток', 'Светлая днём, тёмная ночью',
         toggle(() => S.autoTheme, v => { set('autoTheme', v); Shell.autoTheme(); })));
-      const fs = el('button', 'btn', document.fullscreenElement ? 'Выйти' : 'Включить');
-      fs.onclick = () => { if (document.fullscreenElement) document.exitFullscreen();
-        else document.documentElement.requestFullscreen().catch(() => {});
-        setTimeout(drawMain, 300); };
-      c.appendChild(row('⛶', 'Полноэкранный режим', 'Настоящий Fullscreen API · клавиша F11', fs));
       c.appendChild(row('🔎', 'Масштаб интерфейса', 'Размер текста и элементов',
         seg([{ n:'90%', v:.9 }, { n:'100%', v:1 }, { n:'110%', v:1.1 }, { n:'125%', v:1.25 }],
             () => KV.get('zoom', 1), v => { KV.set('zoom', v); document.documentElement.style.fontSize = (16 * v) + 'px'; })));
@@ -1896,7 +1891,7 @@ APPS.settings = {
     function pAbout(){
       const box = el('div', 'card');
       box.innerHTML = `<div class="about-logo">
-        <div class="win-logo"><i></i><i></i><i></i><i></i></div>
+        <img class="os-logo" src="assets/logo.png" alt="" draggable="false">
         <h2 style="margin:0">${Brand.full()}</h2>
         <div class="muted">${Brand.versionLine()}</div></div>`;
       main.appendChild(box);

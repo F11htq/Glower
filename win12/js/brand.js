@@ -5,7 +5,7 @@
 'use strict';
 
 const Brand = {
-  name:'Glower OS',
+  name:'GlowerOS',
   short:'Glower',
   edition:'Pro',
   version:'1.0',
@@ -23,4 +23,6 @@ document.title = Brand.name;
 addEventListener('DOMContentLoaded', () => {
   const b = document.querySelector('.boot-text');
   if (b) b.textContent = 'Запуск ' + Brand.name;
+  const sl = document.getElementById('tb-search-label');
+  if (sl) sl.textContent = 'Поиск в ' + Brand.name;
 }, { once:true });
