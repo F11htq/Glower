@@ -565,6 +565,28 @@ try {
       return t.includes('Alt + Tab') && t.includes('Alt + `') && /забира/.test(t);
     }));
 
+  check('раскладки спрятаны под стрелку и раскрываются по щелчку',
+    await page.evaluate(async () => {
+      KV.set('exp.kb', false);
+      WM.open('settings', { section:'time' });
+      await new Promise(r => setTimeout(r, 700));
+      const w = WM.wins.find(x => x.appId === 'settings');
+      const exp = w.body.querySelector('.set-exp');
+      const closed = exp && !exp.classList.contains('open')
+        && exp.querySelector('.exp-body').getBoundingClientRect().height < 4;
+      exp.querySelector('.set-row').click();
+      await new Promise(r => setTimeout(r, 600));
+      const opened = exp.classList.contains('open')
+        && exp.querySelectorAll('.exp-body .switch').length === Object.keys(Layouts.ALL).length
+        && exp.querySelector('.exp-body').getBoundingClientRect().height > 60;
+      exp.querySelector('.set-row').click();
+      await new Promise(r => setTimeout(r, 500));
+      const closedAgain = !exp.classList.contains('open');
+      WM.wins.forEach(x => WM.close(x));
+      await new Promise(r => setTimeout(r, 300));
+      return closed && opened && closedAgain;
+    }));
+
   check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
   check('по умолчанию латиница — набор не подменяется',
     await page.evaluate(() => Layouts.current() === 'en' && document.querySelector('#kb-badge').textContent === 'ENG'));

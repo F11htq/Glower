@@ -14,6 +14,27 @@ function row(icon, title, desc, ctl, cls = ''){
   if (ctl) $('.ctl', r).appendChild(ctl);
   return r;
 }
+/* раскрывающийся раздел: строка со стрелкой, под ней — содержимое */
+function expander(icon, title, desc, fill, key){
+  const box = el('div', 'set-exp');
+  const arrow = el('div', 'exp-arrow', '⌄');
+  const head = row(icon, title, desc, arrow, 'clickable');
+  const body = el('div', 'exp-body');
+  box.append(head, body);
+
+  const inner = el('div', 'exp-inner');
+  body.appendChild(inner);
+  fill(inner);                       // содержимое готово сразу — тогда раскрытие плавное
+
+  let open = key ? KV.get('exp.' + key, false) : false;
+  box.classList.toggle('open', open);
+  head.onclick = () => {
+    open = !open;
+    if (key) KV.set('exp.' + key, open);
+    box.classList.toggle('open', open);
+  };
+  return box;
+}
 function card(title){
   const c = el('div', 'card');
   if (title) c.appendChild(el('div', 'card-t', title));
@@ -1707,22 +1728,25 @@ APPS.settings = {
           ? 'Русский — исходный язык системы'
           : `Переведено ${I18N.coverage()} строк интерфейса. Всё, чего нет в словаре, остаётся на русском — это видно сразу и не выдаётся за готовый перевод.`,
         lsel));
-
-      const kb = card('Раскладки клавиатуры');
-      kb.appendChild(row('⌨️', 'Переключение', 'Alt + Shift или щелчок по индикатору в панели',
-        el('div', 'muted tiny', Layouts.def().code)));
-      Object.entries(Layouts.ALL).forEach(([id, d]) => {
-        const on = Layouts.enabled().includes(id);
-        kb.appendChild(row(d.flag, d.name, id === Layouts.current() ? 'Активна' : (on ? 'Включена' : 'Выключена'),
-          toggle(() => Layouts.enabled().includes(id), () => { Layouts.toggle(id); drawMain(); })));
-      });
-      kb.appendChild(row('ℹ️', 'Что раскладка делает на самом деле',
-        'Пока выбрана нелатинская раскладка, буквы с физической клавиатуры превращаются в её символы внутри окон системы. Разложить клавиатуру самой вашей ОС страница не может — и не притворяется.', el('span')));
-      main.appendChild(kb);
       const ci = el('input', 'inp'); ci.value = S.city;
       ci.onchange = () => { set('city', ci.value); Shell.renderShell(); };
       l.appendChild(row('🏙', 'Город для погоды', 'Влияет на виджет погоды', ci));
       main.appendChild(l);
+
+      const kb = card('Клавиатура');
+      const names = () => Layouts.enabled().map(id => Layouts.ALL[id].name).join(', ');
+      kb.appendChild(expander('⌨️', 'Раскладки', names(), body => {
+        Object.entries(Layouts.ALL).forEach(([id, d]) => {
+          body.appendChild(row(d.flag, d.name,
+            id === Layouts.current() ? 'Активна' : (Layouts.enabled().includes(id) ? 'Включена' : 'Выключена'),
+            toggle(() => Layouts.enabled().includes(id), () => { Layouts.toggle(id); drawMain(); })));
+        });
+        body.appendChild(el('div', 'set-note',
+          'Переключение — Alt + Shift или щелчок по индикатору в панели. Пока выбрана нелатинская ' +
+          'раскладка, буквы с физической клавиатуры превращаются в её символы внутри окон системы. ' +
+          'Разложить клавиатуру самой вашей ОС страница не может — и не притворяется.'));
+      }, 'kb'));
+      main.appendChild(kb);
     }
 
     /* --- Доступность --- */

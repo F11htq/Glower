@@ -498,3 +498,11 @@ body.native .lock-name::after{content:' · система';font-size:12px;opacit
 body.locked #desktop{filter:blur(26px) brightness(.55) saturate(.8);pointer-events:none;
   transition:filter var(--t4) var(--e-io)}
 body.locked #desktop > *{pointer-events:none}
+
+/* ---------- раскрывающийся раздел в Параметрах ---------- */
+.set-exp .exp-arrow{font-size:15px;opacity:.6;transition:transform var(--t2) var(--e-spring)}
+.set-exp.open .exp-arrow{transform:rotate(180deg);opacity:.9}
+.set-exp .exp-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--t3) var(--e-io)}
+.set-exp.open .exp-body{grid-template-rows:1fr}
+.set-exp .exp-inner{min-height:0;overflow:hidden}
+.set-exp .exp-body .set-row{padding-left:34px;background:rgba(255,255,255,.04)}
