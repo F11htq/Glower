@@ -84,7 +84,8 @@ const WIDGETS = {
     const ev = Object.entries(KV.get('cal.events', {})).slice(0, 2);
     return `<div class="w-t">Календарь</div><div class="w-big">${d.getDate()}</div>
       <div class="tiny muted">${d.toLocaleDateString('ru-RU', { weekday:'long', month:'long' })}</div>
-      ${ev.map(([, v]) => `<div class="w-row"><span>${esc(v)}</span></div>`).join('')}`; } },
+      ${ev.map(([, v]) => { const e2 = window.Reminders ? Reminders.norm(v) : { t:v, time:'' };
+        return `<div class="w-row"><span>${esc(e2.t)}</span><span class="muted tiny">${e2.time || ''}</span></div>`; }).join('')}`; } },
   tasks:{ n:'Задачи', e:'✅', h(){ const t = KV.get('todo', []).filter(x => !x.d).slice(0, 4);
     return `<div class="w-t">Задачи</div>${t.length ? t.map(x => `<div class="w-row"><span>○ ${esc(x.t)}</span></div>`).join('')
       : '<div class="w-row muted">Всё сделано 🎉</div>'}`; } },

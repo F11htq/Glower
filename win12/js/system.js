@@ -20,12 +20,23 @@ const Dlg = {
           ${opts.text ? `<div class="dlg-x">${esc(opts.text)}</div>` : ''}</div>
         </div>`;
 
-      let input = null;
+      let input = null, extra = null;
       if (opts.type === 'prompt'){
         input = el('input', 'inp');
         input.value = opts.value || '';
         input.spellcheck = false;
         box.appendChild(input);
+        /* второе поле — например время напоминания */
+        if (opts.extra){
+          extra = el('input', 'inp');
+          extra.type = opts.extra.type || 'text';
+          extra.lang = window.I18N ? I18N.locale() : 'ru-RU';
+          extra.value = opts.extra.value || '';
+          extra.placeholder = opts.extra.placeholder || '';
+          const lab = el('label', 'dlg-extra', `<span>${esc(opts.extra.label || '')}</span>`);
+          lab.appendChild(extra);
+          box.appendChild(lab);
+        }
       }
 
       const foot = el('div', 'dlg-foot');
@@ -37,7 +48,9 @@ const Dlg = {
         foot.appendChild(cancel);
       }
       const ok = el('button', 'btn pri' + (opts.danger ? ' danger' : ''), opts.okText || 'ОК');
-      ok.onclick = () => done(opts.type === 'prompt' ? (input.value || '') : true);
+      ok.onclick = () => done(opts.type === 'prompt'
+        ? (extra ? { value:input.value || '', extra:extra.value || '' } : (input.value || ''))
+        : true);
       foot.appendChild(ok);
       box.appendChild(foot);
 
@@ -61,7 +74,11 @@ const Dlg = {
   },
   alert(title, text, icon){ return this.open({ type:'alert', title, text, icon }); },
   confirm(title, text, opts = {}){ return this.open({ type:'confirm', title, text, icon:opts.icon || '❓', ...opts }); },
-  prompt(title, text, value, icon){ return this.open({ type:'prompt', title, text, value, icon:icon || '✏️' }); }
+  prompt(title, text, value, icon){ return this.open({ type:'prompt', title, text, value, icon:icon || '✏️' }); },
+  /* prompt с дополнительным полем: вернёт { value, extra } */
+  promptExtra(title, text, value, extra, icon){
+    return this.open({ type:'prompt', title, text, value, extra, icon:icon || '✏️' });
+  }
 };
 window.Dlg = Dlg;
 

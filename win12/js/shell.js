@@ -430,7 +430,8 @@ const Shell = {
           <div class="forecast">${w.days.map(d => `<div>${d.d}<span>${d.i}</span>${d.t > 0 ? '+' : ''}${d.t}°</div>`).join('')}</div>` },
       { t:'Календарь', html:`<div class="w-big">${now.getDate()}</div>
           <div class="tiny muted">${now.toLocaleDateString('ru-RU', { weekday:'long', month:'long' })}</div>
-          ${evList.length ? evList.map(([k, v]) => `<div class="w-row"><span>${esc(v)}</span><span class="muted">${k.split('-')[2]}</span></div>`).join('')
+          ${evList.length ? evList.map(([k, v]) => { const e2 = window.Reminders ? Reminders.norm(v) : { t:v, time:'' };
+            return `<div class="w-row"><span>${esc(e2.t)}</span><span class="muted">${e2.time || k.split('-')[2]}</span></div>`; }).join('')
                           : '<div class="w-row muted">Событий нет</div>'}` },
       { t:'Задачи', html:todo.length ? todo.map(t => `<div class="w-row"><span>○ ${esc(t.t)}</span></div>`).join('')
                                       : '<div class="w-row muted">Всё сделано 🎉</div>' },

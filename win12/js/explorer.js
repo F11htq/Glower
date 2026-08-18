@@ -148,22 +148,19 @@ function decorate(win){
 
     const run = q => {
       if (!global) return;
-      const res = [];
-      (function walk(node, p){
-        Object.values(node.children || {}).forEach(c => {
-          if (c.name.toLowerCase().includes(q.toLowerCase())) res.push({ node:c, path:p });
-          if (c.type === 'dir') walk(c, [...p, c.name]);
-        });
-      })(FS.root, []);
+      const res = Search.scan(q);
 
       list.innerHTML = '';
-      const head = el('div', 'fe-search-head', `Найдено: ${res.length} · по всему компьютеру`);
+      const inside = res.filter(r => r.hit).length;
+      const head = el('div', 'fe-search-head',
+        `Найдено: ${res.length} · по всему компьютеру` + (inside ? ` · из них ${inside} по содержимому` : ''));
       list.appendChild(head);
       const box = el('div', 'fe-table');
       res.slice(0, 200).forEach(r => {
         const n = el('div', 'fe-tr');
         n.dataset.name = r.node.name;
-        n.innerHTML = `<div class="c1"><span class="gl">${r.node.type === 'dir' ? '📁' : '📄'}</span>${esc(r.node.name)}</div>
+        n.innerHTML = `<div class="c1"><span class="gl">${r.node.type === 'dir' ? '📁' : '📄'}</span>${esc(r.node.name)}
+            ${r.hit ? `<div class="fe-hit tiny">…${esc(r.hit)}…</div>` : ''}</div>
           <div class="tiny muted">/${esc(r.path.join('/'))}</div><div></div><div></div>`;
         n.ondblclick = () => {
           if (r.node.type === 'dir'){ d.tabs[d.tab].path = [...r.path, r.node.name]; mount(win, [...r.path, r.node.name]); }

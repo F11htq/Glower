@@ -355,6 +355,146 @@ try {
   await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
   await page.waitForTimeout(300);
 
+  /* --- переключатели, которые раньше ничего не делали --- */
+  check('выключённые уведомления не показывают баннер, но пишутся в центр',
+    await page.evaluate(async () => {
+      KV.set('notif', false);
+      const before = Notif.list().length;
+      Shell.toast('Проверка', 'баннера быть не должно', '🔔');
+      await new Promise(r => setTimeout(r, 250));
+      const noBanner = document.querySelectorAll('.toast').length === 0;
+      const logged = Notif.list().length === before + 1;
+      KV.set('notif', true);
+      return noBanner && logged;
+    }));
+
+  check('включённые уведомления снова показывают баннер',
+    await page.evaluate(async () => {
+      Shell.toast('Проверка', 'баннер должен быть', '🔔');
+      await new Promise(r => setTimeout(r, 250));
+      const ok = document.querySelectorAll('.toast').length > 0;
+      document.querySelectorAll('.toast').forEach(t => t.remove());
+      return ok;
+    }));
+
+  check('моно-звук действительно сводит выход в один канал',
+    await page.evaluate(() => {
+      A11Y.applyMono(true);
+      const c = Snd.ac();
+      const bus = A11Y.bus(c);
+      const ok = bus.channelCount === 1 && bus.channelCountMode === 'explicit';
+      A11Y.applyMono(false);
+      return ok;
+    }));
+
+  check('залипание клавиш держит модификатор до следующей клавиши',
+    await page.evaluate(async () => {
+      KV.set('sticky', true);
+      dispatchEvent(new KeyboardEvent('keydown', { key:'Control', bubbles:true }));
+      const latched = !!A11Y.latched.Control && !!document.querySelector('#sticky-osd');
+      let sawCtrl = false;
+      const h = e => { if (e.key === 'k' && e.ctrlKey) sawCtrl = true; };
+      addEventListener('keydown', h);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key:'k', bubbles:true }));
+      await new Promise(r => setTimeout(r, 60));
+      removeEventListener('keydown', h);
+      const cleared = !A11Y.latched.Control && !document.querySelector('#sticky-osd');
+      KV.set('sticky', false);
+      return latched && sawCtrl && cleared;
+    }));
+
+  check('приложения по умолчанию действительно меняют ассоциацию',
+    await page.evaluate(async () => {
+      KV.set('assoc', {});
+      const was = Assoc.appFor({ name:'заметка.txt' });
+      const m = KV.get('assoc', {}); m.txt = 'term'; KV.set('assoc', m);
+      const now = Assoc.appFor({ name:'заметка.txt' });
+      KV.set('assoc', {});
+      return was === 'notepad' && now === 'term' && Assoc.appFor({ name:'заметка.txt' }) === 'notepad';
+    }));
+
+  /* --- то, что срабатывает само --- */
+  check('будильник срабатывает в назначенную минуту',
+    await page.evaluate(async () => {
+      KV.set('alarms', []);
+      const now = new Date();
+      Alarms.add({ h:now.getHours(), m:now.getMinutes(), label:'Проверка', days:[] });
+      let fired = false;
+      const orig = Dlg.alert.bind(Dlg);
+      Dlg.alert = (t) => { if (/Будильник/.test(t)) fired = true; return Promise.resolve(true); };
+      Alarms.tick();
+      await new Promise(r => setTimeout(r, 150));
+      Dlg.alert = orig;
+      const off = Alarms.list()[0].on === false;      // разовый выключается сам
+      KV.set('alarms', []);
+      return fired && off;
+    }));
+
+  check('будильник не срабатывает дважды за одну минуту',
+    await page.evaluate(async () => {
+      KV.set('alarms', []);
+      const now = new Date();
+      Alarms.add({ h:now.getHours(), m:now.getMinutes(), label:'Раз в минуту', days:[0,1,2,3,4,5,6] });
+      let count = 0;
+      const orig = Dlg.alert.bind(Dlg);
+      Dlg.alert = () => { count++; return Promise.resolve(true); };
+      Alarms.tick(); Alarms.tick(); Alarms.tick();
+      await new Promise(r => setTimeout(r, 150));
+      Dlg.alert = orig;
+      KV.set('alarms', []);
+      return count === 1;
+    }));
+
+  check('напоминание календаря приходит в указанное время',
+    await page.evaluate(async () => {
+      const now = new Date();
+      const key = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      const hm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+      KV.set('cal.events', { [key]:{ t:'Встреча', time:hm } });
+      KV.set('cal.fired', {});
+      let seen = '';
+      const orig = Shell.toast.bind(Shell);
+      Shell.toast = (title, text) => { if (title === 'Календарь') seen = text; };
+      Reminders.tick(); Reminders.tick();
+      Shell.toast = orig;
+      KV.set('cal.events', {});
+      return seen.includes('Встреча') && seen.includes(hm);
+    }));
+
+  check('автоблокировка срабатывает после бездействия и молчит при активности',
+    await page.evaluate(async () => {
+      const orig = Profiles.lock.bind(Profiles);
+      let locked = 0;
+      Profiles.lock = () => { locked++; };
+      KV.set('autoLock', 1);
+
+      AutoLock.last = Date.now() - 120000;   // две минуты без ввода
+      AutoLock.tick();
+      const afterIdle = locked;
+
+      AutoLock.touch();                       // пользователь пошевелился
+      AutoLock.tick();
+      const afterTouch = locked;
+
+      KV.set('autoLock', 0);
+      AutoLock.last = Date.now() - 120000;
+      AutoLock.tick();                        // выключенная настройка ничего не делает
+      const afterOff = locked;
+
+      Profiles.lock = orig;
+      AutoLock.touch();
+      return afterIdle === 1 && afterTouch === 1 && afterOff === 1;
+    }));
+
+  check('поиск находит слово внутри файла, а не только в имени',
+    await page.evaluate(() => {
+      FS.write(['Документы'], 'протокол.txt', 'секретное слово барсук внутри файла');
+      const res = Search.scan('барсук');
+      const f = res.find(r => r.node.name === 'протокол.txt');
+      FS.rm(['Документы'], 'протокол.txt', true);
+      return !!f && !!f.hit && f.hit.includes('барсук');
+    }));
+
   check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
   check('по умолчанию латиница — набор не подменяется',
     await page.evaluate(() => Layouts.current() === 'en' && document.querySelector('#kb-badge').textContent === 'ENG'));

@@ -669,6 +669,7 @@ APPS.calendar = {
     wrap.append(head, grid);
 
     const M = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    const MG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
     const draw = () => {
       head.innerHTML = '';
       const t = el('div', 'cal-m', `${M[cur.getMonth()]} ${cur.getFullYear()}`);
@@ -693,12 +694,22 @@ APPS.calendar = {
         const key = `${yr}-${mo}-${d}`;
         const isToday = !out && d === now.getDate() && mo === now.getMonth() && yr === now.getFullYear();
         const c = el('div', 'cal-d' + (out ? ' out' : '') + (isToday ? ' today' : ''), `<b>${d}</b>`);
-        if (events[key]) { c.appendChild(el('div', 'ev')); c.title = events[key]; c.innerHTML += `<div class="tiny" style="margin-top:3px;opacity:.8">${esc(events[key]).slice(0, 14)}</div>`; }
-        c.onclick = () => {
-          const v = prompt('Событие на ' + d + ' ' + M[(mo + 12) % 12], events[key] || '');
-          if (v === null) return;
-          if (v) events[key] = v; else delete events[key];
-          KV.set('cal.events', events); draw();
+        const ev = Reminders.norm(events[key]);
+        if (ev.t){
+          c.appendChild(el('div', 'ev'));
+          c.title = (ev.time ? ev.time + ' · ' : '') + ev.t;
+          c.innerHTML += `<div class="tiny" style="margin-top:3px;opacity:.8">${ev.time ? '<b>' + ev.time + '</b> ' : ''}${esc(ev.t).slice(0, 14)}</div>`;
+        }
+        c.onclick = async () => {
+          const r = await Dlg.promptExtra('Событие · ' + d + ' ' + MG[(mo + 12) % 12],
+            'Пустое название удалит событие. Время не обязательно — но если указать, система напомнит.',
+            ev.t, { label:'Напомнить в', type:'time', value:ev.time }, '📅');
+          if (r === null) return;
+          const t = (r.value || '').trim();
+          if (t) events[key] = { t, time:r.extra || '' }; else delete events[key];
+          KV.set('cal.events', events);
+          Shell.renderWidgets && Shell.renderWidgets();
+          draw();
         };
         grid.appendChild(c);
       }
@@ -718,8 +729,8 @@ APPS.clock = {
     const body = el('div', 'scroll pad');
     wrap.append(tabs, body);
     let tab = 'clock';
-    ['Часы','Секундомер','Таймер','Мир'].forEach((n, i) => {
-      const k = ['clock','sw','timer','world'][i];
+    ['Часы','Будильник','Секундомер','Таймер','Мир'].forEach((n, i) => {
+      const k = ['clock','alarm','sw','timer','world'][i];
       const b = el('button', 'btn' + (k === tab ? ' pri' : ''), n);
       b.onclick = () => { tab = k; $$('.btn', tabs).forEach(x => x.classList.remove('pri')); b.classList.add('pri'); draw(); };
       tabs.appendChild(b);
@@ -781,6 +792,7 @@ APPS.clock = {
         };
         $('#tm-r', body).onclick = () => { clearInterval(tmIv); tmLeft = 0; upd(); };
       }
+      else if (tab === 'alarm') Alarms.ui(body);
       else {
         const zones = [['Москва',3],['Лондон',0],['Нью-Йорк',-5],['Токио',9],['Дубай',4],['Сан-Франциско',-8],['Берлин',1],['Сидней',11]];
         const upd = () => {
@@ -1585,7 +1597,9 @@ APPS.settings = {
     /* --- Уведомления --- */
     function pNotif(){
       const c = card('Уведомления');
-      c.appendChild(row('🔔', 'Уведомления', 'Показывать баннеры приложений', toggle(() => KV.get('notif', true), v => KV.set('notif', v))));
+      c.appendChild(row('🔔', 'Уведомления', 'Выключенные баннеры не появляются, но остаются в центре уведомлений',
+        toggle(() => KV.get('notif', true), v => { KV.set('notif', v);
+          if (v) Shell.toast('Уведомления', 'Баннеры снова включены', '🔔'); })));
       c.appendChild(row('🌙', 'Не беспокоить', 'Скрывать баннеры и звуки', toggle(() => S.dnd, v => { set('dnd', v); Shell.updateCC(); })));
       const fs = el('div', 'row');
       const fsel = sel([{ n:'25 минут', v:'25' }, { n:'50 минут', v:'50' }, { n:'90 минут', v:'90' }],
@@ -1639,9 +1653,25 @@ APPS.settings = {
       main.appendChild(au);
 
       const d = card('Приложения по умолчанию');
-      d.appendChild(row('🌐', 'Браузер', 'Dymensity Browser', el('div', 'muted', '›')));
-      d.appendChild(row('📝', 'Текстовый редактор', 'Блокнот', el('div', 'muted', '›')));
-      d.appendChild(row('🖼️', 'Просмотр фото', 'Фотографии', el('div', 'muted', '›')));
+      const GROUPS = [
+        ['📝', 'Текстовые файлы', ['txt','md','log','ini','csv','json','js','css','py']],
+        ['🌐', 'Веб-страницы',    ['html','htm']],
+        ['🖼️', 'Изображения',     ['png','jpg','jpeg','gif','webp','bmp','svg']],
+        ['🎵', 'Звук',            ['mp3','wav','ogg','m4a','flac']]
+      ];
+      const openers = Assoc.openers().map(o => ({ n:o.name, v:o.id }));
+      GROUPS.forEach(([e, name, exts]) => {
+        const cur = Assoc.map()[exts[0]] || 'notepad';
+        const s2 = sel(openers, () => cur, v => {
+          exts.forEach(x => { const m = KV.get(Assoc.KEY, {}); m[x] = v; KV.set(Assoc.KEY, m); });
+          Shell.toast('Приложения', `${name} теперь открываются в «${APPS[v].name}»`, APPS[v].glyph);
+          drawMain();
+        });
+        d.appendChild(row(e, name, exts.map(x => '.' + x).join(' '), s2));
+      });
+      const rst = el('button', 'btn', 'Сбросить');
+      rst.onclick = () => { KV.set(Assoc.KEY, {}); drawMain(); Shell.toast('Приложения', 'Ассоциации возвращены к исходным', '↩️'); };
+      d.appendChild(row('↩️', 'Вернуть по умолчанию', 'Как было при установке системы', rst));
       main.appendChild(d);
     }
 
@@ -1662,6 +1692,13 @@ APPS.settings = {
         set('userName', p.name); Shell.renderShell(); Profiles.buildLock(); drawMain();
       };
       c.appendChild(row('👤', 'Имя', 'Показывается в Пуске и на экране блокировки', ni));
+
+      c.appendChild(row('🔒', 'Блокировать при бездействии', 'Экран блокировки включится сам, если системой не пользуются',
+        sel([{ n:'Никогда', v:'0' }, { n:'1 минута', v:'1' }, { n:'5 минут', v:'5' },
+             { n:'10 минут', v:'10' }, { n:'30 минут', v:'30' }],
+            () => String(KV.get('autoLock', 0)),
+            v => { KV.set('autoLock', +v); AutoLock.touch();
+              Shell.toast('Учётные записи', +v ? `Блокировка через ${v} мин бездействия` : 'Автоблокировка выключена', '🔒'); })));
 
       const ei = el('input', 'inp'); ei.value = me.emoji || me.name[0]; ei.style.width = '64px'; ei.maxLength = 2;
       ei.onchange = () => {
@@ -1788,8 +1825,12 @@ APPS.settings = {
         document.body.style.cursor = v ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\'%3E%3Cpath d=\'M6 2l22 12-10 2-4 10z\' fill=\'white\' stroke=\'black\'/%3E%3C/svg%3E"), auto' : ''; })));
       main.appendChild(c);
       const s = card('Слух и ввод');
-      s.appendChild(row('🔉', 'Моно-звук', '', toggle(() => KV.get('mono', false), v => KV.set('mono', v))));
-      s.appendChild(row('⌨️', 'Залипание клавиш', '', toggle(() => KV.get('sticky', false), v => KV.set('sticky', v))));
+      s.appendChild(row('🔉', 'Моно-звук', 'Оба канала сводятся в один — звук системы и музыки',
+        toggle(() => KV.get('mono', false), v => { A11Y.applyMono(v);
+          Shell.toast('Специальные возможности', v ? 'Звук сведён в моно' : 'Звук снова стерео', '🔉'); })));
+      s.appendChild(row('⌨️', 'Залипание клавиш', 'Нажмите Shift, Ctrl, Alt или Win отдельно — модификатор дождётся следующей клавиши',
+        toggle(() => KV.get('sticky', false), v => { KV.set('sticky', v); A11Y.latched = {}; A11Y.badge();
+          Shell.toast('Специальные возможности', v ? 'Залипание клавиш включено' : 'Залипание клавиш выключено', '⌨️'); })));
       main.appendChild(s);
     }
 
