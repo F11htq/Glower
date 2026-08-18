@@ -1,0 +1,196 @@
+/* ==========================================================================
+   Настоящая машина внутри оболочки
+
+   Если агент запущен с ключом --system, оболочка перестаёт быть страницей
+   про систему и становится оболочкой самой машины: настоящие процессы,
+   настоящая громкость и яркость, настоящий список установленных программ,
+   настоящее выключение. Чего машина не умеет — о том говорится прямо.
+   ========================================================================== */
+'use strict';
+
+const OS = {
+  caps:null,
+
+  on(){ return Platform.mode === 'native' && !!this.caps; },
+  can(what){ return !!(this.caps && this.caps.allow && this.caps.allow[what]); },
+  tool(name){ return !!(this.caps && this.caps.tools && this.caps.tools[name]); },
+
+  async load(){
+    if (Platform.mode !== 'native' || !Platform.info.system) return false;
+    try { this.caps = await Platform.rpc('sys.caps'); return true; }
+    catch(e){ return false; }
+  },
+
+  /* ---------- звук ---------- */
+  async volume(){ return Platform.rpc('sys.volume.get'); },
+  async setVolume(v){ return Platform.rpc('sys.volume.set', { volume:v }); },
+
+  /* ---------- яркость ---------- */
+  async brightness(){ return Platform.rpc('sys.brightness.get'); },
+  async setBrightness(v){ return Platform.rpc('sys.brightness.set', { value:v }); },
+
+  /* ---------- сеть, процессы, программы ---------- */
+  async net(){ return Platform.rpc('sys.net'); },
+  async procs(){ return Platform.rpc('sys.procs'); },
+  async apps(){ return Platform.rpc('sys.apps'); },
+  async launch(id){ return Platform.rpc('sys.launch', { id }); },
+
+  /* ---------- питание ---------- */
+  async power(action){ return Platform.rpc('sys.power', { action }); }
+};
+window.OS = OS;
+
+/* ==========================================================================
+   Подключение к живой машине
+   ========================================================================== */
+(async function boot(){
+  /* ждём, пока Platform договорится с агентом */
+  for (let i = 0; i < 30 && Platform.mode !== 'native'; i++)
+    await new Promise(r => setTimeout(r, 200));
+  if (!await OS.load()) return;
+
+  document.body.classList.add('os-native');
+  Shell.toast('Система', `Оболочка управляет машиной ${OS.caps.host}`, '🖥️', 5000);
+
+  syncVolume();
+  wirePower();
+  wireApps();
+  wireTaskManager();
+})();
+
+/* ---------- громкость системы вместо громкости страницы ---------- */
+async function syncVolume(){
+  if (!OS.tool('wpctl') && !OS.tool('amixer')) return;
+  try {
+    const v = await OS.volume();
+    if (v.volume != null){ Store.set('volume', v.volume); Shell.updateCC(); }
+  } catch(e){}
+
+  /* всё, что двигает громкость в системе, двигает её и на машине */
+  const set = Store.set.bind(Store);
+  Store.set = function(key, value){
+    const r = set(key, value);
+    if (key === 'volume' && OS.on()) OS.setVolume(value).catch(() => {});
+    if (key === 'brightness' && OS.on() && OS.tool('brightnessctl')) OS.setBrightness(value).catch(() => {});
+    return r;
+  };
+}
+
+/* ---------- настоящее выключение ---------- */
+function wirePower(){
+  const orig = Shell.power.bind(Shell);
+  Shell.power = async function(act){
+    if (!OS.on() || !OS.can('power')) return orig(act);
+    const map = { shutdown:['poweroff', 'Выключение', 'Машина выключится.'],
+                  restart:['reboot', 'Перезагрузка', 'Машина перезагрузится.'],
+                  sleep:['suspend', 'Спящий режим', 'Машина уснёт.'] };
+    const m = map[act];
+    if (!m) return orig(act);
+    const ov = $('#power-overlay'); if (ov) ov.classList.remove('on');
+    if (!await Dlg.confirm(m[1], m[2] + ' Это действие затронет всю машину, а не только оболочку.',
+        { icon:'⏻', okText:m[1], danger:true })) return;
+    try { await OS.power(m[0]); }
+    catch(e){ Dlg.alert(m[1], String(e.message || e), '⚠️'); }
+  };
+}
+
+/* ---------- настоящие программы машины ---------- */
+function wireApps(){
+  APPS.native = {
+    name:'Программы машины', glyph:'🐧', bg:'linear-gradient(140deg,#fbbf24,#b45309)', w:720, h:600, single:true,
+    async render(win){
+      const wrap = el('div', 'app col'); win.body.appendChild(wrap);
+      const bar = el('div', 'toolbar');
+      const find = el('input', 'inp grow'); find.placeholder = '🔎 Поиск программы';
+      bar.appendChild(find);
+      const list = el('div', 'scroll pad');
+      wrap.append(bar, list);
+
+      let data = { list:[], total:0, canLaunch:false };
+      try { data = await OS.apps(); }
+      catch(e){ list.appendChild(el('div', 'empty', 'Не удалось получить список: ' + e.message)); return; }
+
+      const draw = () => {
+        const q = find.value.trim().toLowerCase();
+        const items = data.list.filter(a => !q || a.name.toLowerCase().includes(q));
+        list.innerHTML = '';
+        win.setSub(`${data.total} программ на машине`);
+        if (!items.length) return list.appendChild(el('div', 'empty', 'Ничего не найдено'));
+        items.forEach(a => {
+          const b = el('button', 'btn' + (data.canLaunch ? ' pri' : ''), data.canLaunch ? 'Запустить' : 'Запуск выключен');
+          b.disabled = !data.canLaunch;
+          b.onclick = async () => {
+            try { await OS.launch(a.id); Shell.toast('Программы машины', 'Запущено: ' + a.name, '🐧'); }
+            catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
+          };
+          list.appendChild(row('📦', a.name, a.comment || a.id, b));
+        });
+        if (!data.canLaunch)
+          list.appendChild(el('div', 'set-note',
+            'Список настоящий — он прочитан из .desktop-файлов машины. Запуск выключен: ' +
+            'агент должен быть запущен с ключом --allow-launch.'));
+      };
+      find.oninput = draw;
+      draw();
+    }
+  };
+  if (window.Shell && Shell.renderShell) Shell.renderShell();
+}
+
+/* ---------- диспетчер задач показывает настоящие процессы ---------- */
+function wireTaskManager(){
+  const render = APPS.taskmgr.render;
+  APPS.taskmgr.render = function(win, opts){
+    render.call(this, win, opts);
+    if (!OS.on()) return;
+
+    const body = win.body;
+    body.style.flexDirection = 'column';
+    const bar = el('div', 'toolbar');
+    const btn = el('button', 'btn pri', '🐧 Процессы машины');
+    bar.appendChild(btn);
+    body.prepend(bar);
+
+    const box = el('div', 'scroll pad');
+    box.style.display = 'none';
+    let timer = null;
+
+    const draw = async () => {
+      let d;
+      try { d = await OS.procs(); }
+      catch(e){ box.innerHTML = ''; box.appendChild(el('div', 'empty', 'Не удалось прочитать /proc: ' + e.message)); return; }
+      const mb = b => (b / 1048576).toFixed(1) + ' МБ';
+      box.innerHTML = `<div class="card" style="padding:0">
+        <div class="set-row"><div class="l"><b>Процессов</b><small>всего в системе</small></div><div class="ctl">${d.total}</div></div>
+        <div class="set-row"><div class="l"><b>Память</b><small>занято на машине</small></div>
+          <div class="ctl">${mb(d.mem.total - d.mem.free)} из ${mb(d.mem.total)}</div></div>
+        <div class="set-row"><div class="l"><b>Средняя нагрузка</b><small>1, 5 и 15 минут</small></div>
+          <div class="ctl">${d.load.map(x => x.toFixed(2)).join(' · ')}</div></div></div>
+        <div class="fe-table" style="margin-top:12px">
+          <div class="fe-tr head"><div class="c1">Процесс</div><div>PID</div><div>ЦП</div><div>Память</div></div>
+          ${d.list.map(p => `<div class="fe-tr"><div class="c1">${esc(p.name)}</div>
+            <div class="tiny muted">${p.pid}</div><div class="tiny">${p.cpu}%</div>
+            <div class="tiny">${mb(p.mem)}</div></div>`).join('')}
+        </div>`;
+    };
+
+    /* показываем что-то одно: либо окна оболочки, либо процессы машины */
+    const others = () => [...body.children].filter(n => n !== bar && n !== box);
+
+    btn.onclick = () => {
+      const on = btn.classList.toggle('on');
+      others().forEach(n => n.style.display = on ? 'none' : '');   // hidden не работает: у .app свой display
+      if (on){
+        body.appendChild(box);
+        box.style.display = '';
+        draw(); timer = setInterval(draw, 2000);
+        btn.textContent = '↩ Вернуться к окнам';
+      } else {
+        box.style.display = 'none'; clearInterval(timer); timer = null;
+        btn.textContent = '🐧 Процессы машины';
+      }
+    };
+    const close = win.onClose;
+    win.onClose = () => { clearInterval(timer); if (close) close(); };
+  };
+}

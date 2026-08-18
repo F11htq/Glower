@@ -25,7 +25,10 @@ const arg = (name, def) => {
 const PORT = +arg('port', 8123);
 const ROOT = resolve(arg('root', join(homedir(), 'Windows12')));
 const MAX_INLINE = 256 * 1024;          // файлы больше не грузим в дерево целиком
-const ALLOW_OPEN = process.argv.includes('--allow-open');   // разрешить открытие в системе
+const ALLOW_OPEN   = process.argv.includes('--allow-open');    // открывать файлы в системе
+const ALLOW_POWER  = process.argv.includes('--allow-power');   // выключение и перезагрузка
+const ALLOW_LAUNCH = process.argv.includes('--allow-launch');  // запуск программ машины
+const SYSTEM       = process.argv.includes('--system') || ALLOW_POWER || ALLOW_LAUNCH;
 
 /* счётчик изменений: оболочка по нему понимает, что папку правили снаружи */
 let rev = 0;
@@ -95,12 +98,24 @@ function startPoll(){                   // если рекурсивное сл�
   }, 3000);
 }
 
+/* ---------- системный слой: только если запрошен ключом --system ---------- */
+let SYS = {};
+if (SYSTEM){
+  const m = await import('./system.mjs');
+  SYS = {
+    ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
+    ...m.apps(ALLOW_LAUNCH),
+    async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN }); }
+  };
+}
+
 /* ---------- методы, доступные оболочке ---------- */
 const API = {
   async ping(){
-    return { ok:true, agent:'win12-agent', version:'1.1', root:ROOT,
+    return { ok:true, agent:'win12-agent', version:'1.2', root:ROOT,
              platform:process.platform, node:process.version, pid:process.pid,
-             canOpen:ALLOW_OPEN, rev };
+             canOpen:ALLOW_OPEN, system:SYSTEM,
+             canPower:ALLOW_POWER, canLaunch:ALLOW_LAUNCH, rev };
   },
   async 'fs.rev'(){ return { rev }; },
   async 'fs.tree'(){ return { root:{ type:'dir', name:'', children: await tree() } }; },
@@ -134,6 +149,7 @@ const API = {
     spawn(cmd, [p], { detached:true, stdio:'ignore' }).unref();
     return { ok:true, opened:p, via:cmd };
   },
+  ...SYS,
   async 'sys.info'(){
     const { totalmem, freemem, cpus, hostname, userInfo, uptime, release } = await import('node:os');
     return { host:hostname(), user:userInfo().username, platform:process.platform, release:release(),
@@ -196,5 +212,11 @@ server.listen(PORT, () => {
   console.log(`  Рабочая папка: ${ROOT}`);
   console.log(`  Разрешено: чтение и запись только внутри этой папки.`);
   console.log(`  Открытие файлов в системе: ${ALLOW_OPEN ? 'разрешено ключом --allow-open' : 'выключено'}`);
-  console.log(`  Запуск произвольных программ и сеть агенту недоступны.\n`);
+  console.log(`  Системный слой:            ${SYSTEM ? 'включён ключом --system' : 'выключен'}`);
+  if (SYSTEM){
+    console.log(`    громкость, яркость, сеть, процессы, список программ: чтение и настройка`);
+    console.log(`    питание:  ${ALLOW_POWER ? 'разрешено ключом --allow-power' : 'выключено'}`);
+    console.log(`    запуск программ: ${ALLOW_LAUNCH ? 'разрешён ключом --allow-launch' : 'выключен'}`);
+  }
+  console.log(`  Произвольные команды агенту недоступны в любом режиме.\n`);
 });

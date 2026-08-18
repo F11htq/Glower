@@ -1,0 +1,38 @@
+#!/bin/sh
+# ==========================================================================
+#  Сеанс GlowerOS: киоск-компоновщик + оболочка в браузере без единой кнопки
+#  браузера. Запускается как обычный сеанс рабочего стола.
+# ==========================================================================
+set -e
+
+ROOT="${GLOWER_ROOT:-$HOME/GlowerOS}"
+PORT="${GLOWER_PORT:-8123}"
+UI="${GLOWER_UI:-/usr/share/glower/ui}"
+FLAGS="${GLOWER_FLAGS:---system --allow-open --allow-launch --allow-power}"
+
+mkdir -p "$ROOT"
+
+# агент — мост между оболочкой и машиной
+node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS &
+AGENT=$!
+trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
+
+# ждём, пока агент ответит
+i=0
+while [ $i -lt 50 ]; do
+  if curl -sf "http://localhost:$PORT/" >/dev/null 2>&1; then break; fi
+  i=$((i+1)); sleep 0.2
+done
+
+BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
+[ -n "$BROWSER" ] || { echo "GlowerOS: не найден chromium" >&2; exit 1; }
+
+exec "$BROWSER" \
+  --kiosk "http://localhost:$PORT/" \
+  --app="http://localhost:$PORT/" \
+  --start-fullscreen \
+  --noerrdialogs --disable-infobars --disable-session-crashed-bubble \
+  --disable-features=TranslateUI,MediaRouter \
+  --autoplay-policy=no-user-gesture-required \
+  --user-data-dir="$HOME/.local/share/glower/browser" \
+  --class=GlowerOS

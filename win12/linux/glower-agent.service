@@ -1,0 +1,25 @@
+[Unit]
+Description=Системный агент GlowerOS
+Documentation=https://github.com/F11htq/Dymensity-AI
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /usr/share/glower/ui/agent/server.mjs \
+  --port 8123 --root %h/GlowerOS --system --allow-open --allow-launch --allow-power
+Restart=on-failure
+RestartSec=2
+
+# агент трогает только домашнюю папку пользователя и системные утилиты из
+# своего белого списка — остальное закрыто средствами systemd
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-write
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=default.target
