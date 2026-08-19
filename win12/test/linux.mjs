@@ -222,6 +222,23 @@ try {
   check('колесо прокручивает страницу', web.y > 0, String(web.y));
   check('Ctrl + T открывает вкладку', web.вкладок === 2, String(web.вкладок));
 
+  /* --- установка на диск: без ключа она закрыта, и это видно --- */
+  const insCan = await page.evaluate(() => Install.can());
+  check('установка выключена, пока её не разрешили ключом',
+    insCan.allowed === false && /--allow-install/.test(insCan.reason || ''), JSON.stringify(insCan));
+
+  const insStart = await page.evaluate(() => Platform.rpc('install.start', { disk:'/dev/sda' })
+    .then(() => 'запустилась', e => e.message));
+  check('без --allow-install диск не трогают', /--allow-install/.test(insStart), insStart);
+
+  const insDisks = await page.evaluate(() => Install.disks().then(d => d, e => ({ err:e.message })));
+  check('список дисков читается из /sys',
+    Array.isArray(insDisks.list) && insDisks.list.every(d => d.dev.startsWith('/dev/')),
+    JSON.stringify(insDisks).slice(0, 200));
+
+  check('мастер установки не появляется там, где установка невозможна',
+    await page.evaluate(() => !APPS.installer));
+
   check('агент сообщил о системном слое при запуске', /Системный слой:\s+включён/.test(agentLog));
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));

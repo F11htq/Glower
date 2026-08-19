@@ -28,6 +28,7 @@ const MAX_INLINE = 256 * 1024;          // файлы больше не груз
 const ALLOW_OPEN   = process.argv.includes('--allow-open');    // открывать файлы в системе
 const ALLOW_POWER  = process.argv.includes('--allow-power');   // выключение и перезагрузка
 const ALLOW_LAUNCH = process.argv.includes('--allow-launch');  // запуск программ машины
+const ALLOW_INSTALL= process.argv.includes('--allow-install'); // установка системы на диск
 const SYSTEM       = process.argv.includes('--system') || ALLOW_POWER || ALLOW_LAUNCH;
 
 /* счётчик изменений: оболочка по нему понимает, что папку правили снаружи */
@@ -106,7 +107,8 @@ if (SYSTEM){
     ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
     ...m.apps(ALLOW_LAUNCH), ...m.hardware,
     ...(await import('./browser.mjs')).browser(PORT),
-    async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN }); }
+    ...(await import('./install.mjs')).install(ALLOW_INSTALL),
+    async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL }); }
   };
 }
 
@@ -218,6 +220,7 @@ server.listen(PORT, () => {
     console.log(`    громкость, яркость, сеть, процессы, список программ: чтение и настройка`);
     console.log(`    питание:  ${ALLOW_POWER ? 'разрешено ключом --allow-power' : 'выключено'}`);
     console.log(`    запуск программ: ${ALLOW_LAUNCH ? 'разрешён ключом --allow-launch' : 'выключен'}`);
+    console.log(`    установка на диск: ${ALLOW_INSTALL ? 'разрешена ключом --allow-install' : 'выключена'}`);
   }
   console.log(`  Произвольные команды агенту недоступны в любом режиме.\n`);
 });

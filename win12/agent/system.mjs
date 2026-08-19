@@ -200,7 +200,7 @@ export async function capabilities(flags){
       gio: await has('gio'), xdgOpen: await has('xdg-open')
     },
     backlight: existsSync(BL) && (await readdir(BL).catch(() => [])).length > 0,
-    allow:{ power:!!flags.power, launch:!!flags.launch, open:!!flags.open }
+    allow:{ power:!!flags.power, launch:!!flags.launch, open:!!flags.open, install:!!flags.install }
   };
 }
 

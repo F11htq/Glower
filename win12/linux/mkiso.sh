@@ -3,8 +3,8 @@
 #  Сборка загрузочного образа GlowerOS
 #
 #  Делает live-ISO: ядро, systemd, киоск-компоновщик и оболочка, которая
-#  стартует сама. Никакой установки на диск — образ грузится с флешки
-#  или в виртуальной машине.
+#  стартует сама. Образ грузится с флешки или в виртуальной машине, а из
+#  него систему можно установить на диск — мастером внутри самой оболочки.
 #
 #  Запуск (нужен root):
 #     sudo bash linux/mkiso.sh [--out glower.iso] [--chromium /путь/к/chrome-linux]
@@ -73,6 +73,8 @@ apt-get install -y --no-install-recommends \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
+  parted dosfstools e2fsprogs squashfs-tools \
+  grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
   brightnessctl xdg-utils libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
@@ -92,6 +94,8 @@ for d in css js agent assets linux; do
 done
 cp "$SRC/index.html" "$ROOTFS/usr/share/glower/ui/"
 install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
+# установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
+install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 
 if [ -n "$CHROMIUM" ]; then
   install -d "$ROOTFS/opt/chromium"
@@ -136,7 +140,7 @@ StandardInput=tty-force
 StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=XDG_SESSION_TYPE=wayland
-Environment=GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power
+Environment=GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power --allow-install
 ExecStartPre=/bin/mkdir -p /run/user/1000
 ExecStartPre=/bin/chown glower:glower /run/user/1000
 ExecStart=/usr/bin/cage -- /usr/bin/glower-session
