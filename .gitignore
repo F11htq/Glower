@@ -1,4 +1,6 @@
-# собранный архив для выдачи — пересобирается из win12/
+# собранный архив и образ — пересобираются из win12/
+glower.iso
+*.iso
 glower-os.zip
 windows12.zip
 node_modules/
