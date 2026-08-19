@@ -637,6 +637,27 @@ try {
       return native === 0 && seen.length === 3 && seen.every(Boolean);
     }));
 
+  check('меню «Добавить виджет» открывается и виджет появляется на столе',
+    await page.evaluate(async () => {
+      S.deskWidgets = []; Store.save(); Shell.renderDeskWidgets();
+      /* правый щелчок по пустому месту рабочего стола */
+      const d = document.querySelector('#desktop');
+      d.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, clientX:640, clientY:500 }));
+      await new Promise(r => setTimeout(r, 300));
+      const add = [...document.querySelectorAll('#ctx button')].find(b => /Добавить виджет/.test(b.textContent));
+      if (!add) return false;
+      add.click();
+      await new Promise(r => setTimeout(r, 400));
+      const menu = document.querySelector('#ctx');
+      const listed = menu.classList.contains('on') && menu.querySelectorAll('button').length >= 4;
+      if (!listed) return false;
+      menu.querySelector('button').click();          // берём первый виджет
+      await new Promise(r => setTimeout(r, 400));
+      const placed = S.deskWidgets.length === 1 && document.querySelectorAll('#desk-widgets .dw').length === 1;
+      S.deskWidgets = []; Store.save(); Shell.renderDeskWidgets();
+      return placed;
+    }));
+
   check('индикатор раскладки есть в панели', (await page.$$('#kb-badge')).length === 1);
   check('по умолчанию латиница — набор не подменяется',
     await page.evaluate(() => Layouts.current() === 'en' && document.querySelector('#kb-badge').textContent === 'ENG'));

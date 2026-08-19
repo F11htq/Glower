@@ -165,7 +165,10 @@ $('#desktop').addEventListener('contextmenu', e => {
     const b = el('button', '', `<span class="em">🧩</span><span>Добавить виджет…</span>`);
     b.onclick = () => {
       c.classList.remove('on');
-      Shell.ctx(e.clientX, e.clientY, Object.entries(WIDGETS).map(([k, d]) => ({ i:d.e, t:d.n, f:() => addWidget(k) })));
+      /* открываем список следующим кадром: меню не должно перестраиваться
+         посреди обработки того же щелчка */
+      setTimeout(() => Shell.ctx(e.clientX, e.clientY,
+        Object.entries(WIDGETS).map(([k, d]) => ({ i:d.e, t:d.n, f:() => addWidget(k) }))), 10);
     };
     c.insertBefore(b, c.children[3] || null);
   }, 0);

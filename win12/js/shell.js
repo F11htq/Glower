@@ -584,6 +584,10 @@ const Shell = {
   bindDesktop(){
     const d = $('#desktop');
     d.addEventListener('click', e => {
+      /* Если по этому щелчку меню перестроилось, старый элемент уже выброшен
+         из документа — и проверка «щёлкнули мимо» ошибочно закрывала только
+         что открытое меню. Отсюда пропадали подменю. */
+      if (!document.contains(e.target)) return;
       if (!e.target.closest('.win, .dock, .start, #cc, #widgets, .topbar, .ctx')) this.closePanels();
       if (!e.target.closest('.di')) $$('.di').forEach(x => x.classList.remove('sel'));
     });
