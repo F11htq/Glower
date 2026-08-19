@@ -35,6 +35,15 @@ const OS = {
   async apps(){ return Platform.rpc('sys.apps'); },
   async launch(id){ return Platform.rpc('sys.launch', { id }); },
 
+  /* ---------- Wi-Fi ---------- */
+  async wifiState(){ return Platform.rpc('sys.wifi.state'); },
+  async wifiScan(rescan){ return Platform.rpc('sys.wifi.scan', { rescan:!!rescan }); },
+  async wifiSaved(){ return Platform.rpc('sys.wifi.saved'); },
+  async wifiConnect(ssid, password){ return Platform.rpc('sys.wifi.connect', { ssid, password }); },
+  async wifiDisconnect(device){ return Platform.rpc('sys.wifi.disconnect', { device }); },
+  async wifiForget(ssid){ return Platform.rpc('sys.wifi.forget', { ssid }); },
+  async wifiRadio(on){ return Platform.rpc('sys.wifi.radio', { on }); },
+
   /* ---------- железо: спрашиваем машину, а не браузер ---------- */
   async hardware(){ return Platform.rpc('sys.hardware'); },
   async batteryInfo(){ return Platform.rpc('sys.battery'); },

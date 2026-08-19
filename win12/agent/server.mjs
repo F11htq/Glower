@@ -29,6 +29,7 @@ const ALLOW_OPEN   = process.argv.includes('--allow-open');    // открыва
 const ALLOW_POWER  = process.argv.includes('--allow-power');   // выключение и перезагрузка
 const ALLOW_LAUNCH = process.argv.includes('--allow-launch');  // запуск программ машины
 const ALLOW_INSTALL= process.argv.includes('--allow-install'); // установка системы на диск
+const ALLOW_NET    = process.argv.includes('--allow-net');     // подключение к сетям Wi-Fi
 const SYSTEM       = process.argv.includes('--system') || ALLOW_POWER || ALLOW_LAUNCH;
 
 /* счётчик изменений: оболочка по нему понимает, что папку правили снаружи */
@@ -105,10 +106,10 @@ if (SYSTEM){
   const m = await import('./system.mjs');
   SYS = {
     ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
-    ...m.apps(ALLOW_LAUNCH), ...m.hardware,
+    ...m.apps(ALLOW_LAUNCH), ...m.hardware, ...m.wifi(ALLOW_NET),
     ...(await import('./browser.mjs')).browser(PORT),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
-    async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL }); }
+    async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET }); }
   };
 }
 
@@ -221,6 +222,7 @@ server.listen(PORT, () => {
     console.log(`    питание:  ${ALLOW_POWER ? 'разрешено ключом --allow-power' : 'выключено'}`);
     console.log(`    запуск программ: ${ALLOW_LAUNCH ? 'разрешён ключом --allow-launch' : 'выключен'}`);
     console.log(`    установка на диск: ${ALLOW_INSTALL ? 'разрешена ключом --allow-install' : 'выключена'}`);
+    console.log(`    сети Wi-Fi:        ${ALLOW_NET ? 'разрешены ключом --allow-net' : 'выключены'}`);
   }
   console.log(`  Произвольные команды агенту недоступны в любом режиме.\n`);
 });

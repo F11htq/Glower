@@ -222,6 +222,16 @@ try {
   check('колесо прокручивает страницу', web.y > 0, String(web.y));
   check('Ctrl + T открывает вкладку', web.вкладок === 2, String(web.вкладок));
 
+  /* --- Wi-Fi --- */
+  const wifi = await page.evaluate(() => OS.wifiState().then(x => x, e => ({ err:e.message })));
+  check('система честно отвечает про Wi-Fi этой машины',
+    typeof wifi.supported === 'boolean' && (wifi.supported || !!wifi.reason), JSON.stringify(wifi));
+  check('без --allow-net сети остаются закрытыми', wifi.allowed === false, JSON.stringify(wifi));
+
+  const wifiScan = await page.evaluate(() => Platform.rpc('sys.wifi.scan')
+    .then(() => 'просканировал', e => e.message));
+  check('без --allow-net к сетям не подключиться', /--allow-net/.test(wifiScan), wifiScan);
+
   /* --- выключение: проверяем без последствий, что машину есть чем гасить --- */
   const powerWays = await page.evaluate(() => Platform.rpc('sys.power.check'));
   check('система знает, чем выключать машину, и честно об этом отчитывается',

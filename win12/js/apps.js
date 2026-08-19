@@ -1415,12 +1415,98 @@ APPS.settings = {
     }
 
     /* --- Сеть --- */
+    /* ---------- Wi-Fi: настоящие сети машины ---------- */
+    function wifiCard(){
+      const w = card('Wi-Fi');
+      const head = el('div'); const list = el('div');
+      w.append(head, list);
+      main.appendChild(w);
+
+      const draw = async () => {
+        let st;
+        try { st = await OS.wifiState(); }
+        catch(e){ head.innerHTML = ''; head.appendChild(row('⚠️', 'Wi-Fi недоступен', String(e.message || e), el('span'))); return; }
+
+        head.innerHTML = '';
+        if (!st.supported){
+          head.appendChild(row('📶', 'Беспроводных устройств нет',
+            st.reason || 'На этой машине не найдено ни одного адаптера Wi-Fi', el('span')));
+          list.innerHTML = '';
+          return;
+        }
+
+        const sw = toggle(() => st.radio !== false, async v => {
+          try { await OS.wifiRadio(v); await draw(); }
+          catch(e){ Dlg.alert('Wi-Fi', String(e.message || e), '⚠️'); }
+        });
+        head.appendChild(row('📶', 'Wi-Fi', st.radio === false ? 'Выключен' : 'Включён', sw));
+
+        const cur = (st.active || []).find(a => /wireless/.test(a.type || ''));
+        if (cur){
+          const off = el('button', 'btn', 'Отключиться');
+          off.onclick = async () => {
+            try { await OS.wifiDisconnect(cur.device); Shell.toast('Wi-Fi', 'Отключено', '📴'); await draw(); }
+            catch(e){ Dlg.alert('Wi-Fi', String(e.message || e), '⚠️'); }
+          };
+          head.appendChild(row('✅', cur.name, 'Подключено · ' + cur.device, off));
+        }
+
+        if (st.radio === false){ list.innerHTML = ''; return; }
+
+        const scan = el('button', 'btn', '🔄 Искать сети');
+        scan.onclick = () => fill(true);
+        head.appendChild(row('🔎', 'Доступные сети', 'Список обновляется по запросу', scan));
+        fill(false);
+      };
+
+      const bars = s2 => s2 >= 75 ? '▂▄▆█' : s2 >= 50 ? '▂▄▆_' : s2 >= 25 ? '▂▄__' : '▂___';
+
+      const fill = async rescan => {
+        list.innerHTML = '';
+        list.appendChild(el('div', 'muted tiny', rescan ? 'ищу сети…' : 'читаю список…'));
+        let r;
+        try { r = await OS.wifiScan(rescan); }
+        catch(e){ list.innerHTML = ''; list.appendChild(row('⚠️', 'Не удалось получить список', String(e.message || e), el('span'))); return; }
+        list.innerHTML = '';
+        if (!r.list.length) return list.appendChild(row('📭', 'Сетей не найдено', 'Поблизости ничего не видно', el('span')));
+
+        r.list.forEach(x => {
+          const b = el('button', 'btn' + (x.active ? '' : ' pri'), x.active ? 'Подключено' : 'Подключиться');
+          b.disabled = !!x.active;
+          b.onclick = async () => {
+            let pass = '';
+            if (x.secure){
+              pass = await Dlg.prompt('Подключение к ' + x.ssid,
+                'Введите пароль сети', '', '📶', { password:true });
+              if (pass === null) return;
+            }
+            b.textContent = 'подключаюсь…'; b.disabled = true;
+            try {
+              await OS.wifiConnect(x.ssid, pass);
+              Shell.toast('Wi-Fi', 'Подключено к ' + x.ssid, '📶');
+              draw();
+            } catch(e){
+              b.textContent = 'Подключиться'; b.disabled = false;
+              Dlg.alert('Не удалось подключиться', String(e.message || e), '⚠️');
+            }
+          };
+          const r2 = row(x.secure ? '🔒' : '📶', x.ssid,
+            bars(x.signal) + ' ' + x.signal + '% · ' + x.band + (x.security ? ' · ' + x.security : ''), b);
+          if (x.active) r2.classList.add('on');
+          list.appendChild(r2);
+        });
+      };
+
+      draw();
+    }
+
     function pNet(){
       const n = Real.net();
       const c = card('Состояние подключения');
       const st = el('div', 'muted tiny', n.online ? '✅ В сети' : '⚠️ Нет подключения');
       c.appendChild(row(n.online ? '📶' : '📴', 'Интернет', 'Есть ли доступ во внешнюю сеть', st));
       if (isSys()){
+        wifiCard();
         const dl = el('div'); c.appendChild(dl);
         dl.appendChild(row('🔌', 'Опрашиваю сетевые устройства…', '', el('span')));
         OS.net().then(r => {

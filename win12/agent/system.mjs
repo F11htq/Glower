@@ -162,6 +162,93 @@ export const net = {
   }
 };
 
+/* ---------- Wi-Fi: всё через NetworkManager, без своих выдумок ----------
+   Пароли уходят к nmcli отдельными аргументами, а не строкой оболочки, и
+   обратно оболочке не возвращаются: система показывает только имя сети. */
+export function wifi(allowNet){
+  const need = async () => {
+    if (!allowNet) throw new Error('управление сетью выключено: запустите агент с ключом --allow-net');
+    if (!await has('nmcli')) throw new Error('на машине нет NetworkManager — управлять Wi-Fi нечем');
+  };
+
+  return {
+    /* есть ли вообще беспроводное железо и включено ли оно */
+    async 'sys.wifi.state'(){
+      if (!await has('nmcli'))
+        return { supported:false, allowed:!!allowNet, radio:null, devices:[], active:[],
+                 reason:'на машине нет NetworkManager' };
+      const dev = await call('nmcli', ['-t', '-f', 'DEVICE,TYPE,STATE', 'device']).catch(() => '');
+      const list = dev.trim().split('\n').filter(Boolean).map(l => l.split(':'));
+      const wifiDevs = list.filter(x => x[1] === 'wifi').map(x => ({ device:x[0], state:x[2] }));
+      let radio = null;
+      try { radio = (await call('nmcli', ['radio', 'wifi'])).trim() === 'enabled'; } catch(e){}
+      const active = await call('nmcli', ['-t', '-f', 'NAME,DEVICE,TYPE', 'connection', 'show', '--active'])
+        .catch(() => '');
+      return {
+        supported:wifiDevs.length > 0, allowed:!!allowNet, radio, devices:wifiDevs,
+        active:active.trim().split('\n').filter(Boolean).map(l => {
+          const [name, device, type] = l.split(':');
+          return { name, device, type };
+        }),
+        reason:wifiDevs.length ? null : 'беспроводных устройств на машине не видно'
+      };
+    },
+
+    async 'sys.wifi.scan'({ rescan } = {}){
+      await need();
+      if (rescan) await call('nmcli', ['device', 'wifi', 'rescan']).catch(() => {});
+      const out = await call('nmcli', ['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY,FREQ', 'device', 'wifi', 'list']);
+      const seen = new Map();
+      out.trim().split('\n').filter(Boolean).forEach(line => {
+        /* в именах сетей бывает двоеточие — nmcli его экранирует */
+        const parts = line.split(/(?<!\\):/).map(x => x.replace(/\\:/g, ':'));
+        const [use, ssid, signal, security, freq] = parts;
+        if (!ssid) return;
+        const prev = seen.get(ssid);
+        const item = { ssid, signal:+signal || 0, secure:!!(security && security !== '--'),
+          security:security === '--' ? '' : security, band:+freq > 4000 ? '5 ГГц' : '2,4 ГГц',
+          active:use.trim() === '*' };
+        if (!prev || item.signal > prev.signal) seen.set(ssid, item);
+      });
+      return { list:[...seen.values()].sort((a, b) => b.signal - a.signal) };
+    },
+
+    async 'sys.wifi.saved'(){
+      await need();
+      const out = await call('nmcli', ['-t', '-f', 'NAME,TYPE', 'connection', 'show']);
+      return { list:out.trim().split('\n').filter(Boolean)
+        .map(l => l.split(':')).filter(x => /wireless/.test(x[1])).map(x => x[0]) };
+    },
+
+    async 'sys.wifi.connect'({ ssid, password }){
+      await need();
+      if (!ssid) throw new Error('не указана сеть');
+      const args = ['device', 'wifi', 'connect', String(ssid)];
+      if (password) args.push('password', String(password));
+      await call('nmcli', args);
+      return { ok:true, ssid };
+    },
+
+    async 'sys.wifi.disconnect'({ device }){
+      await need();
+      await call('nmcli', ['device', 'disconnect', String(device || '').replace(/[^\w.:-]/g, '')]);
+      return { ok:true };
+    },
+
+    async 'sys.wifi.forget'({ ssid }){
+      await need();
+      await call('nmcli', ['connection', 'delete', String(ssid)]);
+      return { ok:true };
+    },
+
+    async 'sys.wifi.radio'({ on }){
+      await need();
+      await call('nmcli', ['radio', 'wifi', on ? 'on' : 'off']);
+      return { ok:true, on:!!on };
+    }
+  };
+}
+
 /* ---------- процессы: читаем /proc, ничего не выдумываем ---------- */
 export const procs = {
   async 'sys.procs'(){
@@ -241,7 +328,8 @@ export async function capabilities(flags){
       gio: await has('gio'), xdgOpen: await has('xdg-open')
     },
     backlight: existsSync(BL) && (await readdir(BL).catch(() => [])).length > 0,
-    allow:{ power:!!flags.power, launch:!!flags.launch, open:!!flags.open, install:!!flags.install }
+    allow:{ power:!!flags.power, launch:!!flags.launch, open:!!flags.open,
+      install:!!flags.install, net:!!flags.net }
   };
 }
 

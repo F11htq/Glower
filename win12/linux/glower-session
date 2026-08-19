@@ -15,7 +15,7 @@ set -e
 ROOT="${GLOWER_ROOT:-$HOME/GlowerOS}"
 PORT="${GLOWER_PORT:-8123}"
 UI="${GLOWER_UI:-/usr/share/glower/ui}"
-FLAGS="${GLOWER_FLAGS:---system --allow-open --allow-launch --allow-power --allow-install}"
+FLAGS="${GLOWER_FLAGS:---system --allow-open --allow-launch --allow-power --allow-install --allow-net}"
 LOG="${GLOWER_LOG:-/var/log/glower-session.log}"
 
 mkdir -p "$ROOT"

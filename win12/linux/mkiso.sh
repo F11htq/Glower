@@ -76,6 +76,7 @@ apt-get install -y --no-install-recommends \
   parted dosfstools e2fsprogs squashfs-tools \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
+  wpasupplicant iw rfkill wireless-regdb \
   polkitd dbus \
   brightnessctl xdg-utils libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
@@ -128,7 +129,28 @@ passwd -d glower
 usermod -aG sudo glower 2>/dev/null || true
 echo 'glower ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/glower
 chmod 440 /etc/sudoers.d/glower
+# Ubuntu настраивает NetworkManager так, что он ведёт только Wi-Fi и модемы,
+# а проводную сеть оставляет netplan и systemd-networkd, которых в нашей
+# системе нет. В итоге кабель есть, а DHCP никто не запрашивает — машина без
+# сети. Возвращаем NetworkManager всё железо и просим его самого писать
+# адреса DNS: systemd-resolved в образ не входит.
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/10-glower.conf <<'NMCONF'
+[keyfile]
+unmanaged-devices=none
+
+[main]
+dns=default
+rc-manager=file
+NMCONF
+
 echo "GlowerOS" > /etc/hostname
+# файл достался от машины, где собирали образ: адреса чужие, пусть его
+# заполняет NetworkManager по настоящему подключению
+# Строку ниже NetworkManager перепишет своими адресами, как только появится
+# настоящее подключение. Публичный адрес оставлен на случай, если сеть есть,
+# а своих адресов DHCP не выдал.
+printf '# этот файл заполняет NetworkManager\nnameserver 8.8.8.8\n' > /etc/resolv.conf
 printf '127.0.0.1\tlocalhost\n127.0.1.1\tGlowerOS\n' > /etc/hosts
 INCHROOT
 
@@ -152,7 +174,10 @@ StandardInput=tty-force
 StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=XDG_SESSION_TYPE=wayland
-Environment=GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power --allow-install
+# Кавычки обязательны: без них systemd видит только первое слово, а
+# остальные ключи молча теряет — оттого в системе не работали ни выключение,
+# ни установка, ни сети.
+Environment="GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power --allow-install --allow-net"
 ExecStartPre=/bin/mkdir -p /run/user/1000
 ExecStartPre=/bin/chown glower:glower /run/user/1000
 ExecStart=/usr/bin/cage -- /usr/bin/glower-session
@@ -166,6 +191,16 @@ StartLimitIntervalSec=120
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+# Пакеты, установленные в chroot, свои службы не включают: политика chroot
+# это запрещает. Поэтому всё, без чего система не живёт, включаем руками.
+# Особенно dbus: без него не стартует NetworkManager, и машина остаётся
+# вообще без сети — ни провода, ни Wi-Fi.
+chroot "$ROOTFS" /bin/sh -c '
+  for unit in dbus.socket dbus.service polkit.service NetworkManager.service \
+              wpa_supplicant.service systemd-timesyncd.service; do
+    systemctl enable "$unit" >/dev/null 2>&1 || true
+  done' || true
 
 chroot "$ROOTFS" systemctl enable glower.service seatd.service >/dev/null 2>&1 || true
 # первая консоль принадлежит сеансу; для разбора остаются Ctrl+Alt+F2 и дальше

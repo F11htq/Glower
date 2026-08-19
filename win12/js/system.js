@@ -25,6 +25,8 @@ const Dlg = {
         input = el('input', 'inp');
         input.value = opts.value || '';
         input.spellcheck = false;
+        /* пароль сети вводится скрытым — как везде в системе */
+        if (opts.password) input.type = 'password';
         box.appendChild(input);
         /* второе поле — например время напоминания */
         if (opts.extra){
@@ -74,7 +76,8 @@ const Dlg = {
   },
   alert(title, text, icon){ return this.open({ type:'alert', title, text, icon }); },
   confirm(title, text, opts = {}){ return this.open({ type:'confirm', title, text, icon:opts.icon || '❓', ...opts }); },
-  prompt(title, text, value, icon){ return this.open({ type:'prompt', title, text, value, icon:icon || '✏️' }); },
+  prompt(title, text, value, icon, opts = {}){
+    return this.open(Object.assign({ type:'prompt', title, text, value, icon:icon || '✏️' }, opts)); },
   /* prompt с дополнительным полем: вернёт { value, extra } */
   promptExtra(title, text, value, extra, icon){
     return this.open({ type:'prompt', title, text, value, extra, icon:icon || '✏️' });
