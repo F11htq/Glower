@@ -2,10 +2,12 @@
 # ==========================================================================
 #  Сеанс GlowerOS: агент + оболочка в режиме киоска.
 #
-#  Запускается двумя путями, в зависимости от машины:
-#    — есть графический узел ядра (/dev/dri) → cage, чистый Wayland;
-#    — нет (виртуалка без ускорения, старое железо) → обычный X-сервер.
-#  Если не выходит ни так, ни так — на экране остаётся понятное объяснение,
+#  Пробует по очереди, пока что-нибудь не заработает:
+#    1) cage, чистый Wayland — если есть графический узел ядра (/dev/dri);
+#    2) X-сервер с ускорением;
+#    3) X-сервер на программной отрисовке — виртуалки и старое железо.
+#  Отказ одного способа не хоронит сеанс: он просто берётся за следующий.
+#  Если не вышло ничего — на экране остаётся понятное объяснение,
 #  а не мигающий курсор.
 # ==========================================================================
 set -e
@@ -36,41 +38,59 @@ BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser 
 [ -n "$BROWSER" ] || { say "GlowerOS: браузер не найден — оболочку нечем показать"; exit 1; }
 
 # --- на чём рисовать ---
-QUERY="session=1"
-GPU="--enable-features=VaapiVideoDecoder"
-if ! ls /dev/dri/card* >/dev/null 2>&1; then
-  QUERY="session=1&lite=1"
-  GPU="--disable-gpu --disable-gpu-compositing"
-  say "GlowerOS: видеоускорения нет — облегчённый режим"
-fi
-
-COMMON="--kiosk http://localhost:$PORT/?$QUERY
+# Набор ключей собираем на каждую попытку заново: если ускоренный запуск
+# не удался, следующая попытка идёт уже начисто, на программной отрисовке.
+cmdline(){   # $1 — режим: gpu | soft
+  if [ "$1" = "soft" ]; then
+    q="session=1&lite=1"; g="--disable-gpu --disable-gpu-compositing --disable-features=VizDisplayCompositor"
+  else
+    q="session=1"; g="--enable-features=VaapiVideoDecoder"
+  fi
+  printf '%s' "--kiosk http://localhost:$PORT/?$q
 --no-first-run --no-default-browser-check --disable-search-engine-choice-screen
 --disable-sync --password-store=basic --use-mock-keychain
 --deny-permission-prompts --noerrdialogs --disable-infobars
 --disable-session-crashed-bubble --disable-features=TranslateUI,MediaRouter
 --disable-background-timer-throttling --disable-backgrounding-occluded-windows
 --disable-renderer-backgrounding --autoplay-policy=no-user-gesture-required
---user-data-dir=$HOME/.local/share/glower/browser --class=GlowerOS"
+--user-data-dir=$HOME/.local/share/glower/browser --class=GlowerOS $g"
+}
 
+HAVE_DRI=no
+ls /dev/dri/card* >/dev/null 2>&1 && HAVE_DRI=yes
+[ "$HAVE_DRI" = yes ] || say "GlowerOS: видеоускорения нет — облегчённый режим"
+
+# Ни cage, ни X не запускаем через exec: если способ не заведётся именно на
+# этой машине, сеанс должен пережить отказ и попробовать следующий, а не
+# умереть вместе с ним. Раньше из-за этого приходилось вручную выбирать
+# в меню загрузки «безопасную графику».
 run_cage(){
   command -v cage >/dev/null || return 1
-  ls /dev/dri/card* >/dev/null 2>&1 || return 1
-  say "GlowerOS: запуск через cage (Wayland)"
-  exec cage -- "$BROWSER" $COMMON $GPU --ozone-platform=wayland
+  [ "$HAVE_DRI" = yes ] || return 1
+  say "GlowerOS: пробую cage (Wayland)"
+  cage -- "$BROWSER" $(cmdline gpu) --ozone-platform=wayland >>"$LOG" 2>&1
+  code=$?
+  say "GlowerOS: cage завершился с кодом $code"
+  return $code
 }
 
-run_x(){
+run_x(){   # $1 — режим отрисовки
   command -v Xorg >/dev/null || command -v X >/dev/null || return 1
-  say "GlowerOS: графического узла нет, запуск через X-сервер"
+  say "GlowerOS: пробую X-сервер ($1)"
   cat > "$HOME/.xinitrc" <<XRC
-exec "$BROWSER" $COMMON $GPU
+exec "$BROWSER" $(cmdline "$1")
 XRC
-  exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
+  startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp >>"$LOG" 2>&1
+  code=$?
+  say "GlowerOS: X-сервер завершился с кодом $code"
+  return $code
 }
 
-run_cage || true
-run_x || true
+# Успешный выход — это конец сеанса (оболочку закрыли), а не повод
+# перезапускаться следующим способом.
+[ "$HAVE_DRI" = yes ] && { run_cage && exit 0; }
+[ "$HAVE_DRI" = yes ] && { run_x gpu && exit 0; }
+run_x soft && exit 0
 
 # --- сюда попадаем, только если ничего не вышло ---
 say ""
