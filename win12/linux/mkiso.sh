@@ -66,7 +66,7 @@ chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  linux-image-generic casper initramfs-tools \
+  linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   cage seatd libgl1 libegl1 libgles2 mesa-vulkan-drivers \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
@@ -75,6 +75,8 @@ apt-get install -y --no-install-recommends \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
   2>&1 | tail -2
+# initramfs пересобираем: в него должны попасть хуки live-boot
+update-initramfs -u -k all 2>&1 | tail -1
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 INCHROOT
@@ -139,11 +141,11 @@ chroot "$ROOTFS" systemctl set-default multi-user.target >/dev/null 2>&1 || true
 # --------------------------------------------------------------------------
 step "5/6 сжатие файловой системы"
 cleanup
-rm -rf "$ISO"; mkdir -p "$ISO/casper" "$ISO/boot/grub"
+rm -rf "$ISO"; mkdir -p "$ISO/live" "$ISO/boot/grub"
 KVER="$(basename "$(ls -1 "$ROOTFS"/boot/vmlinuz-* | tail -1)" | sed 's/vmlinuz-//')"
-cp "$ROOTFS/boot/vmlinuz-$KVER" "$ISO/casper/vmlinuz"
-cp "$ROOTFS/boot/initrd.img-$KVER" "$ISO/casper/initrd"
-mksquashfs "$ROOTFS" "$ISO/casper/filesystem.squashfs" \
+cp "$ROOTFS/boot/vmlinuz-$KVER" "$ISO/live/vmlinuz"
+cp "$ROOTFS/boot/initrd.img-$KVER" "$ISO/live/initrd"
+mksquashfs "$ROOTFS" "$ISO/live/filesystem.squashfs" \
   -comp zstd -Xcompression-level 12 -noappend \
   -e boot/vmlinuz-\* -e boot/initrd.img-\* -e .debootstrapped -quiet
 
@@ -151,12 +153,12 @@ cat > "$ISO/boot/grub/grub.cfg" <<'GRUB'
 set timeout=3
 set default=0
 menuentry "GlowerOS" {
-  linux /casper/vmlinuz boot=casper quiet splash ---
-  initrd /casper/initrd
+  linux /live/vmlinuz boot=live components quiet splash
+  initrd /live/initrd
 }
 menuentry "GlowerOS · подробный запуск" {
-  linux /casper/vmlinuz boot=casper ---
-  initrd /casper/initrd
+  linux /live/vmlinuz boot=live components
+  initrd /live/initrd
 }
 GRUB
 

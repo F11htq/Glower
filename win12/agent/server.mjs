@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* ==========================================================================
-   Системный агент Windows 12 Prototype
+   Системный агент GlowerOS
 
    Даёт оболочке то, чего у страницы нет: настоящий диск.
    Запуск:  node agent/server.mjs [--port 8123] [--root ~/Windows12]
@@ -207,7 +207,7 @@ if (!existsSync(join(ROOT, 'Документы'))){
 startWatch();
 
 server.listen(PORT, () => {
-  console.log(`\n  Агент Windows 12 запущен`);
+  console.log(`\n  Агент GlowerOS запущен`);
   console.log(`  Оболочка:      http://localhost:${PORT}`);
   console.log(`  Рабочая папка: ${ROOT}`);
   console.log(`  Разрешено: чтение и запись только внутри этой папки.`);
