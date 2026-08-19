@@ -196,9 +196,17 @@ try {
   await page.evaluate(() => { WM.open('calc'); WM.open('clock'); Session.save(); });
   await page.waitForTimeout(700);
   await page.reload();
-  await page.waitForTimeout(2500); await page.keyboard.press('Enter'); await page.waitForTimeout(2200);
-  check('окна восстанавливаются после перезагрузки',
-    await page.evaluate(() => ['calc','clock'].every(a => WM.wins.some(w => w.appId === a))),
+  await page.waitForTimeout(2500); await page.keyboard.press('Enter');
+  /* восстановление идёт по таймеру, а под нагрузкой он растягивается —
+     ждём результата, а не фиксированной паузы */
+  const restored = await page.evaluate(async () => {
+    for (let i = 0; i < 40; i++){
+      if (['calc','clock'].every(a => WM.wins.some(w => w.appId === a))) return true;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    return false;
+  });
+  check('окна восстанавливаются после перезагрузки', restored,
     await page.evaluate(() => WM.wins.map(w => w.appId).join(',')));
   await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); Session.save(); });
   await page.waitForTimeout(400);
