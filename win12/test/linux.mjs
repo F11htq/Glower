@@ -167,6 +167,61 @@ try {
   check('внутренняя кухня агента убрана из настроек настоящей системы',
     !/Подключено к системе/.test(sysText) && !/Перечитать диск/.test(sysText), sysText.slice(0, 200));
 
+  /* --- встроенный браузер --- */
+  const web = await page.evaluate(async () => {
+    const out = {};
+    WM.open('browser');
+    await new Promise(r => setTimeout(r, 800));
+    const w = WM.wins.find(x => x.appId === 'browser');
+    out.старт = !!w.body.querySelector('.br-start');
+
+    const i = w.body.querySelector('.br-bar input');
+    i.value = 'about:blank';
+    i.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', bubbles:true }));
+    for (let k = 0; k < 60 && !w._web.tabs[0].view; k++) await new Promise(r => setTimeout(r, 200));
+    const v = w._web.tabs[0].view;
+    out.движок = !!v;
+    if (!v) return out;
+    for (let k = 0; k < 40 && !w.body.querySelector('.br-frame').src; k++) await new Promise(r => setTimeout(r, 200));
+    out.кадр = (w.body.querySelector('.br-frame').src || '').startsWith('data:image/jpeg');
+
+    /* ставим поле и кнопку прямо на страницу движка и работаем с ними как человек */
+    await v.cdp.send('Runtime.evaluate', { expression:
+      `document.body.innerHTML = '<input id=p style="position:fixed;left:10px;top:10px;width:300px;height:40px">' +
+        '<button id=b style="position:fixed;left:10px;top:70px;width:200px;height:40px">кнопка</button>' +
+        '<div style="height:4000px"></div>';
+       window.__c = 0; document.getElementById('b').onclick = () => window.__c++;
+       document.getElementById('p').focus(); 'ok'`, returnByValue:true }, v.sid);
+
+    const r = v.node.getBoundingClientRect();
+    for (const ch of 'привет'){
+      v.node.dispatchEvent(new KeyboardEvent('keydown', { key:ch, bubbles:true, cancelable:true }));
+      v.node.dispatchEvent(new KeyboardEvent('keyup', { key:ch, bubbles:true, cancelable:true }));
+    }
+    v.node.dispatchEvent(new MouseEvent('mousedown', { clientX:r.left + 100, clientY:r.top + 90, button:0, buttons:1, detail:1, bubbles:true, cancelable:true }));
+    v.node.dispatchEvent(new MouseEvent('mouseup', { clientX:r.left + 100, clientY:r.top + 90, button:0, buttons:0, detail:1, bubbles:true, cancelable:true }));
+    v.node.dispatchEvent(new WheelEvent('wheel', { deltaY:400, clientX:r.left + 200, clientY:r.top + 200, bubbles:true, cancelable:true }));
+    await new Promise(r2 => setTimeout(r2, 900));
+
+    const got = await v.cdp.send('Runtime.evaluate', { expression:
+      'JSON.stringify({ t:document.getElementById("p").value, c:window.__c, y:window.scrollY })',
+      returnByValue:true }, v.sid);
+    Object.assign(out, JSON.parse(got.result.value));
+
+    /* новая вкладка по Ctrl+T */
+    w.body.querySelector('.app').dispatchEvent(
+      new KeyboardEvent('keydown', { key:'t', ctrlKey:true, bubbles:true, cancelable:true }));
+    out.вкладок = w._web.tabs.length;
+    return out;
+  });
+
+  check('браузер открывается на своей начальной странице', web.старт);
+  check('движок машины поднялся и отдал кадр', web.движок && web.кадр, JSON.stringify(web));
+  check('клавиатура доходит до страницы', web.t === 'привет', String(web.t));
+  check('щелчок доходит до страницы', web.c === 1, String(web.c));
+  check('колесо прокручивает страницу', web.y > 0, String(web.y));
+  check('Ctrl + T открывает вкладку', web.вкладок === 2, String(web.вкладок));
+
   check('агент сообщил о системном слое при запуске', /Системный слой:\s+включён/.test(agentLog));
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));

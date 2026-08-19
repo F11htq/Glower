@@ -23,8 +23,13 @@ touch "$LOG" 2>/dev/null || LOG="$HOME/glower-session.log"
 
 say(){ printf '%s\n' "$1"; printf '%s\n' "$1" >> "$LOG" 2>/dev/null || true; }
 
+BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
+[ -n "$BROWSER" ] || { say "GlowerOS: браузер не найден — оболочку нечем показать"; exit 1; }
+
 # --- агент: мост между оболочкой и машиной ---
-node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS >>"$LOG" 2>&1 &
+# GLOWER_BROWSER передаём и агенту: тем же движком он рисует страницы
+# во встроенном браузере системы.
+GLOWER_BROWSER="$BROWSER" node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS >>"$LOG" 2>&1 &
 AGENT=$!
 trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
 
@@ -33,9 +38,6 @@ while [ $i -lt 50 ]; do
   curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
   i=$((i+1)); sleep 0.2
 done
-
-BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
-[ -n "$BROWSER" ] || { say "GlowerOS: браузер не найден — оболочку нечем показать"; exit 1; }
 
 # --- на чём рисовать ---
 # Набор ключей собираем на каждую попытку заново: если ускоренный запуск

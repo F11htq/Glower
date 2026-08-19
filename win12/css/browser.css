@@ -1,0 +1,67 @@
+/* ==========================================================================
+   Браузер: вкладки, адресная строка, полотно движка
+   ========================================================================== */
+.br-app{display:flex;flex-direction:column;height:100%;min-height:0}
+
+.br-tabs{display:flex;align-items:flex-end;gap:4px;padding:6px 8px 0;overflow-x:auto;flex:none;
+  scrollbar-width:none}
+.br-tabs::-webkit-scrollbar{display:none}
+.br-tab{display:flex;align-items:center;gap:8px;max-width:220px;min-width:120px;padding:7px 10px;
+  border-radius:12px 12px 0 0;background:rgba(var(--tint),.10);cursor:default;
+  transition:background var(--t1),transform var(--t2) var(--e-spring)}
+.br-tab:hover{background:rgba(var(--tint),.18)}
+.br-tab.on{background:rgba(var(--tint),.24)}
+.br-tab .t{flex:1;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.br-tab-x{width:18px;height:18px;border-radius:6px;font-size:10px;opacity:.6;flex:none}
+.br-tab-x:hover{background:rgba(var(--tint),.3);opacity:1}
+.br-tab-add{width:30px;height:28px;border-radius:9px;font-size:16px;opacity:.7}
+.br-tab-add:hover{background:rgba(var(--tint),.2);opacity:1}
+
+.br-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;flex:none;
+  border-bottom:1px solid rgba(var(--tint),.12)}
+.br-nav{width:32px;height:32px;border-radius:10px;font-size:15px;opacity:.85;flex:none}
+.br-nav:hover{background:rgba(var(--tint),.18);opacity:1}
+.br-url{flex:1;display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:11px;
+  background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);
+  transition:background var(--t1),box-shadow var(--t1)}
+.br-url:focus-within{background:rgba(var(--tint),.2);box-shadow:inset 0 0 0 1px rgba(var(--acc-r),var(--acc-g),var(--acc-b),.6)}
+.br-url input{flex:1;background:none;border:0;outline:0;color:var(--fg);font-size:13px}
+.br-lock{font-size:12px;opacity:.75}
+
+.br-stage{flex:1;min-height:0;position:relative;overflow:hidden;background:rgba(0,0,0,.12)}
+.br-view{position:absolute;inset:0;outline:none;background:#fff}
+.br-frame{width:100%;height:100%;display:block;object-fit:fill;-webkit-user-drag:none;user-select:none}
+
+/* начальная страница и списки — рисуем сами */
+.br-start,.br-list,.br-error{position:absolute;inset:0;overflow:auto;padding:32px 28px;
+  display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.br-list{align-items:stretch;text-align:left;gap:6px}
+.br-logo{width:72px;height:72px;margin-top:14px}
+.br-start h1{margin:0;font-size:26px;letter-spacing:.3px}
+.br-search{width:min(520px,92%);display:flex}
+.br-search input{flex:1;height:44px;padding:0 18px;border-radius:14px;border:0;outline:0;font-size:14px;
+  color:var(--fg);background:rgba(var(--tint),.14);box-shadow:inset 0 0 0 1px rgba(var(--tint),.16);
+  transition:background var(--t1),box-shadow var(--t1)}
+.br-search input:focus{background:rgba(var(--tint),.22);
+  box-shadow:inset 0 0 0 1px rgba(var(--acc-r),var(--acc-g),var(--acc-b),.65)}
+.br-tiles{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:min(680px,96%);margin-top:6px}
+.br-tile{width:132px;padding:14px 10px;border-radius:16px;background:rgba(var(--tint),.10);
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  transition:transform var(--t2) var(--e-spring),background var(--t1)}
+.br-tile:hover{background:rgba(var(--tint),.2);transform:translateY(-3px)}
+.br-tile .e{width:34px;height:34px;border-radius:11px;display:grid;place-content:center;font-weight:600;
+  background:linear-gradient(140deg,rgba(var(--acc-r),var(--acc-g),var(--acc-b),.9),rgba(var(--acc-r),var(--acc-g),var(--acc-b),.5));
+  color:#fff;margin-bottom:4px}
+.br-tile b{font-size:13px}
+.br-tile small{font-size:11px;opacity:.6}
+.br-recent{width:min(520px,96%);display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.br-recent-t{font-size:12px;opacity:.6;text-align:left;padding-left:6px}
+.br-recent-i{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 12px;
+  border-radius:11px;text-align:left;transition:background var(--t1)}
+.br-recent-i:hover{background:rgba(var(--tint),.16)}
+.br-recent-i b{font-size:13px;font-weight:500}
+.br-recent-i small{font-size:11px;opacity:.55;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.br-note{max-width:560px;font-size:12.5px;line-height:1.5;opacity:.7;margin-top:18px;
+  padding:14px 16px;border-radius:14px;background:rgba(var(--tint),.10)}
+.br-error .e{font-size:44px}
+.br-error h2{margin:0}

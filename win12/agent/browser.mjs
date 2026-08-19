@@ -52,7 +52,11 @@ export function browser(uiPort){
     if (dir) await rm(dir, { recursive:true, force:true }).catch(() => {});
     proc = null; dir = null; state = null;
   };
-  process.on('exit', () => { if (proc) try { proc.kill('SIGKILL'); } catch(e){} });
+  /* движок не должен пережить агента ни при каком способе завершения */
+  const bury = () => { if (proc) try { proc.kill('SIGKILL'); } catch(e){} };
+  process.on('exit', bury);
+  ['SIGTERM', 'SIGINT', 'SIGHUP'].forEach(sig =>
+    process.on(sig, () => { bury(); process.exit(0); }));
 
   return {
     async 'browser.start'(){
