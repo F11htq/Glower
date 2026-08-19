@@ -132,6 +132,41 @@ try {
   check('приложение «Программы машины» появилось только в этом режиме',
     await page.evaluate(() => !!APPS.native));
 
+  /* --- настройки говорят о машине, а не о браузере --- */
+  const devText = await page.evaluate(async () => {
+    WM.open('settings');
+    await new Promise(r => setTimeout(r, 700));
+    const w = WM.wins.find(x => x.appId === 'settings');
+    const nav = [...w.body.querySelectorAll('.set-nav button, .nav-item, button')]
+      .find(b => /Устройства и датчики/.test(b.textContent));
+    if (nav) nav.click();
+    await new Promise(r => setTimeout(r, 1400));
+    return w.body.innerText;
+  });
+
+  check('оборудование показано по данным машины, а не по оценке браузера',
+    /Процессор/.test(devText) && !/округлено браузером/.test(devText), devText.slice(0, 200));
+  check('память названа настоящим объёмом',
+    devText.includes((totalmem() / 1073741824).toFixed(1) + ' ГБ'),
+    devText.match(/Оперативная память[\s\S]{0,40}/));
+  check('вместо «Платформа: Linux» — система и её ядро',
+    /Система/.test(devText) && new RegExp(process.platform === 'linux' ? 'ядро Linux' : '.').test(devText));
+  check('строки про мобильное устройство и hover убраны',
+    !/Мобильное устройство/.test(devText) && !/hover/i.test(devText));
+  check('про Web Bluetooth оболочка больше не оправдывается',
+    !/Web Bluetooth/.test(devText) && /Bluetooth/.test(devText), devText.slice(0, 200));
+
+  const sysText = await page.evaluate(async () => {
+    const w = WM.wins.find(x => x.appId === 'settings');
+    const nav = [...w.body.querySelectorAll('.set-nav button, .nav-item, button')]
+      .find(b => /^\s*.?\s*Система\s*$/.test(b.textContent));
+    if (nav) nav.click();
+    await new Promise(r => setTimeout(r, 900));
+    return w.body.innerText;
+  });
+  check('внутренняя кухня агента убрана из настроек настоящей системы',
+    !/Подключено к системе/.test(sysText) && !/Перечитать диск/.test(sysText), sysText.slice(0, 200));
+
   check('агент сообщил о системном слое при запуске', /Системный слой:\s+включён/.test(agentLog));
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));

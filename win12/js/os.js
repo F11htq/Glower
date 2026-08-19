@@ -35,6 +35,11 @@ const OS = {
   async apps(){ return Platform.rpc('sys.apps'); },
   async launch(id){ return Platform.rpc('sys.launch', { id }); },
 
+  /* ---------- железо: спрашиваем машину, а не браузер ---------- */
+  async hardware(){ return Platform.rpc('sys.hardware'); },
+  async batteryInfo(){ return Platform.rpc('sys.battery'); },
+  async devices(){ return Platform.rpc('sys.devices'); },
+
   /* ---------- питание ---------- */
   async power(action){ return Platform.rpc('sys.power', { action }); }
 };

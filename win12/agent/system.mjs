@@ -203,3 +203,71 @@ export async function capabilities(flags){
     allow:{ power:!!flags.power, launch:!!flags.launch, open:!!flags.open }
   };
 }
+
+/* ---------- железо: то, что машина говорит о себе сама ---------- */
+const readOr = async (p, d = '') => readFile(p, 'utf8').then(s => s.trim()).catch(() => d);
+
+export const hardware = {
+  async 'sys.hardware'(){
+    const cpuinfo = await readOr('/proc/cpuinfo');
+    const model = (cpuinfo.match(/^model name\s*:\s*(.+)$/m) || [])[1]
+      || (cpuinfo.match(/^Model\s*:\s*(.+)$/m) || [])[1] || null;
+    const osrel = await readOr('/etc/os-release');
+    const pretty = (osrel.match(/^PRETTY_NAME="?([^"\n]+)"?$/m) || [])[1] || null;
+
+    /* имя машины: DMI есть не везде, поэтому мягко */
+    const vendor = await readOr('/sys/class/dmi/id/sys_vendor');
+    const product = await readOr('/sys/class/dmi/id/product_name');
+
+    return {
+      cpu:{ model, cores:os.cpus().length, arch:os.arch() },
+      mem:{ total:os.totalmem(), free:os.freemem() },
+      kernel:os.release(), distro:pretty, uptime:Math.round(os.uptime()),
+      machine:[vendor, product].filter(Boolean).join(' ') || null,
+      host:os.hostname()
+    };
+  },
+
+  /* батарея — из /sys, а не из Battery API страницы */
+  async 'sys.battery'(){
+    const base = '/sys/class/power_supply';
+    if (!existsSync(base)) return { present:false, reason:'машина не сообщает о питании' };
+    const names = await readdir(base).catch(() => []);
+    let bat = null, ac = null;
+    for (const n of names){
+      const type = await readOr(join(base, n, 'type'));
+      if (type === 'Battery' && !bat){
+        bat = { name:n,
+          level:+(await readOr(join(base, n, 'capacity'), '')) || null,
+          status:(await readOr(join(base, n, 'status'))) || null };
+      }
+      if (type === 'Mains' && !ac) ac = { name:n, online:(await readOr(join(base, n, 'online'))) === '1' };
+    }
+    if (!bat && !ac) return { present:false, reason:'ни батареи, ни сетевого адаптера не видно' };
+    return { present:!!bat, battery:bat, ac, charging: bat ? bat.status === 'Charging' : !!(ac && ac.online) };
+  },
+
+  /* устройства: камеры, звуковые карты, Bluetooth — из /sys и /proc */
+  async 'sys.devices'(){
+    const cams = [];
+    const v4l = '/sys/class/video4linux';
+    for (const n of (existsSync(v4l) ? await readdir(v4l).catch(() => []) : []))
+      cams.push({ id:n, name:(await readOr(join(v4l, n, 'name'))) || n });
+
+    const cards = [];
+    const asound = await readOr('/proc/asound/cards');
+    for (const line of asound.split('\n')){
+      const m = line.match(/^\s*\d+\s+\[[^\]]+\]:\s*(.+)$/);
+      if (m) cards.push(m[1].trim());
+    }
+
+    const bt = [];
+    const btDir = '/sys/class/bluetooth';
+    for (const n of (existsSync(btDir) ? await readdir(btDir).catch(() => []) : [])){
+      if (!/^hci\d+$/.test(n)) continue;
+      bt.push({ id:n, address:(await readOr(join(btDir, n, 'address'))) || null });
+    }
+
+    return { cameras:cams, sound:cards, bluetooth:bt };
+  }
+};
