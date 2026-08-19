@@ -113,13 +113,18 @@ usermod -aG sudo glower 2>/dev/null || true
 echo 'glower ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/glower
 chmod 440 /etc/sudoers.d/glower
 echo "GlowerOS" > /etc/hostname
+printf '127.0.0.1\tlocalhost\n127.0.1.1\tGlowerOS\n' > /etc/hosts
 INCHROOT
 
 cat > "$ROOTFS/etc/systemd/system/glower.service" <<'UNIT'
 [Unit]
 Description=Сеанс GlowerOS
-After=systemd-user-sessions.service seatd.service
+After=systemd-user-sessions.service seatd.service getty@tty1.service
 Wants=seatd.service
+# За первую консоль нельзя бороться вдвоём: если getty успевает раньше,
+# он забирает tty1, а сеанс получает SIGHUP и умирает — снаружи это
+# выглядит как «система показала обычный текстовый вход».
+Conflicts=getty@tty1.service
 
 [Service]
 User=glower
@@ -147,6 +152,8 @@ WantedBy=multi-user.target
 UNIT
 
 chroot "$ROOTFS" systemctl enable glower.service seatd.service >/dev/null 2>&1 || true
+# первая консоль принадлежит сеансу; для разбора остаются Ctrl+Alt+F2 и дальше
+chroot "$ROOTFS" systemctl mask getty@tty1.service >/dev/null 2>&1 || true
 chroot "$ROOTFS" systemctl set-default multi-user.target >/dev/null 2>&1 || true
 
 # --------------------------------------------------------------------------
