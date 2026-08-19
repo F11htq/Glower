@@ -222,6 +222,14 @@ try {
   check('колесо прокручивает страницу', web.y > 0, String(web.y));
   check('Ctrl + T открывает вкладку', web.вкладок === 2, String(web.вкладок));
 
+  /* --- выключение: проверяем без последствий, что машину есть чем гасить --- */
+  const powerWays = await page.evaluate(() => Platform.rpc('sys.power.check'));
+  check('система знает, чем выключать машину, и честно об этом отчитывается',
+    Array.isArray(powerWays.ways) && powerWays.ways.length >= 2 &&
+    powerWays.ways.every(w => w.ok || (w.why && w.why.length > 3)),
+    JSON.stringify(powerWays));
+  check('без --allow-power выключение остаётся закрытым', powerWays.allowed === false);
+
   /* --- установка на диск: без ключа она закрыта, и это видно --- */
   const insCan = await page.evaluate(() => Install.can());
   check('установка выключена, пока её не разрешили ключом',

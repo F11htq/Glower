@@ -94,8 +94,32 @@ function wirePower(){
     const ov = $('#power-overlay'); if (ov) ov.classList.remove('on');
     if (!await Dlg.confirm(m[1], m[2] + ' Это действие затронет всю машину, а не только оболочку.',
         { icon:'⏻', okText:m[1], danger:true })) return;
+
+    /* Экран гаснет сразу, как в настоящей системе. Но если машина откажется
+       выключаться, занавес надо убрать и сказать почему — иначе человек
+       остаётся перед чёрным экраном работающего компьютера. */
+    const fade = el('div', 'shutdown-fade');
+    fade.innerHTML = act === 'restart'
+      ? '<div style="text-align:center"><div class="boot-ring"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"/></svg></div><div style="margin-top:14px;opacity:.7">Перезагрузка…</div></div>'
+      : act === 'sleep' ? '<div style="opacity:.6">Засыпаю…</div>'
+      : '<div style="opacity:.6">Завершение работы…</div>';
+    document.body.appendChild(fade);
+
     try { await OS.power(m[0]); }
-    catch(e){ Dlg.alert(m[1], String(e.message || e), '⚠️'); }
+    catch(e){
+      fade.remove();
+      Dlg.alert(m[1] + ' не удалась', String(e.message || e), '⚠️');
+      return;
+    }
+    /* Машина уходит не мгновенно: подождём, и если через десять секунд мы
+       всё ещё здесь — значит, не ушла. */
+    if (act !== 'sleep') setTimeout(() => {
+      if (!document.body.contains(fade)) return;
+      fade.remove();
+      Dlg.alert(m[1], 'Команда принята, но машина всё ещё работает. ' +
+        'Похоже, systemd не довёл действие до конца.', '⚠️');
+    }, 10000);
+    else setTimeout(() => fade.remove(), 1500);
   };
 }
 

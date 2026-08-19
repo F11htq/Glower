@@ -28,13 +28,23 @@ export async function has(cmd){
 /* единственная точка запуска: только фиксированные команды */
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
-  'nmcli', 'ip', 'xdg-open', 'gio', 'setxkbmap', 'localectl', 'free', 'uptime'
+  'nmcli', 'ip', 'xdg-open', 'gio', 'setxkbmap', 'localectl', 'free', 'uptime',
+  /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
+     остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
+  'sudo'
 ]);
 
 async function call(cmd, args = []){
   if (!ALLOWED.has(cmd)) throw new Error('команда не разрешена: ' + cmd);
-  const { stdout } = await run(cmd, args, { timeout:5000, maxBuffer:1024 * 1024 });
-  return stdout;
+  try {
+    const { stdout } = await run(cmd, args, { timeout:5000, maxBuffer:1024 * 1024 });
+    return stdout;
+  } catch(e){
+    /* без stderr сообщение «команда не выполнилась» ничего не объясняет —
+       а именно там система пишет, почему отказала */
+    const why = String(e.stderr || '').trim().split('\n')[0];
+    throw new Error(why || e.message);
+  }
 }
 
 /* ---------- питание ---------- */
@@ -49,8 +59,39 @@ export function power(allowPower){
         if (await has('loginctl')) { await call('loginctl', ['lock-session']); return { ok:true, via:'loginctl' }; }
         throw new Error('на машине нет loginctl — блокировать нечем');
       }
-      await call('systemctl', [a]);
-      return { ok:true, via:'systemctl ' + a };
+      /* Выключение — единственное место, где одной команды мало.
+         От имени пользователя systemctl обращается к polkit, а его на машине
+         может не быть; тогда пробуем через sudo, потом через loginctl.
+         Молча делать вид, что получилось, нельзя: это ровно тот случай,
+         когда человек ждёт, что машина погаснет. */
+      const tries = [
+        ['systemctl', [a]],
+        ['sudo', ['-n', 'systemctl', a]],
+        ['loginctl', [a === 'poweroff' ? 'poweroff' : a === 'reboot' ? 'reboot' : 'suspend']]
+      ];
+      const errors = [];
+      for (const [cmd, args] of tries){
+        if (!await has(cmd)) { errors.push(cmd + ': нет на машине'); continue; }
+        try { await call(cmd, args); return { ok:true, via:cmd + ' ' + args.join(' ') }; }
+        catch(e){ errors.push(cmd + ': ' + String(e.message || e).split('\n')[0]); }
+      }
+      throw new Error('машину не удалось ' +
+        (a === 'poweroff' ? 'выключить' : a === 'reboot' ? 'перезагрузить' : 'усыпить') +
+        ' — ' + errors.join(' · '));
+    },
+
+    /* Проверка без последствий: systemd умеет показать, что он сделал бы.
+       Нужна, чтобы про поломку выключения узнавать из проверок, а не от
+       человека, у которого машина не погасла. */
+    async 'sys.power.check'(){
+      const out = [];
+      for (const [cmd, args] of [['systemctl', ['--dry-run', 'poweroff']],
+                                 ['sudo', ['-n', 'systemctl', '--dry-run', 'poweroff']]]){
+        if (!await has(cmd)){ out.push({ via:cmd, ok:false, why:'нет на машине' }); continue; }
+        try { await call(cmd, args); out.push({ via:cmd, ok:true }); }
+        catch(e){ out.push({ via:cmd, ok:false, why:String(e.message || e).split('\n')[0] }); }
+      }
+      return { allowed:!!allowPower, ways:out, ok:out.some(x => x.ok) };
     }
   };
 }

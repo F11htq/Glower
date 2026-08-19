@@ -76,6 +76,7 @@ apt-get install -y --no-install-recommends \
   parted dosfstools e2fsprogs squashfs-tools \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
+  polkitd dbus \
   brightnessctl xdg-utils libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
