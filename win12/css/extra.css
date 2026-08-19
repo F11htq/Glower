@@ -506,3 +506,10 @@ body.locked #desktop > *{pointer-events:none}
 .set-exp.open .exp-body{grid-template-rows:1fr}
 .set-exp .exp-inner{min-height:0;overflow:hidden}
 .set-exp .exp-body .set-row{padding-left:34px;background:rgba(255,255,255,.04)}
+
+/* ---------- баннеры не спорят с виджетами стола ----------
+   Виджеты живут в правом верхнем углу, и уведомления налезали прямо на них.
+   Как в Windows: баннеры приходят снизу справа, над панелью. */
+.toasts{top:auto;bottom:calc(var(--dock-size) + 56px);right:16px;justify-content:flex-end}
+body.panel-open .toasts{transform:translateX(-352px)}
+body.taskbar .toasts{bottom:calc(var(--dock-size) + 18px)}

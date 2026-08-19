@@ -44,6 +44,12 @@ page.on('pageerror', e => jsErrors.push(e.message));
 page.on('console', m => { if (m.type() === 'error' && !/ERR_|net::/.test(m.text())) jsErrors.push(m.text()); });
 page.on('dialog', d => d.accept());
 
+/* обычные проверки идут по уже настроенной системе — мастер первого запуска
+   проверяется отдельно, в самом конце */
+await page.addInitScript(() => {
+  try { localStorage.setItem('win12.setup.done', 'true'); } catch(e){}
+});
+
 const boot = async () => {
   await page.goto(URL_APP);
   await page.waitForTimeout(2400);
@@ -709,6 +715,79 @@ try {
     await page.evaluate(() => S.userName === 'Гость' && !FS.node(['Документы', 'личное.txt'])));
 
   /* --- журнал ошибок --- */
+  /* --- начальная настройка при первом запуске --- */
+  await page.evaluate(() => localStorage.clear());
+  await page.addInitScript(() => { try { localStorage.removeItem('win12.setup.done'); } catch(e){} });
+  await page.goto(URL_APP);
+  await page.waitForTimeout(2900);
+
+  check('при первом запуске система встречает настройкой, а не рабочим столом',
+    await page.evaluate(() => !!document.querySelector('#setup')
+      && document.querySelector('#setup').classList.contains('on')
+      && !document.querySelector('#desktop').classList.contains('on')));
+
+  check('шаги переключаются вперёд и назад',
+    await page.evaluate(async () => {
+      const step = () => document.querySelector('#setup-steps .on');
+      const idx = () => [...document.querySelectorAll('#setup-steps i')].indexOf(step());
+      const was = idx();
+      document.querySelector('#setup-next').click();
+      await new Promise(r => setTimeout(r, 300));
+      const fwd = idx();
+      document.querySelector('#setup-back').click();
+      await new Promise(r => setTimeout(r, 300));
+      return was === 0 && fwd === 1 && idx() === 0;
+    }));
+
+  check('без имени дальше не пускает',
+    await page.evaluate(async () => {
+      Setup.i = 4; Setup.paint();                       // шаг «как к вам обращаться»
+      await new Promise(r => setTimeout(r, 300));
+      document.querySelector('#setup-next').click();
+      await new Promise(r => setTimeout(r, 300));
+      const stuck = Setup.i === 4 && /имени/.test(document.querySelector('.setup-err').textContent);
+      const inp = document.querySelector('.setup-input');
+      inp.value = 'Проверка';
+      inp.dispatchEvent(new Event('input', { bubbles:true }));
+      document.querySelector('#setup-next').click();
+      await new Promise(r => setTimeout(r, 350));
+      return stuck && Setup.i === 5;
+    }));
+
+  check('выбор в мастере действительно применяется к системе',
+    await page.evaluate(async () => {
+      Setup.data.theme = 'dark';
+      Setup.data.accent = 5;
+      Setup.data.wallpaper = 'mint';
+      Setup.data.city = 'Казань';
+      Setup.data.layouts = ['en', 'de'];
+      Setup.i = Setup.STEPS.length - 1; Setup.paint();
+      await new Promise(r => setTimeout(r, 300));
+      document.querySelector('#setup-next').click();
+      await new Promise(r => setTimeout(r, 900));
+      return S.theme === 'dark' && S.accent === 5 && S.wallpaper === 'mint'
+        && S.city === 'Казань' && S.userName === 'Проверка'
+        && JSON.stringify(KV.get('kb.enabled', [])) === JSON.stringify(['en', 'de'])
+        && KV.get('setup.done', false) === true;
+    }));
+
+  check('после настройки показывается приветствие с именем',
+    await page.evaluate(() => {
+      const w = document.querySelector('.welcome');
+      return !!w && /Проверка/.test(w.textContent) && /Добро пожаловать/.test(w.textContent);
+    }));
+
+  check('приветствие уходит и открывает рабочий стол',
+    await page.evaluate(async () => {
+      await new Promise(r => setTimeout(r, 3400));
+      return !document.querySelector('.welcome')
+        && document.querySelector('#desktop').classList.contains('on')
+        && document.querySelector('#lock').classList.contains('gone');
+    }));
+
+  check('второй запуск проходит без настройки',
+    await page.evaluate(() => KV.get('setup.done', false) === true));
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

@@ -40,6 +40,10 @@ await new Promise(r => setTimeout(r, 1200));
 
 const browser = await chromium.launch(exe ? { executablePath:exe, args:['--no-sandbox'] } : { args:['--no-sandbox'] });
 const page = await browser.newPage({ viewport:{ width:1280, height:820 } });
+/* мастер первого запуска проверяется в смоук-тестах — здесь он только мешал бы */
+await page.addInitScript(() => {
+  try { localStorage.setItem('win12.setup.done', 'true'); } catch(e){}
+});
 const errs = [];
 page.on('pageerror', e => errs.push(e.message));
 

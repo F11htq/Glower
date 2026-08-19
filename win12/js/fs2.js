@@ -498,8 +498,16 @@ Shell.toast = function(title, text, icon, ms){
   if (document.hidden && window.Notification && Notification.permission === 'granted')
     try { new Notification(title, { body:text }); } catch(e){}
 };
+/* Уведомления самого браузера нужны только когда система живёт во вкладке:
+   там она может оказаться в фоне. В своём сеансе это единственное окно на
+   экране — просить разрешение незачем, и окно браузера поверх рабочего
+   стола выглядело бы как чужое. */
 document.addEventListener('click', function once(){
-  if (window.Notification && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+  const ownSession = matchMedia('(display-mode: fullscreen)').matches
+    || location.search.includes('session=1')
+    || document.body.classList.contains('os-native');
+  if (!ownSession && window.Notification && Notification.permission === 'default')
+    Notification.requestPermission().catch(() => {});
   document.removeEventListener('click', once);
 }, { once:true });
 

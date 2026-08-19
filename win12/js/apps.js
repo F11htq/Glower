@@ -1922,6 +1922,18 @@ APPS.settings = {
        ['🗣','Язык', navigator.language]
       ].forEach(([e, n, v]) => c.appendChild(row(e, n, '', el('div', 'muted tiny', v))));
       main.appendChild(c);
+      const w = card('Начальная настройка');
+      const wb = el('button', 'btn', 'Пройти заново');
+      wb.onclick = async () => {
+        if (!await Dlg.confirm('Начальная настройка',
+            'Система снова спросит язык, раскладки, имя и оформление — как при первом запуске. Файлы останутся на месте.',
+            { icon:'✨', okText:'Пройти заново' })) return;
+        KV.set('setup.done', false);
+        location.reload();
+      };
+      w.appendChild(row('✨', 'Пройти настройку заново', 'Язык, раскладки, имя, тема и обои', wb));
+      main.appendChild(w);
+
       const r = card('Сброс');
       const b = el('button', 'btn', 'Сбросить настройки');
       b.onclick = async () => {

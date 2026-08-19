@@ -40,6 +40,21 @@
     boot.classList.add('gone');
     document.body.classList.add('blurred');
     setTimeout(() => boot.remove(), 700);
+
+    /* первый запуск: сначала настройка, рабочий стол — после неё */
+    if (window.Setup && Setup.needed()){
+      lock.classList.add('gone');
+      document.body.classList.remove('locked');
+      setTimeout(() => Setup.open(), 350);
+      return;
+    }
+    /* смена языка в настройке перезагружает страницу — здесь досматриваем приветствие */
+    if (window.Welcome && KV.get('welcome.pending', false)){
+      KV.set('welcome.pending', false);
+      lock.classList.add('gone');
+      document.body.classList.remove('locked');
+      setTimeout(() => Welcome.play(), 300);
+    }
   }, skip ? 200 : 1900);
 
   window.__unlock = unlock;

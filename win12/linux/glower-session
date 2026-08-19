@@ -28,8 +28,9 @@ BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser 
 [ -n "$BROWSER" ] || { echo "GlowerOS: не найден chromium" >&2; exit 1; }
 
 exec "$BROWSER" \
-  --kiosk "http://localhost:$PORT/" \
-  --app="http://localhost:$PORT/" \
+  --kiosk "http://localhost:$PORT/?session=1" \
+  --app="http://localhost:$PORT/?session=1" \
+  --deny-permission-prompts \
   --start-fullscreen \
   --noerrdialogs --disable-infobars --disable-session-crashed-bubble \
   --disable-features=TranslateUI,MediaRouter \
