@@ -45,6 +45,8 @@ if ! ls /dev/dri/card* >/dev/null 2>&1; then
 fi
 
 COMMON="--kiosk http://localhost:$PORT/?$QUERY
+--no-first-run --no-default-browser-check --disable-search-engine-choice-screen
+--disable-sync --password-store=basic --use-mock-keychain
 --deny-permission-prompts --noerrdialogs --disable-infobars
 --disable-session-crashed-bubble --disable-features=TranslateUI,MediaRouter
 --disable-background-timer-throttling --disable-backgrounding-occluded-windows
