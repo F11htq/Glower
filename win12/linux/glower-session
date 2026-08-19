@@ -27,13 +27,31 @@ done
 BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
 [ -n "$BROWSER" ] || { echo "GlowerOS: не найден chromium" >&2; exit 1; }
 
+# Есть ли на машине видеоядро? Без него полноэкранное размытие рисуется
+# процессором и система превращается в слайд-шоу — тогда сразу просим
+# оболочку работать в облегчённом режиме и не мучить процессор.
+QUERY="session=1"
+GPU_FLAGS="--enable-features=VaapiVideoDecoder"
+if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+  QUERY="session=1&lite=1"
+  GPU_FLAGS="--disable-gpu --disable-gpu-compositing"
+  echo "GlowerOS: видеоускорение не найдено — облегчённый режим"
+fi
+
+# Wayland напрямую, без прослойки XWayland
+[ -n "$WAYLAND_DISPLAY" ] && GPU_FLAGS="$GPU_FLAGS --ozone-platform=wayland"
+
 exec "$BROWSER" \
-  --kiosk "http://localhost:$PORT/?session=1" \
-  --app="http://localhost:$PORT/?session=1" \
+  --kiosk "http://localhost:$PORT/?$QUERY" \
+  --app="http://localhost:$PORT/?$QUERY" \
   --deny-permission-prompts \
   --start-fullscreen \
   --noerrdialogs --disable-infobars --disable-session-crashed-bubble \
   --disable-features=TranslateUI,MediaRouter \
+  --disable-background-timer-throttling \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
   --autoplay-policy=no-user-gesture-required \
+  $GPU_FLAGS \
   --user-data-dir="$HOME/.local/share/glower/browser" \
   --class=GlowerOS

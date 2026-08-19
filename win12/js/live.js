@@ -378,5 +378,8 @@ const Perf = {
 };
 window.Perf = Perf;
 
-/* меряем после запуска, когда всё уже нарисовано */
-addEventListener('load', () => setTimeout(() => Perf.check(), 3500), { once:true });
+/* сеанс сам сообщает, что видеоядра нет — тогда не ждём замера */
+if (location.search.includes('lite=1') && !Perf.touched() && !KV.get(Perf.KEY, false))
+  addEventListener('load', () => Perf.lite(true), { once:true });
+else
+  addEventListener('load', () => setTimeout(() => Perf.check(), 3500), { once:true });
