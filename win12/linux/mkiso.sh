@@ -81,6 +81,17 @@ apt-get install -y --no-install-recommends \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
   2>&1 | tail -2
+# VirtualBox выдаёт себя за видеокарту VMware, но её драйвер под ним не
+# работает и сам об этом пишет: «unsupported hypervisor, configuration is
+# likely broken». Экран после этого чёрный, и человеку приходится вручную
+# выбирать «безопасную графику». Поэтому под VirtualBox драйвер vmwgfx не
+# загружаем вовсе — тогда система сразу поднимается через X-сервер. На
+# настоящей машине VMware правило не срабатывает и драйвер работает как
+# работал.
+cat > /etc/modprobe.d/glower-vmwgfx.conf <<'MOD'
+install vmwgfx /bin/sh -c 'grep -qi virtualbox /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null || exec modprobe --ignore-install vmwgfx "$@"'
+MOD
+
 # initramfs пересобираем: в него должны попасть хуки live-boot
 update-initramfs -u -k all 2>&1 | tail -1
 apt-get clean
