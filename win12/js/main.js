@@ -36,10 +36,22 @@
     }
   };
 
-  setTimeout(() => {
+  /* Решение о первом запуске принимаем, только когда все скрипты выполнены.
+     Раньше оно висело на таймере в 1,9 с: на быстрой машине этого хватало,
+     а на медленной — например, в виртуалке без аппаратного ускорения —
+     setup.js ещё не успевал выполниться, и система молча уходила на экран
+     блокировки, пропустив настройку. Время загрузки машины теперь ни на
+     что не влияет. */
+  const scriptsReady = document.readyState === 'complete'
+    ? Promise.resolve()
+    : new Promise(r => addEventListener('load', r, { once:true }));
+
+  setTimeout(async () => {
     boot.classList.add('gone');
     document.body.classList.add('blurred');
     setTimeout(() => boot.remove(), 700);
+
+    await scriptsReady;
 
     /* первый запуск: сначала настройка, рабочий стол — после неё */
     if (window.Setup && Setup.needed()){

@@ -726,6 +726,21 @@ try {
       && document.querySelector('#setup').classList.contains('on')
       && !document.querySelector('#desktop').classList.contains('on')));
 
+  /* на медленной машине скрипты выполняются дольше загрузочного экрана —
+     именно на этом настройка однажды потерялась в виртуалке */
+  check('настройка не теряется на медленной машине',
+    await (async () => {
+      const slow = await browser.newPage({ viewport:{ width:1280, height:800 } });
+      const cdp = await slow.context().newCDPSession(slow);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate:20 });
+      await slow.goto(URL_APP);
+      await slow.waitForTimeout(9000);
+      const ok = await slow.evaluate(() => !!document.querySelector('#setup')
+        && !document.querySelector('#desktop').classList.contains('on'));
+      await slow.close();
+      return ok;
+    })());
+
   check('шаги переключаются вперёд и назад',
     await page.evaluate(async () => {
       const step = () => document.querySelector('#setup-steps .on');
