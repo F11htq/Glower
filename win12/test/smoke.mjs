@@ -739,6 +739,28 @@ try {
       return was === 0 && fwd === 1 && idx() === 0;
     }));
 
+  check('выбор английского меняет язык мастера сразу, а не после перезагрузки',
+    await page.evaluate(async () => {
+      Setup.i = 1; Setup.paint();                       // шаг «Язык системы»
+      await new Promise(r => setTimeout(r, 300));
+      const ru = document.querySelector('.setup-t').textContent;
+      [...document.querySelectorAll('.setup-card')].find(c => /English/.test(c.textContent)).click();
+      await new Promise(r => setTimeout(r, 350));
+      const en = document.querySelector('.setup-t').textContent;
+      const btn = document.querySelector('#setup-next').textContent;
+      Setup.i = 4; Setup.paint();
+      await new Promise(r => setTimeout(r, 300));
+      const step = document.querySelector('.setup-t').textContent;
+
+      [...document.querySelectorAll('.setup-card')];    // возвращаемся к русскому
+      Setup.data.lang = 'ru'; Setup.i = 1; Setup.paint();
+      await new Promise(r => setTimeout(r, 300));
+      const back = document.querySelector('.setup-t').textContent;
+
+      return ru === 'Язык системы' && en === 'System language' && btn === 'Next'
+        && step === 'What should we call you' && back === 'Язык системы';
+    }));
+
   check('без имени дальше не пускает',
     await page.evaluate(async () => {
       Setup.i = 4; Setup.paint();                       // шаг «как к вам обращаться»

@@ -84,6 +84,7 @@ const I18N = {
     'Автономный режим':'Standalone mode', 'Подключено к системе':'Connected to the system',
     'настоящий диск':'real disk', 'браузер':'browser', 'Синхронизация':'Sync',
     /* прочее */
+    'Настройка завершена — добро пожаловать':'Setup complete — welcome',
     'Погода':'Weather', 'Сегодня':'Today', 'Событий нет':'No events', 'Всё сделано 🎉':'All done 🎉',
     'Заметка':'Note', 'Нажмите и пишите…':'Click and type…', 'Новая задача…':'New task…',
     'Раскладка клавиатуры':'Keyboard layout', 'Параметры языка':'Language settings',

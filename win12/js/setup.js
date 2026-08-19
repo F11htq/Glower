@@ -12,6 +12,60 @@
 const Setup = {
   KEY:'setup.done',
 
+  /* Мастер говорит на выбранном языке сразу, а не после перезагрузки:
+     свои строки он держит при себе, поэтому переключение видно на месте. */
+  T:{
+    en:{
+      'Здравствуйте':'Welcome',
+      'Настроим систему под вас. Это займёт минуту.':'Let\u2019s set the system up for you. It takes a minute.',
+      'Язык системы':'System language',
+      'Его можно будет сменить в Параметрах в любой момент.':'You can change it in Settings at any time.',
+      'Раскладки клавиатуры':'Keyboard layouts',
+      'Переключение — Alt + Shift или щелчок по индикатору в панели.':'Switch with Alt + Shift or by clicking the indicator in the taskbar.',
+      'Ваш город':'Your city',
+      'Нужен только для погоды. Данные берутся из открытого сервиса Open-Meteo.':'Used only for weather, from the open Open-Meteo service.',
+      'Как к вам обращаться':'What should we call you',
+      'Имя видно в меню Пуск и на экране блокировки.':'The name appears in Start and on the lock screen.',
+      'Имя пользователя':'User name',
+      'Без имени дальше нельзя — так система будет к вам обращаться':'A name is required — this is how the system will address you',
+      'Пароль':'Password',
+      'Можно оставить пустым — тогда вход будет свободным.':'Leave it empty for a free sign-in.',
+      'Пароль (не обязательно)':'Password (optional)',
+      'Честно о том, что это даёт: пароль запирает экран блокировки внутри системы. Его хеш хранится на этой машине, сами файлы не шифруются. Это защита от чужого взгляда, а не от того, у кого есть доступ к компьютеру.':'Honestly about what this gives you: the password locks the system\u2019s lock screen. Its hash is stored on this machine and the files themselves are not encrypted. It guards against a passing glance, not against someone with access to the computer.',
+      'Оформление':'Appearance',
+      'Тему и цвет тоже можно менять когда угодно.':'Theme and colour can be changed at any time too.',
+      'Прозрачная':'Transparent', 'Тёмная':'Dark', 'Светлая':'Light',
+      'стекло и размытие':'glass and blur',
+      'непрозрачные поверхности':'opaque surfaces',
+      'светлые поверхности':'light surfaces',
+      'Обои':'Wallpaper',
+      'Что система о вас знает':'What the system knows about you',
+      'Коротко и без мелкого шрифта.':'Briefly, and without fine print.',
+      'Всё остаётся здесь':'Everything stays here',
+      'Настройки и файлы хранятся на этой машине. Никакой учётной записи и никакой отправки на сторону.':'Settings and files are kept on this machine. No account, nothing sent anywhere.',
+      'Единственный запрос наружу':'The only outside request',
+      'Погода: город уходит в открытый сервис Open-Meteo. Откажетесь — погода просто не покажется.':'Weather: the city name goes to the open Open-Meteo service. Decline and the weather simply will not show.',
+      'Чего здесь нет':'What is not here',
+      'Ни сбора статистики, ни рекламного идентификатора, ни «улучшения качества продукта».':'No analytics, no advertising identifier, no \u201cproduct improvement programme\u201d.',
+      'Проверяется':'Verifiable',
+      'Система открыта: весь код лежит рядом и читается глазами.':'The system is open: all the code sits next to it and can be read.',
+      'Всё готово':'All set',
+      'Осталось нажать кнопку.':'One button left.',
+      'Язык':'Language', 'Раскладки':'Layouts', 'Город':'City',
+      'Пользователь':'User', 'Вход':'Sign-in', 'Тема':'Theme',
+      'по паролю':'password', 'свободный':'free', 'не указан':'not set',
+      'включена':'enabled', 'выключена':'disabled',
+      'Назад':'Back', 'Далее':'Next', 'Начать работу':'Get started',
+      'Русская':'Russian', 'Английская':'English', 'Немецкая':'German',
+      'Добро пожаловать':'Welcome', 'Готовим рабочий стол…':'Preparing your desktop\u2026'
+    }
+  },
+
+  t(s){
+    const d = this.T[this.data.lang];
+    return (d && d[s]) || s;
+  },
+
   needed(){ return !KV.get(this.KEY, false); },
   finish(){ KV.set(this.KEY, true); },
 
@@ -57,13 +111,14 @@ const Setup = {
     const s = this.STEPS[this.i];
     steps.innerHTML = this.STEPS.map((x, k) =>
       `<i class="${k === this.i ? 'on' : k < this.i ? 'was' : ''}"></i>`).join('');
-    box.innerHTML = `<div class="setup-t">${s.title}</div>
-      ${s.sub ? `<div class="setup-s">${s.sub}</div>` : ''}`;
+    box.innerHTML = `<div class="setup-t">${this.t(s.title)}</div>
+      ${s.sub ? `<div class="setup-s">${this.t(s.sub)}</div>` : ''}`;
     const area = el('div', 'setup-area');
     box.appendChild(area);
     s.fill.call(this, area);
     $('#setup-back').style.visibility = this.i ? 'visible' : 'hidden';
-    $('#setup-next').textContent = this.i === this.STEPS.length - 1 ? 'Начать работу' : 'Далее';
+    $('#setup-back').textContent = this.t('Назад');
+    $('#setup-next').textContent = this.t(this.i === this.STEPS.length - 1 ? 'Начать работу' : 'Далее');
     box.style.animation = 'none';
     requestAnimationFrame(() => box.style.animation = '');
   },
@@ -74,7 +129,7 @@ const Setup = {
     items.forEach(it => {
       const c = el('button', 'setup-card' + (get() === it.v ? ' on' : ''));
       c.innerHTML = `${it.big ? `<span class="big">${it.big}</span>` : ''}
-        <b>${esc(it.n)}</b>${it.d ? `<small>${esc(it.d)}</small>` : ''}`;
+        <b>${esc(this.t(it.n))}</b>${it.d ? `<small>${esc(this.t(it.d))}</small>` : ''}`;
       if (it.css) c.style.backgroundImage = it.css;
       c.onclick = () => { set(it.v); Snd.click(); this.paint(); };
       g.appendChild(c);
@@ -105,8 +160,8 @@ const Setup = {
         Object.entries(Layouts.ALL).forEach(([id, d]) => {
           const on = this.data.layouts.includes(id);
           const c = el('button', 'setup-card' + (on ? ' on' : ''));
-          c.innerHTML = `<span class="big">${d.flag}</span><b>${esc(d.name)}</b>
-            <small>${on ? 'включена' : 'выключена'}</small>`;
+          c.innerHTML = `<span class="big">${d.flag}</span><b>${esc(this.t(d.name))}</b>
+            <small>${this.t(on ? 'включена' : 'выключена')}</small>`;
           c.onclick = () => {
             const l = this.data.layouts;
             if (l.includes(id)){ if (l.length > 1) this.data.layouts = l.filter(x => x !== id); }
@@ -121,7 +176,7 @@ const Setup = {
     { title:'Ваш город', sub:'Нужен только для погоды. Данные берутся из открытого сервиса Open-Meteo.',
       fill(area){
         const i = el('input', 'inp setup-input');
-        i.value = this.data.city; i.placeholder = 'Москва';
+        i.value = this.data.city; i.placeholder = this.data.lang === 'en' ? 'Moscow' : 'Москва';
         i.oninput = () => this.data.city = i.value;
         area.appendChild(i);
       } },
@@ -130,7 +185,7 @@ const Setup = {
       fill(area){
         const wrap = el('div', 'setup-name');
         const i = el('input', 'inp setup-input');
-        i.value = this.data.name; i.placeholder = 'Имя пользователя'; i.maxLength = 24;
+        i.value = this.data.name; i.placeholder = this.t('Имя пользователя'); i.maxLength = 24;
         const e2 = el('input', 'inp setup-emoji');
         e2.value = this.data.emoji; e2.placeholder = '🙂'; e2.maxLength = 2;
         i.oninput = () => { this.data.name = i.value; err.textContent = ''; };
@@ -143,20 +198,20 @@ const Setup = {
       },
       check(){
         if (this.data.name.trim()) return true;
-        if (this._err) this._err.textContent = 'Без имени дальше нельзя — так система будет к вам обращаться';
+        if (this._err) this._err.textContent = this.t('Без имени дальше нельзя — так система будет к вам обращаться');
         return false;
       } },
 
     { title:'Пароль', sub:'Можно оставить пустым — тогда вход будет свободным.',
       fill(area){
         const i = el('input', 'inp setup-input'); i.type = 'password';
-        i.placeholder = 'Пароль (не обязательно)'; i.value = this.data.pass;
+        i.placeholder = this.t('Пароль (не обязательно)'); i.value = this.data.pass;
         i.oninput = () => this.data.pass = i.value;
         area.appendChild(i);
-        area.appendChild(el('div', 'setup-note',
+        area.appendChild(el('div', 'setup-note', this.t(
           'Честно о том, что это даёт: пароль запирает экран блокировки внутри системы. ' +
           'Его хеш хранится на этой машине, сами файлы не шифруются. Это защита от чужого ' +
-          'взгляда, а не от того, у кого есть доступ к компьютеру.'));
+          'взгляда, а не от того, у кого есть доступ к компьютеру.')));
       } },
 
     { title:'Оформление', sub:'Тему и цвет тоже можно менять когда угодно.',
@@ -201,7 +256,7 @@ const Setup = {
         const box = el('div', 'setup-privacy');
         list.forEach(([e, t, d]) => {
           const r = el('div', 'setup-priv');
-          r.innerHTML = `<span class="e">${e}</span><div><b>${t}</b><small>${d}</small></div>`;
+          r.innerHTML = `<span class="e">${e}</span><div><b>${this.t(t)}</b><small>${this.t(d)}</small></div>`;
           box.appendChild(r);
         });
         area.appendChild(box);
@@ -211,16 +266,16 @@ const Setup = {
       fill(area){
         const sum = el('div', 'setup-sum');
         const L = Object.entries(Layouts.ALL).filter(([id]) => this.data.layouts.includes(id))
-          .map(([, d]) => d.name).join(', ');
+          .map(([, d]) => this.t(d.name)).join(', ');
         [['🗣', 'Язык', I18N.LANGS[this.data.lang].name],
          ['⌨️', 'Раскладки', L],
-         ['🏙', 'Город', this.data.city || 'не указан'],
+         ['🏙', 'Город', this.data.city || this.t('не указан')],
          ['👤', 'Пользователь', this.data.name],
-         ['🔒', 'Вход', this.data.pass ? 'по паролю' : 'свободный'],
-         ['🎨', 'Тема', { glass:'Прозрачная', dark:'Тёмная', light:'Светлая' }[this.data.theme]]
+         ['🔒', 'Вход', this.t(this.data.pass ? 'по паролю' : 'свободный')],
+         ['🎨', 'Тема', this.t({ glass:'Прозрачная', dark:'Тёмная', light:'Светлая' }[this.data.theme])]
         ].forEach(([e, k, v]) => {
           const r = el('div', 'setup-sr');
-          r.innerHTML = `<span class="e">${e}</span><span class="k">${k}</span><span class="v">${esc(String(v))}</span>`;
+          r.innerHTML = `<span class="e">${e}</span><span class="k">${this.t(k)}</span><span class="v">${esc(String(v))}</span>`;
           sum.appendChild(r);
         });
         area.appendChild(sum);
@@ -276,13 +331,15 @@ window.Setup = Setup;
 const Welcome = {
   play(name){
     const who = name || (Profiles.current() || {}).name || S.userName || '';
+    const T = { hi:'Добро пожаловать', note:'Готовим рабочий стол…' };
+    if ((window.I18N ? I18N.lang() : 'ru') === 'en'){ T.hi = 'Welcome'; T.note = 'Preparing your desktop…'; }
     const ov = el('div', 'welcome');
     ov.innerHTML = `
       <div class="wl-ring"><span></span><span></span><span></span></div>
       <img class="os-logo wl-logo" src="assets/logo.png" alt="" draggable="false">
-      <div class="wl-hi">Добро пожаловать</div>
+      <div class="wl-hi">${T.hi}</div>
       <div class="wl-who">${esc(who)}</div>
-      <div class="wl-note">Готовим рабочий стол…</div>`;
+      <div class="wl-note">${T.note}</div>`;
     document.body.appendChild(ov);
     requestAnimationFrame(() => ov.classList.add('on'));
 
