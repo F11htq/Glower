@@ -161,10 +161,17 @@ mksquashfs "$ROOTFS" "$ISO/live/filesystem.squashfs" \
   -e boot/vmlinuz-\* -e boot/initrd.img-\* -e .debootstrapped -quiet
 
 cat > "$ISO/boot/grub/grub.cfg" <<'GRUB'
-set timeout=3
+set timeout=10
 set default=0
 menuentry "GlowerOS" {
   linux /live/vmlinuz boot=live components quiet splash
+  initrd /live/initrd
+}
+menuentry "GlowerOS · безопасная графика" {
+  # Для машин, где драйвер экрана ядра не заводится: система поднимется
+  # через обычный X-сервер и без эффектов, но поднимется.
+  linux /live/vmlinuz boot=live components nomodeset \
+        modprobe.blacklist=bochs,vmwgfx,virtio_gpu,qxl,vboxvideo
   initrd /live/initrd
 }
 menuentry "GlowerOS · подробный запуск" {
