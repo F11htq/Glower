@@ -68,6 +68,9 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   cage seatd libgl1 libegl1 libgles2 mesa-vulkan-drivers \
+  xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
+  xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
+  sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
@@ -103,8 +106,12 @@ fi
 # --------------------------------------------------------------------------
 step "4/6 автозапуск сеанса"
 chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
-id glower >/dev/null 2>&1 || useradd -m -s /bin/bash -G video,audio,input,render glower
+id glower >/dev/null 2>&1 || useradd -m -s /bin/bash -G video,audio,input,render,tty glower
 passwd -d glower
+# как в любой живой системе: разбор на месте без пароля
+usermod -aG sudo glower 2>/dev/null || true
+echo 'glower ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/glower
+chmod 440 /etc/sudoers.d/glower
 echo "GlowerOS" > /etc/hostname
 INCHROOT
 
@@ -128,8 +135,12 @@ Environment=GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power
 ExecStartPre=/bin/mkdir -p /run/user/1000
 ExecStartPre=/bin/chown glower:glower /run/user/1000
 ExecStart=/usr/bin/cage -- /usr/bin/glower-session
-Restart=always
-RestartSec=2
+# Три неудачи подряд — и systemd останавливается: на экране остаётся
+# объяснение, а не мигающий курсор.
+Restart=on-failure
+RestartSec=3
+StartLimitBurst=3
+StartLimitIntervalSec=120
 
 [Install]
 WantedBy=multi-user.target

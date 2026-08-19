@@ -1,7 +1,12 @@
 #!/bin/sh
 # ==========================================================================
-#  Сеанс GlowerOS: киоск-компоновщик + оболочка в браузере без единой кнопки
-#  браузера. Запускается как обычный сеанс рабочего стола.
+#  Сеанс GlowerOS: агент + оболочка в режиме киоска.
+#
+#  Запускается двумя путями, в зависимости от машины:
+#    — есть графический узел ядра (/dev/dri) → cage, чистый Wayland;
+#    — нет (виртуалка без ускорения, старое железо) → обычный X-сервер.
+#  Если не выходит ни так, ни так — на экране остаётся понятное объяснение,
+#  а не мигающий курсор.
 # ==========================================================================
 set -e
 
@@ -9,49 +14,71 @@ ROOT="${GLOWER_ROOT:-$HOME/GlowerOS}"
 PORT="${GLOWER_PORT:-8123}"
 UI="${GLOWER_UI:-/usr/share/glower/ui}"
 FLAGS="${GLOWER_FLAGS:---system --allow-open --allow-launch --allow-power}"
+LOG="${GLOWER_LOG:-/var/log/glower-session.log}"
 
 mkdir -p "$ROOT"
+touch "$LOG" 2>/dev/null || LOG="$HOME/glower-session.log"
 
-# агент — мост между оболочкой и машиной
-node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS &
+say(){ printf '%s\n' "$1"; printf '%s\n' "$1" >> "$LOG" 2>/dev/null || true; }
+
+# --- агент: мост между оболочкой и машиной ---
+node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS >>"$LOG" 2>&1 &
 AGENT=$!
 trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
 
-# ждём, пока агент ответит
 i=0
 while [ $i -lt 50 ]; do
-  if curl -sf "http://localhost:$PORT/" >/dev/null 2>&1; then break; fi
+  curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
   i=$((i+1)); sleep 0.2
 done
 
 BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
-[ -n "$BROWSER" ] || { echo "GlowerOS: не найден chromium" >&2; exit 1; }
+[ -n "$BROWSER" ] || { say "GlowerOS: браузер не найден — оболочку нечем показать"; exit 1; }
 
-# Есть ли на машине видеоядро? Без него полноэкранное размытие рисуется
-# процессором и система превращается в слайд-шоу — тогда сразу просим
-# оболочку работать в облегчённом режиме и не мучить процессор.
+# --- на чём рисовать ---
 QUERY="session=1"
-GPU_FLAGS="--enable-features=VaapiVideoDecoder"
-if ! ls /dev/dri/renderD* >/dev/null 2>&1; then
+GPU="--enable-features=VaapiVideoDecoder"
+if ! ls /dev/dri/card* >/dev/null 2>&1; then
   QUERY="session=1&lite=1"
-  GPU_FLAGS="--disable-gpu --disable-gpu-compositing"
-  echo "GlowerOS: видеоускорение не найдено — облегчённый режим"
+  GPU="--disable-gpu --disable-gpu-compositing"
+  say "GlowerOS: видеоускорения нет — облегчённый режим"
 fi
 
-# Wayland напрямую, без прослойки XWayland
-[ -n "$WAYLAND_DISPLAY" ] && GPU_FLAGS="$GPU_FLAGS --ozone-platform=wayland"
+COMMON="--kiosk http://localhost:$PORT/?$QUERY
+--deny-permission-prompts --noerrdialogs --disable-infobars
+--disable-session-crashed-bubble --disable-features=TranslateUI,MediaRouter
+--disable-background-timer-throttling --disable-backgrounding-occluded-windows
+--disable-renderer-backgrounding --autoplay-policy=no-user-gesture-required
+--user-data-dir=$HOME/.local/share/glower/browser --class=GlowerOS"
 
-exec "$BROWSER" \
-  --kiosk "http://localhost:$PORT/?$QUERY" \
-  --app="http://localhost:$PORT/?$QUERY" \
-  --deny-permission-prompts \
-  --start-fullscreen \
-  --noerrdialogs --disable-infobars --disable-session-crashed-bubble \
-  --disable-features=TranslateUI,MediaRouter \
-  --disable-background-timer-throttling \
-  --disable-backgrounding-occluded-windows \
-  --disable-renderer-backgrounding \
-  --autoplay-policy=no-user-gesture-required \
-  $GPU_FLAGS \
-  --user-data-dir="$HOME/.local/share/glower/browser" \
-  --class=GlowerOS
+run_cage(){
+  command -v cage >/dev/null || return 1
+  ls /dev/dri/card* >/dev/null 2>&1 || return 1
+  say "GlowerOS: запуск через cage (Wayland)"
+  exec cage -- "$BROWSER" $COMMON $GPU --ozone-platform=wayland
+}
+
+run_x(){
+  command -v Xorg >/dev/null || command -v X >/dev/null || return 1
+  say "GlowerOS: графического узла нет, запуск через X-сервер"
+  cat > "$HOME/.xinitrc" <<XRC
+exec "$BROWSER" $COMMON $GPU
+XRC
+  exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
+}
+
+run_cage || true
+run_x || true
+
+# --- сюда попадаем, только если ничего не вышло ---
+say ""
+say "  GlowerOS не смог показать оболочку на этой машине."
+say "  Что известно:"
+say "    графический узел: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo 'нет')"
+say "    браузер:          $BROWSER"
+say "    cage:             $(command -v cage || echo 'нет')"
+say "    X-сервер:         $(command -v Xorg || command -v X || echo 'нет')"
+say "  Подробности: $LOG"
+say "  Войти в систему можно на другой консоли: Ctrl+Alt+F2, пользователь glower"
+say ""
+sleep infinity
