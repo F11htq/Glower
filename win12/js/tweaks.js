@@ -55,6 +55,8 @@ Shell.updateTaskbar = function(){
     tbSearch.remove();
   }
 
+  Shell.fitDock();
+
   // развёрнутые окна не должны залезать под панель задач
   WM.wins.filter(w => w.maximized).forEach(w => {
     const m = WM.maxRect();
@@ -62,6 +64,31 @@ Shell.updateTaskbar = function(){
     if (w.app.onResize) w.app.onResize(w);
   });
 };
+
+/* ==========================================================================
+   Панель не должна наезжать сама на себя
+
+   В режиме панели задач значки стоят по центру, а трей прижат к правому
+   краю поверх потока — и когда открытых окон много, центральная группа
+   заезжает под него. Резервируем ширину трея с обеих сторон (чтобы центр
+   остался центром) и, если этого мало, уменьшаем значки, как делает
+   настоящая панель задач.
+   ========================================================================== */
+Shell.fitDock = function(){
+  const inDock = tray.parentElement === dock;
+  const taskbar = document.body.classList.contains('taskbar');
+  const pad = taskbar && inDock ? tray.offsetWidth + 22 : 0;
+  dock.style.paddingLeft = dock.style.paddingRight = pad ? pad + 'px' : '';
+
+  const root = document.documentElement;
+  let size = S.dockSize;
+  root.style.setProperty('--dock-size', size + 'px');
+  for (let i = 0; i < 14 && dock.scrollWidth > dock.clientWidth + 1 && size > 30; i++){
+    size -= 2;
+    root.style.setProperty('--dock-size', size + 'px');
+  }
+};
+addEventListener('resize', () => Shell.fitDock());
 
 ['syncDock','updateChrome'].forEach(fn => {
   const orig = Shell[fn].bind(Shell);

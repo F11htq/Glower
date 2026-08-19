@@ -645,18 +645,22 @@ const Shell = {
 
   /* ================= ЧАСЫ / ФОН / ТЕМА ================= */
   clock(){
-    const n = new Date();
+    /* raw — настоящий момент, его форматируют функции локали (они сами знают
+       про выбранный пояс); n — тот же момент, сдвинутый так, чтобы getHours()
+       показывал часы выбранного пояса. */
+    const raw = new Date();
+    const n = zoned(raw);
     let h = n.getHours();
     const suf = S.clock24 ? '' : (h >= 12 ? ' PM' : ' AM');
     if (!S.clock24) h = h % 12 || 12;
     const time = `${S.clock24 ? pad2(h) : h}:${pad2(n.getMinutes())}${S.showSeconds ? ':' + pad2(n.getSeconds()) : ''}${suf}`;
-    const date = n.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+    const date = raw.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
     const tt = $('#tray-time'), td = $('#tray-date');
     if (tt) tt.textContent = time;
     if (td) td.textContent = date;
     const lt = $('#lock-time'), ld = $('#lock-date');
     if (lt) lt.textContent = `${S.clock24 ? pad2(h) : h}:${pad2(n.getMinutes())}${suf}`;
-    if (ld) ld.textContent = n.toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long' });
+    if (ld) ld.textContent = raw.toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long' });
     const dw = $('#dw-clock'); if (dw) dw.textContent = `${pad2(n.getHours())}:${pad2(n.getMinutes())}`;
     const lw = $('#lock-weather');
     if (lw){ const w = this.weather(); lw.innerHTML = `${w.ico} ${w.t > 0 ? '+' : ''}${w.t}° · ${w.desc} · ${esc(S.city)}`; }
@@ -679,7 +683,7 @@ const Shell = {
   autoTheme(){
     clearInterval(this._themeIv);
     if (!S.autoTheme) return;
-    const upd = () => { const h = new Date().getHours();
+    const upd = () => { const h = zoned().getHours();
       Store.set('theme', (h >= 8 && h < 20) ? 'light' : KV.get('darkVariant', 'glass')); };
     upd(); this._themeIv = setInterval(upd, 60000);
   },

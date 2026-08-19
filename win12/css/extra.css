@@ -97,7 +97,8 @@ body.taskbar .dock{width:100%;border-radius:0;justify-content:center;padding:6px
 body.taskbar .dock-item{border-radius:10px}
 body.taskbar .dock-sep{opacity:.5}
 .dock-wrap{transition:bottom var(--t3) var(--e-spring),left var(--t3) var(--e-spring),right var(--t3) var(--e-spring)}
-.dock{transition:width var(--t3) var(--e-spring),border-radius var(--t3) var(--e-out),padding var(--t3) var(--e-out)}
+.dock{transition:width var(--t3) var(--e-spring),border-radius var(--t3) var(--e-out),padding var(--t3) var(--e-out);
+  max-width:calc(100vw - 20px)}
 
 /* трей, переехавший в панель */
 /* в плавающем доке трей стоит в потоке, в панели задач — прижат вправо */

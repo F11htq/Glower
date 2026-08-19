@@ -9,7 +9,7 @@
 
   let list = read('win12.profiles', null);
   if (!Array.isArray(list) || !list.length){
-    list = [{ id:'default', name:'Dymensity', emoji:'D', hash:null, created:Date.now() }];
+    list = [{ id:'default', name:'Пользователь', emoji:'П', hash:null, created:Date.now() }];
     try { localStorage.setItem('win12.profiles', JSON.stringify(list)); } catch(e){}
   }
   let cur = localStorage.getItem('win12.profile') || 'default';

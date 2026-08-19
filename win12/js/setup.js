@@ -308,6 +308,11 @@ const Setup = {
       if (p){ p.name = d.name.trim(); p.emoji = d.emoji || d.name.trim()[0] || '🙂'; Profiles.save(l); }
       if (d.pass) await Profiles.setPassword(me.id, d.pass);
     }
+    /* имя выбрано только что — экран блокировки и кнопка в Пуске должны
+       показать его сразу, а не после перезапуска системы */
+    Profiles.buildLock();
+    if (Profiles.renderChip) Profiles.renderChip();
+    Shell.renderShell();
 
     this.finish();
     const ov = $('#setup');

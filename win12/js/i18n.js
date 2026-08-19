@@ -173,7 +173,13 @@ window.I18N = I18N;
   const D = Date.prototype;
   const wrap = name => {
     const orig = D[name];
-    D[name] = function(loc, opt){ return orig.call(this, loc === 'ru-RU' ? I18N.locale() : loc, opt); };
+    D[name] = function(loc, opt){
+      /* выбранный в настройках часовой пояс действует на все часы системы:
+         подставляем его всюду, где пояс не задан вызовом явно */
+      const tz = typeof S === 'undefined' ? '' : S.tz;
+      if (tz && !(opt && opt.timeZone)) opt = Object.assign({}, opt, { timeZone:tz });
+      return orig.call(this, loc === 'ru-RU' ? I18N.locale() : loc, opt);
+    };
   };
   ['toLocaleDateString', 'toLocaleTimeString', 'toLocaleString'].forEach(wrap);
 })();

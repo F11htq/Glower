@@ -41,6 +41,17 @@ const ACCENTS = [
 ];
 
 /* ---------- Настройки по умолчанию ---------- */
+/* Время в выбранном часовом поясе: сдвигаем момент так, чтобы обычные
+   getHours() и getMinutes() показывали время нужного пояса. Пустая
+   настройка означает «как на машине» — тогда ничего не трогаем. */
+window.zoned = function(d){
+  d = d || new Date();
+  const tz = typeof S === 'undefined' ? '' : S.tz;
+  if (!tz) return d;
+  try { return new Date(d.toLocaleString('en-US', { timeZone:tz })); }
+  catch(e){ return d; }
+};
+
 const DEFAULTS = {
   theme:'glass', autoTheme:false,
   accent:0, accentCustom:null,
@@ -52,10 +63,10 @@ const DEFAULTS = {
   showDesktopIcons:true, showDeskWidgets:true, taskbarFull:true, trayInDock:true,
   deskWidgets:[{t:'clock'},{t:'weather'}], autostart:[],
   font:"'Segoe UI Variable','Segoe UI',system-ui,sans-serif",
-  clock24:true, showSeconds:false,
+  clock24:true, showSeconds:false, tz:'',   /* пусто — часовой пояс машины */
   volume:62, brightness:100, wifi:true, bluetooth:true, dnd:false, nightLight:false,
   airdrop:true, hotcorners:true, sounds:false, soundNotif:true,
-  userName:((window.__profiles || []).find(p => p.id === window.__profile) || {}).name || 'Dymensity', city:'Москва',
+  userName:((window.__profiles || []).find(p => p.id === window.__profile) || {}).name || 'Пользователь', city:'Москва',
   snapAssist:true, tapClickSound:false,
   pinned:['settings','notepad','files','browser','calc','term','paint','photos','music','calendar','clock','store'],
   dockApps:['browser','files','notepad','settings','music','term','paint','calc']

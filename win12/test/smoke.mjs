@@ -881,6 +881,71 @@ try {
       return untouched;
     }));
 
+  /* --- панель задач не наезжает сама на себя --- */
+  check('в развёрнутом окне значки панели не залезают на трей',
+    await page.evaluate(async () => {
+      ['notepad', 'files', 'settings', 'music', 'photos', 'calc', 'mail', 'store'].forEach(id => {
+        try { WM.open(id); } catch(e){}
+      });
+      const w = WM.wins[0];
+      if (!w.maximized) WM.toggleMax(w);
+      await new Promise(r => setTimeout(r, 700));
+      const tray = document.querySelector('#tb-tray').getBoundingClientRect();
+      const items = [...document.querySelectorAll('#dock .dock-item, .tb-dock-search')];
+      const over = items.filter(n => {
+        const r = n.getBoundingClientRect();
+        return r.right > tray.left + 1 && r.left < tray.right - 1 &&
+               r.bottom > tray.top + 1 && r.top < tray.bottom - 1;
+      });
+      return { over:over.length, items:items.length };
+    }).then(r => r.over === 0 && r.items > 5));
+
+  /* --- имя из мастера первого запуска доходит до Пуска --- */
+  check('в Пуске стоит имя, выбранное при настройке',
+    await page.evaluate(async () => {
+      Store.set('userName', 'Тестовый');
+      const l = Profiles.list();
+      l[0].name = 'Тестовый'; l[0].emoji = 'Т';
+      Profiles.save(l);
+      Profiles.buildLock();
+      await new Promise(r => setTimeout(r, 200));
+      const chip = document.querySelector('#start-user').textContent;
+      const lock = document.querySelector('#lock .lock-name').textContent;
+      return chip.includes('Тестовый') && lock.includes('Тестовый');
+    }));
+
+  /* --- часовой пояс --- */
+  check('часовой пояс переключается и двигает часы',
+    await page.evaluate(async () => {
+      const before = document.querySelector('#tray-time').textContent;
+      Store.set('tz', 'Asia/Kamchatka');
+      Shell.clock();
+      const kam = document.querySelector('#tray-time').textContent;
+      Store.set('tz', 'Europe/London');
+      Shell.clock();
+      const lon = document.querySelector('#tray-time').textContent;
+      Store.set('tz', '');
+      Shell.clock();
+      const back = document.querySelector('#tray-time').textContent;
+      return kam !== lon && back === before;
+    }));
+
+  check('в настройках есть список часовых поясов',
+    await page.evaluate(async () => {
+      WM.open('settings', { section:'time' });
+      await new Promise(r => setTimeout(r, 800));
+      const w = WM.wins.find(x => x.appId === 'settings');
+      const s2 = [...w.body.querySelectorAll('select')]
+        .find(x => [...x.options].some(o => /Europe\/Moscow/.test(o.value)));
+      if (!s2) return false;
+      s2.value = 'Asia/Tokyo';
+      s2.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 300));
+      const ok = S.tz === 'Asia/Tokyo';
+      Store.set('tz', '');
+      return ok;
+    }));
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

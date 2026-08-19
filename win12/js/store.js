@@ -11,7 +11,7 @@ const CATALOG = [
 
 /* ---------- Помидор ---------- */
 { id:'pomodoro', name:'Помидор', glyph:'🍅', bg:'linear-gradient(140deg,#fb7185,#dc2626)',
-  w:380, h:480, author:'Dymensity', desc:'Таймер концентрации 25/5 с циклами и звонком',
+  w:380, h:480, author:Brand.name, desc:'Таймер концентрации 25/5 с циклами и звонком',
   render(win){
     const wrap = el('div', 'app col'); wrap.style.cssText = 'align-items:center;justify-content:center;gap:18px;padding:24px';
     win.body.appendChild(wrap);
@@ -53,7 +53,7 @@ const CATALOG = [
 
 /* ---------- 2048 ---------- */
 { id:'g2048', name:'2048', glyph:'🎲', bg:'linear-gradient(140deg,#fbbf24,#f97316)',
-  w:460, h:560, author:'Dymensity', desc:'Классическая головоломка со счётом и рекордом',
+  w:460, h:560, author:Brand.name, desc:'Классическая головоломка со счётом и рекордом',
   render(win){
     const wrap = el('div', 'app col'); wrap.style.cssText = 'padding:16px;gap:12px';
     win.body.appendChild(wrap);
@@ -129,7 +129,7 @@ const CATALOG = [
 
 /* ---------- Конвертер величин ---------- */
 { id:'convert', name:'Конвертер', glyph:'📐', bg:'linear-gradient(140deg,#67e8f9,#0891b2)',
-  w:520, h:480, author:'Dymensity', desc:'Длина, масса, температура, данные и время',
+  w:520, h:480, author:Brand.name, desc:'Длина, масса, температура, данные и время',
   render(win){
     const U = {
       'Длина':{ м:1, км:1000, см:0.01, мм:0.001, миля:1609.34, фут:0.3048, дюйм:0.0254, ярд:0.9144 },
@@ -180,7 +180,7 @@ const CATALOG = [
 
 /* ---------- Палитра ---------- */
 { id:'palette', name:'Палитра', glyph:'🎨', bg:'linear-gradient(140deg,#c084fc,#7c3aed)',
-  w:560, h:440, author:'Dymensity', desc:'Генератор цветовых схем, клик — копирует HEX',
+  w:560, h:440, author:Brand.name, desc:'Генератор цветовых схем, клик — копирует HEX',
   render(win){
     const wrap = el('div', 'app col'); wrap.style.cssText = 'padding:0;gap:0';
     win.body.appendChild(wrap);
@@ -378,7 +378,7 @@ APPS.store = {
     function draw(){
       body.innerHTML = '';
       if (tab === 'catalog'){
-        body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Магазин Dymensity</h2>
+        body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Магазин ${Brand.name}</h2>
           <div style="opacity:.85">Приложения устанавливаются по-настоящему: появляются в Пуске,
           запускаются как системные и удаляются вместе с данными</div>`));
         body.appendChild(el('div', 'card-t', 'Доступно к установке'));

@@ -67,6 +67,7 @@ const Profiles = {
     const lock = $('#lock'), bottom = $('.lock-bottom', lock);
     const p = this.current();
     bottom.innerHTML = '';
+    if (this.renderChip) this.renderChip();   // имя в Пуске идёт за именем профиля
 
     const ava = el('div', 'lock-avatar', esc(p.emoji || p.name[0]));
     const name = el('div', 'lock-name', esc(p.name));
@@ -128,7 +129,15 @@ window.Profiles = Profiles;
 
   // меню пользователя в Пуске
   const chip = $('#start-user');
-  chip.innerHTML = `<span class="ava">${esc((Profiles.current() || {}).emoji || 'D')}</span> ${esc(S.userName)}`;
+  /* имя рисуем отдельной функцией: после мастера первого запуска и смены
+     профиля кнопку нужно перерисовать, иначе в Пуске остаётся старое имя */
+  Profiles.renderChip = () => {
+    const c = $('#start-user');
+    if (!c) return;
+    const me = Profiles.current() || {};
+    c.innerHTML = `<span class="ava">${esc(me.emoji || (S.userName || '?')[0])}</span> ${esc(me.name || S.userName)}`;
+  };
+  Profiles.renderChip();
   chip.onclick = e => {
     e.stopPropagation();
     const others = Profiles.list().filter(p => p.id !== window.__profile);

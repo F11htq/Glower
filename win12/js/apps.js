@@ -482,7 +482,7 @@ APPS.music = {
   name:'Музыка', glyph:'🎵', bg:'linear-gradient(140deg,#fb7185,#a855f7)', w:520, h:600, single:true,
   render(win){
     const TRACKS = [
-      { t:'Liquid Dreams', a:'Dymensity', scale:[0,3,5,7,10], root:220, bpm:96, e:'🌊' },
+      { t:'Liquid Dreams', a:Brand.name, scale:[0,3,5,7,10], root:220, bpm:96, e:'🌊' },
       { t:'Glass Horizon', a:'Aurora Fields', scale:[0,2,4,7,9], root:261.6, bpm:112, e:'🪟' },
       { t:'Night Shift',   a:'Mono Lake',    scale:[0,2,3,7,8], root:196, bpm:84, e:'🌙' },
       { t:'Sunrise Boot',  a:'Kernel Panic', scale:[0,4,7,11,14], root:293.7, bpm:124, e:'🌅' }
@@ -755,7 +755,7 @@ APPS.browser = {
 
     const PAGES = {
       'dymensity://home': () => `
-        <div class="br-hero"><h1>Dymensity</h1><p class="muted">Внутренняя сеть ${Brand.name}</p></div>
+        <div class="br-hero"><h1>${Brand.name}</h1><p class="muted">Внутренняя сеть ${Brand.name}</p></div>
         <div class="br-tiles">
           ${[['📰','Новости','dymensity://news'],['📚','Документация','dymensity://docs'],['🎨','Галерея','dymensity://gallery'],
              ['⚙️','О системе','dymensity://about'],['🧪','Тест стекла','dymensity://glass'],['🕹','Игра','dymensity://game']]
@@ -1819,7 +1819,39 @@ APPS.settings = {
       const c = card('Дата и время');
       c.appendChild(row('🕐', '24-часовой формат', '', toggle(() => S.clock24, v => set('clock24', v))));
       c.appendChild(row('⏱', 'Показывать секунды', 'В часах на панели', toggle(() => S.showSeconds, v => set('showSeconds', v))));
-      c.appendChild(row('🌍', 'Часовой пояс', Intl.DateTimeFormat().resolvedOptions().timeZone, el('div', 'muted tiny', new Date().toString().match(/GMT[+-]\d+/) || '')));
+
+      /* Часовой пояс: берём весь список, который знает система, и добавляем
+         пункт «как на машине». Смена пояса сразу двигает все часы. */
+      const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const zones = (() => {
+        try { return Intl.supportedValuesOf('timeZone'); } catch(e){ return null; }
+      })() || ['Europe/Kaliningrad','Europe/Moscow','Europe/Samara','Asia/Yekaterinburg','Asia/Omsk',
+               'Asia/Krasnoyarsk','Asia/Irkutsk','Asia/Yakutsk','Asia/Vladivostok','Asia/Magadan',
+               'Asia/Kamchatka','Europe/London','Europe/Berlin','Europe/Kyiv','Asia/Almaty','Asia/Tbilisi',
+               'Asia/Dubai','Asia/Shanghai','Asia/Tokyo','America/New_York','America/Los_Angeles','UTC'];
+
+      /* смещение пояса прямо сейчас — чтобы список читался, а не угадывался */
+      const shift = tz => {
+        try {
+          const s2 = new Intl.DateTimeFormat('en-US', { timeZone:tz, timeZoneName:'shortOffset' })
+            .formatToParts(new Date()).find(x => x.type === 'timeZoneName');
+          return s2 ? s2.value.replace('GMT', 'UTC') : '';
+        } catch(e){ return ''; }
+      };
+
+      const list = [{ n:'Как на машине · ' + here, v:'' }]
+        .concat(zones.map(z => ({ n:z.replace(/_/g, ' ') + ' · ' + shift(z), v:z })));
+      const tsel = sel(list, () => S.tz || '', v => {
+        set('tz', v);
+        Shell.clock(); Shell.renderShell(); drawMain();
+      });
+      const tzNow = el('div', 'muted tiny', '');
+      const showNow = () => tzNow.textContent = 'сейчас ' + new Date().toLocaleTimeString('ru-RU',
+        { hour:'2-digit', minute:'2-digit', timeZone:S.tz || here });
+      showNow();
+      const tzRow = row('🌍', 'Часовой пояс', 'Влияет на часы, календарь и время в файлах', tsel);
+      tzRow.querySelector('.ctl').insertBefore(tzNow, tsel);
+      c.appendChild(tzRow);
       main.appendChild(c);
       const l = card('Язык и регион');
       const lsel = sel(Object.entries(I18N.LANGS).map(([k, v]) => ({ n:v.name, v:k })),
