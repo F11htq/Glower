@@ -825,6 +825,33 @@ try {
   check('второй запуск проходит без настройки',
     await page.evaluate(() => KV.get('setup.done', false) === true));
 
+  check('на слабой машине система сама снимает нагрузку',
+    await page.evaluate(async () => {
+      KV.set('perf.userChoice', false);
+      KV.set('perf.lite', false);
+      const real = Perf.measure.bind(Perf);
+      Perf.measure = async () => 9;                 // как будто девять кадров в секунду
+      await Perf.check();
+      const lite = KV.get('perf.lite', false) && S.blur === 0 && S.reduceMotion === true;
+      Perf.lite(false);
+      KV.set('perf.lite', false);
+      Perf.measure = real;
+      return lite && S.blur === 34;
+    }));
+
+  check('выбор пользователя система не перебивает',
+    await page.evaluate(async () => {
+      KV.set('perf.userChoice', true);              // человек сам решил
+      KV.set('perf.lite', false);
+      const real = Perf.measure.bind(Perf);
+      Perf.measure = async () => 5;
+      await Perf.check();
+      const untouched = KV.get('perf.lite', false) === false && S.blur === 34;
+      Perf.measure = real;
+      KV.set('perf.userChoice', false);
+      return untouched;
+    }));
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

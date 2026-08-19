@@ -1281,6 +1281,11 @@ APPS.settings = {
       const d = card('Рабочий стол');
       d.appendChild(row('🗂', 'Значки на рабочем столе', '', toggle(() => S.showDesktopIcons, v => set('showDesktopIcons', v))));
       d.appendChild(row('📊', 'Виджеты на рабочем столе', 'Часы, погода, заметка', toggle(() => S.showDeskWidgets, v => { set('showDeskWidgets', v); Shell.renderDeskWidgets(); })));
+      const lite = KV.get('perf.lite', false);
+      d.appendChild(row('🐢', 'Облегчённый режим', lite
+        ? 'Размытие и анимации выключены: система не увидела видеоускорения. Кадров в секунду при замере: ' + KV.get('perf.fps', '—')
+        : 'Выключает размытие и анимации на слабом железе. Система включает его сама, если кадров меньше 20 в секунду',
+        toggle(() => KV.get('perf.lite', false), v => { KV.set('perf.userChoice', true); Perf.lite(v, true); drawMain(); })));
       d.appendChild(row('🎛', 'Кнопки окна', 'Стиль Windows или macOS',
         seg([{ n:'Windows', v:'win' }, { n:'macOS', v:'mac' }], () => S.wctl, v => set('wctl', v))));
       d.appendChild(row('📍', 'Активные углы', 'Правый верхний угол — просмотр задач', toggle(() => S.hotcorners, v => set('hotcorners', v))));

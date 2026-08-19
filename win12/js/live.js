@@ -320,3 +320,63 @@ window.LockScreen = LockScreen;
     show(list);
   });
 })();
+
+/* ==========================================================================
+   8. Слабое железо: система сама снимает нагрузку
+
+   Liquid Glass — дорогое удовольствие: размытие во весь экран рисуется
+   видеокартой. Если ускорения нет (виртуальная машина без проброса GPU,
+   старый ноутбук, удалённый рабочий стол), интерфейс превращается в слайд-шоу.
+   Система это замечает по настоящим кадрам и убирает то, что не тянет, —
+   и честно говорит, что сделала и как вернуть.
+   ========================================================================== */
+const Perf = {
+  KEY:'perf.lite',
+
+  /* пользователь уже решал сам — не спорим с ним */
+  touched(){ return KV.get('perf.userChoice', false); },
+
+  async measure(ms = 2500){
+    return new Promise(res => {
+      let frames = 0;
+      const t0 = performance.now();
+      const tick = () => {
+        frames++;
+        if (performance.now() - t0 < ms) requestAnimationFrame(tick);
+        else res(Math.round(frames * 1000 / (performance.now() - t0)));
+      };
+      requestAnimationFrame(tick);
+    });
+  },
+
+  /* облегчённый режим: без размытия и лишнего движения */
+  lite(on, quiet){
+    KV.set(this.KEY, on);
+    if (on){
+      Store.set('blur', 0);
+      Store.set('saturate', 110);
+      Store.set('reduceMotion', true);
+      if (!quiet) Shell.toast('Производительность',
+        'Видеоускорение недоступно — размытие и анимации выключены, чтобы система не тормозила. ' +
+        'Вернуть можно в Параметрах → Персонализация.', '🐢', 9000);
+    } else {
+      Store.set('blur', 34);
+      Store.set('saturate', 180);
+      Store.set('reduceMotion', false);
+    }
+    applySettings();
+    Shell.renderShell();
+  },
+
+  async check(){
+    if (this.touched()) return;                 // человек выбрал сам
+    if (KV.get(this.KEY, false)) return;         // уже облегчили раньше
+    const fps = await this.measure();
+    KV.set('perf.fps', fps);
+    if (fps < 20) this.lite(true);
+  }
+};
+window.Perf = Perf;
+
+/* меряем после запуска, когда всё уже нарисовано */
+addEventListener('load', () => setTimeout(() => Perf.check(), 3500), { once:true });
