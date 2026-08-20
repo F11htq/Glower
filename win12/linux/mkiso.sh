@@ -218,7 +218,27 @@ mksquashfs "$ROOTFS" "$ISO/live/filesystem.squashfs" \
   -comp zstd -Xcompression-level 12 -noappend \
   -e boot/vmlinuz-\* -e boot/initrd.img-\* -e .debootstrapped -quiet
 
+# Своим встроенным шрифтом GRUB кириллицу не рисует: названия пунктов
+# превращаются в обрывки латиницы. Кладём в образ полный шрифт Unicode и
+# просим GRUB рисовать меню графически — тогда русские названия читаются.
+FONT=""
+for f in /usr/share/grub/unicode.pf2 /usr/share/grub/unifont.pf2; do
+  [ -f "$f" ] && { FONT="$f"; break; }
+done
+if [ -n "$FONT" ]; then
+  install -d "$ISO/boot/grub/fonts"
+  cp "$FONT" "$ISO/boot/grub/fonts/unicode.pf2"
+else
+  echo "  ВНИМАНИЕ: шрифт GRUB не найден — русские названия в меню загрузки будут нечитаемы"
+fi
+
 cat > "$ISO/boot/grub/grub.cfg" <<'GRUB'
+if loadfont /boot/grub/fonts/unicode.pf2 ; then
+  set gfxmode=auto
+  insmod all_video
+  insmod gfxterm
+  terminal_output gfxterm
+fi
 set timeout=10
 set default=0
 menuentry "GlowerOS" {
