@@ -220,5 +220,29 @@ const INSTALLER_APP = {
 
   APPS.installer = INSTALLER_APP;
   if (window.Shell && Shell.renderShell) Shell.renderShell();
+
+  /* Значок на рабочем столе живой системы — как у всех живых систем:
+     установка не должна прятаться в глубине меню. */
+  addDesktopIcon();
+
+  /* Пункт меню загрузки «Установить GlowerOS» просит открыть мастер сразу */
+  if (/[?&]install=1/.test(location.search)){
+    setTimeout(() => { try { WM.open('installer'); } catch(e){} }, 1200);
+    return;
+  }
+
   Shell.toast('Установка', 'Систему можно перенести на диск — откройте «Установка ' + Brand.name + '»', '💽', 9000);
 })();
+
+
+/* ---------- значок «Установить» на рабочем столе ---------- */
+function addDesktopIcon(){
+  const d = document.getElementById('desktop-icons') || document.querySelector('.desk-icons');
+  if (!d || d.querySelector('.ins-desk')) return;
+  const i = el('div', 'desk-icon ins-desk');
+  i.innerHTML = `<div class="ico" style="background:linear-gradient(140deg,#a78bfa,#4c1d95)">💽</div>
+    <div class="nm">Установить ${esc(Brand.name)}</div>`;
+  i.ondblclick = () => WM.open('installer');
+  i.onclick = e => { if (e.detail === 1) i.classList.add('sel'); };
+  d.appendChild(i);
+}

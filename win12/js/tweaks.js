@@ -77,13 +77,30 @@ Shell.updateTaskbar = function(){
 Shell.fitDock = function(){
   const inDock = tray.parentElement === dock;
   const taskbar = document.body.classList.contains('taskbar');
-  const pad = taskbar && inDock ? tray.offsetWidth + 22 : 0;
-  dock.style.paddingLeft = dock.style.paddingRight = pad ? pad + 'px' : '';
+  dock.style.paddingLeft = dock.style.paddingRight = '';
 
+  /* Две распорки по краям центральной группы: значки остаются посередине,
+     трей — справа, и всё это в одном потоке, поэтому наложение невозможно
+     в принципе. Когда места мало, распорки схлопываются первыми. */
+  let left = dock.querySelector('.dock-spacer.l');
+  let right = dock.querySelector('.dock-spacer.r');
+  if (taskbar && inDock){
+    if (!left){ left = el('div', 'dock-spacer l'); dock.insertBefore(left, dock.firstChild); }
+    if (!right){ right = el('div', 'dock-spacer r'); dock.insertBefore(right, tray); }
+    else if (right.nextElementSibling !== tray) dock.insertBefore(right, tray);
+  } else {
+    if (left) left.remove();
+    if (right) right.remove();
+  }
+
+  /* Если значков всё равно больше, чем влезает, уменьшаем их — как делает
+     настоящая панель задач, — но не мельче 28 px. */
   const root = document.documentElement;
   let size = S.dockSize;
   root.style.setProperty('--dock-size', size + 'px');
-  for (let i = 0; i < 14 && dock.scrollWidth > dock.clientWidth + 1 && size > 30; i++){
+  const tight = () => dock.scrollWidth > dock.clientWidth + 1 ||
+    (taskbar && inDock && (left ? left.offsetWidth : 1) < 1 && dock.scrollWidth >= dock.clientWidth);
+  for (let i = 0; i < 16 && tight() && size > 28; i++){
     size -= 2;
     root.style.setProperty('--dock-size', size + 'px');
   }

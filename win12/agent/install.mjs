@@ -18,6 +18,14 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const SCRIPT = '/usr/bin/glower-install';
 
+/* Сценарий размечает диски, поэтому требует root, а агент работает от имени
+   обычного пользователя. Значит, звать его надо через sudo — в системе для
+   этого заранее разрешён беспарольный вызов. Ключ -n важен: если разрешения
+   вдруг нет, sudo откажет сразу, а не подвиснет, ожидая пароль в пустоту. */
+const RUNNER = process.getuid && process.getuid() === 0
+  ? { cmd:SCRIPT, pre:[] }
+  : { cmd:'sudo', pre:['-n', SCRIPT] };
+
 /* диски машины: читаем /sys, чтобы не зависеть от чужих программ */
 export async function disks(){
   const out = [];
@@ -79,7 +87,7 @@ export function install(allowInstall){
     async 'install.plan'({ disk }){
       if (!allowInstall) throw new Error('установка выключена: запустите агент с ключом --allow-install');
       await checkDisk(disk);
-      const { stdout } = await run(SCRIPT, ['--disk', disk, '--dry-run'], { timeout:15000 });
+      const { stdout } = await run(RUNNER.cmd, [...RUNNER.pre, '--disk', disk, '--dry-run'], { timeout:15000 });
       return { plan:stdout };
     },
 
@@ -94,7 +102,7 @@ export function install(allowInstall){
       if (tz) args.push('--tz', String(tz).replace(/[^\w/+-]/g, ''));
 
       job = { disk, percent:0, step:'Начинаю', done:false, error:null, log:'' };
-      const p = spawn(SCRIPT, args, { stdio:['ignore', 'pipe', 'pipe'] });
+      const p = spawn(RUNNER.cmd, [...RUNNER.pre, ...args], { stdio:['ignore', 'pipe', 'pipe'] });
 
       let tail = '';
       p.stdout.on('data', d => {

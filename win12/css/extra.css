@@ -106,8 +106,14 @@ body.taskbar .dock-sep{opacity:.5}
   align-self:center;margin-left:2px;position:static;transform:none}
 #tb-tray.in-dock::before{content:'';width:1px;height:26px;margin-right:6px;
   background:linear-gradient(transparent,rgba(var(--tint),.35),transparent)}
-body.taskbar #tb-tray.in-dock{position:absolute;right:18px;top:50%;transform:translateY(-50%);margin:0}
+/* В панели задач трей стоит в общем потоке и прижат вправо распорками —
+   абсолютное положение позволяло значкам заезжать под него на узких экранах. */
+body.taskbar #tb-tray.in-dock{position:static;transform:none;margin:0 6px 0 0}
 body.taskbar #tb-tray.in-dock::before{display:none}
+.dock-spacer{flex:1 1 0;min-width:0}
+body.taskbar .dock{justify-content:flex-start}
+/* значки сжимаются раньше, чем начинают наезжать друг на друга */
+body.taskbar .dock-items,body.taskbar .dock-running{min-width:0;overflow:hidden}
 .tb-dock-search{display:flex;align-items:center;gap:8px;height:calc(var(--dock-size) * .74);
   padding:0 14px;border-radius:12px;font-size:12.5px;color:var(--fg-dim);
   background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);

@@ -882,6 +882,38 @@ try {
     }));
 
   /* --- панель задач не наезжает сама на себя --- */
+  /* панель проверяем на нескольких ширинах: на узких экранах она ломалась */
+  for (const size of [{ width:1440, height:900 }, { width:1280, height:720 },
+                      { width:1024, height:640 }, { width:860, height:600 }]){
+    await page.setViewportSize(size);
+    await page.waitForTimeout(500);
+    const r = await page.evaluate(async () => {
+      ['notepad','files','settings','music','photos','calc','mail','store','clock'].forEach(id => {
+        try { WM.open(id); } catch(e){}
+      });
+      const w = WM.wins[0];
+      if (w && !w.maximized) WM.toggleMax(w);
+      await new Promise(r2 => setTimeout(r2, 600));
+      const dock = document.querySelector('#dock');
+      const tray = document.querySelector('#tb-tray').getBoundingClientRect();
+      const items = [...document.querySelectorAll('#dock .dock-item, .tb-dock-search')];
+      const over = items.filter(n => {
+        const b = n.getBoundingClientRect();
+        return b.right > tray.left + 1 && b.left < tray.right - 1 &&
+               b.bottom > tray.top + 1 && b.top < tray.bottom - 1;
+      });
+      const d = dock.getBoundingClientRect();
+      return { over:over.length, items:items.length,
+        wider:Math.round(d.width) > innerWidth + 1,
+        outside:items.some(n => { const b = n.getBoundingClientRect();
+          return b.left < -1 || b.right > innerWidth + 1; }) };
+    });
+    check(`панель не ломается при ширине ${size.width}`,
+      r.over === 0 && !r.wider && !r.outside && r.items > 5, JSON.stringify(r));
+  }
+  await page.setViewportSize({ width:1440, height:900 });
+  await page.waitForTimeout(400);
+
   check('в развёрнутом окне значки панели не залезают на трей',
     await page.evaluate(async () => {
       ['notepad', 'files', 'settings', 'music', 'photos', 'calc', 'mail', 'store'].forEach(id => {

@@ -45,7 +45,7 @@ async function waitPort(dir, proc){
 }
 
 export function browser(uiPort){
-  let proc = null, dir = null, state = null;
+  let proc = null, dir = null, state = null, lastErr = '', exited = null;
 
   const stop = async () => {
     if (proc){ try { proc.kill('SIGTERM'); } catch(e){} }
@@ -74,15 +74,21 @@ export function browser(uiPort){
         '--no-first-run', '--no-default-browser-check', '--disable-search-engine-choice-screen',
         '--disable-sync', '--password-store=basic', '--use-mock-keychain',
         '--disable-features=TranslateUI,MediaRouter',
-        '--window-size=1280,800', '--hide-scrollbars=false'
+        '--window-size=1280,800', '--hide-scrollbars=false',
+        /* Движок рисует страницы без экрана, ускорение ему не нужно: на
+           машинах без настоящей видеокарты попытка его использовать даёт
+           пустые кадры — то самое белое окно вместо сайта. */
+        '--disable-gpu',
+        /* В живой системе /dev/shm мал, и отрисовщик из-за этого падает */
+        '--disable-dev-shm-usage'
       ];
       /* от имени root Chromium не стартует без этого ключа */
       if (process.getuid && process.getuid() === 0) args.push('--no-sandbox');
 
       proc = spawn(exe, args, { stdio:['ignore', 'ignore', 'pipe'] });
       let err = '';
-      proc.stderr.on('data', d => { err = (err + d).slice(-2000); });
-      proc.on('exit', () => { proc = null; state = null; });
+      proc.stderr.on('data', d => { err = (err + d).slice(-2000); lastErr = err; });
+      proc.on('exit', code => { exited = code; proc = null; state = null; });
 
       try {
         const { port, path } = await waitPort(dir, proc);
@@ -95,7 +101,10 @@ export function browser(uiPort){
     },
 
     async 'browser.state'(){
-      return state || { ok:false, running:false };
+      /* Оболочке нужно не только «жив или нет», но и что именно сказал
+         движок: белое окно без объяснения — худший из возможных ответов. */
+      return Object.assign({ ok:false, running:!!proc, exitCode:exited,
+        stderr:(lastErr || '').trim().split('\n').slice(-4).join('\n') }, state || {});
     },
 
     async 'browser.stop'(){ await stop(); return { ok:true }; }

@@ -234,6 +234,10 @@ class WebTab {
         if (shot && shot.data && !this.img.src) this.img.src = 'data:image/jpeg;base64,' + shot.data;
       } catch(e){}
     }, ms));
+
+    /* Если и через шесть секунд ни одного кадра нет, белое окно ничего не
+       объясняет. Спрашиваем движок, что с ним, и показываем ответ. */
+    setTimeout(() => { if (!this.img.src && this.onBlank) this.onBlank(); }, 6000);
   }
   async stopCast(){
     if (!this.sid || !this.casting) return;
@@ -449,6 +453,17 @@ APPS.browser = {
         const cdp = await Web.engine();
         if (!t.view){
           t.view = new WebTab(stage);
+          t.view.onBlank = async () => {
+            let st = {};
+            try { st = await Platform.rpc('browser.state'); } catch(e){}
+            const why = [
+              st.running === false ? 'движок больше не работает' : null,
+              st.exitCode != null ? 'код выхода ' + st.exitCode : null,
+              st.stderr || null
+            ].filter(Boolean).join(' · ');
+            fail(t, new Error('Движок открыл страницу, но не отдал ни одного кадра. ' +
+              (why || 'Он молчит и не объясняет причину.')));
+          };
           t.view.onChange = v => {
             t.url = v.url || t.url; t.title = v.title; t.loading = v.loading;
             drawTabs(); drawBar();

@@ -39,14 +39,19 @@ while [ $i -lt 50 ]; do
   i=$((i+1)); sleep 0.2
 done
 
+# Пункт меню «Установить GlowerOS» передаёт ядру glower.install=1 —
+# оболочка по этому признаку открывает мастер установки сразу.
+QUERY_EXTRA=""
+grep -q 'glower.install=1' /proc/cmdline 2>/dev/null && QUERY_EXTRA="&install=1"
+
 # --- на чём рисовать ---
 # Набор ключей собираем на каждую попытку заново: если ускоренный запуск
 # не удался, следующая попытка идёт уже начисто, на программной отрисовке.
 cmdline(){   # $1 — режим: gpu | soft
   if [ "$1" = "soft" ]; then
-    q="session=1&lite=1"; g="--disable-gpu --disable-gpu-compositing --disable-features=VizDisplayCompositor"
+    q="session=1&lite=1$QUERY_EXTRA"; g="--disable-gpu --disable-gpu-compositing --disable-features=VizDisplayCompositor"
   else
-    q="session=1"; g="--enable-features=VaapiVideoDecoder"
+    q="session=1$QUERY_EXTRA"; g="--enable-features=VaapiVideoDecoder"
   fi
   printf '%s' "--kiosk http://localhost:$PORT/?$q
 --no-first-run --no-default-browser-check --disable-search-engine-choice-screen

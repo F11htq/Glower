@@ -225,6 +225,12 @@ menuentry "GlowerOS" {
   linux /live/vmlinuz boot=live components quiet splash
   initrd /live/initrd
 }
+menuentry "Установить GlowerOS на диск" {
+  # Тот же живой запуск, но оболочка сразу открывает мастер установки —
+  # как отдельная установочная среда у Windows.
+  linux /live/vmlinuz boot=live components quiet splash glower.install=1
+  initrd /live/initrd
+}
 menuentry "GlowerOS · безопасная графика" {
   # Для машин, где драйвер экрана ядра не заводится: система поднимется
   # через обычный X-сервер и без эффектов, но поднимется.
