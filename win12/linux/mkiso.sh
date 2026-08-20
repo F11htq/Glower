@@ -73,7 +73,7 @@ apt-get install -y --no-install-recommends \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
-  parted dosfstools e2fsprogs squashfs-tools \
+  parted fdisk dosfstools e2fsprogs squashfs-tools \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
   wpasupplicant iw rfkill wireless-regdb \

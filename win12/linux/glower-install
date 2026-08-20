@@ -57,6 +57,15 @@ case "$DISK" in
 esac
 ESP="${P}2"; ROOT="${P}3"
 
+# Лучше отказаться сразу и назвать, чего не хватает, чем упасть посреди
+# разметки уже начатого диска.
+missing=""
+for tool in sfdisk wipefs partprobe blkid blockdev lsblk findmnt \
+            mkfs.vfat mkfs.ext4 unsquashfs chroot; do
+  command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+[ -z "$missing" ] || die "для установки не хватает программ:$missing"
+
 SIZE="$(blockdev --getsize64 "$DISK" 2>/dev/null || echo 0)"
 [ "$SIZE" -gt 8000000000 ] || die "на диске меньше 8 ГБ — системе не хватит места"
 
