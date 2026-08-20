@@ -914,6 +914,24 @@ try {
   await page.setViewportSize({ width:1440, height:900 });
   await page.waitForTimeout(400);
 
+  /* указатель открытого окна и подсказка когда-то делили один элемент:
+     из-за этого под значком висела белая клякса, а наведение показывало
+     обрывки. Проверяем, что теперь это разные элементы и ничего не режется. */
+  check('указатель открытого окна не спорит с подсказкой',
+    await page.evaluate(async () => {
+      ['notepad','files','music'].forEach(id => { try { WM.open(id); } catch(e){} });
+      await new Promise(r => setTimeout(r, 400));
+      const it = document.querySelector('#dock .dock-item.run');
+      if (!it) return false;
+      const before = getComputedStyle(it, '::before');
+      const after = getComputedStyle(it, '::after');
+      const узкий = parseFloat(before.width) <= 20;          // указатель — точка или полоска
+      const подсказка = after.content.includes('Блокнот') || after.content.includes('attr') ||
+                        after.content !== 'none';            // подсказка живёт отдельно
+      const целый = getComputedStyle(it.closest('.dock-items') || it).overflow !== 'hidden';
+      return узкий && подсказка && целый;
+    }));
+
   check('в развёрнутом окне значки панели не залезают на трей',
     await page.evaluate(async () => {
       ['notepad', 'files', 'settings', 'music', 'photos', 'calc', 'mail', 'store'].forEach(id => {

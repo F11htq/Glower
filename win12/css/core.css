@@ -251,12 +251,24 @@ body.dock-hidden .dock{transform:translateY(140%);opacity:0}
   transition:transform .18s var(--e-out),background var(--t1);
   will-change:transform}
 .dock-item .emo{font-size:calc(var(--dock-size) * .55);line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}
-.dock-item .app-ico{width:calc(var(--dock-size) * .82);height:calc(var(--dock-size) * .82)}
+.dock-item .app-ico{width:calc(var(--dock-size) * .78);height:calc(var(--dock-size) * .78)}
 .dock-item:hover{background:rgba(var(--tint),.16)}
 .dock-item:active{transform:scale(.86) !important}
-.dock-item.run::after{content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
-  width:5px;height:5px;border-radius:50%;background:var(--fg);opacity:.85;transition:width var(--t2) var(--e-spring)}
-.dock-item.active::after{width:18px;border-radius:3px}
+/* Указатель открытого окна рисуется через ::before, а не ::after: ::after у
+   значка уже занят всплывающей подсказкой, и они спорили за одни и те же
+   свойства — от подсказки значку доставались отступы и белый фон, из-за чего
+   под иконкой висела белая клякса, а наведение показывало обрывки.
+   Размер указателя идёт за размером значка: на сжатой панели он тоже мельче. */
+.dock-item.run::before{content:'';position:absolute;bottom:1px;left:50%;transform:translateX(-50%);
+  width:clamp(3px,calc(var(--dock-size) * .1),5px);height:clamp(3px,calc(var(--dock-size) * .1),5px);
+  border-radius:50%;background:var(--fg);opacity:.85;transition:width var(--t2) var(--e-spring);
+  pointer-events:none}
+.dock-item.active::before{width:clamp(10px,calc(var(--dock-size) * .36),18px);border-radius:3px}
+/* значку оставляем место под указатель, чтобы они не наезжали друг на друга */
+.dock-item .app-ico{margin-bottom:calc(var(--dock-size) * .06);
+  /* глиф внутри плитки тоже должен уменьшаться, иначе при сжатой панели
+     он вылезает за её края и значок выглядит смазанным */
+  font-size:calc(var(--dock-size) * .42);border-radius:calc(var(--dock-size) * .26)}
 .start-btn .os-logo{transition:transform var(--t3) var(--e-spring)}
 .start-btn:hover .os-logo{transform:rotate(-25deg) scale(1.1)}
 body.start-open .start-btn .os-logo{transform:rotate(-90deg) scale(1.05)}

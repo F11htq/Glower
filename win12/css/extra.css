@@ -112,8 +112,9 @@ body.taskbar #tb-tray.in-dock{position:static;transform:none;margin:0 6px 0 0}
 body.taskbar #tb-tray.in-dock::before{display:none}
 .dock-spacer{flex:1 1 0;min-width:0}
 body.taskbar .dock{justify-content:flex-start}
-/* значки сжимаются раньше, чем начинают наезжать друг на друга */
-body.taskbar .dock-items,body.taskbar .dock-running{min-width:0;overflow:hidden}
+/* Группам разрешаем сжиматься, но не обрезать содержимое: обрезка съедала
+   подъём значка при наведении — половина иконки просто исчезала. */
+body.taskbar .dock-items,body.taskbar .dock-running{min-width:0}
 .tb-dock-search{display:flex;align-items:center;gap:8px;height:calc(var(--dock-size) * .74);
   padding:0 14px;border-radius:12px;font-size:12.5px;color:var(--fg-dim);
   background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);
