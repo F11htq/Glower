@@ -73,7 +73,7 @@ export function browser(uiPort){
         '--user-data-dir=' + dir,
         '--no-first-run', '--no-default-browser-check', '--disable-search-engine-choice-screen',
         '--disable-sync', '--password-store=basic', '--use-mock-keychain',
-        '--disable-features=TranslateUI,MediaRouter',
+        '--disable-features=Translate,TranslateUI,MediaRouter',
         '--window-size=1280,800', '--hide-scrollbars=false',
         /* Движок рисует страницы без экрана, ускорение ему не нужно: на
            машинах без настоящей видеокарты попытка его использовать даёт
