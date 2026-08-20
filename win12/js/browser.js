@@ -181,6 +181,27 @@ class WebTab {
 
   changed(){ if (this.onChange) this.onChange(this); }
 
+  /* заставка «готовлю страницу» поверх пустого полотна */
+  waiting(on){
+    if (!on){ if (this.wait){ this.wait.remove(); this.wait = null; } return; }
+    if (this.wait) return;
+    this.wait = el('div', 'br-wait',
+      `<div class="br-spin"></div><div class="t">Открываю страницу…</div>
+       <div class="s">Первый запуск на слабой машине занимает до минуты</div>
+       <button class="btn">Что происходит</button>`);
+    this.node.appendChild(this.wait);
+    $('button', this.wait).onclick = async () => {
+      let st = {};
+      try { st = await Platform.rpc('browser.state'); } catch(e){}
+      const why = [
+        'движок: ' + (st.running ? 'работает' : 'не работает'),
+        st.exitCode != null ? 'код выхода ' + st.exitCode : null,
+        st.stderr || null
+      ].filter(Boolean).join('\n');
+      Dlg.alert('Страница ещё не пришла', why || 'Движок молчит.', 'ℹ️');
+    };
+  }
+
   async navigate(url){
     if (!this.sid) return;
     this.loading = true; this.changed();
@@ -235,9 +256,12 @@ class WebTab {
       } catch(e){}
     }, ms));
 
-    /* Если и через шесть секунд ни одного кадра нет, белое окно ничего не
-       объясняет. Спрашиваем движок, что с ним, и показываем ответ. */
-    setTimeout(() => { if (!this.img.src && this.onBlank) this.onBlank(); }, 6000);
+    /* Пока кадра нет, окно не должно быть просто белым: на слабой машине
+       первый запуск движка занимает время, и человек должен видеть, что
+       система работает, а не сломалась. */
+    this.waiting(true);
+    const stop = setInterval(() => { if (this.img.src){ clearInterval(stop); this.waiting(false); } }, 200);
+    setTimeout(() => clearInterval(stop), 120000);
   }
   async stopCast(){
     if (!this.sid || !this.casting) return;
@@ -453,17 +477,6 @@ APPS.browser = {
         const cdp = await Web.engine();
         if (!t.view){
           t.view = new WebTab(stage);
-          t.view.onBlank = async () => {
-            let st = {};
-            try { st = await Platform.rpc('browser.state'); } catch(e){}
-            const why = [
-              st.running === false ? 'движок больше не работает' : null,
-              st.exitCode != null ? 'код выхода ' + st.exitCode : null,
-              st.stderr || null
-            ].filter(Boolean).join(' · ');
-            fail(t, new Error('Движок открыл страницу, но не отдал ни одного кадра. ' +
-              (why || 'Он молчит и не объясняет причину.')));
-          };
           t.view.onChange = v => {
             t.url = v.url || t.url; t.title = v.title; t.loading = v.loading;
             drawTabs(); drawBar();

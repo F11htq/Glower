@@ -107,7 +107,7 @@ if (SYSTEM){
   SYS = {
     ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
     ...m.apps(ALLOW_LAUNCH), ...m.hardware, ...m.wifi(ALLOW_NET),
-    ...(await import('./browser.mjs')).browser(PORT),
+    ...(await import('./browser.mjs')).browser(PORT, ALLOW_LAUNCH),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET }); }
   };
