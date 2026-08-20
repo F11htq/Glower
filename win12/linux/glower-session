@@ -59,6 +59,7 @@ done
 # оболочка по этому признаку открывает мастер установки сразу.
 QUERY_EXTRA=""
 grep -q 'glower.install=1' /proc/cmdline 2>/dev/null && QUERY_EXTRA="&install=1"
+grep -q 'glower.repair=1' /proc/cmdline 2>/dev/null && QUERY_EXTRA="$QUERY_EXTRA&repair=1"
 
 # --- на чём рисовать ---
 # Набор ключей собираем на каждую попытку заново: если ускоренный запуск

@@ -239,27 +239,43 @@ if loadfont /boot/grub/fonts/unicode.pf2 ; then
   insmod gfxterm
   terminal_output gfxterm
 fi
-set timeout=10
+
+# Меню не показываем. Носитель делает одно из двух: ставит систему, если её
+# ещё нет, или уступает дорогу уже установленной. Выбор нужен только при
+# разборе поломок — он под клавишей Esc.
+set timeout=0
+set timeout_style=hidden
 set default=0
-menuentry "GlowerOS" {
-  linux /live/vmlinuz boot=live components quiet splash
-  initrd /live/initrd
-}
-menuentry "Установить GlowerOS на диск" {
-  # Тот же живой запуск, но оболочка сразу открывает мастер установки —
-  # как отдельная установочная среда у Windows.
+
+# Уже установленная система важнее носителя: иначе после установки образ,
+# оставшийся в приводе, снова лез бы вперёд со своим установщиком.
+insmod part_gpt
+insmod ext2
+insmod search_label
+search --no-floppy --label GlowerOS --set=glower_root
+if [ -n "$glower_root" ]; then
+  if [ -f ($glower_root)/boot/grub/grub.cfg ]; then
+    set root=$glower_root
+    configfile /boot/grub/grub.cfg
+  fi
+fi
+
+menuentry "Установка GlowerOS" {
   linux /live/vmlinuz boot=live components quiet splash glower.install=1
   initrd /live/initrd
 }
-menuentry "GlowerOS · безопасная графика" {
-  # Для машин, где драйвер экрана ядра не заводится: система поднимется
-  # через обычный X-сервер и без эффектов, но поднимется.
-  linux /live/vmlinuz boot=live components nomodeset \
+menuentry "Установка GlowerOS · безопасная графика" {
+  linux /live/vmlinuz boot=live components quiet glower.install=1 nomodeset \
         modprobe.blacklist=bochs,vmwgfx,virtio_gpu,qxl,vboxvideo
   initrd /live/initrd
 }
-menuentry "GlowerOS · подробный запуск" {
-  linux /live/vmlinuz boot=live components
+menuentry "Восстановление установленной системы" {
+  # Системные файлы кладутся заново, личные остаются на месте.
+  linux /live/vmlinuz boot=live components quiet splash glower.install=1 glower.repair=1
+  initrd /live/initrd
+}
+menuentry "Подробный запуск установщика" {
+  linux /live/vmlinuz boot=live components glower.install=1
   initrd /live/initrd
 }
 GRUB

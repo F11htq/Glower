@@ -11,7 +11,7 @@
      — установка идёт в одном экземпляре, ход виден оболочке построчно.
    ========================================================================== */
 import { spawn, execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
@@ -53,6 +53,14 @@ async function liveDevice(){
   } catch(e){ return null; }
 }
 
+/* Уже установленная система опознаётся по метке раздела — её ставит сам
+   установщик. Никаких внешних программ для этого не нужно. */
+function installedRoot(){
+  const link = '/dev/disk/by-label/GlowerOS';
+  if (!existsSync(link)) return null;
+  try { return realpathSync(link); } catch(e){ return link; }
+}
+
 export function install(allowInstall){
   let job = null;      // { disk, percent, step, done, error, log }
 
@@ -64,6 +72,7 @@ export function install(allowInstall){
         allowed:!!allowInstall,
         script:existsSync(SCRIPT),
         live,
+        installed:installedRoot(),
         efi:existsSync('/sys/firmware/efi'),
         reason: !allowInstall ? 'установка выключена: агент запущен без ключа --allow-install'
               : !existsSync(SCRIPT) ? 'в системе нет /usr/bin/glower-install'
@@ -91,12 +100,13 @@ export function install(allowInstall){
       return { plan:stdout };
     },
 
-    async 'install.start'({ disk, password, hostname, tz }){
+    async 'install.start'({ disk, password, hostname, tz, repair }){
       if (!allowInstall) throw new Error('установка выключена: запустите агент с ключом --allow-install');
       if (job && !job.done) throw new Error('установка уже идёт');
       await checkDisk(disk);
 
       const args = ['--disk', disk, '--yes'];
+      if (repair) args.push('--repair');
       if (password) args.push('--pass', String(password));
       if (hostname) args.push('--hostname', String(hostname).replace(/[^\w.-]/g, '') || 'GlowerOS');
       if (tz) args.push('--tz', String(tz).replace(/[^\w/+-]/g, ''));

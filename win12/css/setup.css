@@ -106,3 +106,18 @@
 @media (prefers-reduced-motion:reduce){
   .wl-ring span,.wl-logo,.setup-hello .os-logo{animation:none}
 }
+
+/* ==========================================================================
+   Установочная среда: на экране только мастер
+   ========================================================================== */
+body.setup-env .dock-wrap,
+body.setup-env .topbar,
+body.setup-env #desktop-icons,
+body.setup-env .desk-widgets,
+body.setup-env #widgets,
+body.setup-env #cc{display:none !important}
+body.setup-env #wallpaper{filter:saturate(.75) brightness(.72)}
+/* окно мастера в установочной среде — без рамочных кнопок: закрывать нечего */
+body.setup-env .win [data-a="min"],
+body.setup-env .win [data-a="max"],
+body.setup-env .win [data-a="close"]{display:none}

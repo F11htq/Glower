@@ -54,6 +54,15 @@
     await scriptsReady;
 
     /* первый запуск: сначала настройка, рабочий стол — после неё */
+    /* Установочная среда: человек пришёл ставить систему, а не пользоваться
+       временной. Ни входа, ни настройки, ни рабочего стола — только мастер,
+       как у Windows. */
+    if (/[?&]install=1/.test(location.search)){
+      document.body.classList.add('setup-env');
+      if (window.Profiles) Profiles.ok = true;
+      unlock();
+      return;
+    }
     if (window.Setup && Setup.needed()){
       lock.classList.add('gone');
       document.body.classList.remove('locked');

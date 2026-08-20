@@ -15,13 +15,14 @@
 # ==========================================================================
 set -eu
 
-DISK=""; PASS=""; HOST="GlowerOS"; TZ=""; DRY=0; YES=0
+DISK=""; PASS=""; HOST="GlowerOS"; TZ=""; DRY=0; YES=0; REPAIR=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --disk) DISK="$2"; shift 2 ;;
     --pass) PASS="$2"; shift 2 ;;
     --hostname) HOST="$2"; shift 2 ;;
     --tz) TZ="$2"; shift 2 ;;
+    --repair) REPAIR=1; shift ;;
     --dry-run) DRY=1; shift ;;
     --yes) YES=1; shift ;;
     *) echo "неизвестный ключ: $1" >&2; exit 2 ;;
@@ -80,17 +81,27 @@ if [ "$DRY" = 1 ]; then
   exit 0
 fi
 
-[ "$YES" = 1 ] || die "это стирает диск целиком: подтвердите ключом --yes"
+[ "$YES" = 1 ] || die "это меняет содержимое диска: подтвердите ключом --yes"
 
 TARGET=/mnt/glower-install
 trap 'umount -R "$TARGET" 2>/dev/null || true' EXIT INT TERM
 
-say 2 "Готовлю диск"
 umount -R "$TARGET" 2>/dev/null || true
 for part in $(lsblk -lno NAME "$DISK" | tail -n +2); do umount "/dev/$part" 2>/dev/null || true; done
-wipefs -a "$DISK" >/dev/null 2>&1 || true
 
-say 6 "Размечаю разделы"
+if [ "$REPAIR" = 1 ]; then
+  # Восстановление: разметку не трогаем совсем. Системные файлы кладём заново
+  # поверх, а личные — /home и рабочую папку — оставляем как есть. Так чинится
+  # система, у которой повреждены свои файлы, без потери данных человека.
+  say 2 "Ищу установленную систему"
+  [ -b "$ROOT" ] || die "на $DISK нет раздела с системой — восстанавливать нечего"
+  blkid -s LABEL -o value "$ROOT" 2>/dev/null | grep -qi glower || \
+    die "раздел $ROOT не похож на систему GlowerOS"
+else
+  say 2 "Готовлю диск"
+  wipefs -a "$DISK" >/dev/null 2>&1 || true
+
+  say 6 "Размечаю разделы"
 sfdisk --quiet --wipe always --wipe-partitions always "$DISK" <<PART
 label: gpt
 start=1MiB,   size=1MiB,   type=21686148-6449-6E6F-744E-656564454649, name="bios"
@@ -101,9 +112,10 @@ partprobe "$DISK" 2>/dev/null || partx -u "$DISK" 2>/dev/null || blockdev --rere
 udevadm settle 2>/dev/null || sleep 2
 [ -b "$ROOT" ] || { sleep 2; [ -b "$ROOT" ] || die "разделы не появились: ядро не перечитало таблицу"; }
 
-say 10 "Создаю файловые системы"
-mkfs.vfat -F32 -n GLOWER-EFI "$ESP" >/dev/null
-mkfs.ext4 -F -q -L GlowerOS "$ROOT" >/dev/null
+  say 10 "Создаю файловые системы"
+  mkfs.vfat -F32 -n GLOWER-EFI "$ESP" >/dev/null
+  mkfs.ext4 -F -q -L GlowerOS "$ROOT" >/dev/null
+fi
 
 say 14 "Подключаю разделы"
 mkdir -p "$TARGET"
@@ -117,6 +129,14 @@ if ! mount "$ESP" "$TARGET/boot/efi" 2>/dev/null; then
   [ -d /sys/firmware/efi ] && die "раздел EFI не подключается — установить загрузчик UEFI нечем"
   ESP_OK=0
   say 15 "Раздел EFI не подключился — ставлю загрузчик только для BIOS"
+fi
+
+if [ "$REPAIR" = 1 ]; then
+  # сносим только системные каталоги; /home, /root и /var/log остаются
+  say 16 "Убираю повреждённые системные файлы"
+  for d in bin sbin lib lib32 lib64 libx32 usr etc opt srv; do
+    rm -rf "${TARGET:?}/$d"
+  done
 fi
 
 say 18 "Переношу систему на диск"
@@ -143,6 +163,16 @@ printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "$HOST" > "$TARGET/etc/hosts"
 
 # на диске система больше не живая: настройки пользователя должны переживать перезагрузку
 rm -f "$TARGET/etc/systemd/system/multi-user.target.wants/live-"* 2>/dev/null || true
+
+# На установленной машине меню загрузчика не нужно: система одна и должна
+# стартовать сразу, как Windows. Меню остаётся доступным по Shift или Esc.
+{
+  echo 'GRUB_TIMEOUT=0'
+  echo 'GRUB_TIMEOUT_STYLE=hidden'
+  echo 'GRUB_RECORDFAIL_TIMEOUT=0'
+  echo 'GRUB_DISTRIBUTOR="GlowerOS"'
+  echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"'
+} >> "$TARGET/etc/default/grub"
 
 say 80 "Подключаю служебные каталоги"
 for d in dev dev/pts proc sys run; do

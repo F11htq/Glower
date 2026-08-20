@@ -20,6 +20,7 @@ const Install = {
   disks(){ return Platform.rpc('install.disks'); },
   plan(disk){ return Platform.rpc('install.plan', { disk }); },
   start(o){ return Platform.rpc('install.start', o); },
+  repairing(){ return /[?&]repair=1/.test(location.search); },
   state(){ return Platform.rpc('install.state'); },
   size(b){
     const g = b / 1000 / 1000 / 1000;
@@ -44,7 +45,8 @@ const INSTALLER_APP = {
     foot.append(back, spacer, next);
     wrap.append(body, foot);
 
-    const S2 = { step:0, disk:null, disks:[], pass:'', host:'GlowerOS', can:null, busy:false };
+    const S2 = { step:0, disk:null, disks:[], pass:'', host:'GlowerOS', can:null, busy:false,
+                 repair:Install.repairing() };
 
     const draw = async () => {
       body.innerHTML = '';
@@ -55,18 +57,22 @@ const INSTALLER_APP = {
       /* --- 0. приветствие --- */
       if (S2.step === 0){
         S2.can = S2.can || await Install.can();
+        const чиним = S2.repair;
         body.innerHTML = `
-          <img class="os-logo ins-logo" src="assets/logo.png" alt="" draggable="false">
-          <h1>Установка ${esc(Brand.name)}</h1>
-          <p class="ins-lead">Сейчас система работает из памяти и всё забывает при выключении.
-            Установка перенесёт её на диск: настройки, файлы и учётная запись начнут сохраняться.</p>`;
+          <img class="os-logo ins-logo" src="assets/logo.png" alt="" draggable="false"
+               onerror="this.remove()">
+          <h1>${чиним ? 'Восстановление ' + esc(Brand.name) : 'Установка ' + esc(Brand.name)}</h1>
+          <p class="ins-lead">${чиним
+            ? 'Системные файлы будут положены заново поверх установленной системы. Личные файлы и папка пользователя останутся на месте.'
+            : 'Сейчас система работает из памяти и всё забывает при выключении. Установка перенесёт её на диск: настройки, файлы и учётная запись начнут сохраняться.'}</p>`;
         if (!S2.can.allowed || S2.can.reason){
           body.appendChild(el('div', 'ins-warn',
             'Установка недоступна: ' + esc(S2.can.reason || 'причина неизвестна')));
           next.disabled = true;
         } else {
-          body.appendChild(el('div', 'ins-note',
-            'Диск, который вы выберете, будет очищен полностью. Всё, что на нём есть, исчезнет.'));
+          body.appendChild(el('div', 'ins-note', чиним
+            ? 'Разметка диска не меняется. Заменяются только файлы самой системы.'
+            : 'Диск, который вы выберете, будет очищен полностью. Всё, что на нём есть, исчезнет.'));
         }
         win.setSub('Шаг 1 из 4');
         return;
@@ -130,9 +136,10 @@ const INSTALLER_APP = {
             <div class="r"><span>Имя машины</span><b>${esc(S2.host)}</b></div>
             <div class="r"><span>Пароль</span><b>${S2.pass ? 'задан' : 'без пароля'}</b></div>
           </div>`;
-        body.appendChild(el('div', 'ins-warn',
-          'Диск ' + esc(S2.disk) + ' будет стёрт полностью, вместе со всеми разделами и данными. Отменить это будет нечем.'));
-        next.textContent = 'Стереть диск и установить';
+        body.appendChild(el('div', S2.repair ? 'ins-note' : 'ins-warn', S2.repair
+          ? 'Разметка и личные файлы не трогаются. Заменяются файлы системы: ' + esc(S2.disk) + '.'
+          : 'Диск ' + esc(S2.disk) + ' будет стёрт полностью, вместе со всеми разделами и данными. Отменить это будет нечем.'));
+        next.textContent = S2.repair ? 'Восстановить систему' : 'Стереть диск и установить';
         win.setSub('Шаг 4 из 4');
         return;
       }
@@ -148,7 +155,8 @@ const INSTALLER_APP = {
         win.setSub('Установка идёт');
         const bar = $('.ins-bar i', body), stepEl = $('.ins-step', body), pre = $('.ins-log pre', body);
 
-        try { await Install.start({ disk:S2.disk, password:S2.pass, hostname:S2.host, tz:S.tz || undefined }); }
+        try { await Install.start({ disk:S2.disk, password:S2.pass, hostname:S2.host,
+                                    tz:S.tz || undefined, repair:S2.repair }); }
         catch(e){ return fail(e); }
 
         const tick = async () => {
@@ -169,7 +177,7 @@ const INSTALLER_APP = {
       if (S2.step === 5){
         body.innerHTML = `
           <img class="os-logo ins-logo" src="assets/logo.png" alt="" draggable="false">
-          <h1>Система установлена</h1>
+          <h1>${S2.repair ? 'Система восстановлена' : 'Система установлена'}</h1>
           <p class="ins-lead">${esc(Brand.name)} перенесена на ${esc(S2.disk)}.
             Выньте установочный носитель и перезагрузите машину — дальше она будет грузиться с диска
             и запомнит всё, что вы настроите.</p>`;
@@ -198,9 +206,14 @@ const INSTALLER_APP = {
       if (S2.step === 6){ S2.step = 1; return draw(); }
       if (S2.step === 5){ return Shell.power('restart'); }
       if (S2.step === 3){
-        if (!await Dlg.confirm('Стереть диск ' + S2.disk + '?',
-            'Все разделы и данные на этом диске исчезнут. Это необратимо.',
-            { icon:'💽', okText:'Стереть и установить', danger:true })) return;
+        const ok = S2.repair
+          ? await Dlg.confirm('Восстановить систему на ' + S2.disk + '?',
+              'Файлы самой системы будут заменены. Личные файлы останутся на месте.',
+              { icon:'🛠', okText:'Восстановить' })
+          : await Dlg.confirm('Стереть диск ' + S2.disk + '?',
+              'Все разделы и данные на этом диске исчезнут. Это необратимо.',
+              { icon:'💽', okText:'Стереть и установить', danger:true });
+        if (!ok) return;
       }
       S2.step++;
       draw();
@@ -211,23 +224,47 @@ const INSTALLER_APP = {
 };
 
 /* ---------- показываем мастер только там, где он имеет смысл ---------- */
+/* Если что-то в опознании сорвалось, пишем это в файл рабочей папки: на живой
+   машине консоли не видно, и без записи причину отказа не узнать. При
+   нормальной работе файл не появляется. */
+let журнал = '';
+async function отметка(текст){
+  журнал += new Date().toISOString() + '  ' + текст + '\n';
+  try { await Platform.rpc('fs.write', { path:'установка.log', body:журнал }); } catch(e){}
+}
+
 (async function offer(){
-  for (let i = 0; i < 40 && !(window.OS && OS.on()); i++)
-    await new Promise(r => setTimeout(r, 250));
-  if (!(window.OS && OS.on())) return;
-  const can = await Install.can();
-  if (!can.allowed || can.reason) return;
+  /* Слабая машина отвечает медленно и не с первого раза: пока система
+     раскачивается, запрос к агенту может не пройти. Одной попытки поэтому
+     мало — переспрашиваем, но не дольше пяти минут. */
+  const пауза = ms => new Promise(r => setTimeout(r, ms));
+  let can = null;
+  for (let i = 0; i < 100; i++){
+    if (window.OS && OS.on()){
+      can = await Install.can();
+      if (can.allowed && !can.reason) break;
+      if (can.reason && /живой системы/.test(can.reason)) return;   // уже установлена
+    }
+    await пауза(3000);
+    can = null;
+  }
+  if (!can) return;
 
   APPS.installer = INSTALLER_APP;
-  if (window.Shell && Shell.renderShell) Shell.renderShell();
+  try { if (window.Shell && Shell.renderShell) Shell.renderShell(); }
+  catch(e){ отметка('перерисовка оболочки упала: ' + e.message); }
 
-  /* Значок на рабочем столе живой системы — как у всех живых систем:
-     установка не должна прятаться в глубине меню. */
-  addDesktopIcon();
+  try { addDesktopIcon(); }
+  catch(e){ отметка('значок не поставился: ' + e.message); }
 
-  /* Пункт меню загрузки «Установить GlowerOS» просит открыть мастер сразу */
+  /* Установочная среда: мастер открывается сам и на весь экран */
   if (/[?&]install=1/.test(location.search)){
-    setTimeout(() => { try { WM.open('installer'); } catch(e){} }, 1200);
+    setTimeout(() => {
+      try {
+        const w = WM.open('installer');
+        if (w && !w.maximized) WM.toggleMax(w);
+      } catch(e){ отметка('открыть мастер не вышло: ' + e.message); }
+    }, 1200);
     return;
   }
 
@@ -236,13 +273,25 @@ const INSTALLER_APP = {
 
 
 /* ---------- значок «Установить» на рабочем столе ---------- */
+/* Рабочий стол перерисовывает свои значки целиком, поэтому дописывать наш
+   сбоку бесполезно — он исчезал при первой же перерисовке. Вклиниваемся в
+   саму отрисовку. */
 function addDesktopIcon(){
-  const d = document.getElementById('desktop-icons') || document.querySelector('.desk-icons');
-  if (!d || d.querySelector('.ins-desk')) return;
-  const i = el('div', 'desk-icon ins-desk');
-  i.innerHTML = `<div class="ico" style="background:linear-gradient(140deg,#a78bfa,#4c1d95)">💽</div>
-    <div class="nm">Установить ${esc(Brand.name)}</div>`;
-  i.ondblclick = () => WM.open('installer');
-  i.onclick = e => { if (e.detail === 1) i.classList.add('sel'); };
-  d.appendChild(i);
+  if (Shell.__insIcon) return;
+  Shell.__insIcon = true;
+  const orig = Shell.renderIcons.bind(Shell);
+  Shell.renderIcons = function(){
+    orig();
+    const box = document.getElementById('desktop-icons');
+    if (!box || box.querySelector('.ins-desk')) return;
+    const n = el('div', 'di ins-desk',
+      `<div class="glyph">💽</div><div class="lbl">Установить ${esc(Brand.name)}</div>`);
+    n.onclick = e => { e.stopPropagation();
+      box.querySelectorAll('.di').forEach(x => x.classList.remove('sel')); n.classList.add('sel'); };
+    n.ondblclick = () => WM.open('installer');
+    n.oncontextmenu = e => { e.preventDefault(); e.stopPropagation();
+      Shell.ctx(e.clientX, e.clientY, [{ i:'💽', t:'Установить систему', f:() => WM.open('installer') }]); };
+    box.appendChild(n);
+  };
+  Shell.renderIcons();
 }

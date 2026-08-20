@@ -996,6 +996,39 @@ try {
       return ok;
     }));
 
+  /* установочная среда: только мастер, ничего лишнего вокруг */
+  const среда = await (async () => {
+    const p2 = await browser.newPage({ viewport:{ width:1280, height:800 } });
+    try {
+      await p2.goto(URL_APP + '?install=1');
+      await p2.waitForFunction(() => document.querySelector('#desktop').classList.contains('on'),
+        null, { timeout:20000 }).catch(() => {});
+      return await p2.evaluate(() => ({
+        настройка:!!document.querySelector('#setup.on'),
+        заблокировано:!document.querySelector('#lock').classList.contains('gone'),
+        рабочий:document.querySelector('#desktop').classList.contains('on'),
+        средаУстановки:document.body.classList.contains('setup-env'),
+        докВиден:getComputedStyle(document.querySelector('.dock-wrap')).display !== 'none'
+      }));
+    } finally { await p2.close(); }
+  })();
+  check('в установочной среде нет ни входа, ни настройки',
+    среда.настройка === false && среда.заблокировано === false && среда.рабочий === true,
+    JSON.stringify(среда));
+  check('в установочной среде убран рабочий стол',
+    среда.средаУстановки === true && среда.докВиден === false, JSON.stringify(среда));
+
+  check('восстановление опознаётся отдельно от установки',
+    await (async () => {
+      const p3 = await browser.newPage({ viewport:{ width:1280, height:800 } });
+      try {
+        await p3.goto(URL_APP + '?install=1&repair=1');
+        await p3.waitForTimeout(1500);
+        return await p3.evaluate(() => Install.repairing() === true &&
+          /[?&]install=1/.test(location.search));
+      } finally { await p3.close(); }
+    })());
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){
