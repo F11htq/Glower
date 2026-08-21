@@ -338,7 +338,8 @@ APPS.store = {
     wrap.append(bar, body);
     let tab = 'catalog';
 
-    [['catalog','🛍 Каталог'],['mine','📦 Установленные'],['dev','🧑‍💻 Своё приложение']].forEach(([k, n]) => {
+    [['catalog','🛍 Каталог'],['mine','📦 Установленные'],
+     ['linux','🐧 Программы Linux'],['dev','🧑‍💻 Своё приложение']].forEach(([k, n]) => {
       const b = el('button', 'btn' + (k === tab ? ' pri' : ''), n);
       b.onclick = () => { tab = k; $$('.btn', bar).forEach(x => x.classList.remove('pri')); b.classList.add('pri'); draw(); };
       bar.appendChild(b);
@@ -375,7 +376,134 @@ APPS.store = {
       return c;
     }
 
+    /* ---------- программы машины: настоящие пакеты из репозиториев ---------- */
+    const Pkg = {
+      state(){ return Platform.rpc('pkg.state'); },
+      search(query){ return Platform.rpc('pkg.search', { query }); },
+      info(name){ return Platform.rpc('pkg.info', { name }); },
+      installed(){ return Platform.rpc('pkg.installed'); },
+      install(name){ return Platform.rpc('pkg.install', { name }); },
+      remove(name){ return Platform.rpc('pkg.remove', { name }); },
+      update(){ return Platform.rpc('pkg.update'); },
+      job(){ return Platform.rpc('pkg.job'); }
+    };
+    const размер = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ'
+                                              : Math.round(b / 1024) + ' КБ';
+    let поискСтрока = '', поискСписок = null, работа = null;
+
+    async function следиЗаРаботой(перерисовать){
+      for (let i = 0; i < 900; i++){
+        let j;
+        try { j = await Pkg.job(); } catch(e){ break; }
+        работа = j.running ? j : null;
+        перерисовать(j);
+        if (!j.running){
+          Shell.toast('Программы машины',
+            j.ok ? (j.action === 'install' ? 'Установлено: ' + j.name
+                  : j.action === 'remove' ? 'Удалено: ' + j.name : 'Списки обновлены')
+                 : 'Не вышло: ' + (j.error || 'неизвестная причина'),
+            j.ok ? '✅' : '⚠️', 7000);
+          break;
+        }
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      работа = null;
+      draw();
+    }
+
+    async function drawLinux(){
+      const st = await Pkg.state().catch(e => ({ reason:String(e.message || e) }));
+      body.innerHTML = '';
+      body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Программы Linux</h2>
+        <div style="opacity:.85">Настоящие программы из репозиториев Ubuntu: ставятся в систему,
+        появляются в «Программах машины» и запускаются как обычные</div>`));
+
+      if (!st || st.reason){
+        body.appendChild(el('div', 'set-note', esc((st && st.reason) ||
+          'Установка программ доступна, только когда система управляет машиной')));
+        win.setSub('недоступно');
+        return;
+      }
+
+      const bar2 = el('div', 'row');
+      const inp = el('input', 'inp grow');
+      inp.placeholder = '🔎 Название программы: gimp, vlc, telegram…';
+      inp.value = поискСтрока;
+      const go = el('button', 'btn pri', 'Найти');
+      const upd = el('button', 'btn', '🔄 Обновить списки');
+      bar2.append(inp, go, upd);
+      body.appendChild(bar2);
+
+      const найти = async () => {
+        поискСтрока = inp.value.trim();
+        if (поискСтрока.length < 2) return;
+        поискСписок = 'ищу';
+        draw();
+        try {
+          const r = await Pkg.search(поискСтрока);
+          const list = r.list.slice(0, 24);
+          /* подробности берём только для показанных: иначе это сотни запросов */
+          поискСписок = await Promise.all(list.map(async x => {
+            try { return Object.assign(x, await Pkg.info(x.name)); } catch(e){ return x; }
+          }));
+        } catch(e){ поискСписок = { ошибка:String(e.message || e) }; }
+        draw();
+      };
+      go.onclick = найти;
+      inp.onkeydown = e => { if (e.key === 'Enter') найти(); };
+      upd.onclick = async () => {
+        try { await Pkg.update(); следиЗаРаботой(() => {}); draw(); }
+        catch(e){ Dlg.alert('Обновление списков', String(e.message || e), '⚠️'); }
+      };
+
+      if (работа){
+        const box = el('div', 'card', '');
+        box.style.padding = '14px';
+        box.innerHTML = `<b>${esc(работа.action === 'remove' ? 'Удаление' : работа.action === 'update' ? 'Обновление списков' : 'Установка')}
+          ${esc(работа.name || '')}</b>
+          <div class="ins-bar" style="margin-top:10px"><i style="width:${работа.percent || 0}%"></i></div>
+          <div class="muted tiny" style="margin-top:6px">${esc(работа.step || '')}</div>`;
+        body.appendChild(box);
+      }
+
+      if (поискСписок === 'ищу'){
+        body.appendChild(el('div', 'empty', 'Ищу в репозиториях…'));
+      } else if (поискСписок && поискСписок.ошибка){
+        body.appendChild(el('div', 'set-note', esc(поискСписок.ошибка)));
+      } else if (Array.isArray(поискСписок)){
+        body.appendChild(el('div', 'card-t', 'Найдено'));
+        if (!поискСписок.length) body.appendChild(el('div', 'empty', 'Ничего не найдено'));
+        поискСписок.forEach(x => {
+          const b2 = el('button', 'btn' + (x.installed ? '' : ' pri'),
+            x.installed ? 'Удалить' : '⬇ Установить');
+          b2.disabled = !!работа;
+          b2.onclick = async () => {
+            try {
+              if (x.installed){
+                if (!await Dlg.confirm('Удалить ' + x.name + '?',
+                    'Программа будет удалена из системы вместе с ненужными зависимостями.',
+                    { icon:'🗑️', okText:'Удалить', danger:true })) return;
+                await Pkg.remove(x.name);
+              } else await Pkg.install(x.name);
+              следиЗаРаботой(() => {});
+              draw();
+            } catch(e){ Dlg.alert('Программы машины', String(e.message || e), '⚠️'); }
+          };
+          const сведения = [x.installed ? 'установлена ' + x.installed : x.candidate || '',
+                            размер(x.size) ? 'займёт ' + размер(x.size) : '']
+                            .filter(Boolean).join(' · ');
+          body.appendChild(row('📦', x.name, (x.about || '') + (сведения ? ' · ' + сведения : ''), b2));
+        });
+      } else {
+        body.appendChild(el('div', 'set-note',
+          'Введите название программы. Список берётся из репозиториев Ubuntu — тех же, ' +
+          'что у обычной системы Linux.'));
+      }
+      win.setSub('программы Linux');
+    }
+
     function draw(){
+      if (tab === 'linux'){ drawLinux(); return; }
       body.innerHTML = '';
       if (tab === 'catalog'){
         body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Магазин ${Brand.name}</h2>

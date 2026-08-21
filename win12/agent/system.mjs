@@ -329,7 +329,7 @@ export async function capabilities(flags){
     },
     backlight: existsSync(BL) && (await readdir(BL).catch(() => [])).length > 0,
     allow:{ power:!!flags.power, launch:!!flags.launch, open:!!flags.open,
-      install:!!flags.install, net:!!flags.net }
+      install:!!flags.install, net:!!flags.net, packages:!!flags.packages }
   };
 }
 

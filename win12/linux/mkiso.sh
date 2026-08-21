@@ -177,7 +177,7 @@ Environment=XDG_SESSION_TYPE=wayland
 # Кавычки обязательны: без них systemd видит только первое слово, а
 # остальные ключи молча теряет — оттого в системе не работали ни выключение,
 # ни установка, ни сети.
-Environment="GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power --allow-install --allow-net"
+Environment="GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power --allow-install --allow-net --allow-packages"
 ExecStartPre=/bin/mkdir -p /run/user/1000
 ExecStartPre=/bin/chown glower:glower /run/user/1000
 ExecStart=/usr/bin/cage -- /usr/bin/glower-session

@@ -257,6 +257,27 @@ try {
   check('мастер установки не появляется там, где установка невозможна',
     await page.evaluate(() => !APPS.installer));
 
+  /* --- программы Linux: поиск открыт, установка под ключом --- */
+  const pkgState = await page.evaluate(() => Platform.rpc('pkg.state').then(x => x, e => ({ err:e.message })));
+  check('система знает, чем ставить программы',
+    pkgState.apt === true && pkgState.allowed === false, JSON.stringify(pkgState));
+  check('без --allow-packages установка закрыта, и причина названа',
+    /--allow-packages/.test(pkgState.reason || ''), String(pkgState.reason));
+
+  const pkgFind = await page.evaluate(() => Platform.rpc('pkg.search', { query:'coreutils' })
+    .then(r => r.list.length, e => 'ошибка: ' + e.message));
+  check('поиск по репозиториям работает и без разрешения на установку',
+    typeof pkgFind === 'number' && pkgFind > 0, String(pkgFind));
+
+  const pkgTry = await page.evaluate(() => Platform.rpc('pkg.install', { name:'htop' })
+    .then(() => 'запустилось', e => e.message));
+  check('без ключа программу не поставить', /--allow-packages/.test(pkgTry), String(pkgTry));
+
+  const pkgBad = await page.evaluate(() => Platform.rpc('pkg.install', { name:'--reinstall' })
+    .then(() => 'приняло', e => e.message));
+  check('вместо имени пакета ключ подсунуть нельзя',
+    /недопустимое имя|--allow-packages/.test(pkgBad), String(pkgBad));
+
   check('агент сообщил о системном слое при запуске', /Системный слой:\s+включён/.test(agentLog));
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));
