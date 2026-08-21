@@ -196,7 +196,15 @@ try {
   await page.evaluate(() => { WM.open('calc'); WM.open('clock'); Session.save(); });
   await page.waitForTimeout(700);
   await page.reload();
-  await page.waitForTimeout(2500); await page.keyboard.press('Enter');
+  /* Под нагрузкой экран блокировки появляется позже, и одиночное нажатие
+     Enter уходило в пустоту: рабочий стол не открывался, а восстановление
+     сеанса начинается только после него. Жмём, пока стол не откроется. */
+  for (let i = 0; i < 40; i++){
+    const ready = await page.evaluate(() => document.querySelector('#desktop').classList.contains('on'));
+    if (ready) break;
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+  }
   /* восстановление идёт по таймеру, а под нагрузкой он растягивается —
      ждём результата, а не фиксированной паузы */
   const restored = await page.evaluate(async () => {

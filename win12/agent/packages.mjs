@@ -93,8 +93,16 @@ export function packages(allowPackages){
       let apt_ = false, sudo = false;
       try { await run('which', ['apt-get']); apt_ = true; } catch(e){}
       try { await run('sudo', ['-n', 'true']); sudo = true; } catch(e){}
+      /* Списки пакетов в образе вычищены, чтобы он не пух. Пока их не
+         обновили, поиск честно ничего не найдёт — и оболочка должна об
+         этом знать, а не показывать пустоту как «ничего не найдено». */
+      let lists = false;
+      try {
+        const { readdirSync } = await import('node:fs');
+        lists = readdirSync('/var/lib/apt/lists').some(f => /_Packages(\.|$)/.test(f));
+      } catch(e){}
       return {
-        allowed:!!allowPackages, apt:apt_, sudo,
+        allowed:!!allowPackages, apt:apt_, sudo, lists,
         busy:!!(job && !job.done),
         reason: !apt_ ? 'на машине нет apt' : !sudo ? 'у системы нет права ставить программы'
               : !allowPackages ? 'установка программ выключена: нужен ключ --allow-packages' : null
