@@ -149,6 +149,10 @@ NMCONF
 # Telegram, Firefox, Spotify и прочие. Подключаем сразу, чтобы человеку не
 # пришлось об этом знать.
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+# Списки Flathub кладём сразу: иначе первый поиск в собранной системе честно
+# ничего не найдёт, и человеку придётся догадываться, что источник не готов.
+# Если у машины сборки нет сети — не беда, система подключит их сама.
+flatpak update --appstream -y --noninteractive 2>/dev/null || true
 
 echo "GlowerOS" > /etc/hostname
 # файл достался от машины, где собирали образ: адреса чужие, пусть его

@@ -385,6 +385,7 @@ APPS.store = {
       install(name, source){ return Platform.rpc('pkg.install', { name, source }); },
       remove(name, source){ return Platform.rpc('pkg.remove', { name, source }); },
       update(source){ return Platform.rpc('pkg.update', { source }); },
+      flathub(){ return Platform.rpc('pkg.flathub'); },
       job(){ return Platform.rpc('pkg.job'); },
       cancel(){ return Platform.rpc('pkg.cancel'); }
     };
@@ -436,6 +437,32 @@ APPS.store = {
           'Система сейчас работает из памяти: всё поставленное занимает оперативку и исчезнет ' +
           'при выключении. Свободно ' + гб(st.free) + '. Для больших программ сначала установите ' +
           'систему на диск — там места столько же, сколько на диске.'));
+      }
+
+      /* Flathub подключается отдельно: у него свои списки, и без них поиск по
+         нему честно ничего не находит. Показываем это прямо, а не молчим. */
+      if (st.flatpak && !st.flathubData){
+        const box = el('div', 'card', '');
+        box.style.padding = '14px';
+        box.innerHTML = `<b>Flathub ещё не подключён</b>
+          <div class="muted tiny" style="margin-top:6px;line-height:1.45">
+            Telegram, Spotify, Firefox и прочее живёт там. Списки Flathub качаются
+            отдельно — это около 30 МБ и одна-две минуты, зато потом поиск находит всё.</div>`;
+        const b3 = el('button', 'btn pri', '🫙 Подключить Flathub');
+        b3.style.marginTop = '10px';
+        b3.disabled = !!работа;
+        b3.onclick = async () => {
+          try {
+            await Pkg.flathub(); draw();
+            const j = await дождисьРаботы();
+            if (j.ok){ st.flathubData = true; st.flathub = true; }
+            Shell.toast('Программы Linux', j.ok ? 'Flathub подключён' :
+              'Не вышло подключить Flathub: ' + (j.error || ''), j.ok ? '✅' : '⚠️', 7000);
+            if (j.ok && поискСтрока.length >= 2) найти(); else draw();
+          } catch(e){ Dlg.alert('Flathub', String(e.message || e), '⚠️'); }
+        };
+        box.appendChild(b3);
+        body.appendChild(box);
       }
 
       const bar2 = el('div', 'row');
@@ -549,9 +576,12 @@ APPS.store = {
       } else if (Array.isArray(поискСписок)){
         body.appendChild(el('div', 'card-t', 'Найдено'));
         if (!поискСписок.length)
-          body.appendChild(el('div', 'empty', st.lists
-            ? 'Ничего не найдено. У программ в репозиториях бывают свои имена — попробуйте другое'
-            : 'Списки пакетов ещё не загружены — нажмите «Обновить списки»'));
+          body.appendChild(el('div', 'empty', !st.lists
+            ? 'Списки пакетов ещё не загружены — нажмите «Обновить списки»'
+            : (st.flatpak && !st.flathubData)
+              ? 'В репозиториях Ubuntu такого нет. Telegram, Spotify и подобное живут на Flathub — ' +
+                'подключите его кнопкой выше, и поиск найдёт их'
+              : 'Ничего не найдено. У программ бывают свои имена — попробуйте другое написание'));
         поискСписок.forEach(x => {
           const b2 = el('button', 'btn' + (x.installed ? '' : ' pri'),
             x.installed ? 'Удалить' : '⬇ Установить');

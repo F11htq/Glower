@@ -197,10 +197,17 @@ export function packages(allowPackages){
         const { readdirSync } = await import('node:fs');
         lists = readdirSync('/var/lib/apt/lists').some(f => /_Packages(\.|$)/.test(f));
       } catch(e){}
-      let flat = false, flathub = false;
+      let flat = false, flathub = false, flathubData = false;
       try { await run('which', ['flatpak']); flat = true; } catch(e){}
       if (flat){
         try { flathub = /flathub/.test(await flatpak(['remotes'], 15000)); } catch(e){}
+        /* Списки Flathub качаются отдельно от подключения. Без них поиск
+           честно ничего не находит — и это надо показывать как «источник ещё
+           не готов», а не как «ничего не найдено». */
+        try {
+          const { readdirSync } = await import('node:fs');
+          flathubData = readdirSync('/var/lib/flatpak/appstream/flathub').length > 0;
+        } catch(e){}
       }
 
       /* Живая система держит всё в памяти: поставленное туда занимает
@@ -219,7 +226,7 @@ export function packages(allowPackages){
 
       return {
         allowed:!!allowPackages, apt:apt_, sudo, lists, live, free, listsAge,
-        flatpak:flat, flathub,
+        flatpak:flat, flathub, flathubData,
         busy:!!(job && !job.done),
         reason: !apt_ ? 'на машине нет apt' : !sudo ? 'у системы нет права ставить программы'
               : !allowPackages ? 'установка программ выключена: нужен ключ --allow-packages' : null
@@ -255,7 +262,7 @@ export function packages(allowPackages){
       const точно = x => (x.title || x.name).toLowerCase().includes(q.toLowerCase()) ? 0 : 1;
       const list = [...flathub, ...ubuntu].sort((a, b) => точно(a) - точно(b))
         .slice(0, limit || 40);
-      return { list };
+      return { list, flathubИскал:flathub.length > 0 };
     },
 
     /* что известно про программу: версия, размер, установлена ли */
@@ -327,6 +334,18 @@ export function packages(allowPackages){
       } catch(e){}
 
       return { list };
+    },
+
+    /* Подключить Flathub и скачать его списки — одно понятное действие,
+       которое человек запускает кнопкой и видит ход. */
+    async 'pkg.flathub'(){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      let есть = false;
+      try { есть = await run('which', ['flatpak']).then(() => true); } catch(e){}
+      if (!есть) throw new Error('на машине нет flatpak — Flathub подключать нечем');
+      await этоFlathub();
+      return запустиFlatpak('flathub', '', ['update', '--appstream', '-y', '--noninteractive', '--system']);
     },
 
     async 'pkg.update'({ source } = {}){
