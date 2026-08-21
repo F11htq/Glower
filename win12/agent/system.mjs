@@ -278,7 +278,10 @@ export const procs = {
 
 /* ---------- установленные программы: читаем .desktop ---------- */
 const APP_DIRS = ['/usr/share/applications', '/usr/local/share/applications',
-  join(os.homedir(), '.local/share/applications')];
+  join(os.homedir(), '.local/share/applications'),
+  /* программы из Flathub кладут свои ярлыки сюда */
+  join(os.homedir(), '.local/share/flatpak/exports/share/applications'),
+  '/var/lib/flatpak/exports/share/applications'];
 
 export function apps(allowLaunch){
   return {

@@ -380,11 +380,11 @@ APPS.store = {
     const Pkg = {
       state(){ return Platform.rpc('pkg.state'); },
       search(query){ return Platform.rpc('pkg.search', { query }); },
-      info(name){ return Platform.rpc('pkg.info', { name }); },
+      info(name, source){ return Platform.rpc('pkg.info', { name, source }); },
       installed(){ return Platform.rpc('pkg.installed'); },
-      install(name){ return Platform.rpc('pkg.install', { name }); },
-      remove(name){ return Platform.rpc('pkg.remove', { name }); },
-      update(){ return Platform.rpc('pkg.update'); },
+      install(name, source){ return Platform.rpc('pkg.install', { name, source }); },
+      remove(name, source){ return Platform.rpc('pkg.remove', { name, source }); },
+      update(source){ return Platform.rpc('pkg.update', { source }); },
       job(){ return Platform.rpc('pkg.job'); },
       cancel(){ return Platform.rpc('pkg.cancel'); }
     };
@@ -416,14 +416,26 @@ APPS.store = {
       const st = await Pkg.state().catch(e => ({ reason:String(e.message || e) }));
       body.innerHTML = '';
       body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Программы Linux</h2>
-        <div style="opacity:.85">Настоящие программы из репозиториев Ubuntu: ставятся в систему,
-        появляются в «Программах машины» и запускаются как обычные</div>`));
+        <div style="opacity:.85">Поиск идёт по двум источникам: репозитории Ubuntu и Flathub —
+        там живут Telegram, Firefox, Spotify и прочее, чего в Ubuntu уже нет. Поставленное
+        появляется в «Программах машины» и запускается как обычная программа.${
+          st && st.flatpak === false ? ' <b>Flathub на этой машине недоступен</b>.' : ''}</div>`));
 
       if (!st || st.reason){
         body.appendChild(el('div', 'set-note', esc((st && st.reason) ||
           'Установка программ доступна, только когда система управляет машиной')));
         win.setSub('недоступно');
         return;
+      }
+
+      /* Живая система держит всё в памяти: об этом честнее сказать заранее,
+         чем показать падение dpkg после получаса скачивания. */
+      if (st.live){
+        const гб = b => b ? (b / 1073741824).toFixed(1) + ' ГБ' : '?';
+        body.appendChild(el('div', 'set-note',
+          'Система сейчас работает из памяти: всё поставленное занимает оперативку и исчезнет ' +
+          'при выключении. Свободно ' + гб(st.free) + '. Для больших программ сначала установите ' +
+          'систему на диск — там места столько же, сколько на диске.'));
       }
 
       const bar2 = el('div', 'row');
@@ -485,7 +497,7 @@ APPS.store = {
           const list = r.list.slice(0, 24);
           /* подробности берём только для показанных: иначе это сотни запросов */
           поискСписок = await Promise.all(list.map(async x => {
-            try { return Object.assign(x, await Pkg.info(x.name)); } catch(e){ return x; }
+            try { return Object.assign(x, await Pkg.info(x.name, x.source)); } catch(e){ return x; }
           }));
         } catch(e){ поискСписок = { ошибка:String(e.message || e) }; }
         draw();
@@ -495,8 +507,12 @@ APPS.store = {
       upd.onclick = async () => {
         try {
           await Pkg.update(); draw();
-          const j = await дождисьРаботы();
+          let j = await дождисьРаботы();
           st.lists = st.lists || !!j.ok;
+          /* второй источник обновляем следом: у Flathub свои списки */
+          if (st.flatpak){
+            try { await Pkg.update('flatpak'); draw(); j = await дождисьРаботы(); } catch(e){}
+          }
           Shell.toast('Программы Linux', j.ok ? 'Списки обновлены' : 'Обновить списки не вышло',
             j.ok ? '✅' : '⚠️', 5000);
           if (поискСтрока.length >= 2) найти(); else draw();
@@ -546,8 +562,8 @@ APPS.store = {
                 if (!await Dlg.confirm('Удалить ' + x.name + '?',
                     'Программа будет удалена из системы вместе с ненужными зависимостями.',
                     { icon:'🗑️', okText:'Удалить', danger:true })) return;
-                await Pkg.remove(x.name);
-              } else await Pkg.install(x.name);
+                await Pkg.remove(x.name, x.source);
+              } else await Pkg.install(x.name, x.source);
               следиЗаРаботой(() => {});
               draw();
             } catch(e){ Dlg.alert('Программы машины', String(e.message || e), '⚠️'); }
@@ -556,11 +572,15 @@ APPS.store = {
             b2.disabled = true;
             b2.textContent = 'через Snap';
           }
-          const сведения = [x.installed ? 'установлена ' + x.installed : x.candidate || '',
-                            размер(x.size) ? 'займёт ' + размер(x.size) : '',
+          const источник = x.source === 'flatpak' ? 'Flathub' : 'Ubuntu';
+          const сведения = [источник,
+                            x.installed ? 'установлена ' + x.installed : x.candidate || '',
+                            размер(x.size) ? (x.source === 'flatpak' ? 'скачает ' : 'займёт ') + размер(x.size) : '',
                             x.snap ? 'это заглушка: ставится через Snap, а он в системе не работает' : '']
                             .filter(Boolean).join(' · ');
-          body.appendChild(row('📦', x.name, (x.about || '') + (сведения ? ' · ' + сведения : ''), b2));
+          body.appendChild(row(x.source === 'flatpak' ? '🫙' : '📦',
+            (x.title && x.title !== x.name ? x.title + ' · ' + x.name : x.name),
+            (x.about || '') + (сведения ? ' · ' + сведения : ''), b2));
         });
       } else {
         body.appendChild(el('div', 'set-note',

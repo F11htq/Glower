@@ -74,6 +74,7 @@ apt-get install -y --no-install-recommends \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
   parted fdisk dosfstools e2fsprogs squashfs-tools \
+  flatpak \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
   wpasupplicant iw rfkill wireless-regdb \
@@ -143,6 +144,11 @@ unmanaged-devices=none
 dns=default
 rc-manager=file
 NMCONF
+
+# Flathub: главный источник программ, которых нет в репозиториях Ubuntu —
+# Telegram, Firefox, Spotify и прочие. Подключаем сразу, чтобы человеку не
+# пришлось об этом знать.
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
 
 echo "GlowerOS" > /etc/hostname
 # файл достался от машины, где собирали образ: адреса чужие, пусть его
