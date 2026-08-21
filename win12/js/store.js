@@ -385,7 +385,8 @@ APPS.store = {
       install(name){ return Platform.rpc('pkg.install', { name }); },
       remove(name){ return Platform.rpc('pkg.remove', { name }); },
       update(){ return Platform.rpc('pkg.update'); },
-      job(){ return Platform.rpc('pkg.job'); }
+      job(){ return Platform.rpc('pkg.job'); },
+      cancel(){ return Platform.rpc('pkg.cancel'); }
     };
     const размер = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ'
                                               : Math.round(b / 1024) + ' КБ';
@@ -434,9 +435,30 @@ APPS.store = {
       bar2.append(inp, go, upd);
       body.appendChild(bar2);
 
+      /* Обновление списков идёт минуту-другую. Если поиск запустить поверх него,
+         apt ответит по пустым спискам — и человек увидит «ничего не найдено»
+         под бегущей полосой обновления. Поэтому ждём. */
+      const дождисьРаботы = async () => {
+        for (let i = 0; i < 900; i++){
+          const j = await Pkg.job().catch(() => ({ running:false }));
+          работа = j.running ? j : null;
+          if (!j.running) return j;
+          draw();
+          await new Promise(r => setTimeout(r, 1200));
+        }
+        return { running:false, ok:false };
+      };
+
       const найти = async () => {
         поискСтрока = inp.value.trim();
         if (поискСтрока.length < 2) return;
+
+        if (работа && работа.action === 'update'){
+          поискСписок = 'обновляю';
+          draw();
+          const j = await дождисьРаботы();
+          st.lists = st.lists || !!j.ok;
+        }
 
         /* В свежей системе списки пакетов пусты — их вычищают при сборке
            образа. Обновляем сами: человек не должен догадываться, что перед
@@ -471,17 +493,34 @@ APPS.store = {
       go.onclick = найти;
       inp.onkeydown = e => { if (e.key === 'Enter') найти(); };
       upd.onclick = async () => {
-        try { await Pkg.update(); следиЗаРаботой(() => {}); draw(); }
-        catch(e){ Dlg.alert('Обновление списков', String(e.message || e), '⚠️'); }
+        try {
+          await Pkg.update(); draw();
+          const j = await дождисьРаботы();
+          st.lists = st.lists || !!j.ok;
+          Shell.toast('Программы Linux', j.ok ? 'Списки обновлены' : 'Обновить списки не вышло',
+            j.ok ? '✅' : '⚠️', 5000);
+          if (поискСтрока.length >= 2) найти(); else draw();
+        } catch(e){ Dlg.alert('Обновление списков', String(e.message || e), '⚠️'); }
       };
 
       if (работа){
         const box = el('div', 'card', '');
         box.style.padding = '14px';
+        const молчит = работа.молчит || 0;
         box.innerHTML = `<b>${esc(работа.action === 'remove' ? 'Удаление' : работа.action === 'update' ? 'Обновление списков' : 'Установка')}
           ${esc(работа.name || '')}</b>
           <div class="ins-bar" style="margin-top:10px"><i style="width:${работа.percent || 0}%"></i></div>
-          <div class="muted tiny" style="margin-top:6px">${esc(работа.step || '')}</div>`;
+          <div class="muted tiny" style="margin-top:6px">${esc(работа.step || '')}${
+            молчит > 60 ? ' · молчит ' + Math.round(молчит / 60) + ' мин — возможно, ждёт сеть' : ''}</div>`;
+        const stop = el('button', 'btn', '✕ Остановить');
+        stop.style.marginTop = '10px';
+        stop.onclick = async () => {
+          if (!await Dlg.confirm('Остановить работу?',
+              'apt будет прерван, а система приведена в порядок.', { icon:'✕', okText:'Остановить', danger:true })) return;
+          try { await Pkg.cancel(); работа = null; draw(); }
+          catch(e){ Dlg.alert('Программы Linux', String(e.message || e), '⚠️'); }
+        };
+        box.appendChild(stop);
         body.appendChild(box);
       }
 
@@ -493,7 +532,10 @@ APPS.store = {
         body.appendChild(el('div', 'set-note', esc(поискСписок.ошибка)));
       } else if (Array.isArray(поискСписок)){
         body.appendChild(el('div', 'card-t', 'Найдено'));
-        if (!поискСписок.length) body.appendChild(el('div', 'empty', 'Ничего не найдено'));
+        if (!поискСписок.length)
+          body.appendChild(el('div', 'empty', st.lists
+            ? 'Ничего не найдено. У программ в репозиториях бывают свои имена — попробуйте другое'
+            : 'Списки пакетов ещё не загружены — нажмите «Обновить списки»'));
         поискСписок.forEach(x => {
           const b2 = el('button', 'btn' + (x.installed ? '' : ' pri'),
             x.installed ? 'Удалить' : '⬇ Установить');
@@ -510,8 +552,13 @@ APPS.store = {
               draw();
             } catch(e){ Dlg.alert('Программы машины', String(e.message || e), '⚠️'); }
           };
+          if (x.snap){
+            b2.disabled = true;
+            b2.textContent = 'через Snap';
+          }
           const сведения = [x.installed ? 'установлена ' + x.installed : x.candidate || '',
-                            размер(x.size) ? 'займёт ' + размер(x.size) : '']
+                            размер(x.size) ? 'займёт ' + размер(x.size) : '',
+                            x.snap ? 'это заглушка: ставится через Snap, а он в системе не работает' : '']
                             .filter(Boolean).join(' · ');
           body.appendChild(row('📦', x.name, (x.about || '') + (сведения ? ' · ' + сведения : ''), b2));
         });

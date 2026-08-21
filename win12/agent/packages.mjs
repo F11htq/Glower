@@ -54,14 +54,19 @@ export function packages(allowPackages){
      apt не даёт, поэтому считаем по узнаваемым шагам — честнее, чем рисовать
      ровную полоску, которая ничего не значит. */
   const запусти = (action, name, args) => {
-    job = { name, action, percent:2, step:'Начинаю', done:false, ok:false, error:null, log:'' };
-    const p = spawn('sudo', ['-n', 'apt-get', ...args], {
+    job = { name, action, percent:2, step:'Начинаю', done:false, ok:false, error:null, log:'',
+            слышно:Date.now(), pid:null };
+    const p = spawn('sudo', ['-n', 'apt-get',
+      '-o', 'Dpkg::Use-Pty=0', '-o', 'Dpkg::Options::=--force-confold', ...args], {
       stdio:['ignore', 'pipe', 'pipe'],
+      detached:true,     // своя группа процессов: иначе работу нечем остановить
       env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' }
     });
+    job.pid = p.pid;
     let tail = '';
     const шаг = line => {
       job.log = (job.log + line + '\n').slice(-8000);
+      job.слышно = Date.now();
       if (/^Get:/.test(line)){ job.percent = Math.min(60, job.percent + 4); job.step = 'Скачиваю'; }
       else if (/^Unpacking/.test(line)){ job.percent = Math.max(job.percent, 65); job.step = 'Распаковываю'; }
       else if (/^Setting up/.test(line)){ job.percent = Math.max(job.percent, 80); job.step = 'Настраиваю'; }
@@ -76,6 +81,7 @@ export function packages(allowPackages){
     });
     p.stderr.on('data', d => {
       const t = String(d).trim();
+      job.слышно = Date.now();
       if (t) job.error = t.split('\n').pop();
       job.log = (job.log + t + '\n').slice(-8000);
     });
@@ -131,8 +137,15 @@ export function packages(allowPackages){
       const show = await cache(['show', n]).catch(() => '');
       const поле = (t, k) => ((t.match(new RegExp('^' + k + ':\\s*(.+)$', 'm')) || [])[1] || '').trim();
       const installed = (policy.match(/Installed:\s*(.+)/) || [])[1];
+      /* В Ubuntu часть «программ» — пустые заглушки, которые тянут snapd и
+         ставят настоящее приложение из Snap. У нас Snap не работает, а установка
+         такой заглушки просто зависает. Опознаём их и говорим прямо. */
+      const pre = поле(show, 'Pre-Depends') + ' ' + поле(show, 'Depends');
+      const snap = /\bsnapd\b/.test(pre) ||
+        /transitional package/i.test(поле(show, 'Description-en') + поле(show, 'Description'));
+
       return {
-        name:n,
+        name:n, snap,
         installed: installed && installed !== '(none)' ? installed.trim() : null,
         candidate:(policy.match(/Candidate:\s*(.+)/) || [])[1] || null,
         size:+поле(show, 'Installed-Size') * 1024 || null,
@@ -168,6 +181,11 @@ export function packages(allowPackages){
       нужноРазрешение();
       const n = проверьИмя(name);
       if (job && !job.done) throw new Error('уже идёт другая работа');
+      const про = await this['pkg.info']({ name:n });
+      if (про.snap)
+        throw new Error('«' + n + '» в репозиториях Ubuntu — не сама программа, а заглушка, ' +
+          'которая ставит её через Snap. Snap в GlowerOS не работает, поэтому установка ' +
+          'зависла бы. Поищите программу под другим именем.');
       return запусти('install', n, ['install', '-y', '--no-install-recommends', n]);
     },
 
@@ -180,10 +198,29 @@ export function packages(allowPackages){
       return запусти('remove', n, ['remove', '-y', '--auto-remove', n]);
     },
 
+    /* Остановить работу. Просто убить нельзя: apt запущен от root через sudo,
+       поэтому и сигнал шлём через sudo — команда фиксированная, номер группы
+       процессов числовой. */
+    async 'pkg.cancel'(){
+      нужноРазрешение();
+      if (!job || job.done) return { ok:true, running:false };
+      const pgid = String(job.pid);
+      try { await run('sudo', ['-n', 'kill', '-TERM', '-' + pgid], { timeout:5000 }); } catch(e){}
+      await new Promise(r => setTimeout(r, 3000));
+      if (job && !job.done){
+        try { await run('sudo', ['-n', 'kill', '-KILL', '-' + pgid], { timeout:5000 }); } catch(e){}
+      }
+      /* прерванный dpkg оставляет систему на середине — приводим в порядок */
+      try { await run('sudo', ['-n', 'dpkg', '--configure', '-a'], { timeout:120000 }); } catch(e){}
+      if (job){ job.done = true; job.ok = false; job.error = 'работа остановлена'; }
+      return { ok:true, running:false };
+    },
+
     async 'pkg.job'(){
       if (!job) return { running:false };
       return { running:!job.done, ok:job.ok, percent:job.percent, step:job.step,
-        error:job.error, name:job.name, action:job.action, log:job.log.slice(-3000) };
+        error:job.error, name:job.name, action:job.action, log:job.log.slice(-3000),
+        молчит: job.done ? 0 : Math.round((Date.now() - job.слышно) / 1000) };
     }
   };
 }

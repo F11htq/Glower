@@ -208,7 +208,9 @@ try {
   /* восстановление идёт по таймеру, а под нагрузкой он растягивается —
      ждём результата, а не фиксированной паузы */
   const restored = await page.evaluate(async () => {
-    for (let i = 0; i < 40; i++){
+    /* под нагрузкой восстановление занимает секунды, а не мгновение;
+       ждём до минуты, иначе проверка мигает без всякой поломки */
+    for (let i = 0; i < 240; i++){
       if (['calc','clock'].every(a => WM.wins.some(w => w.appId === a))) return true;
       await new Promise(r => setTimeout(r, 250));
     }
