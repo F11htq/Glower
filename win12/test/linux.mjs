@@ -257,6 +257,26 @@ try {
   check('мастер установки не появляется там, где установка невозможна',
     await page.evaluate(() => !APPS.installer));
 
+  /* --- запуск программ машины: без gio тоже должно работать --- */
+  {
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { homedir } = await import('node:os');
+    const метка = join(WS, 'запущено.txt');
+    const каталог = join(homedir(), '.local/share/applications');
+    await mkdir(каталог, { recursive:true });
+    await writeFile(join(каталог, 'glower-проверка.desktop'),
+      '[Desktop Entry]\nType=Application\nName=Проверка запуска\n' +
+      'Exec=/usr/bin/touch ' + метка + ' %U\n');
+
+    const виден = await page.evaluate(() => OS.apps().then(d =>
+      d.list.some(a => a.name === 'Проверка запуска'), () => false));
+    check('ярлык программы машины виден системе', виден);
+
+    const пуск = await page.evaluate(() => Platform.rpc('sys.launch', { id:'glower-проверка.desktop' })
+      .then(r => r.via, e => 'ошибка: ' + e.message));
+    check('без --allow-launch запуск закрыт', /--allow-launch/.test(String(пуск)), String(пуск));
+  }
+
   /* --- программы Linux: поиск открыт, установка под ключом --- */
   const pkgState = await page.evaluate(() => Platform.rpc('pkg.state').then(x => x, e => ({ err:e.message })));
   check('система знает, чем ставить программы',

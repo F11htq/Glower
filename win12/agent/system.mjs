@@ -311,8 +311,35 @@ export function apps(allowLaunch){
       if (!/^[\w.+-]+\.desktop$/.test(String(id))) throw new Error('неверный идентификатор программы');
       const dir = APP_DIRS.find(d => existsSync(join(d, id)));
       if (!dir) throw new Error('такой программы на машине нет: ' + id);
+
       if (await has('gio')){ await call('gio', ['launch', join(dir, id)]); return { ok:true, via:'gio' }; }
-      throw new Error('нет gio — запускать программы нечем');
+
+      /* gio в системе может не быть — тогда запускаем сами, как это делает
+         любой рабочий стол: берём строку Exec из .desktop-файла, убираем
+         подстановки вроде %U и запускаем первую команду с её доводами.
+         Ничего не разбирается через оболочку: список доводов собирается здесь. */
+      const текст = await readFile(join(dir, id), 'utf8');
+      const exec = (текст.match(/^Exec=(.*)$/m) || [])[1];
+      if (!exec) throw new Error('в ярлыке нет строки запуска');
+      const части = exec.replace(/%[fFuUdDnNickvm]/g, '').trim()
+        .match(/"[^"]+"|\S+/g).map(x => x.replace(/^"|"$/g, ''));
+      const программа = части.shift();
+      if (!/^[\w./+-]+$/.test(программа)) throw new Error('в ярлыке странная команда запуска');
+
+      /* окно должно появиться на том же экране, где оболочка */
+      const env = Object.assign({}, process.env);
+      const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
+      env.XDG_RUNTIME_DIR = дом;
+      if (!env.WAYLAND_DISPLAY && !env.DISPLAY){
+        const сокет = (existsSync(дом) ? (await readdir(дом).catch(() => [])) : [])
+          .find(f => /^wayland-\d+$/.test(f));
+        if (сокет) env.WAYLAND_DISPLAY = сокет; else env.DISPLAY = ':0';
+      }
+
+      const { spawn } = await import('node:child_process');
+      const дитя = spawn(программа, части, { stdio:'ignore', detached:true, env });
+      дитя.unref();
+      return { ok:true, via:'ярлык', команда:программа };
     }
   };
 }

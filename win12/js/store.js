@@ -401,10 +401,10 @@ APPS.store = {
         перерисовать(j);
         if (!j.running){
           Shell.toast('Программы машины',
-            j.ok ? (j.action === 'install' ? 'Установлено: ' + j.name
+            j.ok ? (j.action === 'install' ? 'Установлено: ' + j.name + ' — ищите в Пуске'
                   : j.action === 'remove' ? 'Удалено: ' + j.name : 'Списки обновлены')
                  : 'Не вышло: ' + (j.error || 'неизвестная причина'),
-            j.ok ? '✅' : '⚠️', 7000);
+            j.ok ? '✅' : '⚠️', 8000);
           break;
         }
         await new Promise(r => setTimeout(r, 1200));

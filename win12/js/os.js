@@ -69,6 +69,7 @@ window.OS = OS;
   syncVolume();
   wirePower();
   wireApps();
+  wireMachineApps();
   wireTaskManager();
 })();
 
@@ -133,6 +134,68 @@ function wirePower(){
 }
 
 /* ---------- настоящие программы машины ---------- */
+/* ---------- программы машины в Пуске и поиске ----------
+   Поставленную программу человек ищет там же, где остальные: в Пуске и в
+   поиске. Раньше она пряталась в отдельном окне «Программы машины», и найти
+   её было нельзя — только знать, где смотреть. */
+let списокМашины = [];
+
+async function обновиСписокМашины(){
+  try {
+    const d = await OS.apps();
+    списокМашины = (d.list || []).map(a => ({
+      id:a.id, name:a.name, comment:a.comment,
+      flatpak:/flatpak/.test(a.id) || /^[a-z]+\.[a-zA-Z0-9.]+\.desktop$/.test(a.id)
+    }));
+  } catch(e){ списокМашины = []; }
+}
+
+function wireMachineApps(){
+  обновиСписокМашины();
+  /* после установки список меняется — перечитываем его, когда открывают Пуск */
+  const start = Shell.renderStart.bind(Shell);
+  Shell.renderStart = function(){ обновиСписокМашины(); return start(); };
+
+  /* поиск: программы машины ищутся наравне со всем остальным */
+  const искать = Shell.searchAll.bind(Shell);
+  Shell.searchAll = function(q){
+    const out = искать(q);
+    списокМашины.forEach(a => {
+      if (!a.name.toLowerCase().includes(q)) return;
+      out.push({ emo:a.flatpak ? '🫙' : '🐧', t:a.name, s:a.comment || 'Программа машины',
+        k:'Запуск', run:async () => {
+          try { await OS.launch(a.id); Shell.toast('Программы машины', 'Запускаю: ' + a.name, '🐧'); }
+          catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
+        } });
+    });
+    return out;
+  };
+
+  /* «Все приложения»: список машины идёт следом за приложениями системы */
+  const все = Shell.allApps.bind(Shell);
+  Shell.allApps = function(on){
+    const r = все(on);
+    if (!on || !списокМашины.length) return r;
+    const res = document.getElementById('start-results');
+    if (!res) return r;
+    res.appendChild(el('div', 'all-letter', 'Программы машины'));
+    списокМашины.forEach(a => {
+      const b = el('button', 'all-row');
+      const ico = el('div', 'app-ico', a.flatpak ? '🫙' : '🐧');
+      ico.style.background = 'linear-gradient(140deg,#fbbf24,#b45309)';
+      b.appendChild(ico);
+      b.appendChild(el('div', 't', esc(a.name)));
+      b.onclick = async () => {
+        Shell.closePanels();
+        try { await OS.launch(a.id); Shell.toast('Программы машины', 'Запускаю: ' + a.name, '🐧'); }
+        catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
+      };
+      res.appendChild(b);
+    });
+    return r;
+  };
+}
+
 function wireApps(){
   APPS.native = {
     name:'Программы машины', glyph:'🐧', bg:'linear-gradient(140deg,#fbbf24,#b45309)', w:720, h:600, single:true,
