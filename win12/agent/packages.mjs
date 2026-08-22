@@ -82,8 +82,12 @@ export function packages(allowPackages){
   const запусти = (action, name, args) => {
     job = { name, action, percent:2, step:'Начинаю', done:false, ok:false, error:null, log:'',
             слышно:Date.now(), pid:null };
+    /* apt умеет отдавать свой собственный ход работы числами — просим его об
+       этом. Раньше проценты выводились по узнаваемым строкам, и на длинной
+       закачке полоса просто стояла на месте. */
     const p = spawn('sudo', ['-n', 'apt-get',
-      '-o', 'Dpkg::Use-Pty=0', '-o', 'Dpkg::Options::=--force-confold', ...args], {
+      '-o', 'Dpkg::Use-Pty=0', '-o', 'Dpkg::Options::=--force-confold',
+      '-o', 'APT::Status-Fd=1', ...args], {
       stdio:['ignore', 'pipe', 'pipe'],
       detached:true,     // своя группа процессов: иначе работу нечем остановить
       env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' }
@@ -91,8 +95,22 @@ export function packages(allowPackages){
     job.pid = p.pid;
     let tail = '';
     const шаг = line => {
-      job.log = (job.log + line + '\n').slice(-8000);
       job.слышно = Date.now();
+
+      /* строки состояния: «dlstatus:1:12.3:Скачивание…», «pmstatus:пакет:64.0:…» */
+      const st = line.match(/^(dlstatus|pmstatus|status):[^:]*:([\d.]+):(.*)$/);
+      if (st){
+        const п = Math.round(parseFloat(st[2]));
+        if (п >= 0 && п <= 100){
+          /* скачивание — первая половина полосы, установка — вторая */
+          job.percent = st[1] === 'dlstatus' ? Math.min(50, Math.round(п / 2))
+                                             : Math.max(50, 50 + Math.round(п / 2));
+        }
+        if (st[3]) job.step = st[1] === 'dlstatus' ? 'Скачиваю' : 'Устанавливаю';
+        return;
+      }
+
+      job.log = (job.log + line + '\n').slice(-8000);
       if (/^Get:/.test(line)){ job.percent = Math.min(60, job.percent + 4); job.step = 'Скачиваю'; }
       else if (/^Unpacking/.test(line)){ job.percent = Math.max(job.percent, 65); job.step = 'Распаковываю'; }
       else if (/^Setting up/.test(line)){ job.percent = Math.max(job.percent, 80); job.step = 'Настраиваю'; }

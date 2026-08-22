@@ -92,9 +92,16 @@
 
 /* ---------- Панель задач в стиле Windows ---------- */
 body.taskbar .dock-wrap{bottom:0;left:0;right:0}
-body.taskbar .dock{width:100%;border-radius:0;justify-content:center;padding:6px 12px;
+/* Панель задач тянется ровно на всю ширину экрана и по высоте держится
+   близко к значкам: раньше она не доставала до краёв из-за общего ограничения
+   ширины, а сверху и снизу оставалось много пустого места. */
+body.taskbar .dock{width:100%;max-width:none;border-radius:0;justify-content:center;padding:3px 8px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,calc(var(--glass-brd)*1.2)),0 -6px 24px rgba(0,0,0,.28)}
-body.taskbar .dock-item{border-radius:10px}
+body.taskbar .dock-wrap{padding:0}
+body.taskbar .dock-item{border-radius:10px;transform-origin:center center}
+/* в панели задач значок при наведении растёт от середины, а не вверх:
+   иначе он вылезает за край полосы и выглядит подпрыгнувшим */
+body.taskbar .dock-item:hover{transform:scale(1.06)}
 body.taskbar .dock-sep{opacity:.5}
 .dock-wrap{transition:bottom var(--t3) var(--e-spring),left var(--t3) var(--e-spring),right var(--t3) var(--e-spring)}
 .dock{transition:width var(--t3) var(--e-spring),border-radius var(--t3) var(--e-out),padding var(--t3) var(--e-out);

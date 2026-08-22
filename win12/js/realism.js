@@ -259,11 +259,14 @@ function showPrev(btn, appId){
 function hidePrev(){ prev.classList.remove('on'); }
 prev.addEventListener('mouseenter', () => clearTimeout(prevTimer));
 prev.addEventListener('mouseleave', () => { prevTimer = setTimeout(hidePrev, 220); });
-$('#dock').addEventListener('mouseover', e => {
+/* Карточки, выезжающие над значками при наведении, убраны: они закрывали
+   собой панель и мешали. Наведение теперь только чуть увеличивает значок.
+   Список окон приложения остался по правой кнопке. */
+$('#dock').addEventListener('contextmenu', e => {
   const b = e.target.closest('.dock-item');
-  clearTimeout(prevTimer);
-  if (!b || !b.dataset.app || !WM.wins.some(w => w.appId === b.dataset.app)){ prevTimer = setTimeout(hidePrev, 200); return; }
-  prevTimer = setTimeout(() => showPrev(b, b.dataset.app), 320);
+  if (!b || !b.dataset.app || !WM.wins.some(w => w.appId === b.dataset.app)) return;
+  e.preventDefault();
+  showPrev(b, b.dataset.app);
 });
 $('#dock').addEventListener('mouseleave', () => { prevTimer = setTimeout(hidePrev, 250); });
 

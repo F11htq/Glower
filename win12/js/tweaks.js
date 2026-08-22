@@ -96,10 +96,18 @@ Shell.fitDock = function(){
   /* Если значков всё равно больше, чем влезает, уменьшаем их — как делает
      настоящая панель задач, — но не мельче 28 px. */
   const root = document.documentElement;
-  let size = S.dockSize;
+  /* В режиме панели задач значки мельче: полоса во всю ширину экрана с
+     крупными значками выглядит непропорционально огромной. */
+  let size = taskbar ? Math.min(S.dockSize, 42) : S.dockSize;
   root.style.setProperty('--dock-size', size + 'px');
-  const tight = () => dock.scrollWidth > dock.clientWidth + 1 ||
-    (taskbar && inDock && (left ? left.offsetWidth : 1) < 1 && dock.scrollWidth >= dock.clientWidth);
+  /* Помещается ли содержимое, считаем сами: scrollWidth у гибкой раскладки
+     врёт — он оказывался больше ширины даже когда оставалось полпанели
+     пустого места, и значки мельчали на ровном месте. Складываем ширины
+     самих значков и сравниваем с шириной панели. */
+  const нужно = () => [...dock.children]
+    .filter(n => !n.classList.contains('dock-spacer'))
+    .reduce((s2, n) => s2 + n.offsetWidth + 6, 0);
+  const tight = () => нужно() > dock.clientWidth - 16;
   for (let i = 0; i < 16 && tight() && size > 28; i++){
     size -= 2;
     root.style.setProperty('--dock-size', size + 'px');

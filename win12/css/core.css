@@ -252,7 +252,8 @@ body.dock-hidden .dock{transform:translateY(140%);opacity:0}
   will-change:transform}
 .dock-item .emo{font-size:calc(var(--dock-size) * .55);line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}
 .dock-item .app-ico{width:calc(var(--dock-size) * .78);height:calc(var(--dock-size) * .78)}
-.dock-item:hover{background:rgba(var(--tint),.16)}
+/* наведение: только лёгкое увеличение, без подъёма и выездов */
+.dock-item:hover{background:rgba(var(--tint),.16);transform:scale(1.08)}
 .dock-item:active{transform:scale(.86) !important}
 /* Указатель открытого окна рисуется через ::before, а не ::after: ::after у
    значка уже занят всплывающей подсказкой, и они спорили за одни и те же
