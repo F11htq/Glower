@@ -145,7 +145,7 @@ async function обновиСписокМашины(){
     const d = await OS.apps();
     списокМашины = (d.list || []).map(a => ({
       id:a.id, name:a.name, comment:a.comment,
-      flatpak:/flatpak/.test(a.id) || /^[a-z]+\.[a-zA-Z0-9.]+\.desktop$/.test(a.id)
+      flatpak:a.flatpak || /flatpak/.test(a.id) || /^[a-z]+\.[a-zA-Z0-9.]+\.desktop$/.test(a.id)
     }));
   } catch(e){ списокМашины = []; }
 }

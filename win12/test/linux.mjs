@@ -277,6 +277,50 @@ try {
     check('без --allow-launch запуск закрыт', /--allow-launch/.test(String(пуск)), String(пуск));
   }
 
+  /* --- как именно запускаются программы: коротким flatpak и вручную --- */
+  {
+    const { mkdir, writeFile, symlink, rm } = await import('node:fs/promises');
+    const бин = join(WS, 'бин');
+    await mkdir(бин, { recursive:true });
+    /* урезанный PATH: gio быть не должно, иначе ручная дорога не проверится */
+    for (const имя of ['which']){
+      const где = ['/usr/bin/' + имя, '/bin/' + имя].find(p => existsSync(p));
+      if (где) await symlink(где, join(бин, имя)).catch(() => {});
+    }
+    const журнал = join(WS, 'flatpak.log');
+    await rm(журнал, { force:true });
+    await writeFile(join(бин, 'flatpak'),
+      '#!/bin/sh\necho "$*" >> "$FLATPAK_LOG"\nexit 0\n', { mode:0o755 });
+
+    const итог = await new Promise(resolve => {
+      const child = spawn(process.execPath, [join(root, 'test/launch-child.mjs')],
+        { stdio:['ignore', 'pipe', 'pipe'],
+          env:{ ...process.env, PATH:бин, FLATPAK_LOG:журнал, GLOWER_TEST_DIR:WS } });
+      let out = '';
+      child.stdout.on('data', d => { out += d; });
+      child.on('exit', () => { try { resolve(JSON.parse(out.trim().split('\n').pop())); }
+        catch(e){ resolve({ ошибка:out.slice(0, 300) }); } });
+    });
+
+    check('программа из Flathub запускается коротким flatpak run',
+      итог.flatpak && итог.flatpak.ok === true && итог.flatpak.via === 'flatpak',
+      JSON.stringify(итог.flatpak || итог.ошибка));
+    check('flatpak получает только имя программы, без пометок передачи файлов',
+      итог.доводы === 'run glower.test.flatpak', String(итог.доводы));
+    check('в списке программ видно, что она из Flathub',
+      !!(итог.список && итог.список.flatpak === true), JSON.stringify(итог.список));
+    check('пометки @@u и @@ не мешают обычному запуску без gio',
+      итог.передача && итог.передача.ok === true && итог.запущено === true,
+      JSON.stringify(итог.передача));
+    check('упавшая программа объясняет причину, а не молчит',
+      итог.падение && итог.падение.ok === false && /нет_такой_библиотеки/.test(итог.падение.error || ''),
+      JSON.stringify(итог.падение));
+    check('о пропавшем ярлыке говорится прямо',
+      итог.нет && /такой программы на машине нет/.test(итог.нет.error || ''), JSON.stringify(итог.нет));
+    check('путём вместо имени ярлыка подсунуть чужой файл нельзя',
+      итог.путь && /неверный идентификатор/.test(итог.путь.error || ''), JSON.stringify(итог.путь));
+  }
+
   /* --- программы Linux: поиск открыт, установка под ключом --- */
   const pkgState = await page.evaluate(() => Platform.rpc('pkg.state').then(x => x, e => ({ err:e.message })));
   check('система знает, чем ставить программы',

@@ -28,7 +28,7 @@ export async function has(cmd){
 /* единственная точка запуска: только фиксированные команды */
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
-  'nmcli', 'ip', 'xdg-open', 'gio', 'setxkbmap', 'localectl', 'free', 'uptime',
+  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -283,6 +283,49 @@ const APP_DIRS = ['/usr/share/applications', '/usr/local/share/applications',
   join(os.homedir(), '.local/share/flatpak/exports/share/applications'),
   '/var/lib/flatpak/exports/share/applications'];
 
+/* Запуск отдельной программы: она живёт своей жизнью и после нашего ухода,
+   но первые полторы секунды мы слушаем её жалобы. Если программа сразу упала,
+   человек увидит настоящую причину, а не молчание. */
+async function запустить(программа, части, via){
+  const итог = await попытка(программа, части, via);
+  if (!итог.ok) throw new Error(итог.error);
+  return итог;
+}
+
+async function попытка(программа, части, via){
+  const { spawn } = await import('node:child_process');
+  const env = Object.assign({}, process.env);
+  const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
+  env.XDG_RUNTIME_DIR = дом;
+  if (!env.WAYLAND_DISPLAY && !env.DISPLAY){
+    const сокет = (existsSync(дом) ? (await readdir(дом).catch(() => [])) : [])
+      .find(f => /^wayland-\d+$/.test(f));
+    if (сокет) env.WAYLAND_DISPLAY = сокет; else env.DISPLAY = ':0';
+  }
+
+  return await new Promise(resolve => {
+    let дитя;
+    try { дитя = spawn(программа, части, { stdio:['ignore', 'ignore', 'pipe'], detached:true, env }); }
+    catch(e){ resolve({ ok:false, error:'не удалось запустить: ' + e.message }); return; }
+
+    let жалобы = '', готово = false;
+    const ответ = о => { if (готово) return; готово = true; clearTimeout(часы); resolve(о); };
+    дитя.stderr && дитя.stderr.on('data', d => { жалобы = (жалобы + d).slice(0, 2000); });
+    дитя.on('error', e => ответ({ ok:false, error:'не удалось запустить: ' + e.message }));
+    дитя.on('exit', код => {
+      if (код === 0) { ответ({ ok:true, via, команда:программа }); return; }
+      const причина = жалобы.trim().split('\n').filter(Boolean).pop();
+      ответ({ ok:false, error:причина || ('программа завершилась с ошибкой ' + код) });
+    });
+    const часы = setTimeout(() => {
+      /* полторы секунды прошли, программа жива — значит, запустилась */
+      дитя.stderr && дитя.stderr.destroy();
+      дитя.unref();
+      ответ({ ok:true, via, команда:программа });
+    }, 1500);
+  });
+}
+
 export function apps(allowLaunch){
   return {
     async 'sys.apps'(){
@@ -298,6 +341,7 @@ export function apps(allowLaunch){
             const name = get('Name');
             if (!name) continue;
             list.push({ id:f, name, comment:get('Comment') || '',
+              flatpak:!!get('X-Flatpak'),
               icon:get('Icon') || '', categories:(get('Categories') || '').split(';').filter(Boolean) });
           } catch(e){}
         }
@@ -308,38 +352,41 @@ export function apps(allowLaunch){
 
     async 'sys.launch'({ id }){
       if (!allowLaunch) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
-      if (!/^[\w.+-]+\.desktop$/.test(String(id))) throw new Error('неверный идентификатор программы');
-      const dir = APP_DIRS.find(d => existsSync(join(d, id)));
-      if (!dir) throw new Error('такой программы на машине нет: ' + id);
+      /* имя ярлыка может быть каким угодно, кроме пути: без косой черты
+         из папки не выйти, а «..» и скрытые имена отсекаем отдельно */
+      const имя = String(id);
+      if (!/^[^/\\\0]+\.desktop$/.test(имя) || имя.startsWith('.'))
+        throw new Error('неверный идентификатор программы');
+      const dir = APP_DIRS.find(d => existsSync(join(d, имя)));
+      if (!dir) throw new Error('такой программы на машине нет: ' + имя);
 
-      if (await has('gio')){ await call('gio', ['launch', join(dir, id)]); return { ok:true, via:'gio' }; }
+      const текст = await readFile(join(dir, имя), 'utf8');
+      const поле = k => (текст.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1];
+
+      /* Программы из Flathub живут в своём окружении. Их ярлык зовёт flatpak
+         длинной строкой с пометками передачи файлов (@@u … @@), которую нельзя
+         просто так отдать программе. Ярлык сам называет своё имя в строке
+         X-Flatpak — по нему запуск получается коротким и надёжным. */
+      const flatpak = поле('X-Flatpak');
+      if (flatpak && /^[\w.-]+$/.test(flatpak) && await has('flatpak'))
+        return запустить('flatpak', ['run', flatpak], 'flatpak');
+
+      if (await has('gio')){ await call('gio', ['launch', join(dir, имя)]); return { ok:true, via:'gio' }; }
 
       /* gio в системе может не быть — тогда запускаем сами, как это делает
          любой рабочий стол: берём строку Exec из .desktop-файла, убираем
          подстановки вроде %U и запускаем первую команду с её доводами.
          Ничего не разбирается через оболочку: список доводов собирается здесь. */
-      const текст = await readFile(join(dir, id), 'utf8');
-      const exec = (текст.match(/^Exec=(.*)$/m) || [])[1];
+      const exec = поле('Exec');
       if (!exec) throw new Error('в ярлыке нет строки запуска');
-      const части = exec.replace(/%[fFuUdDnNickvm]/g, '').trim()
-        .match(/"[^"]+"|\S+/g).map(x => x.replace(/^"|"$/g, ''));
+      const части = (exec.replace(/%[fFuUdDnNickvm]/g, '').match(/"[^"]+"|\S+/g) || [])
+        .map(x => x.replace(/^"|"$/g, ''))
+        /* @@ и @@u — пометки передачи файлов, без самих файлов они лишние */
+        .filter(x => !/^@@u?$/.test(x));
       const программа = части.shift();
+      if (!программа) throw new Error('в ярлыке пустая строка запуска');
       if (!/^[\w./+-]+$/.test(программа)) throw new Error('в ярлыке странная команда запуска');
-
-      /* окно должно появиться на том же экране, где оболочка */
-      const env = Object.assign({}, process.env);
-      const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
-      env.XDG_RUNTIME_DIR = дом;
-      if (!env.WAYLAND_DISPLAY && !env.DISPLAY){
-        const сокет = (existsSync(дом) ? (await readdir(дом).catch(() => [])) : [])
-          .find(f => /^wayland-\d+$/.test(f));
-        if (сокет) env.WAYLAND_DISPLAY = сокет; else env.DISPLAY = ':0';
-      }
-
-      const { spawn } = await import('node:child_process');
-      const дитя = spawn(программа, части, { stdio:'ignore', detached:true, env });
-      дитя.unref();
-      return { ok:true, via:'ярлык', команда:программа };
+      return запустить(программа, части, 'ярлык');
     }
   };
 }
