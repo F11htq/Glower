@@ -74,7 +74,7 @@ apt-get install -y --no-install-recommends \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
   parted fdisk dosfstools e2fsprogs squashfs-tools \
-  flatpak \
+  flatpak bubblewrap apparmor \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
   wpasupplicant iw rfkill wireless-regdb \
@@ -90,6 +90,16 @@ apt-get install -y --no-install-recommends \
 # загружаем вовсе — тогда система сразу поднимается через X-сервер. На
 # настоящей машине VMware правило не срабатывает и драйвер работает как
 # работал.
+# Программы из Flathub запускаются в песочнице, а песочнице нужны
+# пространства имён пользователя. В Ubuntu 24.04 они по умолчанию закрыты
+# для программ без своего профиля AppArmor, и flatpak падает на первом же
+# шаге: «ldconfig failed, exit status 256». Для этой системы ограничение
+# снимаем — иначе ни одна программа из Flathub не запустится.
+cat > /etc/sysctl.d/60-glower-userns.conf <<'SYSCTL'
+-kernel.apparmor_restrict_unprivileged_userns=0
+-kernel.unprivileged_userns_clone=1
+SYSCTL
+
 cat > /etc/modprobe.d/glower-vmwgfx.conf <<'MOD'
 install vmwgfx /bin/sh -c 'grep -qi virtualbox /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null || exec modprobe --ignore-install vmwgfx "$@"'
 MOD

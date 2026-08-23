@@ -369,7 +369,15 @@ export function apps(allowLaunch){
          X-Flatpak — по нему запуск получается коротким и надёжным. */
       const flatpak = поле('X-Flatpak');
       if (flatpak && /^[\w.-]+$/.test(flatpak) && await has('flatpak'))
-        return запустить('flatpak', ['run', flatpak], 'flatpak');
+        return запустить('flatpak', ['run', flatpak], 'flatpak').catch(e => {
+          /* Песочнице flatpak нужны пространства имён пользователя. Когда они
+             закрыты, программа падает на первом же шаге со странной для
+             человека строкой про ldconfig — объясняем, о чём она. */
+          if (/ldconfig|bwrap|namespace|пространств/i.test(e.message))
+            throw new Error(e.message + ' — песочнице flatpak закрыты пространства имён ' +
+              'пользователя (kernel.apparmor_restrict_unprivileged_userns)');
+          throw e;
+        });
 
       if (await has('gio')){ await call('gio', ['launch', join(dir, имя)]); return { ok:true, via:'gio' }; }
 
