@@ -28,7 +28,7 @@ export async function has(cmd){
 /* единственная точка запуска: только фиксированные команды */
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
-  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'setxkbmap', 'localectl', 'free', 'uptime',
+  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -283,6 +283,17 @@ const APP_DIRS = ['/usr/share/applications', '/usr/local/share/applications',
   join(os.homedir(), '.local/share/flatpak/exports/share/applications'),
   '/var/lib/flatpak/exports/share/applications'];
 
+/* Пробный запуск для осмотра: ждём, чем дело кончится, и возвращаем жалобы. */
+function попытка_тихо(программа, части){
+  return new Promise(async resolve => {
+    const { execFile } = await import('node:child_process');
+    execFile(программа, части, { timeout:8000 }, (e, out, err) => {
+      if (!e) return resolve({ ok:true });
+      resolve({ ok:false, error:(String(err || '').trim().split('\n')[0] || e.message) });
+    });
+  });
+}
+
 /* Запуск отдельной программы: она живёт своей жизнью и после нашего ухода,
    но первые полторы секунды мы слушаем её жалобы. Если программа сразу упала,
    человек увидит настоящую причину, а не молчание. */
@@ -348,6 +359,52 @@ export function apps(allowLaunch){
       }
       list.sort((a, b) => a.name.localeCompare(b.name));
       return { total:list.length, list, canLaunch:!!allowLaunch };
+    },
+
+    /* Осмотр песочницы: почему программа из Flathub не запускается.
+       Здесь нет догадок — только то, что машина отвечает сама. */
+    async 'sys.sandbox'({ id } = {}){
+      const строки = [];
+      const скажи = (что, как) => строки.push(что + ': ' + как);
+
+      const прочти = async п => readFile(п, 'utf8').then(t => t.trim()).catch(e => 'нет (' + e.code + ')');
+      скажи('kernel.apparmor_restrict_unprivileged_userns',
+        await прочти('/proc/sys/kernel/apparmor_restrict_unprivileged_userns'));
+      скажи('user.max_user_namespaces', await прочти('/proc/sys/user/max_user_namespaces'));
+      скажи('файл настройки', await прочти('/etc/sysctl.d/60-glower-userns.conf'));
+
+      /* bwrap — та самая песочница, в которой flatpak запускает ldconfig */
+      скажи('bwrap', await has('bwrap') ? 'есть' : 'нет');
+      if (await has('bwrap')){
+        const итог = await попытка_тихо('bwrap',
+          ['--ro-bind', '/', '/', '--unshare-user', '--unshare-pid', '/bin/true']);
+        скажи('проба bwrap', итог.ok ? 'работает' : 'не работает — ' + итог.error);
+      }
+
+      скажи('flatpak', await has('flatpak')
+        ? (await call('flatpak', ['--version']).catch(e => e.message)).trim() : 'нет');
+      if (await has('flatpak')){
+        const список = await call('flatpak', ['list', '--columns=application,origin,installation'])
+          .catch(e => e.message);
+        скажи('установлено', (список || '').trim() || 'ничего');
+        if (id && /^[\w.-]+$/.test(id)){
+          const про = await call('flatpak', ['info', id]).catch(e => e.message);
+          скажи('о программе', (про || '').trim().split('\n').slice(0, 6).join(' · '));
+        }
+      }
+
+      /* живая система работает поверх сжатого образа: место в ней — это ОЗУ */
+      const монтирование = await прочти('/proc/mounts');
+      const корень = String(монтирование).split('\n').find(l => (l.split(' ')[1] === '/')) || '';
+      скажи('корень', корень.split(' ').slice(0, 3).join(' ') || 'неизвестно');
+      скажи('память', Math.round(os.freemem() / 1048576) + ' МБ свободно из ' +
+        Math.round(os.totalmem() / 1048576));
+      const куда = ['/', '/var/lib/flatpak', '/home'].filter(existsSync);
+      const место = await call('df', ['-h', ...куда]).catch(e => 'df не ответил: ' + e.message);
+      const строкиМеста = String(место).trim().split('\n');
+      скажи('место', (строкиМеста.length > 1 ? строкиМеста.slice(1) : строкиМеста).join(' · '));
+
+      return { текст:строки.join('\n') };
     },
 
     async 'sys.launch'({ id }){

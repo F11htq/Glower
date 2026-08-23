@@ -20,6 +20,11 @@ const Dlg = {
           ${opts.text ? `<div class="dlg-x">${esc(opts.text)}</div>` : ''}</div>
         </div>`;
 
+      /* длинный ответ машины показываем как есть: ровными строками и с прокруткой */
+      if (opts.pre){
+        const бл = el('pre', 'dlg-pre'); бл.textContent = opts.pre; box.appendChild(бл);
+      }
+
       let input = null, extra = null;
       if (opts.type === 'prompt'){
         input = el('input', 'inp');

@@ -200,6 +200,10 @@ Environment=XDG_SESSION_TYPE=wayland
 Environment="GLOWER_FLAGS=--system --allow-open --allow-launch --allow-power --allow-install --allow-net --allow-packages"
 ExecStartPre=/bin/mkdir -p /run/user/1000
 ExecStartPre=/bin/chown glower:glower /run/user/1000
+# Песочнице flatpak нужны пространства имён пользователя. Файл в /etc/sysctl.d
+# делает то же самое при загрузке, но полагаться на один путь не будем:
+# знак «+» означает, что строка выполняется с правами root.
+ExecStartPre=+/bin/sh -c '/sbin/sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true'
 ExecStart=/usr/bin/cage -- /usr/bin/glower-session
 # Три неудачи подряд — и systemd останавливается: на экране остаётся
 # объяснение, а не мигающий курсор.

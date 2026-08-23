@@ -150,6 +150,28 @@ async function обновиСписокМашины(){
   } catch(e){ списокМашины = []; }
 }
 
+/* Запуск программы машины из любого места оболочки. Если она не пошла,
+   человеку показывают настоящую причину, а для программ из Flathub — ещё и
+   кнопку осмотра песочницы: там ответ машины о том, что ей мешает. */
+async function запустиПрограмму(a){
+  try {
+    await OS.launch(a.id);
+    Shell.toast('Программы машины', 'Запускаю: ' + a.name, a.flatpak ? '🫙' : '🐧');
+  } catch(e){
+    const текст = String(e.message || e);
+    const песочница = /flatpak|ldconfig|bwrap|песочниц/i.test(текст);
+    const ответ = await Dlg.open({ type:песочница ? 'confirm' : 'alert', icon:'⚠️',
+      title:'Не удалось запустить', text:текст,
+      okText:песочница ? 'Осмотреть песочницу' : 'ОК', cancelText:'Закрыть' });
+    if (!песочница || !ответ) return;
+    let осмотр;
+    try { осмотр = await Platform.rpc('sys.sandbox', { id:(a.id || '').replace(/\.desktop$/, '') }); }
+    catch(e2){ осмотр = { текст:'осмотр не удался: ' + (e2.message || e2) }; }
+    await Dlg.open({ type:'alert', icon:'🔎', title:'Осмотр песочницы',
+      text:'Вот что машина отвечает о себе', pre:осмотр.текст || '' });
+  }
+}
+
 function wireMachineApps(){
   обновиСписокМашины();
   /* после установки список меняется — перечитываем его, когда открывают Пуск */
@@ -163,10 +185,7 @@ function wireMachineApps(){
     списокМашины.forEach(a => {
       if (!a.name.toLowerCase().includes(q)) return;
       out.push({ emo:a.flatpak ? '🫙' : '🐧', t:a.name, s:a.comment || 'Программа машины',
-        k:'Запуск', run:async () => {
-          try { await OS.launch(a.id); Shell.toast('Программы машины', 'Запускаю: ' + a.name, '🐧'); }
-          catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
-        } });
+        k:'Запуск', run:() => запустиПрограмму(a) });
     });
     return out;
   };
@@ -185,11 +204,7 @@ function wireMachineApps(){
       ico.style.background = 'linear-gradient(140deg,#fbbf24,#b45309)';
       b.appendChild(ico);
       b.appendChild(el('div', 't', esc(a.name)));
-      b.onclick = async () => {
-        Shell.closePanels();
-        try { await OS.launch(a.id); Shell.toast('Программы машины', 'Запускаю: ' + a.name, '🐧'); }
-        catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
-      };
+      b.onclick = () => { Shell.closePanels(); запустиПрограмму(a); };
       res.appendChild(b);
     });
     return r;
@@ -220,10 +235,7 @@ function wireApps(){
         items.forEach(a => {
           const b = el('button', 'btn' + (data.canLaunch ? ' pri' : ''), data.canLaunch ? 'Запустить' : 'Запуск выключен');
           b.disabled = !data.canLaunch;
-          b.onclick = async () => {
-            try { await OS.launch(a.id); Shell.toast('Программы машины', 'Запущено: ' + a.name, '🐧'); }
-            catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
-          };
+          b.onclick = () => запустиПрограмму(a);
           list.appendChild(row('📦', a.name, a.comment || a.id, b));
         });
         if (!data.canLaunch)

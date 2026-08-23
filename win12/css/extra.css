@@ -528,3 +528,9 @@ body.locked #desktop > *{pointer-events:none}
 .toasts{top:auto;bottom:calc(var(--dock-size) + 56px);right:16px;justify-content:flex-end}
 body.panel-open .toasts{transform:translateX(-352px)}
 body.taskbar .toasts{bottom:calc(var(--dock-size) + 18px)}
+
+/* ответ машины в окне: ровные строки, прокрутка, ничего не обрезано */
+.dlg-pre{max-height:46vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
+  margin:10px 0 0;padding:10px 12px;border-radius:12px;
+  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);
+  font:12px/1.5 ui-monospace,'Cascadia Code',Consolas,monospace}
