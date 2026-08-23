@@ -229,7 +229,18 @@ const WM = {
       Object.assign(win.node.style, { left:m.left + 'px', top:m.top + 'px', width:m.width + 'px', height:m.height + 'px' });
       win.maximized = true;
     }
-    setTimeout(() => { win.node.classList.remove('snapping'); if (win.app.onResize) win.app.onResize(win); }, 460);
+    setTimeout(() => {
+      win.node.classList.remove('snapping');
+      /* Пока окно разворачивалось, док на глазах превращался в панель задач и
+         менял высоту. Размер, посчитанный в начале этого движения, уже не
+         годится — иначе между окном и панелью остаётся щель. */
+      if (win.maximized){
+        const m2 = WM.maxRect();
+        Object.assign(win.node.style, { left:m2.left + 'px', top:m2.top + 'px',
+          width:m2.width + 'px', height:m2.height + 'px' });
+      }
+      if (win.app.onResize) win.app.onResize(win);
+    }, 460);
   },
 
   unmax(win, ev){
@@ -246,9 +257,20 @@ const WM = {
     if (r.right < 80) win.node.style.left = (80 - r.width) + 'px';
   },
 
+  /* Сколько места снизу занимает панель. Её высота зависит от размера значков,
+     отступов и того, влез ли трей, — поэтому её измеряют, а не вычисляют:
+     иначе между развёрнутым окном и панелью остаётся щель. */
+  занятоСнизу(запас = 0){
+    if (S.dockAutohide || document.body.classList.contains('dock-hidden')) return 0;
+    const панель = document.querySelector('.dock-wrap');
+    const r = панель && панель.getBoundingClientRect();
+    const h = r && r.height ? Math.max(0, Math.round(innerHeight - r.top)) : (S.dockSize + 18);
+    return h + запас;
+  },
+
   /* область для развёрнутого окна (снизу может стоять панель задач) */
   maxRect(){
-    const tb = document.body.classList.contains('taskbar') ? (S.dockSize + 18) : 0;
+    const tb = document.body.classList.contains('taskbar') ? this.занятоСнизу() : 0;
     return { left:0, top:0, width:innerWidth, height:innerHeight - tb };
   },
 
@@ -262,7 +284,7 @@ const WM = {
     return null;
   },
   zoneRect(z){
-    const pad = 8, top = 82, bot = S.dockAutohide ? 14 : (S.dockSize + 42);
+    const pad = 8, top = 82, bot = S.dockAutohide ? 14 : WM.занятоСнизу(12);
     const W = innerWidth - pad * 2, H = innerHeight - top - bot;
     const R = (x, y, w, h) => ({ left:x, top:y, width:w, height:h });
     switch(z){
@@ -324,7 +346,7 @@ const WM = {
     const ws = this.wins.filter(w => !w.minimized && w.desk === this.desk);
     if (!ws.length) return;
     const cols = Math.ceil(Math.sqrt(ws.length)), rows = Math.ceil(ws.length / cols);
-    const pad = 10, top = 82, bot = S.dockSize + 42;
+    const pad = 10, top = 82, bot = this.занятоСнизу(12);
     const cw = (innerWidth - pad * (cols + 1)) / cols, ch = (innerHeight - top - bot - pad * (rows - 1)) / rows;
     ws.forEach((w, i) => {
       if (w.maximized) { w.node.classList.remove('max'); w.maximized = false; }

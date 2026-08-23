@@ -57,9 +57,15 @@ Shell.updateTaskbar = function(){
 
   Shell.fitDock();
 
-  // развёрнутые окна не должны залезать под панель задач
+  Shell.fitMaxWindows();
+};
+
+/* Развёрнутое окно должно доходить ровно до панели: ни под неё, ни со щелью.
+   Высота панели меняется от размера значков и от того, влез ли трей, поэтому
+   после каждой её перестройки развёрнутые окна подгоняются заново. */
+Shell.fitMaxWindows = function(){
+  const m = WM.maxRect();
   WM.wins.filter(w => w.maximized).forEach(w => {
-    const m = WM.maxRect();
     Object.assign(w.node.style, { left:m.left + 'px', top:m.top + 'px', width:m.width + 'px', height:m.height + 'px' });
     if (w.app.onResize) w.app.onResize(w);
   });
@@ -112,8 +118,15 @@ Shell.fitDock = function(){
     size -= 2;
     root.style.setProperty('--dock-size', size + 'px');
   }
+  if (Shell.fitMaxWindows) Shell.fitMaxWindows();
 };
-addEventListener('resize', () => Shell.fitDock());
+addEventListener('resize', () => { Shell.fitDock(); Shell.fitMaxWindows(); });
+/* Панель меняет высоту плавно, и пока идёт это движение, мерить её бесполезно:
+   развёрнутые окна подгоняются ещё раз, когда движение закончилось. */
+const обёртка = document.querySelector('.dock-wrap');
+[dock, обёртка].forEach(n => n && n.addEventListener('transitionend', e => {
+  if (e.target === n) Shell.fitMaxWindows();
+}));
 
 ['syncDock','updateChrome'].forEach(fn => {
   const orig = Shell[fn].bind(Shell);

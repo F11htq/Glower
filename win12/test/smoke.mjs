@@ -100,6 +100,12 @@ try {
   check('док становится панелью задач', await page.evaluate(() => document.body.classList.contains('taskbar')));
   check('развёрнутое окно не заходит под панель',
     await page.evaluate(() => Math.round(WM.top().node.getBoundingClientRect().height) < innerHeight - 40));
+  const щель = await page.evaluate(() => {
+    const о = WM.top().node.getBoundingClientRect();
+    const п = document.querySelector('.dock-wrap').getBoundingClientRect();
+    return Math.round(п.top - о.bottom);
+  });
+  check('между развёрнутым окном и панелью нет щели', Math.abs(щель) <= 1, щель + 'px');
 
   /* --- приложения открываются --- */
   await page.evaluate(() => WM.wins.forEach(w => WM.close(w)));
