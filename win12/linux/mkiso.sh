@@ -68,6 +68,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 mesa-vulkan-drivers \
+  python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
   sudo \
@@ -121,6 +122,8 @@ install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
+# своя программа-оболочка: рабочий стол и полоса под панель задач
+install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
 # настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё
 install -d "$ROOTFS/usr/share/glower/labwc"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"

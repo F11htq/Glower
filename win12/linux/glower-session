@@ -92,18 +92,49 @@ ls /dev/dri/card* >/dev/null 2>&1 && HAVE_DRI=yes
 # labwc — оконный сервер. Оболочка запускается его же средствами и лежит в
 # самом низу стопки: чужие окна встают поверх неё, как и положено окнам, но
 # в отличие от киоска остаются переключаемыми — и клавишами, и панелью задач.
+# Есть ли на машине всё для настоящего рабочего стола: движок WebKit и
+# протокол слоёв. Если да, оболочку показывает своя программа, а не браузер.
+have_webkit(){
+  command -v glower-shell >/dev/null || return 1
+  python3 - >/dev/null 2>&1 <<'PYCHECK'
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('WebKit2', '4.1')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, WebKit2, GtkLayerShell
+PYCHECK
+}
+
 run_labwc(){
   command -v labwc >/dev/null || return 1
   [ "$HAVE_DRI" = yes ] || return 1
   say "GlowerOS: пробую labwc (Wayland)"
   mkdir -p "$HOME/.local/share/glower"
   START_SH="$HOME/.local/share/glower/shell.sh"
-  cat > "$START_SH" <<STARTUP
+
+  if have_webkit; then
+    # Рабочий стол — настоящая поверхность нижнего слоя, а под панель задач
+    # отводится полоса экрана, которую оконный сервер вычитает из рабочей
+    # области: развёрнутое окно её не закроет.
+    say "GlowerOS: оболочку показывает своя программа на WebKit"
+    cat > "$START_SH" <<STARTUP
 #!/bin/sh
-"$BROWSER" $(cmdline gpu) --ozone-platform=wayland
+GLOWER_URL="http://localhost:$PORT/" \
+GLOWER_QUERY="session=1$QUERY_EXTRA" \
+GLOWER_PANEL_H="${GLOWER_PANEL_H:-48}" \
+  /usr/bin/glower-shell
 # оболочку закрыли — значит, закончился и сеанс
 labwc -e >/dev/null 2>&1 || true
 STARTUP
+  else
+    say "GlowerOS: WebKit недоступен — показываю оболочку браузером"
+    cat > "$START_SH" <<STARTUP
+#!/bin/sh
+"$BROWSER" $(cmdline gpu) --ozone-platform=wayland
+labwc -e >/dev/null 2>&1 || true
+STARTUP
+  fi
+
   chmod +x "$START_SH"
   labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc}" -s "$START_SH" >>"$LOG" 2>&1
   code=$?

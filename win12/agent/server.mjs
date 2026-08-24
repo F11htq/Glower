@@ -115,8 +115,12 @@ if (SYSTEM){
   };
 }
 
+/* разговор поверхностей оболочки: рабочий стол и панель задач */
+const BUS = (await import('./bus.mjs')).bus();
+
 /* ---------- методы, доступные оболочке ---------- */
 const API = {
+  ...BUS,
   async ping(){
     return { ok:true, agent:'win12-agent', version:'1.2', root:ROOT,
              platform:process.platform, node:process.version, pid:process.pid,

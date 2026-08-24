@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Оболочка GlowerOS: рабочий стол и панель задач как настоящие поверхности.
+
+Раньше оболочка была окном браузера, притворявшимся рабочим столом: её
+приходилось держать в самом низу стопки, а развёрнутая программа накрывала
+панель задач, и человеку оставалось угадывать, как вернуться.
+
+Здесь всё честно. Рабочий стол — поверхность нижнего слоя: она под всеми
+окнами и никогда с ними не спорит. Полосу под панель задач держит вторая
+поверхность, верхнего слоя: она прозрачна и щелчков не ловит — её работа в
+том, чтобы оконный сервер вычел эту полосу из рабочей области. Ни одно окно,
+даже развёрнутое во весь экран, панель после этого не закроет, а видна она
+всё так же на рабочем столе.
+
+Показывает обе поверхности движок WebKit — тот же, что и в настоящих
+программах системы; наша оболочка написана обычным HTML и CSS.
+"""
+import json
+import os
+import sys
+import urllib.request
+
+import cairo
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('WebKit2', '4.1')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, WebKit2, GtkLayerShell, GLib   # noqa: E402
+
+# GTK по своему обычаю рисует вокруг окна тень, и поверхность выходит выше
+# запрошенной: полоса под панель получалась на двенадцать точек шире, чем
+# просили. Оболочке тени не нужны — убираем их разом для всех наших окон.
+БЕЗ_ТЕНЕЙ = b"""
+window, window.background, decoration, decoration:backdrop {
+  box-shadow: none; margin: 0; border: 0; background-color: transparent;
+}
+"""
+
+АДРЕС = os.environ.get('GLOWER_URL', 'http://localhost:8123/')
+ПОЛОСА = int(os.environ.get('GLOWER_PANEL_H', '48'))
+ДОВОД = '&'.join(x for x in os.environ.get('GLOWER_QUERY', '').split('&') if x)
+
+
+def адрес(поверхность):
+    хвост = 'surface=' + поверхность + ('&' + ДОВОД if ДОВОД else '')
+    return АДРЕС + ('&' if '?' in АДРЕС else '?') + хвост
+
+
+def вид(поверхность):
+    """Веб-вид с настройками, которые нужны оболочке, и без лишнего."""
+    v = WebKit2.WebView()
+    н = v.get_settings()
+    н.set_property('enable-developer-extras', True)
+    н.set_property('enable-write-console-messages-to-stdout', True)
+    н.set_property('media-playback-requires-user-gesture', False)
+    н.set_property('enable-back-forward-navigation-gestures', False)
+    v.set_background_color(Gdk.RGBA(0, 0, 0, 0))
+    v.load_uri(адрес(поверхность))
+
+    def упало(вид_, событие, _данные=None):
+        # Оболочка не должна пропадать молча: перезагружаем и пишем в журнал.
+        print('GlowerOS: веб-вид упал (%s), перезагружаю' % поверхность, file=sys.stderr)
+        GLib.timeout_add(1500, lambda: (вид_.load_uri(адрес(поверхность)), False)[1])
+        return True
+    v.connect('web-process-terminated', упало)
+    return v
+
+
+def распорка(высота):
+    """Прозрачная полоса внизу экрана: держит место для панели задач.
+
+    Ничего не рисует и щелчков не ловит — пустая область ввода означает, что
+    любое нажатие проходит сквозь неё на рабочий стол, где панель и живёт."""
+    окно = Gtk.Window()
+    # Без этого GTK пририсовывает окну свою тень, поверхность выходит выше
+    # запрошенного, и полоса под панель получается шире, чем нужно.
+    окно.set_decorated(False)
+    окно.set_app_paintable(True)
+    экран = окно.get_screen()
+    if экран is not None and экран.get_rgba_visual() is not None:
+        окно.set_visual(экран.get_rgba_visual())
+    окно.add(Gtk.DrawingArea())
+
+    GtkLayerShell.init_for_window(окно)
+    GtkLayerShell.set_layer(окно, GtkLayerShell.Layer.TOP)
+    GtkLayerShell.set_namespace(окно, 'glower-полоса')
+    for край in (К.BOTTOM, К.LEFT, К.RIGHT):
+        GtkLayerShell.set_anchor(окно, край, True)
+    окно.set_size_request(-1, высота)
+    GtkLayerShell.set_exclusive_zone(окно, высота)
+    GtkLayerShell.set_keyboard_mode(окно, GtkLayerShell.KeyboardMode.NONE)
+    окно.show_all()
+
+    окно_gdk = окно.get_window()
+    if окно_gdk is not None:
+        окно_gdk.input_shape_combine_region(cairo.Region(), 0, 0)
+
+    if os.environ.get('GLOWER_DEBUG'):
+        def покажи():
+            а = окно.get_allocation()
+            print('полоса: просили %d, поверхность %dx%d' % (высота, а.width, а.height),
+                  file=sys.stderr, flush=True)
+            return False
+        GLib.timeout_add(1500, покажи)
+    return окно
+
+
+def поверхность(имя, слой, края, высота=None, полоса=None):
+    окно = Gtk.Window()
+    окно.set_decorated(False)
+    GtkLayerShell.init_for_window(окно)
+    GtkLayerShell.set_layer(окно, слой)
+    GtkLayerShell.set_namespace(окно, 'glower-' + имя)
+    for край in края:
+        GtkLayerShell.set_anchor(окно, край, True)
+    if высота:
+        окно.set_size_request(-1, высота)
+    # Полоса экрана, которую оконный сервер вычтет из рабочей области: ни одно
+    # окно, даже развёрнутое во весь экран, не сможет её закрыть.
+    GtkLayerShell.set_exclusive_zone(окно, полоса if полоса is not None else -1)
+    GtkLayerShell.set_keyboard_mode(окно, GtkLayerShell.KeyboardMode.ON_DEMAND)
+    окно.add(вид(имя))
+    окно.connect('destroy', Gtk.main_quit)
+    окно.show_all()
+    return окно
+
+
+def следи_за_полосой(окно):
+    """Панель задач меняет высоту — вместе с ней меняется и занятая полоса.
+
+    Оболочка сама сообщает свою высоту агенту, а мы её спрашиваем: так полоса
+    всегда ровно под панелью, и ни щели, ни лишнего края не остаётся."""
+    состояние = {'высота': ПОЛОСА}
+
+    def спроси():
+        try:
+            запрос = urllib.request.Request(
+                АДРЕС.split('?')[0].rstrip('/') + '/rpc',
+                data=json.dumps({'method': 'ui.last', 'params': {'тема': 'полоса'}}).encode(),
+                headers={'Content-Type': 'application/json'})
+            ответ = json.loads(urllib.request.urlopen(запрос, timeout=2).read().decode())
+            что = (ответ.get('result') or {}).get('что')
+            высота = int(что) if что else None
+        except Exception:
+            высота = None
+        if os.environ.get('GLOWER_DEBUG'):
+            print('агент сказал про полосу: %r' % (высота,), file=sys.stderr, flush=True)
+        if высота and 20 <= высота <= 200 and высота != состояние['высота']:
+            состояние['высота'] = высота
+            окно.set_size_request(-1, высота)
+            GtkLayerShell.set_exclusive_zone(окно, высота)
+        return True
+
+    GLib.timeout_add_seconds(2, спроси)
+
+
+стиль = Gtk.CssProvider()
+стиль.load_from_data(БЕЗ_ТЕНЕЙ)
+Gtk.StyleContext.add_provider_for_screen(
+    Gdk.Screen.get_default(), стиль, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+К = GtkLayerShell.Edge
+поверхность('desktop', GtkLayerShell.Layer.BACKGROUND,
+            [К.TOP, К.BOTTOM, К.LEFT, К.RIGHT], полоса=-1)
+if ПОЛОСА > 0:
+    следи_за_полосой(распорка(ПОЛОСА))
+
+Gtk.main()

@@ -63,6 +63,21 @@ Shell.updateTaskbar = function(){
 /* Развёрнутое окно должно доходить ровно до панели: ни под неё, ни со щелью.
    Высота панели меняется от размера значков и от того, влез ли трей, поэтому
    после каждой её перестройки развёрнутые окна подгоняются заново. */
+/* Сколько места на экране занимает панель — знает только сама оболочка.
+   Программа, которая её показывает, эту высоту у агента и спрашивает, чтобы
+   отвести под панель ровно столько экрана, сколько нужно. */
+let полосаСказана = 0;
+Shell.tellPanelHeight = function(){
+  if (!window.Platform || Platform.mode !== 'native') return;
+  const п = document.querySelector('.dock-wrap');
+  if (!п) return;
+  const r = п.getBoundingClientRect();
+  const h = Math.round(innerHeight - r.top);
+  if (!h || Math.abs(h - полосаСказана) < 2) return;
+  полосаСказана = h;
+  Platform.rpc('ui.say', { 'тема':'полоса', что:h }).catch(() => {});
+};
+
 Shell.fitMaxWindows = function(){
   const m = WM.maxRect();
   WM.wins.filter(w => w.maximized).forEach(w => {
@@ -119,6 +134,7 @@ Shell.fitDock = function(){
     root.style.setProperty('--dock-size', size + 'px');
   }
   if (Shell.fitMaxWindows) Shell.fitMaxWindows();
+  if (Shell.tellPanelHeight) Shell.tellPanelHeight();
 };
 addEventListener('resize', () => { Shell.fitDock(); Shell.fitMaxWindows(); });
 /* Панель меняет высоту плавно, и пока идёт это движение, мерить её бесполезно:
