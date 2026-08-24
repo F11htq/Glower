@@ -67,7 +67,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
-  cage seatd libgl1 libegl1 libgles2 mesa-vulkan-drivers \
+  labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 mesa-vulkan-drivers \
   xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
   sudo \
@@ -121,6 +121,9 @@ install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
+# настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё
+install -d "$ROOTFS/usr/share/glower/labwc"
+install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
 
 if [ -n "$CHROMIUM" ]; then
   install -d "$ROOTFS/opt/chromium"

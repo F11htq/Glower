@@ -3,9 +3,10 @@
 #  Сеанс GlowerOS: агент + оболочка в режиме киоска.
 #
 #  Пробует по очереди, пока что-нибудь не заработает:
-#    1) cage, чистый Wayland — если есть графический узел ядра (/dev/dri);
-#    2) X-сервер с ускорением;
-#    3) X-сервер на программной отрисовке — виртуалки и старое железо.
+#    1) labwc — настоящий оконный сервер: чужие окна живут рядом с оболочкой;
+#    2) cage, киоск на одно окно — если labwc на этой машине не пошёл;
+#    3) X-сервер с ускорением;
+#    4) X-сервер на программной отрисовке — виртуалки и старое железо.
 #  Отказ одного способа не хоронит сеанс: он просто берётся за следующий.
 #  Если не вышло ничего — на экране остаётся понятное объяснение,
 #  а не мигающий курсор.
@@ -77,7 +78,7 @@ cmdline(){   # $1 — режим: gpu | soft
 --disable-session-crashed-bubble --disable-features=Translate,TranslateUI,MediaRouter
 --disable-background-timer-throttling --disable-backgrounding-occluded-windows
 --disable-renderer-backgrounding --autoplay-policy=no-user-gesture-required
---user-data-dir=$HOME/.local/share/glower/browser --class=GlowerOS $g"
+--user-data-dir=$HOME/.local/share/glower/browser --class=glowershell $g"
 }
 
 HAVE_DRI=no
@@ -88,6 +89,28 @@ ls /dev/dri/card* >/dev/null 2>&1 && HAVE_DRI=yes
 # этой машине, сеанс должен пережить отказ и попробовать следующий, а не
 # умереть вместе с ним. Раньше из-за этого приходилось вручную выбирать
 # в меню загрузки «безопасную графику».
+# labwc — оконный сервер. Оболочка запускается его же средствами и лежит в
+# самом низу стопки: чужие окна встают поверх неё, как и положено окнам, но
+# в отличие от киоска остаются переключаемыми — и клавишами, и панелью задач.
+run_labwc(){
+  command -v labwc >/dev/null || return 1
+  [ "$HAVE_DRI" = yes ] || return 1
+  say "GlowerOS: пробую labwc (Wayland)"
+  mkdir -p "$HOME/.local/share/glower"
+  START_SH="$HOME/.local/share/glower/shell.sh"
+  cat > "$START_SH" <<STARTUP
+#!/bin/sh
+"$BROWSER" $(cmdline gpu) --ozone-platform=wayland
+# оболочку закрыли — значит, закончился и сеанс
+labwc -e >/dev/null 2>&1 || true
+STARTUP
+  chmod +x "$START_SH"
+  labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc}" -s "$START_SH" >>"$LOG" 2>&1
+  code=$?
+  say "GlowerOS: labwc завершился с кодом $code"
+  return $code
+}
+
 run_cage(){
   command -v cage >/dev/null || return 1
   [ "$HAVE_DRI" = yes ] || return 1
@@ -112,6 +135,7 @@ XRC
 
 # Успешный выход — это конец сеанса (оболочку закрыли), а не повод
 # перезапускаться следующим способом.
+[ "$HAVE_DRI" = yes ] && { run_labwc && exit 0; }
 [ "$HAVE_DRI" = yes ] && { run_cage && exit 0; }
 [ "$HAVE_DRI" = yes ] && { run_x gpu && exit 0; }
 run_x soft && exit 0
@@ -122,6 +146,7 @@ say "  GlowerOS не смог показать оболочку на этой м
 say "  Что известно:"
 say "    графический узел: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo 'нет')"
 say "    браузер:          $BROWSER"
+say "    labwc:            $(command -v labwc || echo 'нет')"
 say "    cage:             $(command -v cage || echo 'нет')"
 say "    X-сервер:         $(command -v Xorg || command -v X || echo 'нет')"
 say "  Подробности: $LOG"

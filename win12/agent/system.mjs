@@ -28,7 +28,7 @@ export async function has(cmd){
 /* единственная точка запуска: только фиксированные команды */
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
-  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'setxkbmap', 'localectl', 'free', 'uptime',
+  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -303,8 +303,9 @@ async function запустить(программа, части, via){
   return итог;
 }
 
-async function попытка(программа, части, via){
-  const { spawn } = await import('node:child_process');
+/* Агент поднимается раньше оконного сервера, поэтому про экран он ничего
+   не знает и узнаёт каждый раз заново: ищет сокет Wayland в папке сеанса. */
+async function средаЭкрана(){
   const env = Object.assign({}, process.env);
   const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
   env.XDG_RUNTIME_DIR = дом;
@@ -313,6 +314,12 @@ async function попытка(программа, части, via){
       .find(f => /^wayland-\d+$/.test(f));
     if (сокет) env.WAYLAND_DISPLAY = сокет; else env.DISPLAY = ':0';
   }
+  return env;
+}
+
+async function попытка(программа, части, via){
+  const { spawn } = await import('node:child_process');
+  const env = await средаЭкрана();
 
   return await new Promise(resolve => {
     let дитя;
@@ -359,6 +366,45 @@ export function apps(allowLaunch){
       }
       list.sort((a, b) => a.name.localeCompare(b.name));
       return { total:list.length, list, canLaunch:!!allowLaunch };
+    },
+
+    /* ---------- настоящие окна машины ----------
+       Оболочка рисует свои окна сама, но рядом с ней живут окна чужих
+       программ. Оконный сервер умеет о них рассказывать и ими управлять —
+       через это система и становится системой, а не киоском. */
+    async 'sys.windows'(){
+      if (!await has('wlrctl'))
+        return { list:[], можно:false, почему:'на машине нет wlrctl — окнами управлять нечем' };
+      const env = await средаЭкрана();
+      const { execFile } = await import('node:child_process');
+      const текст = await new Promise(resolve => execFile('wlrctl', ['toplevel', 'list'],
+        { env, timeout:4000 }, (e, out) => resolve(e ? '' : String(out))));
+      const list = текст.split('\n').filter(Boolean).map(строка => {
+        const п = строка.indexOf(': ');
+        const appId = п < 0 ? строка.trim() : строка.slice(0, п).trim();
+        const title = п < 0 ? '' : строка.slice(п + 2).trim();
+        return { appId, title, оболочка:appId === 'glowershell' };
+      });
+      return { list, можно:!!allowLaunch };
+    },
+
+    async 'sys.window'({ action, appId, title }){
+      if (!allowLaunch) throw new Error('управление окнами выключено: запустите агент с ключом --allow-launch');
+      const можно = { focus:'focus', minimize:'minimize', maximize:'maximize',
+        fullscreen:'fullscreen', close:'close' };
+      const что = можно[action];
+      if (!что) throw new Error('неизвестное действие с окном: ' + action);
+      if (!appId || !/^[\w.+-]+$/.test(String(appId))) throw new Error('неверное имя окна');
+      if (!await has('wlrctl')) throw new Error('на машине нет wlrctl — окнами управлять нечем');
+
+      const доводы = ['toplevel', что, 'app_id:' + appId];
+      if (title) доводы.push('title:' + String(title).slice(0, 120));
+      const env = await средаЭкрана();
+      const { execFile } = await import('node:child_process');
+      const беда = await new Promise(resolve => execFile('wlrctl', доводы, { env, timeout:4000 },
+        (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
+      if (беда) throw new Error(беда);
+      return { ok:true, action:что, appId };
     },
 
     /* Починка: закрытый список действий, каждое выполняется от root
@@ -413,6 +459,19 @@ export function apps(allowLaunch){
       const место = await call('df', ['-h', ...куда]).catch(e => 'df не ответил: ' + e.message);
       const строкиМеста = String(место).trim().split('\n');
       скажи('место', (строкиМеста.length > 1 ? строкиМеста.slice(1) : строкиМеста).join(' · '));
+
+      /* Журнал системы прикладываем к осмотру: тому, кто умеет читать, он
+         скажет больше всех наших проверок вместе взятых. */
+      const журнал = async (что, доводы) => {
+        const т = await call('journalctl', доводы).catch(e => 'журнал не ответил: ' + e.message);
+        строки.push('', '— ' + что + ' —', String(т).trim() || '(пусто)');
+      };
+      if (await has('journalctl')){
+        await журнал('последние ошибки системы',
+          ['-p', 'err', '-n', '25', '--no-pager', '--output=short-iso']);
+        await журнал('журнал сеанса',
+          ['--user', '-n', '25', '--no-pager', '--output=short-iso']);
+      }
 
       return { текст:строки.join('\n') };
     },

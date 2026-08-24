@@ -321,6 +321,32 @@ try {
       итог.путь && /неверный идентификатор/.test(итог.путь.error || ''), JSON.stringify(итог.путь));
   }
 
+  /* --- настоящие окна машины попадают в панель задач --- */
+  const чужие = await page.evaluate(async () => {
+    const было = Platform.rpc.bind(Platform);
+    Platform.rpc = (m, p) => m === 'sys.windows'
+      ? Promise.resolve({ list:[
+          { appId:'org.telegram.desktop', title:'Telegram', 'оболочка':false },
+          { appId:'glowershell', title:'Рабочий стол', 'оболочка':true }], 'можно':true })
+      : было(m, p);
+    await new Promise(r => setTimeout(r, 3600));
+    const подписи = [...document.querySelectorAll('#dock-running .dock-item')].map(b => b.dataset.tip || '');
+    Platform.rpc = было;
+    return подписи;
+  });
+  check('окно чужой программы видно в панели задач',
+    чужие.some(t => /Telegram/.test(t)), JSON.stringify(чужие));
+  check('сама оболочка себя окном не считает',
+    !чужие.some(t => /Рабочий стол|glowershell/.test(t)), JSON.stringify(чужие));
+
+  const окна = await page.evaluate(() => Platform.rpc('sys.windows').then(d => d, e => ({ err:e.message })));
+  check('система честно отвечает про свои окна',
+    Array.isArray(окна.list), JSON.stringify(окна).slice(0, 160));
+  const окноБезКлюча = await page.evaluate(() => Platform.rpc('sys.window', { action:'close', appId:'glowershell' })
+    .then(() => 'выполнилось', e => e.message));
+  check('без --allow-launch чужие окна не трогают',
+    /--allow-launch/.test(окноБезКлюча), String(окноБезКлюча));
+
   /* --- починка: закрытый список действий, и только по ключу --- */
   const починкаБезКлюча = await page.evaluate(() => Platform.rpc('sys.fix', { что:'песочница' })
     .then(() => 'выполнилось', e => e.message));

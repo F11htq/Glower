@@ -71,6 +71,7 @@ window.OS = OS;
   wireApps();
   wireMachineApps();
   wireTaskManager();
+  wireNativeWindows();
 })();
 
 /* ---------- громкость системы вместо громкости страницы ---------- */
@@ -175,7 +176,17 @@ async function покажиОсмотр(a){
 }
 
 async function запустиПрограмму(a){
-  const скажи = () => Shell.toast('Программы машины', 'Запускаю: ' + a.name, a.flatpak ? '🫙' : '🐧');
+  const скажи = () => {
+    Shell.toast('Программы машины', 'Запускаю: ' + a.name, a.flatpak ? '🫙' : '🐧');
+    /* Программа открывается своим окном поверх рабочего стола. Один раз за
+       сеанс подсказываем, как вернуться, — дальше человек уже знает. */
+    if (!sessionStorage.getItem('glower.окноПодсказка')){
+      try { sessionStorage.setItem('glower.окноПодсказка', '1'); } catch(e){}
+      setTimeout(() => Shell.toast('Как вернуться',
+        'Программа открылась своим окном. Она есть в панели задач, а клавиши Windows + D возвращают на рабочий стол.',
+        '🪟', 9000), 1200);
+    }
+  };
   try { await OS.launch(a.id); скажи(); return; }
   catch(e){
     const текст = String(e.message || e);
@@ -340,4 +351,57 @@ function wireTaskManager(){
     const close = win.onClose;
     win.onClose = () => { clearInterval(timer); if (close) close(); };
   };
+}
+
+/* ---------- настоящие окна машины в панели задач ----------
+
+   Программа машины открывается своим окном — настоящим окном оконного
+   сервера, а не нарисованным. Раньше такое окно закрывало собой всё и пути
+   назад не оставляло. Теперь оно встаёт в панель задач рядом с нашими:
+   щелчок — перейти к нему, правая кнопка — закрыть. */
+let чужиеОкна = [];
+
+function значокЧужого(o){
+  const свой = списокМашины.find(a => (a.id || '').replace(/\.desktop$/, '') === o.appId);
+  return свой ? (свой.flatpak ? '🫙' : '🐧') : '🪟';
+}
+
+function нарисуйЧужие(){
+  const box = document.getElementById('dock-running');
+  if (!box) return;
+  чужиеОкна.forEach(o => {
+    const b = el('button', 'dock-item run');
+    b.dataset.tip = (o.title || o.appId) + ' — окно машины';
+    b.appendChild(el('div', 'emo', значокЧужого(o)));
+    b.onclick = () => Platform.rpc('sys.window', { action:'focus', appId:o.appId, title:o.title })
+      .catch(e => Dlg.alert('Не удалось перейти к окну', String(e.message || e), '⚠️'));
+    b.oncontextmenu = async e => {
+      e.preventDefault();
+      if (await Dlg.confirm('Закрыть окно?', o.title || o.appId, { okText:'Закрыть', danger:true }))
+        Platform.rpc('sys.window', { action:'close', appId:o.appId, title:o.title })
+          .then(() => setTimeout(обновиЧужие, 300))
+          .catch(er => Dlg.alert('Не удалось закрыть', String(er.message || er), '⚠️'));
+    };
+    box.appendChild(b);
+  });
+  const сеп = document.getElementById('dock-sep-run');
+  if (сеп && чужиеОкна.length) сеп.hidden = false;
+  if (Shell.fitDock) Shell.fitDock();
+}
+
+async function обновиЧужие(){
+  if (document.hidden) return;
+  try {
+    const d = await Platform.rpc('sys.windows');
+    const было = JSON.stringify(чужиеОкна);
+    чужиеОкна = (d.list || []).filter(o => !o.оболочка);
+    if (JSON.stringify(чужиеОкна) !== было) Shell.syncDock();
+  } catch(e){ /* оконный сервер может и не уметь этого — тогда просто молчим */ }
+}
+
+function wireNativeWindows(){
+  const прежний = Shell.syncDock.bind(Shell);
+  Shell.syncDock = function(){ const r = прежний(); нарисуйЧужие(); return r; };
+  обновиЧужие();
+  setInterval(обновиЧужие, 3000);
 }
