@@ -41,7 +41,7 @@ jobs:
           echo "CHROME_DIR=$PWD/chrome-linux64" >> $GITHUB_ENV
 
       - name: Собрать образ
-        run: sudo bash win12/linux/mkiso.sh --out glower.iso --chromium "$CHROME_DIR"
+        run: sudo bash glower/linux/mkiso.sh --out glower.iso --chromium "$CHROME_DIR"
 
       - name: Контрольная сумма
         run: sha256sum glower.iso > glower.iso.sha256

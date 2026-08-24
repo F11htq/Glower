@@ -1,0 +1,531 @@
+/* ==========================================================================
+   Доработки под поведение настоящих систем
+   ========================================================================== */
+
+/* ---------- Рабочий стол: свободное размещение значков ---------- */
+.desktop-icons{position:absolute;top:0;left:0;right:0;bottom:0;display:block;max-height:none;z-index:1;
+  pointer-events:none}
+.di{position:absolute;width:92px;pointer-events:auto;transition:background var(--t1),box-shadow var(--t1)}
+.di.drag{opacity:.75;z-index:9;transition:none;cursor:grabbing}
+.marquee{position:absolute;z-index:2;border-radius:4px;pointer-events:none;
+  background:rgba(var(--accent-rgb,58,134,255),.22);
+  box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb,58,134,255),.9)}
+
+/* ---------- Превью окон в доке ---------- */
+.dock-prev{position:fixed;z-index:820;min-width:220px;max-width:300px;padding:6px;border-radius:16px;
+  opacity:0;visibility:hidden;transform:translateY(10px) scale(.95);transform-origin:bottom center;
+  transition:opacity var(--t2) var(--e-io),transform var(--t2) var(--e-spring),visibility var(--t2)}
+.dock-prev.on{opacity:1;visibility:visible;transform:none}
+.dp-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:11px;font-size:12.5px;cursor:pointer;
+  transition:background var(--t1)}
+.dp-row:hover{background:rgba(var(--tint),.2)}
+.dp-thumb{width:52px;height:32px;border-radius:6px;flex:none;display:grid;place-content:center;font-size:15px;
+  box-shadow:inset 0 0 0 1px rgba(var(--tint),.2)}
+.dp-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-row .x{opacity:.4;font-size:15px;padding:0 3px}
+.dp-row .x:hover{opacity:1;color:#ff6b6b}
+.dp-head{font-size:10.5px;opacity:.55;font-weight:700;padding:5px 10px 3px;text-transform:uppercase;letter-spacing:.5px}
+
+/* ---------- Snap Assist ---------- */
+.snap-assist{position:fixed;z-index:640;display:none;align-content:center;justify-content:center;
+  flex-wrap:wrap;gap:16px;padding:24px;background:rgba(0,0,0,.28);
+  animation:fade var(--t3) both}
+.snap-assist.on{display:flex}
+.sa-card{width:min(280px,30vw);border-radius:14px;overflow:hidden;cursor:pointer;
+  background:rgba(var(--tint),.14);box-shadow:inset 0 0 0 1px rgba(var(--tint),.2),0 12px 30px rgba(0,0,0,.32);
+  animation:sgIn var(--t3) var(--e-spring) both;animation-delay:calc(var(--i,0)*50ms);
+  transition:transform var(--t2) var(--e-spring)}
+.sa-card:hover{transform:translateY(-5px) scale(1.03)}
+.sa-head{display:flex;align-items:center;gap:8px;padding:9px 11px;font-size:12.5px;background:rgba(var(--tint),.12)}
+.sa-body{height:120px;display:grid;place-content:center;font-size:44px;opacity:.75}
+.sa-hint{position:absolute;bottom:26px;left:0;right:0;text-align:center;font-size:12.5px;opacity:.6}
+
+/* ---------- Диалог «Выполнить» ---------- */
+.run-dlg{position:fixed;left:24px;bottom:calc(var(--dock-size) + 46px);z-index:860;width:min(420px,92vw);
+  padding:16px;border-radius:18px;opacity:0;visibility:hidden;transform:translateY(14px) scale(.96);
+  transition:opacity var(--t2) var(--e-io),transform var(--t2) var(--e-spring),visibility var(--t2)}
+.run-dlg.on{opacity:1;visibility:visible;transform:none}
+.run-dlg h4{margin:0 0 4px;font-size:14px;font-weight:600}
+.run-dlg p{margin:0 0 12px;font-size:11.5px;opacity:.6;line-height:1.45}
+.run-row{display:flex;gap:8px}
+.run-row input{flex:1}
+.run-err{color:#ff8080;font-size:11.5px;margin-top:8px;min-height:14px}
+
+/* ---------- Корзина ---------- */
+.tr-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:11px;font-size:12.5px;
+  transition:background var(--t1)}
+.tr-row:hover{background:rgba(var(--tint),.12)}
+.tr-row .gl{font-size:20px}
+.tr-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr-row .from{font-size:11px;opacity:.5}
+
+/* ---------- Проводник 2.0 ---------- */
+.fe-sep{width:1px;height:20px;background:rgba(var(--tint),.2)}
+.fe-table{padding:6px 10px 14px}
+.fe-tr{display:grid;grid-template-columns:1fr 150px 110px 90px;gap:10px;align-items:center;
+  padding:7px 10px;border-radius:9px;font-size:12.5px;cursor:pointer;transition:background var(--t1)}
+.fe-tr .c1{display:flex;align-items:center;gap:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fe-tr .gl{font-size:16px}
+.fe-tr.head{font-size:11px;opacity:.55;font-weight:700;cursor:default;position:sticky;top:0;
+  background:rgba(var(--tint),.10);text-transform:uppercase;letter-spacing:.4px}
+.fe-tr.head:hover{background:rgba(var(--tint),.10)}
+.fe-tr:hover{background:rgba(var(--tint),.12)}
+.fe-tr.sel,.fe-it.sel{background:rgba(var(--accent-rgb,58,134,255),.34);
+  box-shadow:inset 0 0 0 1px rgba(var(--tint),.3)}
+.fe-it.drop,.fe-tr.drop{background:rgba(var(--accent-rgb,58,134,255),.5);
+  box-shadow:inset 0 0 0 2px var(--accent)}
+.fe-it[draggable]:active{opacity:.6}
+
+/* приём файлов из настоящей ОС */
+.drop-hint{position:fixed;inset:0;z-index:1200;display:grid;place-content:center;text-align:center;
+  font-size:20px;line-height:1.6;background:rgba(0,0,0,.4);
+  opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--t2) var(--e-io),visibility var(--t2)}
+.drop-hint.on{opacity:1;visibility:visible}
+.drop-hint > div{padding:40px 60px;border-radius:26px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);
+  background:rgba(var(--tint),.12);font-size:44px}
+
+/* поиск в Блокноте */
+.np-find{display:none;gap:6px;padding:8px 12px;align-items:center;flex:none;
+  border-bottom:1px solid rgba(var(--tint),.12);background:rgba(var(--tint),.07)}
+.np-find.on{display:flex}
+.np-find .inp{flex:1;min-width:80px}
+
+/* ---------- Панель задач ---------- */
+body.taskbar .dock-wrap{bottom:0;left:0;right:0}
+/* Панель задач тянется ровно на всю ширину экрана и по высоте держится
+   близко к значкам: раньше она не доставала до краёв из-за общего ограничения
+   ширины, а сверху и снизу оставалось много пустого места. */
+body.taskbar .dock{width:100%;max-width:none;border-radius:0;justify-content:center;padding:3px 8px;
+  box-shadow:inset 0 1px 0 var(--surface),0 -6px 24px rgba(0,0,0,.28)}
+body.taskbar .dock-wrap{padding:0}
+body.taskbar .dock-item{border-radius:10px;transform-origin:center center}
+/* в панели задач значок при наведении растёт от середины, а не вверх:
+   иначе он вылезает за край полосы и выглядит подпрыгнувшим */
+body.taskbar .dock-item:hover{background:rgba(var(--tint),.22)}
+body.taskbar .dock-sep{opacity:.5}
+.dock-wrap{transition:bottom var(--t3) var(--e-spring),left var(--t3) var(--e-spring),right var(--t3) var(--e-spring)}
+.dock{transition:width var(--t3) var(--e-spring),border-radius var(--t3) var(--e-out),padding var(--t3) var(--e-out);
+  max-width:calc(100vw - 20px)}
+
+/* трей, переехавший в панель */
+/* в плавающем доке трей стоит в потоке, в панели задач — прижат вправо */
+#tb-tray.in-dock{background:none;box-shadow:none;
+  align-self:center;margin-left:2px;position:static;transform:none}
+#tb-tray.in-dock::before{content:'';width:1px;height:26px;margin-right:6px;
+  background:linear-gradient(transparent,rgba(var(--tint),.35),transparent)}
+/* В панели задач трей стоит в общем потоке и прижат вправо распорками —
+   абсолютное положение позволяло значкам заезжать под него на узких экранах. */
+body.taskbar #tb-tray.in-dock{position:static;transform:none;margin:0 6px 0 0}
+body.taskbar #tb-tray.in-dock::before{display:none}
+.dock-spacer{flex:1 1 0;min-width:0}
+body.taskbar .dock{justify-content:flex-start}
+/* Группам разрешаем сжиматься, но не обрезать содержимое: обрезка съедала
+   подъём значка при наведении — половина иконки просто исчезала. */
+body.taskbar .dock-items,body.taskbar .dock-running{min-width:0}
+.tb-dock-search{display:flex;align-items:center;gap:8px;height:calc(var(--dock-size) * .74);
+  padding:0 14px;border-radius:12px;font-size:12.5px;color:var(--fg-dim);
+  background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);
+  align-self:center;transition:background var(--t1),color var(--t1)}
+.tb-dock-search:hover{background:rgba(var(--tint),.24);color:var(--fg)}
+.tb-dock-search .ic{width:15px;height:15px}
+@media(max-width:820px){.tb-dock-search span{display:none}}
+
+/* ---------- Виджеты рабочего стола ---------- */
+.desk-widgets{position:absolute;inset:0;width:auto;display:block;pointer-events:none;
+  transition:opacity var(--t3) var(--e-io),transform var(--t3) var(--e-out)}
+.desk-widgets .dw{position:absolute;width:230px;pointer-events:auto;cursor:grab;
+  animation:sgIn var(--t3) var(--e-spring) both}
+.desk-widgets .dw.drag{cursor:grabbing;transition:none;box-shadow:0 24px 60px rgba(0,0,0,.45);z-index:5;
+  transform:scale(1.03)}
+.dw-x{position:absolute;top:6px;right:8px;width:20px;height:20px;border-radius:50%;font-size:14px;line-height:1;
+  background:rgba(var(--tint),.2);opacity:0;transition:opacity var(--t1),background var(--t1)}
+.dw:hover .dw-x{opacity:1}
+.dw-x:hover{background:#e81123;color:#fff}
+.dw-note{font-size:12.5px;line-height:1.5;min-height:56px;outline:0;user-select:text;cursor:text;
+  border-radius:8px;padding:4px 6px;margin-top:2px;background:rgba(var(--tint),.08)}
+.dw-note:focus{box-shadow:inset 0 0 0 1px var(--accent)}
+.mu-time{margin-top:-6px}
+
+/* ==========================================================================
+   ТЁМНАЯ ТЕМА — та, с которой система начинается
+   плотные поверхности, приглушённые обои
+   ========================================================================== */
+[data-theme="dark"]{
+  --fg:#e9ecf3;
+  --fg-dim:rgba(233,236,243,.58);
+  --shadow:0 24px 60px rgba(0,0,0,.62), 0 3px 12px rgba(0,0,0,.5);
+  --d-1:#14161d;   /* фон окна */
+  --d-2:#1a1d26;   /* панели */
+  --d-3:#22262f;   /* поднятые элементы */
+  --d-4:#2c313c;   /* наведение */
+  --d-line:rgba(255,255,255,.08);
+}
+[data-theme="dark"] .glass,
+[data-theme="dark"] .toast{
+  background:var(--d-2);
+  box-shadow:inset 0 0 0 1px var(--d-line), var(--shadow);
+}
+[data-theme="dark"] .win{
+  background:var(--d-1);
+  box-shadow:inset 0 0 0 1px var(--d-line), var(--shadow);
+}
+[data-theme="dark"] .titlebar{background:var(--d-2);border-bottom-color:var(--d-line)}
+[data-theme="dark"] .win:not(.focus) .titlebar{background:var(--d-1)}
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .toolbar,
+[data-theme="dark"] .statusbar{background:var(--d-2);border-color:var(--d-line)}
+[data-theme="dark"] .card,
+[data-theme="dark"] .tile,
+[data-theme="dark"] .w-card,
+[data-theme="dark"] .btn,
+[data-theme="dark"] .inp,
+[data-theme="dark"] .td-item,
+[data-theme="dark"] .np-tab,
+[data-theme="dark"] .calc-keys button{
+  background:var(--d-3);box-shadow:inset 0 0 0 1px var(--d-line)}
+[data-theme="dark"] .btn:hover,
+[data-theme="dark"] .tile.btn:hover,
+[data-theme="dark"] .calc-keys button:hover,
+[data-theme="dark"] .sb-item:hover,
+[data-theme="dark"] .set-row:hover,
+[data-theme="dark"] .fe-tr:hover,
+[data-theme="dark"] .fe-it:hover,
+[data-theme="dark"] .dock-item:hover,
+[data-theme="dark"] .sg:hover,
+[data-theme="dark"] .tray-btn:hover{background:var(--d-4)}
+[data-theme="dark"] .btn.pri,
+[data-theme="dark"] .tile.on{background:linear-gradient(140deg,var(--accent),var(--accent-2))}
+[data-theme="dark"] .sb-item.on{background:var(--d-4);box-shadow:inset 0 0 0 1px var(--d-line)}
+[data-theme="dark"] .seg{background:var(--d-1)}
+[data-theme="dark"] .seg button.on{background:var(--d-4)}
+[data-theme="dark"] .switch{background:#3a4050}
+[data-theme="dark"] .ctx,
+[data-theme="dark"] .start,
+[data-theme="dark"] .cc,
+[data-theme="dark"] .widgets,
+[data-theme="dark"] .spot,
+[data-theme="dark"] .dock,
+[data-theme="dark"] .dock-prev,
+[data-theme="dark"] .run-dlg{background:var(--d-2)}
+[data-theme="dark"] .start-foot{background:var(--d-1);border-color:var(--d-line)}
+[data-theme="dark"] .term{background:#0c0e13}
+[data-theme="dark"] .taskview{background:rgba(8,9,13,.9);}
+[data-theme="dark"] .snap-assist{background:rgba(8,9,13,.86)}
+[data-theme="dark"] .di:hover{background:rgba(255,255,255,.1)}
+[data-theme="dark"] .wall-grain{opacity:.02}
+[data-theme="dark"] kbd{background:var(--d-4);box-shadow:none}
+
+/* ---------- Магазин и приложения из каталога ---------- */
+.st-grid{margin-bottom:14px}
+.st-card{align-content:start}
+.st-card .row{gap:6px;margin-top:2px}
+.pkg-code{margin:0 16px 16px;padding:12px 14px;border-radius:12px;font-size:11px;line-height:1.5;
+  background:rgba(0,0,0,.28);overflow:auto;max-height:220px;user-select:text;
+  font-family:'Cascadia Code',Consolas,monospace;white-space:pre-wrap}
+[data-theme="light"] .pkg-code{background:rgba(0,0,0,.06)}
+
+/* Помидор */
+.pomo-ring{width:190px;height:190px;border-radius:50%;display:grid;place-content:center;
+  background:conic-gradient(var(--accent) var(--p,0%), rgba(var(--tint),.14) 0);
+  box-shadow:inset 0 0 0 12px rgba(var(--tint),.06);transition:background .4s linear}
+.pomo-ring span{font-size:38px;font-weight:250;font-variant-numeric:tabular-nums;
+  width:150px;height:150px;border-radius:50%;display:grid;place-content:center;
+  background:var(--d-1,rgba(20,24,34,.55));}
+[data-theme="light"] .pomo-ring span{background:rgba(255,255,255,.85)}
+
+/* 2048 */
+.g-score{padding:6px 14px;border-radius:10px;background:rgba(var(--tint),.14);font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.5px;opacity:.85;text-align:center}
+.g-score b{display:block;font-size:17px;letter-spacing:0}
+.g-board{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;aspect-ratio:1;padding:8px;
+  border-radius:14px;background:rgba(var(--tint),.1)}
+.g-cell{border-radius:10px;display:grid;place-content:center;font-size:23px;font-weight:600;
+  background:rgba(var(--tint),.07);transition:transform .12s var(--e-spring),background .15s}
+.g-cell.v2{background:#eee4da;color:#776e65}.g-cell.v4{background:#ede0c8;color:#776e65}
+.g-cell.v8{background:#f2b179;color:#fff}.g-cell.v16{background:#f59563;color:#fff}
+.g-cell.v32{background:#f67c5f;color:#fff}.g-cell.v64{background:#f65e3b;color:#fff}
+.g-cell.v128{background:#edcf72;color:#fff;font-size:20px}.g-cell.v256{background:#edcc61;color:#fff;font-size:20px}
+.g-cell.v512{background:#edc850;color:#fff;font-size:20px}.g-cell.v1024{background:#edc53f;color:#fff;font-size:17px}
+.g-cell.v2048{background:linear-gradient(140deg,var(--accent),var(--accent-2));color:#fff;font-size:17px}
+
+/* Конвертер */
+.conv-row{display:flex;justify-content:space-between;padding:9px 13px;border-radius:10px;
+  background:rgba(var(--tint),.09);font-size:13px}
+.conv-row b{font-variant-numeric:tabular-nums}
+
+/* Палитра */
+.pal-grid{flex:1;display:flex;min-height:0}
+.pal{flex:1;display:flex;align-items:flex-end;justify-content:center;padding-bottom:18px;cursor:pointer;
+  transition:flex .3s var(--e-out)}
+.pal:hover{flex:1.5}
+.pal span{font-size:11px;letter-spacing:.5px;padding:4px 9px;border-radius:8px;
+  background:rgba(0,0,0,.35);color:#fff;text-transform:uppercase}
+
+/* ---------- Экран блокировки: профили ---------- */
+.lock-pw{display:flex;gap:6px;align-items:center;padding:5px;border-radius:14px;
+  background:rgba(var(--tint),.16);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.lock-pw input{width:190px;padding:8px 14px;border:0;outline:0;background:none;font-size:14px;color:var(--fg)}
+.lock-pw input::placeholder{color:var(--fg-dim)}
+.lock-pw button{width:34px;height:34px;border-radius:10px;background:rgba(var(--tint),.22);font-size:15px;
+  transition:background var(--t1)}
+.lock-pw button:hover{background:var(--accent);color:#fff}
+.lock-pw.shake{animation:shk .4s}
+@keyframes shk{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+.lock-err{font-size:12px;color:#ff8080;min-height:16px}
+.lock-sw-t{font-size:11px;opacity:.5;margin-top:14px;text-transform:uppercase;letter-spacing:.6px}
+.lock-users{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.lock-user{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:22px;font-size:13px;
+  background:rgba(var(--tint),.14);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);transition:transform var(--t2) var(--e-spring),background var(--t1)}
+.lock-user:hover{background:rgba(var(--tint),.26);transform:translateY(-2px)}
+.lock-user .ava{width:26px;height:26px;font-size:12px}
+
+/* ---------- «Все приложения» в меню Пуск ---------- */
+.all-letter{font-size:11px;font-weight:700;opacity:.5;padding:12px 12px 5px;letter-spacing:.6px;
+  position:sticky;top:-16px;z-index:1;}
+.all-row{display:flex;align-items:center;gap:12px;width:100%;padding:7px 12px;border-radius:11px;
+  text-align:left;transition:background var(--t1),transform var(--t2) var(--e-spring);
+  animation:sgIn calc(.35s * var(--speed)) var(--e-out) both;animation-delay:calc(var(--i,0) * 10ms)}
+.all-row:hover{background:rgba(var(--tint),.18);transform:translateX(3px)}
+.all-row .app-ico{width:32px;height:32px;font-size:16px}
+.all-row .t{font-size:13px;display:flex;align-items:center;gap:7px}
+.all-pin{font-size:10px;opacity:.55}
+.all-count{padding:14px 12px 6px;font-size:11px;opacity:.45;text-align:center}
+[data-theme="dark"] .all-letter{background:var(--d-2)}
+[data-theme="dark"] .all-row:hover{background:var(--d-4)}
+.all-head{display:flex;align-items:center;gap:12px;padding:2px 4px 10px;font-size:13px;font-weight:600;
+  position:sticky;top:-16px;z-index:2;}
+[data-theme="dark"] .all-head{background:var(--d-2)}
+
+/* ---------- Подсказки внутри панелей с обрезкой ---------- */
+/* .start, .cc и .widgets скрывают переполнение, поэтому подсказка снизу обрезалась */
+.start [data-tip]::after,
+.cc [data-tip]::after,
+.widgets [data-tip]::after{top:auto;bottom:calc(100% + 9px)}
+.start [data-tip]:hover::after,
+.cc [data-tip]:hover::after,
+.widgets [data-tip]:hover::after{transform:translate(-50%,0) scale(1)}
+
+/* у правого края подсказку прижимаем к краю, иначе её срезает */
+.start-foot-r [data-tip]::after{left:auto;right:0;transform:translate(0,6px) scale(.92);
+  transform-origin:bottom right}
+.start-foot-r [data-tip]:hover::after{transform:translate(0,0) scale(1)}
+
+/* ==========================================================================
+   СИСТЕМНЫЕ ДИАЛОГИ, ЦЕНТР УВЕДОМЛЕНИЙ, OSD
+   ========================================================================== */
+.dlg-ov{position:absolute;inset:0;z-index:1100;display:grid;place-content:center;
+  background:rgba(0,0,0,.35);
+  opacity:0;transition:opacity var(--t2) var(--e-io)}
+.dlg-ov.on{opacity:1}
+.dlg{width:min(420px,88vw);padding:22px;border-radius:20px;display:flex;flex-direction:column;gap:16px;
+  transform:scale(.92) translateY(10px);transition:transform var(--t3) var(--e-spring)}
+.dlg-ov.on .dlg{transform:none}
+.dlg-head{display:flex;gap:14px;align-items:flex-start}
+.dlg-ico{font-size:28px;line-height:1;flex:none}
+.dlg-t{font-size:15px;font-weight:600;line-height:1.3}
+.dlg-x{font-size:12.5px;opacity:.7;line-height:1.45;margin-top:5px}
+.dlg .inp{width:100%;font-size:14px;padding:10px 13px}
+.dlg-foot{display:flex;gap:8px;justify-content:flex-end}
+.dlg-foot .btn{min-width:96px;text-align:center;padding:9px 16px}
+.btn.danger{background:linear-gradient(140deg,#ef4444,#b91c1c)}
+[data-theme="dark"] .dlg{background:var(--d-2)}
+[data-theme="dark"] .btn.danger{background:linear-gradient(140deg,#ef4444,#b91c1c)}
+
+/* центр уведомлений */
+.nc{margin-bottom:14px}
+.nc-head{display:flex;align-items:center;justify-content:space-between;
+  font-size:11.5px;font-weight:600;opacity:.65;padding:0 2px 8px}
+.nc-empty{text-align:center;padding:22px 0;font-size:26px;opacity:.35}
+.nc-empty div{font-size:12px;margin-top:6px}
+.nc-item{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;border-radius:14px;margin-bottom:7px;
+  background:rgba(var(--tint),.1);box-shadow:inset 0 0 0 1px rgba(var(--tint),.1);
+  animation:sgIn .35s var(--e-out) both}
+.nc-item .app-ico{width:32px;height:32px;font-size:15px;
+  background:linear-gradient(140deg,var(--accent),var(--accent-2))}
+.nc-item .tx{flex:1;font-size:12px;line-height:1.4;min-width:0}
+.nc-item .tx b{display:block;font-size:12.5px;margin-bottom:2px}
+.nc-x{width:20px;height:20px;border-radius:50%;background:rgba(var(--tint),.18);font-size:13px;flex:none;
+  opacity:0;transition:opacity var(--t1),background var(--t1)}
+.nc-item:hover .nc-x{opacity:1}
+.nc-x:hover{background:#e81123;color:#fff}
+[data-theme="dark"] .nc-item{background:var(--d-3)}
+#tray-widgets.has-notif::before{content:'';position:absolute;top:5px;right:5px;width:6px;height:6px;
+  border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px rgba(0,0,0,.25)}
+#tray-widgets{position:relative}
+
+/* индикатор громкости и яркости */
+.osd{position:fixed;left:50%;bottom:22%;transform:translate(-50%,14px) scale(.94);z-index:1150;
+  display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:20px;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--t2) var(--e-io),transform var(--t3) var(--e-spring),visibility var(--t2)}
+.osd.on{opacity:1;visibility:visible;transform:translate(-50%,0) scale(1)}
+.osd-ico{font-size:24px}
+.osd-bar{width:170px;height:6px;border-radius:6px;background:rgba(var(--tint),.22);overflow:hidden}
+.osd-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transition:width var(--t2) var(--e-out)}
+.osd-v{font-size:12.5px;width:38px;text-align:right;font-variant-numeric:tabular-nums;opacity:.8}
+
+/* ---------- Меню приложений ---------- */
+.menubar{display:flex;gap:2px;padding:4px 8px;flex:none;
+  border-bottom:1px solid rgba(var(--tint),.1);background:rgba(var(--tint),.05)}
+.menu-b{padding:5px 12px;border-radius:8px;font-size:12.5px;transition:background var(--t1)}
+.menu-b:hover{background:rgba(var(--tint),.18)}
+[data-theme="dark"] .menubar{background:var(--d-2)}
+[data-theme="dark"] .menu-b:hover{background:var(--d-4)}
+
+/* ---------- Свойства файла ---------- */
+.props-head{display:flex;gap:14px;align-items:center;padding:6px 4px 18px}
+.props-ico{font-size:44px;line-height:1}
+.props-head b{font-size:15px}
+
+/* ---------- Диспетчер задач ---------- */
+.tm-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:14px;flex:none}
+.tm-card{padding:12px 14px;border-radius:14px;background:rgba(var(--tint),.09);
+  box-shadow:inset 0 0 0 1px rgba(var(--tint),.12)}
+.tm-k{font-size:11px;opacity:.6;margin-bottom:4px}
+.tm-v{font-size:20px;font-weight:300;letter-spacing:-.5px;margin-bottom:3px}
+[data-theme="dark"] .tm-card{background:var(--d-3)}
+
+/* ---------- Ярлыки, «Свернуть всё», заголовки в меню ---------- */
+.di.is-link .glyph::after{content:'↗';position:absolute;left:2px;bottom:2px;width:16px;height:16px;
+  border-radius:4px;font-size:10px;display:grid;place-content:center;
+  background:rgba(var(--tint),.35);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+.di.is-link .glyph{position:relative}
+.ctx-head{font-size:10.5px;font-weight:700;opacity:.5;padding:8px 11px 4px;
+  text-transform:uppercase;letter-spacing:.5px}
+.show-desktop{width:8px;align-self:stretch;margin-left:6px;border-radius:4px;flex:none;
+  background:rgba(var(--tint),.12);transition:background var(--t1)}
+.show-desktop:hover{background:var(--accent)}
+body.taskbar .show-desktop{width:10px;margin-left:10px;border-radius:0}
+
+/* ---------- Конфликт при вставке, переименование на месте, drop на док ---------- */
+.conflict{display:flex;flex-direction:column;gap:6px}
+.conflict-b{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:12px;text-align:left;
+  font-size:12.5px;background:rgba(var(--tint),.1);box-shadow:inset 0 0 0 1px rgba(var(--tint),.12);
+  transition:background var(--t1),transform var(--t2) var(--e-spring)}
+.conflict-b:hover{background:rgba(var(--tint),.22);transform:translateX(3px)}
+.conflict-b .em{font-size:17px;width:22px;text-align:center}
+.conflict-all{display:flex;align-items:center;gap:9px;font-size:12px;opacity:.75;padding:6px 4px 0;cursor:pointer}
+[data-theme="dark"] .conflict-b{background:var(--d-3)}
+[data-theme="dark"] .conflict-b:hover{background:var(--d-4)}
+
+.inline-edit{width:100%;max-width:150px;padding:3px 6px;border:0;outline:0;font:inherit;font-size:11.5px;
+  border-radius:6px;text-align:center;background:#fff;color:#111;
+  box-shadow:0 0 0 2px var(--accent)}
+.fe-tr .inline-edit{text-align:left;max-width:220px}
+.dock-item.drop-target{background:var(--accent)}
+
+/* ---------- Вкладки Проводника ---------- */
+.fe-tabs{display:flex;align-items:center;gap:3px;padding:6px 8px 0;flex:none;overflow:auto}
+.fe-tab{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px 10px 0 0;font-size:12px;
+  white-space:nowrap;cursor:pointer;max-width:180px;background:rgba(var(--tint),.07);
+  transition:background var(--t1)}
+.fe-tab:hover{background:rgba(var(--tint),.14)}
+.fe-tab.on{background:rgba(var(--tint),.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+.fe-tab .nm{overflow:hidden;text-overflow:ellipsis}
+.fe-tab .x{opacity:.45;font-size:14px;line-height:1;padding:0 2px;border-radius:4px}
+.fe-tab .x:hover{opacity:1;background:rgba(255,255,255,.2)}
+.fe-tab-add{width:26px;height:26px;border-radius:8px;font-size:15px;opacity:.7;transition:background var(--t1)}
+.fe-tab-add:hover{background:rgba(var(--tint),.18);opacity:1}
+[data-theme="dark"] .fe-tab{background:var(--d-1)}
+[data-theme="dark"] .fe-tab.on{background:var(--d-3)}
+
+/* адресная строка и поиск везде */
+.fe-path-edit{width:26px;height:26px;border-radius:7px;font-size:12px;opacity:.55;flex:none;
+  transition:background var(--t1),opacity var(--t1)}
+.fe-path-edit:hover{background:rgba(var(--tint),.18);opacity:1}
+.fe-path-inp{flex:1;min-width:180px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px}
+.fe-all{flex:none}
+.fe-search-head{padding:10px 14px 4px;font-size:11px;opacity:.6}
+
+/* сортировка по заголовкам */
+.fe-tr.head .sortable{cursor:pointer;border-radius:6px;padding:2px 4px;margin:-2px -4px;
+  transition:background var(--t1)}
+.fe-tr.head .sortable:hover{background:rgba(var(--tint),.16)}
+.fe-tr.head .sorted{color:var(--accent);opacity:1}
+.fe-tr.head .sorted::after{content:' ↓';font-size:9px}
+
+/* ---------- Индикатор подключения к системному агенту ---------- */
+.agent-badge .ic{stroke:#4ade80}
+.agent-badge.busy .ic{animation:pulseAgent 1s ease-in-out infinite}
+@keyframes pulseAgent{50%{opacity:.35}}
+body.native .lock-name::after{content:' · система';font-size:12px;opacity:.5}
+
+/* ---------- Индикатор раскладки ---------- */
+.kb-badge{width:auto;min-width:38px;padding:0 8px;font-size:11.5px;font-weight:600;letter-spacing:.4px;
+  border-radius:9px;opacity:.9}
+.kb-badge:hover{opacity:1}
+
+/* ---------- индикатор залипания клавиш ---------- */
+.sticky-osd{position:fixed;left:50%;bottom:112px;transform:translateX(-50%);z-index:1800;
+  padding:8px 16px;border-radius:14px;font-size:13px;font-weight:600;letter-spacing:.4px;
+  pointer-events:none;animation:osd-in .18s var(--e-out)}
+@keyframes osd-in{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ---------- поиск: совпадение внутри файла ---------- */
+.fe-hit{opacity:.75;margin-top:2px;font-style:italic;max-width:46ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ---------- будильники ---------- */
+.alarm-card{padding:14px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.alarm-time{width:auto;min-width:132px;font-size:19px;font-weight:700;letter-spacing:.5px}
+.alarm-days{flex-wrap:wrap;gap:6px}
+.alarm-days .btn{padding:4px 10px;min-width:0;font-size:12px}
+.dlg-extra{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;opacity:.85}
+.dlg-extra .inp{width:120px}
+
+/* ---------- экран блокировки: уведомления и плеер ---------- */
+.lock-extra{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:22px;
+  animation:up .8s .2s var(--e-out) both}
+.lock-media{display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:16px;min-width:320px}
+.lock-media .art{font-size:26px}
+.lock-media .txt{display:flex;flex-direction:column;line-height:1.3;text-align:left}
+.lock-media .txt b{font-size:14px}
+.lock-media .txt span{font-size:12px;opacity:.7}
+.lock-media .mb{display:flex;gap:6px;margin-left:auto}
+.lock-media .mb button{background:none;border:0;color:inherit;font-size:15px;cursor:pointer;opacity:.85;
+  padding:4px 6px;border-radius:8px;transition:background var(--t1),transform var(--t1)}
+.lock-media .mb button:hover{background:rgba(255,255,255,.14);transform:scale(1.1)}
+.lock-notifs{display:flex;flex-direction:column;gap:8px;width:min(400px,80vw)}
+.lock-notif{display:flex;gap:11px;align-items:flex-start;padding:11px 14px;border-radius:15px;text-align:left}
+.lock-notif .ic{font-size:17px;line-height:1.2}
+.lock-notif b{display:block;font-size:13px}
+.lock-notif span{font-size:12px;opacity:.72;display:block;max-height:34px;overflow:hidden}
+
+/* ---------- пояснение в Параметрах ---------- */
+.set-note{padding:12px 16px;font-size:13px;line-height:1.55;opacity:.75}
+
+/* ---------- переключатель окон ---------- */
+.switcher{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1900;
+  padding:12px;border-radius:20px;display:flex;flex-direction:column;gap:4px;min-width:280px;
+  animation:osd-in .16s var(--e-out);pointer-events:none}
+.sw-it{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;font-size:13px}
+.sw-it.on{background:rgba(var(--tint),.28)}
+.sw-it .gl{font-size:17px}
+.sw-it .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:30ch}
+
+/* ---------- за экраном блокировки не видно рабочего стола ---------- */
+body.locked #desktop{filter:blur(26px) brightness(.55) saturate(.8);pointer-events:none;
+  transition:filter var(--t4) var(--e-io)}
+body.locked #desktop > *{pointer-events:none}
+
+/* ---------- раскрывающийся раздел в Параметрах ---------- */
+.set-exp .exp-arrow{font-size:15px;opacity:.6;transition:transform var(--t2) var(--e-spring)}
+.set-exp.open .exp-arrow{transform:rotate(180deg);opacity:.9}
+.set-exp .exp-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--t3) var(--e-io)}
+.set-exp.open .exp-body{grid-template-rows:1fr}
+.set-exp .exp-inner{min-height:0;overflow:hidden}
+.set-exp .exp-body .set-row{padding-left:34px;background:rgba(255,255,255,.04)}
+
+/* ---------- баннеры не спорят с виджетами стола ----------
+   Виджеты живут в правом верхнем углу, и уведомления налезали прямо на них.
+   Баннеры приходят снизу справа, над панелью. */
+.toasts{top:auto;bottom:calc(var(--dock-size) + 56px);right:16px;justify-content:flex-end}
+body.panel-open .toasts{transform:translateX(-352px)}
+body.taskbar .toasts{bottom:calc(var(--dock-size) + 18px)}
+
+/* ответ машины в окне: ровные строки, прокрутка, ничего не обрезано */
+.dlg-pre{max-height:46vh;overflow:auto;white-space:pre-wrap;word-break:break-word;
+  margin:10px 0 0;padding:10px 12px;border-radius:12px;
+  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);
+  font:12px/1.5 ui-monospace,'Cascadia Code',Consolas,monospace}

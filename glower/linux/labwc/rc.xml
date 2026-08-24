@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  Настройки оконного сервера GlowerOS.
+
+  Раньше сеанс держался на cage: он показывает одно окно за раз, и любая
+  чужая программа закрывала собой всё, не оставляя пути назад. labwc — это
+  настоящий оконный сервер: чужие окна живут рядом с оболочкой, попадают в
+  панель задач и переключаются как везде.
+
+  Оболочка — окно с именем glowershell. Оно всегда внизу стопки, без рамки
+  и не показывается в чужих переключателях: это рабочий стол, а не окно.
+-->
+<labwc_config>
+
+  <core>
+    <gap>0</gap>
+  </core>
+
+  <theme>
+    <cornerRadius>10</cornerRadius>
+    <font name="sans" size="10" />
+  </theme>
+
+  <keyboard>
+    <default />
+    <!-- Super и D возвращают на рабочий стол из любой программы -->
+    <keybind key="W-d">
+      <action name="Execute" command="wlrctl toplevel focus app_id:glowershell" />
+    </keybind>
+    <!-- Тем, кто знает, зачем он нужен: настоящий терминал -->
+    <keybind key="W-Return">
+      <action name="Execute" command="foot" />
+    </keybind>
+    <keybind key="W-q">
+      <action name="Close" />
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <default />
+  </mouse>
+
+  <windowRules>
+    <windowRule identifier="glowershell">
+      <!-- Оболочку намеренно не прячем от протокола управления окнами:
+           иначе к ней нельзя вернуться ни клавишами, ни панелью задач.
+           Из списка окон её убирает сама оболочка — она знает своё имя. -->
+      <serverDecoration>no</serverDecoration>
+      <action name="ToggleAlwaysOnBottom" />
+    </windowRule>
+  </windowRules>
+
+</labwc_config>

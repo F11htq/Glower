@@ -1,0 +1,223 @@
+#!/bin/sh
+# ==========================================================================
+#  Установка GlowerOS на диск
+#
+#  Живой образ разворачивается в память и всё забывает при перезагрузке.
+#  Этот сценарий переносит ту же систему на настоящий диск: размечает его,
+#  распаковывает образ, прописывает загрузчик — и машина начинает грузиться
+#  с диска сама.
+#
+#  Он пишет в разделы, поэтому ведёт себя строго:
+#    — работает только с тем диском, который назван явно;
+#    — отказывается трогать диск, с которого сейчас загружена система;
+#    — с ключом --dry-run ничего не делает, а только показывает план;
+#    — каждый шаг отчитывается строкой «ШАГ <проценты> <что делает>».
+# ==========================================================================
+set -eu
+
+DISK=""; PASS=""; HOST="GlowerOS"; TZ=""; DRY=0; YES=0; REPAIR=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk) DISK="$2"; shift 2 ;;
+    --pass) PASS="$2"; shift 2 ;;
+    --hostname) HOST="$2"; shift 2 ;;
+    --tz) TZ="$2"; shift 2 ;;
+    --repair) REPAIR=1; shift ;;
+    --dry-run) DRY=1; shift ;;
+    --yes) YES=1; shift ;;
+    *) echo "неизвестный ключ: $1" >&2; exit 2 ;;
+  esac
+done
+
+say(){ printf 'ШАГ %s %s\n' "$1" "$2"; }
+die(){ printf '%s\n' "$1" >&2; exit 1; }
+
+[ -n "$DISK" ] || die "не указан диск: --disk /dev/sda"
+[ "$(id -u)" = 0 ] || die "установка требует прав root"
+[ -b "$DISK" ] || die "$DISK — не блочное устройство"
+
+# --- откуда берём систему ---
+SQFS=""
+for p in /run/live/medium/live/filesystem.squashfs \
+         /lib/live/mount/medium/live/filesystem.squashfs \
+         /cdrom/live/filesystem.squashfs; do
+  [ -f "$p" ] && { SQFS="$p"; break; }
+done
+[ -n "$SQFS" ] || die "образ системы не найден: установка запускается из живой системы GlowerOS"
+
+# --- диск, с которого мы сейчас работаем, трогать нельзя ---
+MEDIUM="$(findmnt -no SOURCE --target "$(dirname "$SQFS")" 2>/dev/null || true)"
+case "$MEDIUM" in
+  "$DISK"|"$DISK"[0-9]*|"$DISK"p[0-9]*) die "$DISK — это носитель, с которого запущена система" ;;
+esac
+
+# --- имена разделов: sda1, но nvme0n1p1 ---
+case "$DISK" in
+  *[0-9]) P="${DISK}p" ;;
+  *) P="$DISK" ;;
+esac
+ESP="${P}2"; ROOT="${P}3"
+
+# Лучше отказаться сразу и назвать, чего не хватает, чем упасть посреди
+# разметки уже начатого диска.
+missing=""
+for tool in sfdisk wipefs partprobe blkid blockdev lsblk findmnt \
+            mkfs.vfat mkfs.ext4 unsquashfs chroot; do
+  command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+[ -z "$missing" ] || die "для установки не хватает программ:$missing"
+
+SIZE="$(blockdev --getsize64 "$DISK" 2>/dev/null || echo 0)"
+[ "$SIZE" -gt 8000000000 ] || die "на диске меньше 8 ГБ — системе не хватит места"
+
+if [ "$DRY" = 1 ]; then
+  echo "ПЛАН"
+  echo "  диск:        $DISK ($((SIZE / 1000000000)) ГБ)"
+  echo "  разметка:    GPT · 1 МБ загрузчик BIOS · 512 МБ EFI · остальное — система"
+  echo "  система из:  $SQFS"
+  echo "  имя машины:  $HOST"
+  [ -n "$TZ" ] && echo "  часовой пояс: $TZ"
+  echo "  пароль:      $([ -n "$PASS" ] && echo 'будет задан' || echo 'без пароля, как в живой системе')"
+  exit 0
+fi
+
+[ "$YES" = 1 ] || die "это меняет содержимое диска: подтвердите ключом --yes"
+
+TARGET=/mnt/glower-install
+trap 'umount -R "$TARGET" 2>/dev/null || true' EXIT INT TERM
+
+umount -R "$TARGET" 2>/dev/null || true
+for part in $(lsblk -lno NAME "$DISK" | tail -n +2); do umount "/dev/$part" 2>/dev/null || true; done
+
+if [ "$REPAIR" = 1 ]; then
+  # Восстановление: разметку не трогаем совсем. Системные файлы кладём заново
+  # поверх, а личные — /home и рабочую папку — оставляем как есть. Так чинится
+  # система, у которой повреждены свои файлы, без потери данных человека.
+  say 2 "Ищу установленную систему"
+  [ -b "$ROOT" ] || die "на $DISK нет раздела с системой — восстанавливать нечего"
+  blkid -s LABEL -o value "$ROOT" 2>/dev/null | grep -qi glower || \
+    die "раздел $ROOT не похож на систему GlowerOS"
+else
+  say 2 "Готовлю диск"
+  wipefs -a "$DISK" >/dev/null 2>&1 || true
+
+  say 6 "Размечаю разделы"
+sfdisk --quiet --wipe always --wipe-partitions always "$DISK" <<PART
+label: gpt
+start=1MiB,   size=1MiB,   type=21686148-6449-6E6F-744E-656564454649, name="bios"
+start=2MiB,   size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="efi"
+start=514MiB,              type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="glower"
+PART
+partprobe "$DISK" 2>/dev/null || partx -u "$DISK" 2>/dev/null || blockdev --rereadpt "$DISK" 2>/dev/null || true
+udevadm settle 2>/dev/null || sleep 2
+[ -b "$ROOT" ] || { sleep 2; [ -b "$ROOT" ] || die "разделы не появились: ядро не перечитало таблицу"; }
+
+  say 10 "Создаю файловые системы"
+  mkfs.vfat -F32 -n GLOWER-EFI "$ESP" >/dev/null
+  mkfs.ext4 -F -q -L GlowerOS "$ROOT" >/dev/null
+fi
+
+say 14 "Подключаю разделы"
+mkdir -p "$TARGET"
+mount "$ROOT" "$TARGET"
+mkdir -p "$TARGET/boot/efi"
+# На машине, загруженной через UEFI, раздел EFI обязателен. На старой,
+# загруженной через BIOS, он лишь задел на будущее: если ядро этой машины
+# не умеет vfat, установка не должна из-за этого срываться.
+ESP_OK=1
+if ! mount "$ESP" "$TARGET/boot/efi" 2>/dev/null; then
+  [ -d /sys/firmware/efi ] && die "раздел EFI не подключается — установить загрузчик UEFI нечем"
+  ESP_OK=0
+  say 15 "Раздел EFI не подключился — ставлю загрузчик только для BIOS"
+fi
+
+if [ "$REPAIR" = 1 ]; then
+  # сносим только системные каталоги; /home, /root и /var/log остаются
+  say 16 "Убираю повреждённые системные файлы"
+  for d in bin sbin lib lib32 lib64 libx32 usr etc opt srv; do
+    rm -rf "${TARGET:?}/$d"
+  done
+fi
+
+say 18 "Переношу систему на диск"
+# unsquashfs шумит процентами в stdout — пересчитываем их в общий прогресс
+unsquashfs -f -d "$TARGET" "$SQFS" 2>/dev/null | while read -r line; do
+  pct="$(printf '%s' "$line" | tr -dc '0-9%' | tr -d '%' | head -c 3)"
+  case "$line" in
+    *%*) [ -n "$pct" ] && say $((18 + pct * 55 / 100)) "Переношу систему на диск" ;;
+  esac
+done
+say 74 "Система перенесена"
+
+say 76 "Настраиваю систему"
+UUID_ROOT="$(blkid -s UUID -o value "$ROOT")"
+UUID_ESP="$(blkid -s UUID -o value "$ESP" 2>/dev/null || echo '')"
+{
+  printf 'UUID=%s  /          ext4  errors=remount-ro  0 1\n' "$UUID_ROOT"
+  [ "$ESP_OK" = 1 ] && printf 'UUID=%s   /boot/efi  vfat  umask=0077         0 1\n' "$UUID_ESP"
+} > "$TARGET/etc/fstab"
+printf '%s\n' "$HOST" > "$TARGET/etc/hostname"
+printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "$HOST" > "$TARGET/etc/hosts"
+[ -n "$TZ" ] && [ -f "$TARGET/usr/share/zoneinfo/$TZ" ] && \
+  ln -sf "/usr/share/zoneinfo/$TZ" "$TARGET/etc/localtime"
+
+# на диске система больше не живая: настройки пользователя должны переживать перезагрузку
+rm -f "$TARGET/etc/systemd/system/multi-user.target.wants/live-"* 2>/dev/null || true
+
+# На установленной машине меню загрузчика не нужно: система одна и должна
+# стартовать сразу. Меню остаётся доступным по Shift или Esc.
+{
+  echo 'GRUB_TIMEOUT=0'
+  echo 'GRUB_TIMEOUT_STYLE=hidden'
+  echo 'GRUB_RECORDFAIL_TIMEOUT=0'
+  echo 'GRUB_DISTRIBUTOR="GlowerOS"'
+  echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"'
+} >> "$TARGET/etc/default/grub"
+
+say 80 "Подключаю служебные каталоги"
+for d in dev dev/pts proc sys run; do
+  mkdir -p "$TARGET/$d"
+  mount --rbind "/$d" "$TARGET/$d" 2>/dev/null || mount --bind "/$d" "$TARGET/$d" 2>/dev/null || true
+done
+
+say 84 "Ставлю загрузчик"
+IN_EFI=0
+[ -d /sys/firmware/efi ] && IN_EFI=1
+# пароль передаём через ввод, а не через текст сценария: так его не испортят
+# кавычки и особые знаки
+if [ -n "$PASS" ]; then
+  printf 'glower:%s\n' "$PASS" | chroot "$TARGET" chpasswd || die "не удалось задать пароль"
+fi
+
+chroot "$TARGET" /bin/sh -e <<CHROOT
+grub-install --target=i386-pc --boot-directory=/boot "$DISK" >/dev/null 2>&1 || true
+if [ -d /sys/firmware/efi ] && [ "$ESP_OK" = 1 ]; then
+  grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+    --bootloader-id=GlowerOS --removable >/dev/null 2>&1 || true
+fi
+update-grub >/dev/null 2>&1 || grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
+update-initramfs -u >/dev/null 2>&1 || true
+CHROOT
+
+# grub-mkconfig определяет корень по устройству и на некоторых машинах
+# записывает в меню путь вида /dev/sda3 или /dev/loop0p3 — имя, которое
+# верно только на машине-установщике. После перезагрузки такого устройства
+# может не быть вовсе, и система останавливается в initramfs с «does not
+# exist». Поэтому корень в меню всегда переписываем на UUID раздела.
+sed -i "s|root=/dev/[A-Za-z0-9/]*|root=UUID=$UUID_ROOT|g" "$TARGET/boot/grub/grub.cfg"
+printf 'GRUB_DISABLE_LINUX_UUID=false\n' >> "$TARGET/etc/default/grub" 2>/dev/null || true
+
+say 94 "Проверяю загрузчик"
+[ -f "$TARGET/boot/grub/grub.cfg" ] || die "загрузчик не встал: /boot/grub/grub.cfg не создан"
+grep -q "root=UUID=$UUID_ROOT" "$TARGET/boot/grub/grub.cfg" || \
+  die "в меню загрузчика нет корня по UUID — система не нашла бы себя после перезагрузки"
+if [ "$IN_EFI" = 1 ] && [ "$ESP_OK" = 1 ] && [ ! -d "$TARGET/boot/efi/EFI" ]; then
+  die "загрузчик EFI не встал: раздел EFI пуст"
+fi
+
+say 97 "Отключаю разделы"
+sync
+umount -R "$TARGET" 2>/dev/null || true
+
+say 100 "Готово"
+echo "УСТАНОВЛЕНО $DISK"
