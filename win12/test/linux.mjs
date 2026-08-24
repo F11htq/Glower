@@ -321,6 +321,16 @@ try {
       итог.путь && /неверный идентификатор/.test(итог.путь.error || ''), JSON.stringify(итог.путь));
   }
 
+  /* --- починка: закрытый список действий, и только по ключу --- */
+  const починкаБезКлюча = await page.evaluate(() => Platform.rpc('sys.fix', { что:'песочница' })
+    .then(() => 'выполнилось', e => e.message));
+  check('без --allow-launch система сама себя не чинит',
+    /--allow-launch/.test(починкаБезКлюча), String(починкаБезКлюча));
+  const починкаЧужая = await page.evaluate(() => Platform.rpc('sys.fix', { что:'rm -rf /' })
+    .then(() => 'выполнилось', e => e.message));
+  check('вместо починки чужую команду подсунуть нельзя',
+    /неизвестная починка|--allow-launch/.test(починкаЧужая), String(починкаЧужая));
+
   /* --- программы Linux: поиск открыт, установка под ключом --- */
   const pkgState = await page.evaluate(() => Platform.rpc('pkg.state').then(x => x, e => ({ err:e.message })));
   check('система знает, чем ставить программы',

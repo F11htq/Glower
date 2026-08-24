@@ -361,6 +361,16 @@ export function apps(allowLaunch){
       return { total:list.length, list, canLaunch:!!allowLaunch };
     },
 
+    /* Починка: закрытый список действий, каждое выполняется от root
+       отдельной программой /usr/bin/glower-fix. Произвольных команд нет. */
+    async 'sys.fix'({ что }){
+      if (!allowLaunch) throw new Error('починка выключена: запустите агент с ключом --allow-launch');
+      const можно = ['песочница'];
+      if (!можно.includes(что)) throw new Error('неизвестная починка: ' + что);
+      const ответ = await call('sudo', ['-n', '/usr/bin/glower-fix', что]);
+      return { ok:true, ответ:String(ответ).trim() };
+    },
+
     /* Осмотр песочницы: почему программа из Flathub не запускается.
        Здесь нет догадок — только то, что машина отвечает сама. */
     async 'sys.sandbox'({ id } = {}){

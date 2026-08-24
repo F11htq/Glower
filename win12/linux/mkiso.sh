@@ -120,6 +120,7 @@ cp "$SRC/index.html" "$ROOTFS/usr/share/glower/ui/"
 install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
+install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 
 if [ -n "$CHROMIUM" ]; then
   install -d "$ROOTFS/opt/chromium"

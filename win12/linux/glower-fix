@@ -1,0 +1,35 @@
+#!/bin/sh
+# ==========================================================================
+#  Починка того, что человек чинить не должен
+#
+#  Запускается от root через sudo и только с одним из известных ключей.
+#  Никаких произвольных команд: список починок закрыт и виден целиком.
+#  Каждая печатает, что получилось, — оболочке нужен ответ, а не молчание.
+# ==========================================================================
+set -eu
+
+case_name="${1:-}"
+
+case "$case_name" in
+  песочница)
+    # Программы из Flathub работают в песочнице, а песочнице нужны
+    # пространства имён пользователя. В Ubuntu 24.04 они закрыты по
+    # умолчанию, и программа не доходит даже до запуска.
+    sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
+    sysctl -q -w kernel.unprivileged_userns_clone=1 2>/dev/null || true
+    printf -- '-kernel.apparmor_restrict_unprivileged_userns=0\n-kernel.unprivileged_userns_clone=1\n' \
+      > /etc/sysctl.d/60-glower-userns.conf
+    # Профиль AppArmor может держать запрет и помимо переключателя: если
+    # система умеет его отключать для песочницы, пользуемся этим.
+    if [ -e /sys/kernel/security/apparmor/profiles ] && command -v aa-disable >/dev/null 2>&1; then
+      aa-disable /etc/apparmor.d/bwrap-userns-restrict >/dev/null 2>&1 || true
+      aa-disable /etc/apparmor.d/unprivileged_userns >/dev/null 2>&1 || true
+    fi
+    value="$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo нет)"
+    echo "песочница: ограничение=$value"
+    ;;
+  *)
+    echo "неизвестная починка: $case_name" >&2
+    exit 2
+    ;;
+esac
