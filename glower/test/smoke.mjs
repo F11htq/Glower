@@ -1024,7 +1024,8 @@ try {
         заблокировано:!document.querySelector('#lock').classList.contains('gone'),
         рабочий:document.querySelector('#desktop').classList.contains('on'),
         средаУстановки:document.body.classList.contains('setup-env'),
-        докВиден:getComputedStyle(document.querySelector('.dock-wrap')).display !== 'none'
+        докВиден:getComputedStyle(document.querySelector('.dock-wrap')).display !== 'none',
+        тема:document.documentElement.dataset.theme
       }));
     } finally { await p2.close(); }
   })();
@@ -1033,6 +1034,7 @@ try {
     JSON.stringify(среда));
   check('в установочной среде убран рабочий стол',
     среда.средаУстановки === true && среда.докВиден === false, JSON.stringify(среда));
+  check('окно установки показывается на тёмном', среда.тема === 'dark', String(среда.тема));
 
   check('восстановление опознаётся отдельно от установки',
     await (async () => {

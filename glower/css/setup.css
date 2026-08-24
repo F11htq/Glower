@@ -116,7 +116,7 @@ body.setup-env #desktop-icons,
 body.setup-env .desk-widgets,
 body.setup-env #widgets,
 body.setup-env #cc{display:none !important}
-body.setup-env #wallpaper{filter:saturate(.75) brightness(.72)}
+body.setup-env #wallpaper{filter:saturate(.35) brightness(.28)}
 /* окно мастера в установочной среде — без рамочных кнопок: закрывать нечего */
 body.setup-env .win [data-a="min"],
 body.setup-env .win [data-a="max"],
