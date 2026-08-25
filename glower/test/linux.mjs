@@ -35,9 +35,14 @@ if (process.platform !== 'linux'){
 }
 
 const WS = await mkdtemp(join(tmpdir(), 'glower-'));
+/* Настоящий сеанс говорит агенту, каким движком рисовать страницы, — здесь
+   делаем то же самое. Раньше этого не было, и проверки встроенного браузера
+   падали не из-за системы, а из-за того, что в проверочной машине нет
+   команды chromium в путях. */
 const agent = spawn(process.execPath,
   [join(root, 'agent/server.mjs'), '--port', String(PORT), '--root', WS, '--system'],
-  { stdio:['ignore', 'pipe', 'pipe'] });
+  { stdio:['ignore', 'pipe', 'pipe'],
+    env:{ ...process.env, GLOWER_BROWSER:process.env.GLOWER_BROWSER || exe || '' } });
 let agentLog = '';
 agent.stdout.on('data', d => agentLog += d);
 await new Promise(r => setTimeout(r, 1300));
