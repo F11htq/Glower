@@ -168,11 +168,17 @@ const ПОЧИНКИ = [{
 }];
 
 async function покажиОсмотр(a){
-  let осмотр;
-  try { осмотр = await Platform.rpc('sys.sandbox', { id:(a.id || '').replace(/\.desktop$/, '') }); }
-  catch(e){ осмотр = { текст:'осмотр не удался: ' + (e.message || e) }; }
+  const части = [];
+  try {
+    const о = await Platform.rpc('sys.sandbox', { id:(a.id || '').replace(/\.desktop$/, '') });
+    части.push(о.текст || '');
+  } catch(e){ части.push('осмотр не удался: ' + (e.message || e)); }
+  try {
+    const ж = await Platform.rpc('sys.log', { строк:60 });
+    части.push('', ж.текст || '');
+  } catch(e){ части.push('', 'журнал не получен: ' + (e.message || e)); }
   await Dlg.open({ type:'alert', icon:'🔎', title:'Что отвечает система',
-    text:'Это для разбирательства, чинить руками ничего не нужно', pre:осмотр.текст || '' });
+    text:'Это для разбирательства, чинить руками ничего не нужно', pre:части.join('\n') });
 }
 
 async function запустиПрограмму(a){

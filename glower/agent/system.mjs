@@ -28,7 +28,8 @@ export async function has(cmd){
 /* единственная точка запуска: только фиксированные команды */
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
-  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl', 'setxkbmap', 'localectl', 'free', 'uptime',
+  'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl',
+  'getcap', 'id', 'ls', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -417,6 +418,23 @@ export function apps(allowLaunch){
       return { ok:true, ответ:String(ответ).trim() };
     },
 
+    /* Журнал оболочки: что система писала о себе, пока поднималась.
+       Ошибку в окне видно сразу, а вот почему она случилась — только здесь. */
+    async 'sys.log'({ строк = 80 } = {}){
+      const n = Math.min(400, Math.max(10, parseInt(строк, 10) || 80));
+      const куски = [];
+      if (await has('journalctl')){
+        for (const [что, доводы] of [
+          ['сеанс', ['-u', 'glower.service', '-n', String(n), '--no-pager', '--output=short-iso']],
+          ['ошибки системы', ['-p', 'err', '-n', '40', '--no-pager', '--output=short-iso']]
+        ]){
+          const т = await call('journalctl', доводы).catch(e => 'журнал не ответил: ' + e.message);
+          куски.push('— ' + что + ' —', String(т).trim() || '(пусто)', '');
+        }
+      } else куски.push('journalctl на машине нет');
+      return { текст:куски.join('\n') };
+    },
+
     /* Осмотр песочницы: почему программа из Flathub не запускается.
        Здесь нет догадок — только то, что машина отвечает сама. */
     async 'sys.sandbox'({ id } = {}){
@@ -430,7 +448,14 @@ export function apps(allowLaunch){
       скажи('файл настройки', await прочти('/etc/sysctl.d/60-glower-userns.conf'));
 
       /* bwrap — та самая песочница, в которой flatpak запускает ldconfig */
+      скажи('кто мы', (await call('id', []).catch(e => e.message)).trim());
       скажи('bwrap', await has('bwrap') ? 'есть' : 'нет');
+      if (await has('bwrap')){
+        скажи('права bwrap', (await call('ls', ['-l', '/usr/bin/bwrap']).catch(e => e.message)).trim());
+        if (await has('getcap'))
+          скажи('возможности bwrap',
+            (await call('getcap', ['/usr/bin/bwrap']).catch(e => e.message)).trim() || '(нет)');
+      }
       if (await has('bwrap')){
         const итог = await попытка_тихо('bwrap',
           ['--ro-bind', '/', '/', '--unshare-user', '--unshare-pid', '/bin/true']);
