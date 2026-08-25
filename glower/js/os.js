@@ -72,7 +72,7 @@ window.OS = OS;
   wireMachineApps();
   wireTaskManager();
   wireNativeWindows();
-  wireRealTerminal();
+  wireRealApps();
   wireNotifications();
 })();
 
@@ -414,35 +414,81 @@ function wireNativeWindows(){
   setInterval(обновиЧужие, 3000);
 }
 
-/* ---------- настоящий терминал вместо нарисованного ----------
+/* ---------- настоящие программы вместо нарисованных ----------
 
-   На живой машине «Терминал» открывает настоящий терминал системы: с
-   оболочкой, историей и всеми программами Linux. Нарисованный остаётся
-   только там, где системы под оболочкой нет, — в браузере. */
-function wireRealTerminal(){
-  if (!APPS.term) return;
-  APPS.term.name = 'Терминал';
-  APPS.term.sub = 'Настоящий терминал системы';
+   Раньше «Файлы», «Текст», «Калькулятор» и прочее были рисунками внутри
+   одной страницы: они умели ровно то, что им написали, и ничего сверх.
+   На живой машине их место занимают настоящие программы Linux — со своими
+   окнами, своими возможностями и своей судьбой. Значок и имя остаются
+   прежними, чтобы человеку не пришлось ничего переучивать.
 
-  const прежний = Shell.launch.bind(Shell);
+   Там, где системы под оболочкой нет (обычный браузер), всё остаётся как
+   было: нарисованное лучше, чем пустое место. */
+const НАСТОЯЩИЕ = {
+  term:    { вызов:'sys.terminal', подпись:'Терминал системы' },
+  files:   { ярлыки:['thunar.desktop', 'org.xfce.thunar.desktop', 'org.gnome.Nautilus.desktop',
+                     'nautilus.desktop', 'pcmanfm.desktop'], подпись:'Файлы системы' },
+  notepad: { ярлыки:['org.xfce.mousepad.desktop', 'mousepad.desktop',
+                     'org.gnome.TextEditor.desktop', 'gedit.desktop'], подпись:'Текстовый редактор' },
+  calc:    { ярлыки:['org.gnome.Calculator.desktop', 'gnome-calculator.desktop',
+                     'galculator.desktop'], подпись:'Калькулятор системы' },
+  photos:  { ярлыки:['org.gnome.eog.desktop', 'eog.desktop', 'org.gnome.Loupe.desktop',
+                     'ristretto.desktop'], подпись:'Просмотр изображений' },
+  music:   { ярлыки:['mpv.desktop', 'io.mpv.Mpv.desktop'], подпись:'Проигрыватель' },
+  browser: { ярлыки:['chromium.desktop', 'chromium-browser.desktop', 'google-chrome.desktop',
+                     'firefox.desktop'], подпись:'Браузер системы' }
+};
+
+/* Нарисованные приложения, которым на живой машине замены нет: они уходят,
+   а не притворяются. Пусть лучше их не будет, чем будет подделка. */
+const УБРАТЬ_НА_МАШИНЕ = ['paint', 'todo', 'calendar', 'clock', 'trash'];
+
+async function wireRealApps(){
+  let есть = [];
+  try { есть = ((await OS.apps()).list || []).map(a => a.id); } catch(e){}
+
+  const найден = {};
+  Object.entries(НАСТОЯЩИЕ).forEach(([id, о]) => {
+    if (!APPS[id]) return;
+    if (о.вызов){ найден[id] = о; return; }               // терминал ищет агент сам
+    const ярлык = (о.ярлыки || []).find(я => есть.includes(я));
+    if (ярлык) найден[id] = Object.assign({ ярлык }, о);
+  });
+
+  Object.entries(найден).forEach(([id, о]) => {
+    APPS[id].sub = о.подпись;
+    APPS[id].настоящее = true;
+  });
+
+  УБРАТЬ_НА_МАШИНЕ.forEach(id => { delete APPS[id]; });
+
+  const открыть = async id => {
+    const о = найден[id];
+    try {
+      if (о.вызов) await Platform.rpc(о.вызов, {});
+      else await OS.launch(о.ярлык);
+      Shell.toast(APPS[id] ? APPS[id].name : 'Программа', 'Открываю', '🚀');
+    } catch(e){
+      Dlg.alert('Не удалось открыть', String(e.message || e), '⚠️');
+    }
+  };
+
+  const прежнийЗапуск = Shell.launch.bind(Shell);
   Shell.launch = function(id, btn){
-    if (id !== 'term') return прежний(id, btn);
+    if (!найден[id]) return прежнийЗапуск(id, btn);
     if (btn){ btn.classList.add('bounce'); setTimeout(() => btn.classList.remove('bounce'), 700); }
     Shell.closePanels();
-    Platform.rpc('sys.terminal', {})
-      .then(() => Shell.toast('Терминал', 'Открываю терминал системы', '⌨️'))
-      .catch(e => Dlg.alert('Терминал не открылся', String(e.message || e), '⚠️'));
+    открыть(id);
   };
 
-  /* Пуск, поиск и рабочий стол зовут окно напрямую — перехватываем и там */
-  const открыть = WM.open.bind(WM);
+  const прежнееОкно = WM.open.bind(WM);
   WM.open = function(id, opts){
-    if (id !== 'term') return открыть(id, opts);
-    Platform.rpc('sys.terminal', {})
-      .then(() => Shell.toast('Терминал', 'Открываю терминал системы', '⌨️'))
-      .catch(e => Dlg.alert('Терминал не открылся', String(e.message || e), '⚠️'));
+    if (!найден[id]) return прежнееОкно(id, opts);
+    открыть(id);
     return null;
   };
+
+  Shell.renderShell();
 }
 
 /* ---------- уведомления настоящих программ ----------
@@ -473,3 +519,6 @@ function wireNotifications(){
 
   слушай();
 }
+
+/* проверкам нужно звать эту сборку напрямую */
+window.wireRealApps = wireRealApps;

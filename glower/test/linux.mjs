@@ -326,6 +326,32 @@ try {
       итог.путь && /неверный идентификатор/.test(итог.путь.error || ''), JSON.stringify(итог.путь));
   }
 
+  /* --- нарисованные приложения уступают место настоящим --- */
+  const подмена = await page.evaluate(async () => {
+    const было = Platform.rpc.bind(Platform);
+    Platform.rpc = (m, p) => {
+      if (m === 'sys.apps') return Promise.resolve({ total:1, canLaunch:true,
+        list:[{ id:'thunar.desktop', name:'Файлы', comment:'', flatpak:false, icon:'', categories:[] }] });
+      if (m === 'sys.launch') return Promise.resolve({ ok:true, via:'проверка', id:p && p.id });
+      return было(m, p);
+    };
+    await wireRealApps();
+    const открыто = WM.wins.length;
+    const итог = WM.open('files');
+    await new Promise(r => setTimeout(r, 400));
+    const ответ = { окноНеОткрылось:итог === null && WM.wins.length === openWins(открыто),
+      подпись:APPS.files && APPS.files.sub,
+      рисованныхУбрали:!APPS.paint && !APPS.todo && !APPS.calendar };
+    Platform.rpc = было;
+    return ответ;
+    function openWins(n){ return n; }
+  });
+  check('«Файлы» открывают настоящую программу, а не рисованное окно',
+    подмена.окноНеОткрылось === true && /Файлы системы/.test(подмена.подпись || ''),
+    JSON.stringify(подмена));
+  check('нарисованные приложения без замены с машины убраны',
+    подмена.рисованныхУбрали === true, JSON.stringify(подмена));
+
   /* --- настоящие окна машины попадают в панель задач --- */
   const чужие = await page.evaluate(async () => {
     const было = Platform.rpc.bind(Platform);

@@ -69,6 +69,7 @@ apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
+  thunar gvfs mousepad gnome-calculator eog mpv \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
@@ -133,6 +134,21 @@ if [ -n "$CHROMIUM" ]; then
   install -d "$ROOTFS/opt/chromium"
   cp -r "$CHROMIUM/." "$ROOTFS/opt/chromium/"
   ln -sf /opt/chromium/chrome "$ROOTFS/usr/bin/chromium"
+  # Ярлык браузеру пишем сами: он положен в систему файлами, а не пакетом,
+  # и без ярлыка оболочка его не увидит среди программ машины.
+  install -d "$ROOTFS/usr/share/applications"
+  cat > "$ROOTFS/usr/share/applications/chromium.desktop" <<'DESK'
+[Desktop Entry]
+Type=Application
+Name=Браузер
+Name[en]=Browser
+Comment=Просмотр сайтов
+Exec=/usr/bin/chromium --ozone-platform=wayland %U
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+DESK
   echo "  браузер взят из $CHROMIUM"
 else
   chroot "$ROOTFS" apt-get install -y --no-install-recommends chromium 2>&1 | tail -1 || \
