@@ -68,6 +68,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
+  wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
@@ -79,7 +80,7 @@ apt-get install -y --no-install-recommends \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
   wpasupplicant iw rfkill wireless-regdb \
-  polkitd dbus \
+  polkitd dbus dbus-daemon \
   brightnessctl xdg-utils libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \

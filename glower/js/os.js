@@ -72,6 +72,8 @@ window.OS = OS;
   wireMachineApps();
   wireTaskManager();
   wireNativeWindows();
+  wireRealTerminal();
+  wireNotifications();
 })();
 
 /* ---------- громкость системы вместо громкости страницы ---------- */
@@ -410,4 +412,64 @@ function wireNativeWindows(){
   Shell.syncDock = function(){ const r = прежний(); нарисуйЧужие(); return r; };
   обновиЧужие();
   setInterval(обновиЧужие, 3000);
+}
+
+/* ---------- настоящий терминал вместо нарисованного ----------
+
+   На живой машине «Терминал» открывает настоящий терминал системы: с
+   оболочкой, историей и всеми программами Linux. Нарисованный остаётся
+   только там, где системы под оболочкой нет, — в браузере. */
+function wireRealTerminal(){
+  if (!APPS.term) return;
+  APPS.term.name = 'Терминал';
+  APPS.term.sub = 'Настоящий терминал системы';
+
+  const прежний = Shell.launch.bind(Shell);
+  Shell.launch = function(id, btn){
+    if (id !== 'term') return прежний(id, btn);
+    if (btn){ btn.classList.add('bounce'); setTimeout(() => btn.classList.remove('bounce'), 700); }
+    Shell.closePanels();
+    Platform.rpc('sys.terminal', {})
+      .then(() => Shell.toast('Терминал', 'Открываю терминал системы', '⌨️'))
+      .catch(e => Dlg.alert('Терминал не открылся', String(e.message || e), '⚠️'));
+  };
+
+  /* Пуск, поиск и рабочий стол зовут окно напрямую — перехватываем и там */
+  const открыть = WM.open.bind(WM);
+  WM.open = function(id, opts){
+    if (id !== 'term') return открыть(id, opts);
+    Platform.rpc('sys.terminal', {})
+      .then(() => Shell.toast('Терминал', 'Открываю терминал системы', '⌨️'))
+      .catch(e => Dlg.alert('Терминал не открылся', String(e.message || e), '⚠️'));
+    return null;
+  };
+}
+
+/* ---------- уведомления настоящих программ ----------
+
+   Программы Linux сообщают о событиях через шину сеанса. Оболочка их
+   принимает (это делает программа-хозяин) и передаёт сюда — а здесь они
+   показываются так же, как свои: всплывающим окошком и записью в центре
+   уведомлений. Для человека разницы нет, и это правильно. */
+function wireNotifications(){
+  let с = 0, работаем = true;
+
+  const слушай = async () => {
+    while (работаем){
+      try {
+        const d = await Platform.rpc('ui.hear', { с, темы:['уведомление'] });
+        с = d.n || с;
+        (d.список || []).forEach(м => покажи(м.что));
+      } catch(e){ await new Promise(r => setTimeout(r, 3000)); }
+    }
+  };
+
+  const покажи = у => {
+    if (!у) return;
+    const заголовок = String(у.заголовок || у.откуда || 'Уведомление').slice(0, 120);
+    const текст = String(у.текст || '').replace(/<[^>]*>/g, '').slice(0, 300);
+    Shell.toast(заголовок, текст || String(у.откуда || ''), '🔔', 7000);
+  };
+
+  слушай();
 }

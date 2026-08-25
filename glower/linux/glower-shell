@@ -41,7 +41,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('WebKit2', '4.1')
 gi.require_version('GtkLayerShell', '0.1')
-from gi.repository import Gtk, Gdk, WebKit2, GtkLayerShell, GLib   # noqa: E402
+from gi.repository import Gtk, Gdk, Gio, WebKit2, GtkLayerShell, GLib   # noqa: E402
 
 # GTK по своему обычаю рисует вокруг окна тень, и поверхность выходит выше
 # запрошенной: полоса под панель получалась на двенадцать точек шире, чем
@@ -141,6 +141,93 @@ def поверхность(имя, слой, края, высота=None, пол
     return окно
 
 
+# ==========================================================================
+#  Уведомления настоящих программ
+#
+#  Программы Linux сообщают о событиях через общую шину сеанса: письмо
+#  пришло, файл скачался, музыка сменилась. Без приёмника эти сообщения
+#  просто пропадают, и человек не понимает, почему система молчит.
+#
+#  Здесь оболочка сама становится приёмником: занимает известное имя на
+#  шине и пересылает всё пришедшее рабочему столу — тот показывает это
+#  своими средствами, как собственные уведомления.
+# ==========================================================================
+ОПИСАНИЕ = """
+<node>
+  <interface name='org.freedesktop.Notifications'>
+    <method name='Notify'>
+      <arg type='s' name='app_name' direction='in'/>
+      <arg type='u' name='replaces_id' direction='in'/>
+      <arg type='s' name='app_icon' direction='in'/>
+      <arg type='s' name='summary' direction='in'/>
+      <arg type='s' name='body' direction='in'/>
+      <arg type='as' name='actions' direction='in'/>
+      <arg type='a{sv}' name='hints' direction='in'/>
+      <arg type='i' name='expire_timeout' direction='in'/>
+      <arg type='u' name='id' direction='out'/>
+    </method>
+    <method name='CloseNotification'>
+      <arg type='u' name='id' direction='in'/>
+    </method>
+    <method name='GetCapabilities'>
+      <arg type='as' name='caps' direction='out'/>
+    </method>
+    <method name='GetServerInformation'>
+      <arg type='s' name='name' direction='out'/>
+      <arg type='s' name='vendor' direction='out'/>
+      <arg type='s' name='version' direction='out'/>
+      <arg type='s' name='spec_version' direction='out'/>
+    </method>
+  </interface>
+</node>
+"""
+
+
+def скажи_столу(тема, что):
+    """Передаём рабочему столу через агента: он и покажет."""
+    try:
+        запрос = urllib.request.Request(
+            АДРЕС.split('?')[0].rstrip('/') + '/rpc',
+            data=json.dumps({'method': 'ui.say', 'params': {'тема': тема, 'что': что}}).encode(),
+            headers={'Content-Type': 'application/json'})
+        urllib.request.urlopen(запрос, timeout=2).read()
+    except Exception:
+        pass
+
+
+def приём_уведомлений():
+    счёт = {'n': 0}
+
+    def вызов(_соединение, _кто, _путь, _интерфейс, метод, доводы, ответ):
+        if метод == 'Notify':
+            имя, замена, значок, заголовок, текст = доводы[0], доводы[1], доводы[2], доводы[3], доводы[4]
+            счёт['n'] += 1
+            номер = замена or счёт['n']
+            скажи_столу('уведомление', {'откуда': имя, 'значок': значок,
+                                        'заголовок': заголовок, 'текст': текст, 'номер': номер})
+            ответ.return_value(GLib.Variant('(u)', (номер,)))
+        elif метод == 'CloseNotification':
+            скажи_столу('уведомление-закрыть', {'номер': доводы[0]})
+            ответ.return_value(None)
+        elif метод == 'GetCapabilities':
+            ответ.return_value(GLib.Variant('(as)', (['body', 'persistence'],)))
+        elif метод == 'GetServerInformation':
+            ответ.return_value(GLib.Variant('(ssss)', ('GlowerOS', 'GlowerOS', '1.0', '1.2')))
+        else:
+            ответ.return_value(None)
+
+    def занято(соединение, имя, _данные=None):
+        узел = Gio.DBusNodeInfo.new_for_xml(ОПИСАНИЕ)
+        соединение.register_object('/org/freedesktop/Notifications', узел.interfaces[0], вызов, None, None)
+        print('GlowerOS: принимаю уведомления программ', file=sys.stderr, flush=True)
+
+    try:
+        Gio.bus_own_name(Gio.BusType.SESSION, 'org.freedesktop.Notifications',
+                         Gio.BusNameOwnerFlags.NONE, занято, None, None)
+    except Exception as e:
+        print('GlowerOS: уведомления принять не вышло: %s' % e, file=sys.stderr, flush=True)
+
+
 def следи_за_полосой(окно):
     """Панель задач меняет высоту — вместе с ней меняется и занятая полоса.
 
@@ -180,5 +267,6 @@ Gtk.StyleContext.add_provider_for_screen(
             [К.TOP, К.BOTTOM, К.LEFT, К.RIGHT], полоса=-1)
 if ПОЛОСА > 0:
     следи_за_полосой(распорка(ПОЛОСА))
+приём_уведомлений()
 
 Gtk.main()

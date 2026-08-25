@@ -29,7 +29,7 @@ export async function has(cmd){
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
   'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl',
-  'getcap', 'id', 'ls', 'setxkbmap', 'localectl', 'free', 'uptime',
+  'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -367,6 +367,62 @@ export function apps(allowLaunch){
       }
       list.sort((a, b) => a.name.localeCompare(b.name));
       return { total:list.length, list, canLaunch:!!allowLaunch };
+    },
+
+    /* ---------- общий буфер обмена ----------
+
+       Оболочка живёт в своём движке, чужие программы — в своих окнах. Без
+       общего буфера скопированное в одном месте не появляется в другом, и
+       человек винит систему — справедливо. Здесь мы соединяем их. */
+    async 'sys.clipboard.get'(){
+      if (!await has('wl-paste')) return { есть:false, почему:'на машине нет wl-paste' };
+      const текст = await call('wl-paste', ['--no-newline']).catch(() => '');
+      return { есть:true, текст:String(текст) };
+    },
+
+    async 'sys.clipboard.set'({ текст }){
+      if (!allowLaunch) throw new Error('обмен с системой выключен: запустите агент с ключом --allow-launch');
+      if (typeof текст !== 'string') throw new Error('нечего класть в буфер');
+      if (!await has('wl-copy')) throw new Error('на машине нет wl-copy');
+      const { execFile } = await import('node:child_process');
+      const env = await средаЭкрана();
+      await new Promise((готово, беда) => {
+        const п = execFile('wl-copy', ['--'], { env, timeout:4000 }, e => e ? беда(e) : готово());
+        п.stdin.end(текст.slice(0, 1024 * 256));
+      });
+      return { ok:true };
+    },
+
+    /* Настоящий терминал системы.
+
+       Свой, нарисованный терминал был игрушкой: он умел лишь то, что мы ему
+       написали. Человеку, который знает, зачем нужен терминал, нужен
+       настоящий — с оболочкой, историей, программами. Ищем его среди
+       программ машины, а если ярлыка нет, зовём по имени. */
+    async 'sys.terminal'(){
+      if (!allowLaunch) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
+
+      const ярлыки = ['org.codeberg.dnkl.foot.desktop', 'foot.desktop',
+        'org.gnome.Terminal.desktop', 'gnome-terminal.desktop', 'kitty.desktop',
+        'Alacritty.desktop', 'alacritty.desktop', 'xterm.desktop',
+        'debian-xterm.desktop', 'org.kde.konsole.desktop'];
+      for (const имя of ярлыки){
+        const dir = APP_DIRS.find(d => existsSync(join(d, имя)));
+        if (!dir) continue;
+        const текст = await readFile(join(dir, имя), 'utf8');
+        const exec = (текст.match(/^Exec=(.*)$/m) || [])[1];
+        if (!exec) continue;
+        const части = (exec.replace(/%[fFuUdDnNickvm]/g, '').match(/"[^"]+"|\S+/g) || [])
+          .map(x => x.replace(/^"|"$/g, '')).filter(x => !/^@@u?$/.test(x));
+        const программа = части.shift();
+        if (программа && /^[\w./+-]+$/.test(программа))
+          return запустить(программа, части, 'терминал');
+      }
+
+      for (const имя of ['foot', 'x-terminal-emulator', 'gnome-terminal', 'kitty', 'alacritty', 'xterm']){
+        if (await has(имя)) return запустить(имя, [], 'терминал');
+      }
+      throw new Error('на машине нет терминала — ставить его должен образ системы');
     },
 
     /* ---------- настоящие окна машины ----------

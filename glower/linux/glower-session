@@ -22,6 +22,13 @@ if [ -z "${GLOWER_NO_CAPS:-}" ] && command -v setpriv >/dev/null 2>&1; then
   exec setpriv --ambient-caps=-all --inh-caps=-all "$0" "$@"
 fi
 
+# Настоящим программам Linux нужна общая шина сеанса: через неё работают
+# уведомления, портал выбора файлов и песочница flatpak. Без неё программы
+# запускаются, но ведут себя странно и молча. Поднимаем её на весь сеанс.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
+  exec dbus-run-session -- "$0" "$@"
+fi
+
 ROOT="${GLOWER_ROOT:-$HOME/GlowerOS}"
 PORT="${GLOWER_PORT:-8123}"
 UI="${GLOWER_UI:-/usr/share/glower/ui}"
