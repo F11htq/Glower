@@ -96,14 +96,30 @@ const Setup = {
     this.i = 0;
     this.paint();
 
-    $('#setup-back', ov).onclick = () => { if (this.i > 0){ this.i--; this.paint(); } };
-    $('#setup-next', ov).onclick = () => {
-      const s = this.STEPS[this.i];
-      if (s.check && !s.check.call(this)) return;
-      if (this.i < this.STEPS.length - 1){ this.i++; this.paint(); Snd.click(); }
-      else this.done();
+    $('#setup-back', ov).onclick = () => this.назад();
+    $('#setup-next', ov).onclick = () => this.вперёд();
+
+    /* Настройка должна проходиться и без мыши: Enter ведёт вперёд, Backspace
+       возвращает назад. Без этого система непроходима для того, у кого мышь
+       не работает или её просто нет. */
+    this._клавиши = e => {
+      if (!document.getElementById('setup')) return;
+      const поле = document.activeElement;
+      const вводит = поле && /^(INPUT|TEXTAREA|SELECT)$/.test(поле.tagName);
+      if (e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); this.вперёд(); }
+      else if (e.key === 'Backspace' && !вводит){ e.preventDefault(); this.назад(); }
     };
+    document.addEventListener('keydown', this._клавиши, true);
   },
+
+  вперёд(){
+    const s = this.STEPS[this.i];
+    if (s.check && !s.check.call(this)) return;
+    if (this.i < this.STEPS.length - 1){ this.i++; this.paint(); Snd.click(); }
+    else this.done();
+  },
+
+  назад(){ if (this.i > 0){ this.i--; this.paint(); } },
 
   paint(){
     const box = $('#setup-body'), steps = $('#setup-steps');
@@ -288,6 +304,7 @@ const Setup = {
 
   /* ---------- применение ---------- */
   async done(){
+    if (this._клавиши){ document.removeEventListener('keydown', this._клавиши, true); this._клавиши = null; }
     const d = this.data;
 
     Store.set('theme', d.theme);

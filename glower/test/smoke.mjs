@@ -1012,6 +1012,26 @@ try {
       return ok;
     }));
 
+  /* настройка первого запуска проходится с клавиатуры: без мыши тоже система */
+  const клавиатурой = await (async () => {
+    const p4 = await browser.newPage({ viewport:{ width:1280, height:800 } });
+    try {
+      await p4.goto(URL_APP);
+      await p4.waitForFunction(() => !!document.getElementById('setup'), null, { timeout:20000 }).catch(() => {});
+      const было = await p4.evaluate(() => (window.Setup && Setup.i) || 0);
+      await p4.keyboard.press('Enter');
+      await p4.waitForTimeout(600);
+      const стало = await p4.evaluate(() => (window.Setup && Setup.i) || 0);
+      await p4.keyboard.press('Backspace');
+      await p4.waitForTimeout(600);
+      const назад = await p4.evaluate(() => (window.Setup && Setup.i) || 0);
+      return { было, стало, назад };
+    } finally { await p4.close(); }
+  })();
+  check('настройка идёт вперёд по Enter и назад по Backspace',
+    клавиатурой.стало === клавиатурой.было + 1 && клавиатурой.назад === клавиатурой.было,
+    JSON.stringify(клавиатурой));
+
   /* установочная среда: только мастер, ничего лишнего вокруг */
   const среда = await (async () => {
     const p2 = await browser.newPage({ viewport:{ width:1280, height:800 } });
