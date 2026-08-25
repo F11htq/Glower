@@ -87,7 +87,9 @@ echo "$sand" | grep -q 'проба bwrap: работает' && r=да || r=не�
 проверь "песочница bwrap работает" "$r"
 
 # настоящая программа системы: открываем её и ищем в списке окон
-спроси '{"method":"sys.launch","params":{"id":"foot.desktop"}}' > /dev/null
+# Имя ярлыка у настоящей программы своё: берём его из списка программ машины
+label=$(спроси '{"method":"sys.apps","params":{}}' | grep -o '"id":"[^"]*foot[^"]*"' | head -1 | cut -d'"' -f4)
+[ -n "$label" ] && спроси "{\"method\":\"sys.launch\",\"params\":{\"id\":\"$label\"}}" > /dev/null
 sleep 6
 wins2=$(спроси '{"method":"sys.windows","params":{}}')
 echo "$wins2" | grep -qi 'foot' && r=да || r=нет
