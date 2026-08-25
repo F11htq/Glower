@@ -185,6 +185,10 @@ INCHROOT
 cat > "$ROOTFS/etc/systemd/system/glower.service" <<'UNIT'
 [Unit]
 Description=Сеанс GlowerOS
+# Три неудачи за две минуты — и systemd останавливается: на экране остаётся
+# объяснение, а не бесконечный круг перезапусков.
+StartLimitBurst=3
+StartLimitIntervalSec=120
 After=systemd-user-sessions.service seatd.service getty@tty1.service
 Wants=seatd.service
 # За первую консоль нельзя бороться вдвоём: если getty успевает раньше,
@@ -212,14 +216,15 @@ ExecStartPre=/bin/chown glower:glower /run/user/1000
 # делает то же самое при загрузке, но полагаться на один путь не будем:
 # знак «+» означает, что строка выполняется с правами root.
 ExecStartPre=+/bin/sh -c '/sbin/sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true'
-ExecStart=/usr/bin/cage -- /usr/bin/glower-session
+# Оконный сервер выбирает сам сеанс: сначала labwc — настоящий, с окнами и
+# слоями; если он на этой машине не пошёл, остаются cage и X-сервер. Раньше
+# здесь стоял cage, и всё происходило внутри киоска: labwc поднимался вложенно
+# и настоящим оконным сервером системы так и не становился.
+ExecStart=/usr/bin/glower-session
 # Три неудачи подряд — и systemd останавливается: на экране остаётся
 # объяснение, а не мигающий курсор.
 Restart=on-failure
 RestartSec=3
-StartLimitBurst=3
-StartLimitIntervalSec=120
-
 [Install]
 WantedBy=multi-user.target
 UNIT

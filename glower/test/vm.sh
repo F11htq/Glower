@@ -68,6 +68,13 @@ for k in power launch install net packages; do
   проверь "разрешение $k доехало до агента" "$r"
 done
 
+# Какой оконный сервер на самом деле держит сеанс: настоящий или киоск
+procs=$(спроси '{"method":"sys.procs","params":{}}')
+echo "$procs" | grep -q '"labwc"' && r=да || r=нет
+проверь "сеанс держит настоящий оконный сервер labwc" "$r"
+echo "$procs" | grep -q '"cage"' && r=нет || r=да
+проверь "киоска cage в сеансе нет" "$r"
+
 wins=$(спроси '{"method":"sys.windows","params":{}}')
 echo "$wins" | grep -q '"list"' && проверь "система знает про свои wins" да \
   || проверь "система знает про свои wins" нет "$wins"

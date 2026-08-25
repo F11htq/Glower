@@ -72,8 +72,11 @@ Shell.tellPanelHeight = function(){
   const п = document.querySelector('.dock-wrap');
   if (!п) return;
   const r = п.getBoundingClientRect();
+  /* Пока панель не отрисована, её размеры — нули, и «высота» выходит во весь
+     экран. Пустую панель не считаем: полосу отводят под настоящую. */
+  if (r.height < 8 || innerHeight - r.bottom > 4) return;
   const h = Math.round(innerHeight - r.top);
-  if (!h || Math.abs(h - полосаСказана) < 2) return;
+  if (!h || h > innerHeight / 3 || Math.abs(h - полосаСказана) < 2) return;
   полосаСказана = h;
   Platform.rpc('ui.say', { 'тема':'полоса', что:h }).catch(() => {});
 };
