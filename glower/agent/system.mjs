@@ -348,6 +348,11 @@ async function попытка(программа, части, via){
 export function apps(allowLaunch){
   return {
     async 'sys.apps'(){
+      /* язык системы: ru_RU.UTF-8 → сначала ru_RU, потом ru */
+      const язык = String(process.env.LANG || process.env.LC_ALL || process.env.LANGUAGE || '')
+        .split('.')[0].split(':')[0];
+      const языки = [язык, язык.split('_')[0]].filter(Boolean)
+        .filter((я, i, все) => я && все.indexOf(я) === i);
       const list = [];
       for (const dir of APP_DIRS){
         if (!existsSync(dir)) continue;
@@ -355,7 +360,17 @@ export function apps(allowLaunch){
           if (!f.endsWith('.desktop')) continue;
           try {
             const t = await readFile(join(dir, f), 'utf8');
-            const get = k => (t.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1];
+            /* В ярлыке рядом с английским именем лежат переводы: Name[ru],
+               Comment[ru] и прочие. Настоящий рабочий стол берёт имя на языке
+               человека — возьмём и мы, иначе система говорит по-русски, а
+               программы в ней подписаны по-английски. */
+            const get = k => {
+              for (const я of языки){
+                const м = t.match(new RegExp('^' + k + '\\[' + я + '\\]=(.*)$', 'm'));
+                if (м) return м[1];
+              }
+              return (t.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1];
+            };
             if (get('NoDisplay') === 'true' || get('Hidden') === 'true') continue;
             const name = get('Name');
             if (!name) continue;

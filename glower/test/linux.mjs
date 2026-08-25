@@ -326,6 +326,23 @@ try {
       итог.путь && /неверный идентификатор/.test(итог.путь.error || ''), JSON.stringify(итог.путь));
   }
 
+  /* --- имена программ берутся на языке системы --- */
+  {
+    const { mkdir, writeFile, rm } = await import('node:fs/promises');
+    const { homedir } = await import('node:os');
+    const каталог = join(homedir(), '.local/share/applications');
+    await mkdir(каталог, { recursive:true });
+    await writeFile(join(каталог, 'glower-перевод.desktop'),
+      '[Desktop Entry]\nType=Application\nName=File Manager\nName[ru]=Файлы\n' +
+      'Comment=Browse files\nComment[ru]=Просмотр файлов\nExec=/bin/true\n');
+    const найдено = await page.evaluate(() => Platform.rpc('sys.apps')
+      .then(d => (d.list.find(a => a.id === 'glower-перевод.desktop') || {}), () => ({})));
+    await rm(join(каталог, 'glower-перевод.desktop'), { force:true });
+    check('имя программы берётся на языке системы',
+      найдено.name === 'Файлы' || найдено.name === 'File Manager',
+      JSON.stringify(найдено));
+  }
+
   /* --- нарисованные приложения уступают место настоящим --- */
   const подмена = await page.evaluate(async () => {
     const было = Platform.rpc.bind(Platform);
