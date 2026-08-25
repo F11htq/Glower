@@ -17,12 +17,25 @@
 Показывает обе поверхности движок WebKit — тот же, что и в настоящих
 программах системы; наша оболочка написана обычным HTML и CSS.
 """
+import glob
 import json
 import os
 import sys
 import urllib.request
 
 import cairo
+
+# Без настоящей видеокарты движок пытается рисовать через ускорение, не
+# получает его и остаётся ни с чем: окно выходит чёрным. Так бывает в
+# виртуальных машинах и на старом железе. Заранее переводим его на
+# программную отрисовку — медленнее, зато видно.
+if os.environ.get('GLOWER_SOFT') == '1' or not glob.glob('/dev/dri/renderD*'):
+    for имя, значение in (('WEBKIT_DISABLE_COMPOSITING_MODE', '1'),
+                          ('WEBKIT_DISABLE_DMABUF_RENDERER', '1'),
+                          ('LIBGL_ALWAYS_SOFTWARE', '1'),
+                          ('GALLIUM_DRIVER', 'llvmpipe')):
+        os.environ.setdefault(имя, значение)
+    print('GlowerOS: видеоускорения нет — рисую программно', file=sys.stderr, flush=True)
 
 import gi
 gi.require_version('Gtk', '3.0')

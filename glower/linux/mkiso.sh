@@ -67,7 +67,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
-  labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 mesa-vulkan-drivers \
+  labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
@@ -141,8 +141,10 @@ fi
 # --------------------------------------------------------------------------
 step "4/6 автозапуск сеанса"
 chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
-id glower >/dev/null 2>&1 || useradd -m -s /bin/bash \
-  -G video,audio,input,render,tty,adm,systemd-journal glower
+id glower >/dev/null 2>&1 || useradd -m -s /bin/bash glower
+# Группы задаём отдельно: при повторной сборке пользователь уже есть, и
+# строка выше не выполняется — а группы всё равно должны быть на месте.
+usermod -aG video,audio,input,render,tty,adm,systemd-journal glower
 passwd -d glower
 # как в любой живой системе: разбор на месте без пароля
 usermod -aG sudo glower 2>/dev/null || true
