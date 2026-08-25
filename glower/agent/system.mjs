@@ -424,11 +424,20 @@ export function apps(allowLaunch){
       const n = Math.min(400, Math.max(10, parseInt(строк, 10) || 80));
       const куски = [];
       if (await has('journalctl')){
+        /* Обычный пользователь видит только свои записи. Если системного
+           журнала ему не дали, спрашиваем через sudo — права на это у сеанса
+           есть, а гадать по пустому ответу бессмысленно. */
+        const журнал = async доводы => {
+          const прямо = await call('journalctl', доводы).catch(e => '');
+          if (String(прямо).trim() && !/No entries/.test(прямо)) return прямо;
+          return await call('sudo', ['-n', 'journalctl', ...доводы])
+            .catch(e => 'журнал не ответил: ' + e.message);
+        };
         for (const [что, доводы] of [
           ['сеанс', ['-u', 'glower.service', '-n', String(n), '--no-pager', '--output=short-iso']],
           ['ошибки системы', ['-p', 'err', '-n', '40', '--no-pager', '--output=short-iso']]
         ]){
-          const т = await call('journalctl', доводы).catch(e => 'журнал не ответил: ' + e.message);
+          const т = await журнал(доводы);
           куски.push('— ' + что + ' —', String(т).trim() || '(пусто)', '');
         }
       } else куски.push('journalctl на машине нет');
@@ -449,6 +458,11 @@ export function apps(allowLaunch){
 
       /* bwrap — та самая песочница, в которой flatpak запускает ldconfig */
       скажи('кто мы', (await call('id', []).catch(e => e.message)).trim());
+      /* Песочница отказывается работать, если у позвавшего её процесса есть
+         особые права. Смотрим, что у нас на самом деле. */
+      const состояние = await прочти('/proc/self/status');
+      скажи('права процесса', String(состояние).split('\n')
+        .filter(с => /^Cap(Prm|Eff|Inh|Amb|Bnd)/.test(с)).join(' · ') || 'неизвестно');
       скажи('bwrap', await has('bwrap') ? 'есть' : 'нет');
       if (await has('bwrap')){
         скажи('права bwrap', (await call('ls', ['-l', '/usr/bin/bwrap']).catch(e => e.message)).trim());

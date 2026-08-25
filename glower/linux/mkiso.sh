@@ -141,7 +141,8 @@ fi
 # --------------------------------------------------------------------------
 step "4/6 автозапуск сеанса"
 chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
-id glower >/dev/null 2>&1 || useradd -m -s /bin/bash -G video,audio,input,render,tty glower
+id glower >/dev/null 2>&1 || useradd -m -s /bin/bash \
+  -G video,audio,input,render,tty,adm,systemd-journal glower
 passwd -d glower
 # как в любой живой системе: разбор на месте без пароля
 usermod -aG sudo glower 2>/dev/null || true
