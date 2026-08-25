@@ -626,6 +626,9 @@ export async function capabilities(flags){
     host:os.hostname(), user:os.userInfo().username,
     platform:process.platform, release:os.release(), arch:os.arch(),
     desktop:process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_SESSION || null,
+    /* язык системы: на нём говорят настоящие программы, и человеку важно
+       увидеть в настройках именно его, а не догадку по браузеру */
+    lang:process.env.LANG || process.env.LC_ALL || process.env.LANGUAGE || null,
     session:process.env.XDG_SESSION_TYPE || null,
     tools:{
       systemctl: await has('systemctl'), loginctl: await has('loginctl'),

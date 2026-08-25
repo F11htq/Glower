@@ -96,6 +96,11 @@ echo "$wins2" | grep -qi 'foot' && r=да || r=нет
 проверь "окно настоящей программы видно системе" "$r" "$(echo "$wins2" | head -c 200)"
 снимок "st-программой"
 
+# Язык системы: программы должны говорить с человеком по-русски
+caps2=$(спроси '{"method":"sys.caps","params":{}}')
+echo "$caps2" | grep -qi 'ru_RU' && r=да || r=нет
+проверь "система говорит по-русски" "$r" "$(echo "$caps2" | head -c 200)"
+
 power=$(спроси '{"method":"sys.power.check","params":{}}')
 echo "$power" | grep -q '"ok":true' && r=да || r=нет
 проверь "выключение системе доступно" "$r" "$(echo "$power" | head -c 160)"

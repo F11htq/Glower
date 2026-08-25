@@ -70,6 +70,7 @@ apt-get install -y --no-install-recommends \
   labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs mousepad gnome-calculator eog mpv \
+  locales language-pack-ru language-pack-gnome-ru \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
@@ -191,6 +192,22 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 # Если у машины сборки нет сети — не беда, система подключит их сама.
 flatpak update --appstream -y --noninteractive 2>/dev/null || true
 
+# Язык системы. Без него настоящие программы говорят по-английски, и
+# человек, ради которого всё затевалось, упирается в чужой язык на первом же
+# окне. Русский ставим языком по умолчанию, английский остаётся запасным.
+sed -i 's/^# *\(ru_RU.UTF-8\)/\1/; s/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen 2>/dev/null || true
+printf 'ru_RU.UTF-8 UTF-8\nen_US.UTF-8 UTF-8\n' >> /etc/locale.gen
+locale-gen ru_RU.UTF-8 en_US.UTF-8 >/dev/null 2>&1 || true
+cat > /etc/default/locale <<'LOC'
+LANG=ru_RU.UTF-8
+LANGUAGE=ru:en
+LC_ALL=ru_RU.UTF-8
+LOC
+cat > /etc/locale.conf <<'LOC'
+LANG=ru_RU.UTF-8
+LANGUAGE=ru:en
+LOC
+
 echo "GlowerOS" > /etc/hostname
 # файл достался от машины, где собирали образ: адреса чужие, пусть его
 # заполняет NetworkManager по настоящему подключению
@@ -231,6 +248,9 @@ AmbientCapabilities=
 CapabilityBoundingSet=~CAP_WAKE_ALARM
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=XDG_SESSION_TYPE=wayland
+Environment=LANG=ru_RU.UTF-8
+Environment=LANGUAGE=ru:en
+Environment=LC_ALL=ru_RU.UTF-8
 # Кавычки обязательны: без них systemd видит только первое слово, а
 # остальные ключи молча теряет — оттого в системе не работали ни выключение,
 # ни установка, ни сети.
