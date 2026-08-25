@@ -204,6 +204,12 @@ TTYReset=yes
 TTYVHangup=yes
 StandardInput=tty-force
 StandardOutput=journal
+# Сеансу не нужны особые права ядра. Одно такое право (cap_wake_alarm)
+# доставалось ему по наследству, и из-за него отказывалась работать песочница
+# flatpak: она отказывается запускаться, если у позвавшего есть права, но он
+# не setuid. Снимаем их явно — программы от этого ничего не теряют.
+AmbientCapabilities=
+CapabilityBoundingSet=~CAP_WAKE_ALARM
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=XDG_SESSION_TYPE=wayland
 # Кавычки обязательны: без них systemd видит только первое слово, а

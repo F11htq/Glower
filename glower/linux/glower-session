@@ -13,6 +13,15 @@
 # ==========================================================================
 set -e
 
+# Особые права ядра сеансу не нужны, а песочнице flatpak они прямо мешают:
+# она отказывается работать, если у позвавшего есть права, но он не setuid.
+# Юнит их уже снимает; здесь — на случай запуска сеанса иным способом.
+if [ -z "${GLOWER_NO_CAPS:-}" ] && command -v setpriv >/dev/null 2>&1; then
+  GLOWER_NO_CAPS=1
+  export GLOWER_NO_CAPS
+  exec setpriv --ambient-caps=-all --inh-caps=-all "$0" "$@"
+fi
+
 ROOT="${GLOWER_ROOT:-$HOME/GlowerOS}"
 PORT="${GLOWER_PORT:-8123}"
 UI="${GLOWER_UI:-/usr/share/glower/ui}"
