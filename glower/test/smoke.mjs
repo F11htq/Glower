@@ -1028,6 +1028,17 @@ try {
       return { было, стало, назад };
     } finally { await p4.close(); }
   })();
+  const темаВИтогах = await (async () => {
+    const p5 = await browser.newPage({ viewport:{ width:1280, height:800 } });
+    try {
+      await p5.goto(URL_APP);
+      await p5.waitForFunction(() => !!window.Setup, null, { timeout:20000 }).catch(() => {});
+      return await p5.evaluate(() => Setup.data && Setup.data.theme);
+    } finally { await p5.close(); }
+  })();
+  check('настройка предлагает тёмную тему, а не убранную прозрачную',
+    темаВИтогах === 'dark', String(темаВИтогах));
+
   check('настройка идёт вперёд по Enter и назад по Backspace',
     клавиатурой.стало === клавиатурой.было + 1 && клавиатурой.назад === клавиатурой.было,
     JSON.stringify(клавиатурой));

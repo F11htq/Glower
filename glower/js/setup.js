@@ -34,7 +34,7 @@ const Setup = {
       'Честно о том, что это даёт: пароль запирает экран блокировки внутри системы. Его хеш хранится на этой машине, сами файлы не шифруются. Это защита от чужого взгляда, а не от того, у кого есть доступ к компьютеру.':'Honestly about what this gives you: the password locks the system\u2019s lock screen. Its hash is stored on this machine and the files themselves are not encrypted. It guards against a passing glance, not against someone with access to the computer.',
       'Оформление':'Appearance',
       'Тему и цвет тоже можно менять когда угодно.':'Theme and colour can be changed at any time too.',
-      'Прозрачная':'Transparent', 'Тёмная':'Dark', 'Светлая':'Light',
+      'Тёмная':'Dark', 'Светлая':'Light',
       'непрозрачные поверхности':'opaque surfaces',
       'светлые поверхности':'light surfaces',
       'Обои':'Wallpaper',
@@ -70,7 +70,7 @@ const Setup = {
 
   /* собранные ответы */
   data:{ lang:'ru', layouts:['en', 'ru'], city:'Москва', name:'', emoji:'',
-         pass:'', theme:'glass', accent:0, wallpaper:'bloom' },
+         pass:'', theme:'dark', accent:0, wallpaper:'bloom' },
 
   /* ---------- каркас ---------- */
   open(){
@@ -286,7 +286,7 @@ const Setup = {
          ['🏙', 'Город', this.data.city || this.t('не указан')],
          ['👤', 'Пользователь', this.data.name],
          ['🔒', 'Вход', this.t(this.data.pass ? 'по паролю' : 'свободный')],
-         ['🎨', 'Тема', this.t({ glass:'Прозрачная', dark:'Тёмная', light:'Светлая' }[this.data.theme])]
+         ['🎨', 'Тема', this.t({ dark:'Тёмная', light:'Светлая' }[this.data.theme] || 'Тёмная')]
         ].forEach(([e, k, v]) => {
           const r = el('div', 'setup-sr');
           r.innerHTML = `<span class="e">${e}</span><span class="k">${this.t(k)}</span><span class="v">${esc(String(v))}</span>`;

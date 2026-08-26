@@ -461,6 +461,26 @@ async function wireRealApps(){
   });
 
   УБРАТЬ_НА_МАШИНЕ.forEach(id => { delete APPS[id]; });
+  /* Убранное не должно оставаться ни в панели, ни в Пуске: значок, за
+     которым ничего нет, — та же подделка, только меньше. */
+  ['dockApps', 'pinned'].forEach(ключ => {
+    const было = S[ключ] || [];
+    const стало = было.filter(id => APPS[id]);
+    if (стало.length !== было.length){ S[ключ] = стало; Store.save(); }
+  });
+
+  /* Значки рабочего стола рисуются отдельно: убираем оттуда те, что вели
+     к нарисованным приложениям, и открываем настоящие вместо них. */
+  const прежниеЗначки = Shell.renderIcons.bind(Shell);
+  Shell.renderIcons = function(){
+    const r = прежниеЗначки();
+    const короб = document.getElementById('desktop-icons');
+    if (короб) [...короб.children].forEach(n => {
+      const имя = (n.querySelector('.lbl') || {}).textContent || '';
+      if (имя === 'Корзина' && !APPS.trash) n.remove();
+    });
+    return r;
+  };
 
   const открыть = async id => {
     const о = найден[id];
