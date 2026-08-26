@@ -54,6 +54,21 @@ window, window.background, decoration, decoration:backdrop {
 
 АДРЕС = os.environ.get('GLOWER_URL', 'http://localhost:8123/')
 ПОЛОСА = int(os.environ.get('GLOWER_PANEL_H', '48'))
+# Слой рабочего стола и его право на клавиатуру. Значения по умолчанию —
+# рабочие; переменные оставлены, чтобы можно было проверить машину, где
+# оконный сервер ведёт себя иначе.
+# Чем показывать рабочий стол.
+#
+#   окно  — обычное окно оконного сервера, лежащее в самом низу стопки.
+#           Единственный способ, при котором до рабочего стола доходит
+#           клавиатура: поверхностям нижних слоёв оконный сервер её не
+#           отдаёт, и в мастере первого запуска нельзя было напечатать
+#           даже собственное имя.
+#   слой  — поверхность слоя. Оставлено для проверок и для оконных
+#           серверов, которые умеют отдавать таким поверхностям клавиатуру.
+ВИД_СТОЛА = os.environ.get('GLOWER_SURFACE', 'окно')
+СЛОЙ = os.environ.get('GLOWER_LAYER', 'bottom')
+КЛАВИАТУРА = os.environ.get('GLOWER_KBD', 'on_demand')
 ДОВОД = '&'.join(x for x in os.environ.get('GLOWER_QUERY', '').split('&') if x)
 
 
@@ -121,6 +136,34 @@ def распорка(высота):
     return окно
 
 
+СЛОИ = {}
+РЕЖИМЫ = {}
+
+
+def стол_окном(имя):
+    """Рабочий стол как обычное окно: во весь экран, без рамки, внизу стопки.
+
+    Имя окна (glowershell) знает оконный сервер: по нему он держит стол под
+    всеми окнами и не рисует ему рамку. Оболочка это же имя убирает из своей
+    панели задач — рабочий стол не окно для человека, даже если он окно для
+    оконного сервера."""
+    окно = Gtk.Window()
+    окно.set_decorated(False)
+    окно.set_title('GlowerOS')
+    в = вид(имя)
+    окно.add(в)
+    окно.connect('destroy', Gtk.main_quit)
+    окно.show_all()
+    окно.fullscreen()
+    # Ввод достаётся тому, кто его взял. Без этого окно есть, страница живёт,
+    # а напечатать в ней нельзя ни буквы — именно так и было.
+    в.set_can_focus(True)
+    в.grab_focus()
+    окно.set_focus(в)
+    окно.present()
+    return окно
+
+
 def поверхность(имя, слой, края, высота=None, полоса=None):
     окно = Gtk.Window()
     окно.set_decorated(False)
@@ -134,10 +177,14 @@ def поверхность(имя, слой, края, высота=None, пол
     # Полоса экрана, которую оконный сервер вычтет из рабочей области: ни одно
     # окно, даже развёрнутое во весь экран, не сможет её закрыть.
     GtkLayerShell.set_exclusive_zone(окно, полоса if полоса is not None else -1)
-    GtkLayerShell.set_keyboard_mode(окно, GtkLayerShell.KeyboardMode.ON_DEMAND)
-    окно.add(вид(имя))
+    GtkLayerShell.set_keyboard_mode(окно, РЕЖИМЫ.get(КЛАВИАТУРА, GtkLayerShell.KeyboardMode.ON_DEMAND))
+    в = вид(имя)
+    окно.add(в)
     окно.connect('destroy', Gtk.main_quit)
     окно.show_all()
+    в.set_can_focus(True)
+    в.grab_focus()
+    окно.set_focus(в)
     return окно
 
 
@@ -257,14 +304,25 @@ def следи_за_полосой(окно):
     GLib.timeout_add_seconds(2, спроси)
 
 
+# Имя, под которым оконный сервер знает наш рабочий стол
+GLib.set_prgname('glowershell')
+
 стиль = Gtk.CssProvider()
 стиль.load_from_data(БЕЗ_ТЕНЕЙ)
 Gtk.StyleContext.add_provider_for_screen(
     Gdk.Screen.get_default(), стиль, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 К = GtkLayerShell.Edge
-поверхность('desktop', GtkLayerShell.Layer.BACKGROUND,
-            [К.TOP, К.BOTTOM, К.LEFT, К.RIGHT], полоса=-1)
+СЛОИ.update(background=GtkLayerShell.Layer.BACKGROUND, bottom=GtkLayerShell.Layer.BOTTOM,
+            top=GtkLayerShell.Layer.TOP, overlay=GtkLayerShell.Layer.OVERLAY)
+РЕЖИМЫ.update(none=GtkLayerShell.KeyboardMode.NONE,
+              on_demand=GtkLayerShell.KeyboardMode.ON_DEMAND,
+              exclusive=GtkLayerShell.KeyboardMode.EXCLUSIVE)
+if ВИД_СТОЛА == 'окно':
+    стол_окном('desktop')
+else:
+    поверхность('desktop', СЛОИ.get(СЛОЙ, GtkLayerShell.Layer.BOTTOM),
+                [К.TOP, К.BOTTOM, К.LEFT, К.RIGHT], полоса=-1)
 if ПОЛОСА > 0:
     следи_за_полосой(распорка(ПОЛОСА))
 приём_уведомлений()

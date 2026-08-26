@@ -48,6 +48,17 @@ body{
 }
 button{font-family:inherit;color:inherit;border:0;background:none;cursor:pointer;font-size:inherit}
 input,textarea,select{font-family:inherit;color:inherit}
+
+/* Поля ввода всегда доступны для набора.
+
+   На всей странице стоит запрет выделения текста — он нужен, чтобы рабочий
+   стол не выделялся, как страница в интернете. Chromium сам делает для полей
+   исключение, а WebKit — тот самый движок, которым система показывает
+   оболочку, — распространяет запрет и на них: поле перестаёт принимать
+   набор вовсе. Снимаем запрет там, где человек печатает. */
+input,textarea,[contenteditable="true"],[contenteditable=""]{
+  user-select:text;-webkit-user-select:text}
+input,textarea{cursor:text}
 .svg-defs{position:absolute;width:0;height:0}
 .ic{width:18px;height:18px;fill:none;stroke:var(--fg);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 

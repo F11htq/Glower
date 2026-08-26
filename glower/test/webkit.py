@@ -29,6 +29,19 @@ from gi.repository import Gtk, WebKit2, GLib   # noqa: E402
     ('окно разворачивается', "(function(){ WM.toggleMax(WM.top()); return WM.top().maximized; })()"),
     ('поверхности плотные, без прозрачности',
      "getComputedStyle(document.querySelector('.dock')).backdropFilter === 'none'"),
+    # WebKit распространяет запрет выделения и на поля ввода: если не снять
+    # его, на живой системе нельзя напечатать ни буквы. Проверяем на самом
+    # движке, а не на догадке.
+    ('в поля ввода можно печатать',
+     "(function(){ const п = document.createElement('input'); document.body.appendChild(п);"
+     " const с = getComputedStyle(п);"
+     " const можно = (с.webkitUserSelect || с.userSelect) !== 'none';"
+     " п.remove(); return можно })()"),
+    ('поле настройки принимает набор',
+     "(function(){ const п = document.createElement('input'); document.body.appendChild(п);"
+     " п.focus(); const было = document.activeElement === п;"
+     " п.value = 'проба'; const держит = п.value === 'проба'; п.remove();"
+     " return было && держит })()"),
     ('ошибок в коде страницы нет', "window.__ошибки.length === 0"),
 ]
 
