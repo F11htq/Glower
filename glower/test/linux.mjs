@@ -387,6 +387,99 @@ try {
   check('сама оболочка себя окном не считает',
     !чужие.some(t => /Рабочий стол|glowershell/.test(t)), JSON.stringify(чужие));
 
+  /* --- у настоящей программы в панели задач свой значок --- */
+  {
+    const { writeFile, rm } = await import('node:fs/promises');
+    /* Крошечная настоящая картинка: одна прозрачная точка */
+    const точка = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64');
+    const файл = join(WS, 'значок-проверки.png');
+    await writeFile(файл, точка);
+    const свой = await page.evaluate(п => Platform.rpc('sys.icon', { 'имя':п })
+      .then(d => d, e => ({ err:e.message })), файл);
+    check('система отдаёт настоящий значок программы',
+      свой['есть'] === true && String(свой['данные'] || '').startsWith('data:image/png;base64,'),
+      JSON.stringify(свой).slice(0, 120));
+    await rm(файл, { force:true });
+
+    const нет = await page.evaluate(() => Platform.rpc('sys.icon', { 'имя':'такого-значка-нет-12345' })
+      .then(d => d, e => ({ err:e.message })));
+    check('о ненайденном значке система говорит прямо',
+      нет['есть'] === false && !!нет['почему'], JSON.stringify(нет).slice(0, 120));
+  }
+
+  /* --- значок доезжает до панели задач и до Пуска --- */
+  const значкиВПанели = await page.evaluate(async () => {
+    const было = Platform.rpc.bind(Platform);
+    Platform.rpc = (m, p) => {
+      if (m === 'sys.apps') return Promise.resolve({ total:1, canLaunch:true,
+        list:[{ id:'org.telegram.desktop.desktop', name:'Telegram', comment:'', flatpak:false,
+                icon:'telegram', 'окно':'org.telegram.desktop', categories:[] }] });
+      if (m === 'sys.windows') return Promise.resolve({ list:[
+        { appId:'org.telegram.desktop', title:'Telegram', 'оболочка':false,
+          'состояние':{ 'развёрнуто':true, 'вовесь':false, 'активно':true } }], 'можно':true });
+      if (m === 'sys.icon') return Promise.resolve({ 'есть':true, 'тип':'image/png',
+        'данные':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
+      return было(m, p);
+    };
+    await new Promise(r => setTimeout(r, 3600));
+    const кнопка = [...document.querySelectorAll('#dock-running .dock-item')]
+      .find(b => /Telegram/.test(b.dataset.tip || ''));
+    const ответ = {
+      картинка:!!(кнопка && кнопка.querySelector('img')),
+      развёрнуто:!!(кнопка && кнопка.classList.contains('развёрнуто')),
+      вработе:!!(кнопка && кнопка.classList.contains('active')),
+      подпись:кнопка ? кнопка.dataset.tip : ''
+    };
+    Platform.rpc = было;
+    return ответ;
+  });
+  check('у чужого окна в панели задач свой значок',
+    значкиВПанели.картинка === true, JSON.stringify(значкиВПанели));
+  check('панель задач видит, что чужое окно развёрнуто',
+    значкиВПанели['развёрнуто'] === true && значкиВПанели.вработе === true,
+    JSON.stringify(значкиВПанели));
+  check('о развёрнутом окне сказано и словами',
+    /развёрнуто/.test(значкиВПанели.подпись || ''), значкиВПанели.подпись);
+
+  /* --- чужое окно во весь экран: панель уходит с дороги --- */
+  const вовесь = await page.evaluate(async () => {
+    const было = Platform.rpc.bind(Platform);
+    const сказано = [];
+    Platform.rpc = (m, p) => {
+      if (m === 'sys.windows') return Promise.resolve({ list:[
+        { appId:'mpv', title:'Кино', 'оболочка':false,
+          'состояние':{ 'развёрнуто':false, 'вовесь':true, 'активно':true } }],
+        'можно':true, 'вовесьЭкран':true });
+      if (m === 'ui.say'){ сказано.push(p); return Promise.resolve({ ok:true }); }
+      return было(m, p);
+    };
+    await new Promise(r => setTimeout(r, 3600));
+    const ушла = document.body.classList.contains('чужой-вовесь');
+    Platform.rpc = было;
+    document.body.classList.remove('чужой-вовесь');
+    return { ушла, сказано };
+  });
+  check('при чужом окне во весь экран панель уходит с дороги',
+    вовесь.ушла === true, JSON.stringify(вовесь).slice(0, 160));
+
+  /* --- чем система открывает такой-то тип --- */
+  {
+    const { mkdir, writeFile, rm } = await import('node:fs/promises');
+    const { homedir } = await import('node:os');
+    const файл = join(homedir(), '.config/mimeapps.list');
+    await mkdir(join(homedir(), '.config'), { recursive:true });
+    let прежнее = null;
+    try { прежнее = await (await import('node:fs/promises')).readFile(файл, 'utf8'); } catch(e){}
+    await writeFile(файл, '[Default Applications]\nx-scheme-handler/https=firefox.desktop\n');
+    const чем = await page.evaluate(() => Platform.rpc('sys.mime', { 'тип':'x-scheme-handler/https' })
+      .then(d => d, e => ({ err:e.message })));
+    if (прежнее === null) await rm(файл, { force:true }); else await writeFile(файл, прежнее);
+    check('система знает, чем открывать ссылки',
+      чем && чем['чем'] === 'firefox.desktop', JSON.stringify(чем));
+  }
+
   const окна = await page.evaluate(() => Platform.rpc('sys.windows').then(d => d, e => ({ err:e.message })));
   check('система честно отвечает про свои окна',
     Array.isArray(окна.list), JSON.stringify(окна).slice(0, 160));

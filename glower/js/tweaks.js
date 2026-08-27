@@ -67,6 +67,17 @@ Shell.updateTaskbar = function(){
    Программа, которая её показывает, эту высоту у агента и спрашивает, чтобы
    отвести под панель ровно столько экрана, сколько нужно. */
 let полосаСказана = 0;
+/* Сказать программе-хозяину, сколько экрана отвести под панель. Ноль значит
+   «ничего не отводи»: так бывает, когда чужое окно занимает весь экран. */
+Shell.скажиПолосу = function(h){
+  if (!window.Platform || Platform.mode !== 'native') return;
+  if (h === полосаСказана) return;
+  полосаСказана = h;
+  Platform.rpc('ui.say', { 'тема':'полоса', что:h }).catch(() => {});
+};
+/* Забыть сказанное: следующее измерение уйдёт хозяину, даже если высота
+   получится прежней. */
+Shell.полосаЗабыть = function(){ полосаСказана = -1; };
 Shell.tellPanelHeight = function(){
   if (!window.Platform || Platform.mode !== 'native') return;
   const п = document.querySelector('.dock-wrap');
@@ -77,8 +88,7 @@ Shell.tellPanelHeight = function(){
   if (r.height < 8 || innerHeight - r.bottom > 4) return;
   const h = Math.round(innerHeight - r.top);
   if (!h || h > innerHeight / 3 || Math.abs(h - полосаСказана) < 2) return;
-  полосаСказана = h;
-  Platform.rpc('ui.say', { 'тема':'полоса', что:h }).catch(() => {});
+  Shell.скажиПолосу(h);
 };
 
 Shell.fitMaxWindows = function(){

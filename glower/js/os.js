@@ -143,11 +143,54 @@ function wirePower(){
    её было нельзя — только знать, где смотреть. */
 let списокМашины = [];
 
+/* ---------- настоящие значки настоящих программ ----------
+
+   У каждой программы Linux есть свой значок, и человек узнаёт программу
+   именно по нему. Рисовать вместо Telegram общий квадратик — то же
+   притворство, от которого мы уходим. Имя значка записано в ярлыке,
+   изображение достаёт система, а здесь оно просто показывается.
+
+   Изображения помним: одно и то же не просим дважды. */
+const значкиПамять = new Map();
+
+function дайЗначок(имя){
+  if (!имя) return Promise.resolve(null);
+  if (значкиПамять.has(имя)) return значкиПамять.get(имя);
+  const обещание = Platform.rpc('sys.icon', { имя })
+    .then(d => (d && d.есть) ? d.данные : null)
+    .catch(() => null);
+  значкиПамять.set(имя, обещание);
+  return обещание;
+}
+
+/* Подставить настоящее изображение в уже нарисованный кружок значка.
+   Пока изображение едет, виден запасной рисунок — пустого места не будет. */
+function поставьЗначок(узел, имя){
+  дайЗначок(имя).then(src => {
+    if (!src || !узел.isConnected) return;
+    узел.textContent = '';
+    узел.classList.add('свой');
+    узел.style.background = 'transparent';
+    const и = document.createElement('img');
+    и.src = src; и.alt = ''; и.draggable = false;
+    узел.appendChild(и);
+  });
+  return узел;
+}
+
+/* Кружок значка для программы машины. */
+function значокМашины(a, класс){
+  const d = el('div', класс || 'app-ico', a.flatpak ? '🫙' : '🐧');
+  d.style.background = 'linear-gradient(140deg,#fbbf24,#b45309)';
+  поставьЗначок(d, a.значок);
+  return d;
+}
+
 async function обновиСписокМашины(){
   try {
     const d = await OS.apps();
     списокМашины = (d.list || []).map(a => ({
-      id:a.id, name:a.name, comment:a.comment,
+      id:a.id, name:a.name, comment:a.comment, значок:a.icon || '', окно:a.окно || '',
       flatpak:a.flatpak || /flatpak/.test(a.id) || /^[a-z]+\.[a-zA-Z0-9.]+\.desktop$/.test(a.id)
     }));
   } catch(e){ списокМашины = []; }
@@ -237,7 +280,9 @@ function wireMachineApps(){
     const out = искать(q);
     списокМашины.forEach(a => {
       if (!a.name.toLowerCase().includes(q)) return;
-      out.push({ emo:a.flatpak ? '🫙' : '🐧', t:a.name, s:a.comment || 'Программа машины',
+      out.push({ ico:{ glyph:a.flatpak ? '🫙' : '🐧',
+                       bg:'linear-gradient(140deg,#fbbf24,#b45309)', значок:a.значок },
+        t:a.name, s:a.comment || 'Программа машины',
         k:'Запуск', run:() => запустиПрограмму(a) });
     });
     return out;
@@ -253,9 +298,7 @@ function wireMachineApps(){
     res.appendChild(el('div', 'all-letter', 'Программы машины'));
     списокМашины.forEach(a => {
       const b = el('button', 'all-row');
-      const ico = el('div', 'app-ico', a.flatpak ? '🫙' : '🐧');
-      ico.style.background = 'linear-gradient(140deg,#fbbf24,#b45309)';
-      b.appendChild(ico);
+      b.appendChild(значокМашины(a));
       b.appendChild(el('div', 't', esc(a.name)));
       b.onclick = () => { Shell.closePanels(); запустиПрограмму(a); };
       res.appendChild(b);
@@ -289,7 +332,11 @@ function wireApps(){
           const b = el('button', 'btn' + (data.canLaunch ? ' pri' : ''), data.canLaunch ? 'Запустить' : 'Запуск выключен');
           b.disabled = !data.canLaunch;
           b.onclick = () => запустиПрограмму(a);
-          list.appendChild(row('📦', a.name, a.comment || a.id, b));
+          const строка = row('', a.name, a.comment || a.id, b);
+          /* Значок настоящей программы вместо общего рисунка */
+          const кружок = строка.querySelector('.emo');
+          if (кружок){ кружок.textContent = a.flatpak ? '🫙' : '🐧'; поставьЗначок(кружок, a.icon); }
+          list.appendChild(строка);
         });
         if (!data.canLaunch)
           list.appendChild(el('div', 'set-note',
@@ -368,19 +415,42 @@ function wireTaskManager(){
    назад не оставляло. Теперь оно встаёт в панель задач рядом с нашими:
    щелчок — перейти к нему, правая кнопка — закрыть. */
 let чужиеОкна = [];
+let списокЧитан = 0;
+
+/* Чьё это окно: оконный сервер называет программу коротким именем
+   (app_id), а ярлык — своим. Сводим их: по имени файла ярлыка, по
+   записанному в ярлыке имени окна и по названию программы. */
+function ярлыкОкна(o){
+  const имя = String(o.appId || '').toLowerCase();
+  if (!имя) return null;
+  const без = я => String(я || '').replace(/\.desktop$/, '').toLowerCase();
+  return списокМашины.find(a => без(a.id) === имя)
+      || списокМашины.find(a => (a.окно || '').toLowerCase() === имя)
+      || списокМашины.find(a => без(a.id).split('.').pop() === имя)
+      || списокМашины.find(a => (a.name || '').toLowerCase() === имя)
+      || null;
+}
 
 function значокЧужого(o){
-  const свой = списокМашины.find(a => (a.id || '').replace(/\.desktop$/, '') === o.appId);
-  return свой ? (свой.flatpak ? '🫙' : '🐧') : '🪟';
+  const свой = ярлыкОкна(o);
+  const d = el('div', 'emo', свой ? (свой.flatpak ? '🫙' : '🐧') : '🪟');
+  /* Если ярлык не нашёлся, пробуем имя окна как имя значка: у многих
+     программ они совпадают (firefox, org.telegram.desktop). Не нашлось и
+     так — останется наш рисунок, а не пустое место. */
+  поставьЗначок(d, (свой && свой.значок) || o.appId);
+  return d;
 }
 
 function нарисуйЧужие(){
   const box = document.getElementById('dock-running');
   if (!box) return;
   чужиеОкна.forEach(o => {
-    const b = el('button', 'dock-item run');
-    b.dataset.tip = (o.title || o.appId) + ' — окно машины';
-    b.appendChild(el('div', 'emo', значокЧужого(o)));
+    const с = o.состояние || {};
+    const b = el('button', 'dock-item run'
+      + (с.активно ? ' active' : '') + (с.развёрнуто ? ' развёрнуто' : ''));
+    b.dataset.tip = (o.title || o.appId) + ' — окно машины'
+      + (с.вовесь ? ' (во весь экран)' : с.развёрнуто ? ' (развёрнуто)' : '');
+    b.appendChild(значокЧужого(o));
     b.onclick = () => Platform.rpc('sys.window', { action:'focus', appId:o.appId, title:o.title })
       .catch(e => Dlg.alert('Не удалось перейти к окну', String(e.message || e), '⚠️'));
     b.oncontextmenu = async e => {
@@ -404,7 +474,31 @@ async function обновиЧужие(){
     const было = JSON.stringify(чужиеОкна);
     чужиеОкна = (d.list || []).filter(o => !o.оболочка);
     if (JSON.stringify(чужиеОкна) !== было) Shell.syncDock();
+    вовесьЭкран(!!d.вовесьЭкран);
+    /* Открылось окно программы, которой в нашем списке ещё нет (её только
+       что поставили) — перечитаем список, чтобы у окна появились имя и
+       значок. Перечитываем не чаще раза в полминуты. */
+    if (чужиеОкна.some(o => !ярлыкОкна(o)) && Date.now() - списокЧитан > 30000){
+      списокЧитан = Date.now();
+      обновиСписокМашины();
+    }
   } catch(e){ /* оконный сервер может и не уметь этого — тогда просто молчим */ }
+}
+
+/* Чужая программа во весь экран: панель задач уходит с дороги и перестаёт
+   держать за собой полосу — экран в этот миг принадлежит программе, как в
+   любой другой системе. Когда программа выходит из полного экрана, панель
+   возвращается сама. */
+let былоВовесь = false;
+function вовесьЭкран(да){
+  if (да === былоВовесь) return;
+  былоВовесь = да;
+  document.body.classList.toggle('чужой-вовесь', да);
+  if (да){ if (Shell.скажиПолосу) Shell.скажиПолосу(0); }
+  else setTimeout(() => {
+    if (Shell.полосаЗабыть) Shell.полосаЗабыть();
+    if (Shell.tellPanelHeight) Shell.tellPanelHeight();
+  }, 500);
 }
 
 function wireNativeWindows(){
@@ -445,21 +539,35 @@ const НАСТОЯЩИЕ = {
    а не притворяются. Пусть лучше их не будет, чем будет подделка. */
 const УБРАТЬ_НА_МАШИНЕ = ['paint', 'todo', 'calendar', 'clock', 'trash'];
 
+/* У терминала своего ярлыка в наших списках нет — его ищет агент, — но
+   значок у настоящего терминала машины всё-таки есть. */
+const ТЕРМИНАЛЫ = ['foot.desktop', 'org.gnome.Terminal.desktop', 'kitty.desktop',
+  'alacritty.desktop', 'xterm.desktop', 'debian-xterm.desktop'];
+
 async function wireRealApps(){
-  let есть = [];
-  try { есть = ((await OS.apps()).list || []).map(a => a.id); } catch(e){}
+  let список = [];
+  try { список = (await OS.apps()).list || []; } catch(e){}
+  const есть = список.map(a => a.id);
+  const значокЯрлыка = я => (список.find(a => a.id === я) || {}).icon || '';
 
   const найден = {};
   Object.entries(НАСТОЯЩИЕ).forEach(([id, о]) => {
     if (!APPS[id]) return;
-    if (о.вызов){ найден[id] = о; return; }               // терминал ищет агент сам
+    if (о.вызов){                                          // терминал ищет агент сам
+      найден[id] = Object.assign(
+        { значок:значокЯрлыка(ТЕРМИНАЛЫ.find(я => есть.includes(я))) }, о);
+      return;
+    }
     const ярлык = (о.ярлыки || []).find(я => есть.includes(я));
-    if (ярлык) найден[id] = Object.assign({ ярлык }, о);
+    if (ярлык) найден[id] = Object.assign({ ярлык, значок:значокЯрлыка(ярлык) }, о);
   });
 
   Object.entries(найден).forEach(([id, о]) => {
     APPS[id].sub = о.подпись;
     APPS[id].настоящее = true;
+    /* Значок — настоящий, программы: человек должен узнавать её так же,
+       как в любой другой системе, а не по нашему рисунку. */
+    if (о.значок) APPS[id].значок = о.значок;
   });
 
   УБРАТЬ_НА_МАШИНЕ.forEach(id => { delete APPS[id]; });

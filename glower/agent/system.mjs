@@ -284,6 +284,84 @@ const APP_DIRS = ['/usr/share/applications', '/usr/local/share/applications',
   join(os.homedir(), '.local/share/flatpak/exports/share/applications'),
   '/var/lib/flatpak/exports/share/applications'];
 
+/* ---------- настоящие значки настоящих программ ----------
+
+   В ярлыке .desktop записано не изображение, а имя значка: например
+   «org.telegram.desktop». Само изображение лежит в темах значков, в
+   нескольких местах и в нескольких размерах. Настоящий рабочий стол умеет
+   его найти — и мы умеем, иначе у чужих программ значков нет и человек
+   видит одинаковые квадратики вместо Telegram и Firefox.
+
+   Список файлов собирается один раз и держится в памяти: значки на машине
+   не меняются каждую секунду, а перечитывать тысячи имён на каждый щелчок —
+   расточительство. */
+const ЗНАЧКИ_КОРНИ = [
+  join(os.homedir(), '.local/share/icons'),
+  join(os.homedir(), '.icons'),
+  join(os.homedir(), '.local/share/flatpak/exports/share/icons'),
+  '/var/lib/flatpak/exports/share/icons',
+  '/usr/local/share/icons',
+  '/usr/share/icons'
+];
+const ЗНАЧКИ_ПРОСТЫЕ = ['/usr/share/pixmaps', '/usr/local/share/pixmaps',
+  join(os.homedir(), '.local/share/flatpak/exports/share/pixmaps')];
+const ЗНАЧКИ_ТИПЫ = { '.png':'image/png', '.svg':'image/svg+xml',
+  '.xpm':'image/x-xpixmap', '.jpg':'image/jpeg', '.jpeg':'image/jpeg' };
+
+/* Чем больше число, тем лучше находка. Векторный значок хорош при любом
+   размере, крупный растровый — почти так же, мелкий берём последним. */
+function вес_значка(путь){
+  const низ = путь.toLowerCase();
+  let в = 0;
+  if (низ.endsWith('.svg')) в = 900;
+  else {
+    const м = низ.match(/(\d+)x\1/);
+    в = м ? Math.min(Number(м[1]), 512) : 40;
+  }
+  if (низ.includes('/hicolor/')) в += 30;
+  if (низ.includes('/apps/')) в += 20;
+  if (низ.endsWith('.xpm')) в -= 500;
+  if (низ.includes('-symbolic')) в -= 800;
+  return в;
+}
+
+let ЗНАЧКИ_СПИСОК = null;
+async function собери_значки(){
+  if (ЗНАЧКИ_СПИСОК) return ЗНАЧКИ_СПИСОК;
+  const карта = new Map();
+  let осталось = 80000;                    // предел, чтобы обход не стал вечным
+
+  const положи = путь => {
+    const точка = путь.lastIndexOf('.');
+    if (точка < 0) return;
+    const рас = путь.slice(точка).toLowerCase();
+    if (!ЗНАЧКИ_ТИПЫ[рас]) return;
+    const имя = путь.slice(путь.lastIndexOf('/') + 1, точка);
+    const в = вес_значка(путь);
+    const было = карта.get(имя);
+    if (!было || в > было.вес) карта.set(имя, { путь, вес:в });
+  };
+
+  const обойди = async (dir, глубина) => {
+    if (глубина > 4 || осталось <= 0) return;
+    let список;
+    try { список = await readdir(dir, { withFileTypes:true }); } catch(e){ return; }
+    for (const з of список){
+      if (осталось-- <= 0) return;
+      const полный = join(dir, з.name);
+      if (з.isDirectory()) await обойди(полный, глубина + 1);
+      else положи(полный);
+    }
+  };
+
+  for (const корень of ЗНАЧКИ_КОРНИ) if (existsSync(корень)) await обойди(корень, 0);
+  for (const корень of ЗНАЧКИ_ПРОСТЫЕ) if (existsSync(корень)) await обойди(корень, 3);
+  ЗНАЧКИ_СПИСОК = карта;
+  return карта;
+}
+
+const ЗНАЧКИ_ГОТОВЫЕ = new Map();          // имя → готовая строка data:
+
 /* Пробный запуск для осмотра: ждём, чем дело кончится, и возвращаем жалобы. */
 function попытка_тихо(программа, части){
   return new Promise(async resolve => {
@@ -376,7 +454,10 @@ export function apps(allowLaunch){
             if (!name) continue;
             list.push({ id:f, name, comment:get('Comment') || '',
               flatpak:!!get('X-Flatpak'),
-              icon:get('Icon') || '', categories:(get('Categories') || '').split(';').filter(Boolean) });
+              icon:get('Icon') || '',
+              /* по этому имени окно чужой программы узнаётся в панели задач */
+              окно:get('StartupWMClass') || '',
+              categories:(get('Categories') || '').split(';').filter(Boolean) });
           } catch(e){}
         }
       }
@@ -414,6 +495,41 @@ export function apps(allowLaunch){
         if (чем) return { есть:true, тип:т, чем, откуда:файл };
       }
       return { есть:false, тип:т, почему:'система не знает, чем открывать такой тип' };
+    },
+
+    /* Значок программы: отдаём готовое изображение, а не имя файла.
+       Оболочка живёт в своём движке и до файлов машины сама не дотянется. */
+    async 'sys.icon'({ имя }){
+      const ключ = String(имя || '').trim();
+      if (!ключ) return { есть:false, почему:'значок не назван' };
+      if (ключ.includes('\0')) return { есть:false, почему:'неверное имя значка' };
+      if (ЗНАЧКИ_ГОТОВЫЕ.has(ключ)) return ЗНАЧКИ_ГОТОВЫЕ.get(ключ);
+
+      let путь = null;
+      if (ключ.startsWith('/') && existsSync(ключ)) путь = ключ;
+      else {
+        const карта = await собери_значки();
+        const найдено = карта.get(ключ)
+          || карта.get(ключ.replace(/\.(png|svg|xpm)$/i, ''))
+          || карта.get(ключ.toLowerCase());
+        if (найдено) путь = найдено.путь;
+      }
+
+      let ответ = { есть:false, почему:'значка с таким именем на машине нет' };
+      if (путь){
+        const рас = путь.slice(путь.lastIndexOf('.')).toLowerCase();
+        const тип = ЗНАЧКИ_ТИПЫ[рас] || 'application/octet-stream';
+        try {
+          const байты = await readFile(путь);
+          if (байты.length <= 1024 * 1024)
+            ответ = { есть:true, тип, путь,
+              данные:'data:' + тип + ';base64,' + байты.toString('base64') };
+          else ответ = { есть:false, почему:'значок слишком велик: ' + путь };
+        } catch(e){ ответ = { есть:false, почему:'значок не прочитался: ' + e.message }; }
+      }
+      if (ЗНАЧКИ_ГОТОВЫЕ.size > 400) ЗНАЧКИ_ГОТОВЫЕ.clear();
+      ЗНАЧКИ_ГОТОВЫЕ.set(ключ, ответ);
+      return ответ;
     },
 
     /* ---------- общий буфер обмена ----------
@@ -489,7 +605,31 @@ export function apps(allowLaunch){
         const title = п < 0 ? '' : строка.slice(п + 2).trim();
         return { appId, title, оболочка:appId === 'glowershell' };
       });
-      return { list, можно:!!allowLaunch };
+
+      /* Состояние окна: развёрнуто ли оно, занимает ли весь экран, оно ли
+         сейчас в работе. Без этого панель задач не знает, что происходит с
+         чужой программой, и показывает развёрнутое окно так же, как обычное.
+
+         wlrctl отвечает на такой вопрос только «да/нет» по совпадению, а
+         совпадаем мы по имени программы: если у одной программы несколько
+         окон, состояние получится общее на все её окна. Это честное
+         приближение, а не точное знание, и выдавать его за большее нельзя. */
+      const спроси_состояние = (appId, состояние) => new Promise(resolve =>
+        execFile('wlrctl', ['toplevel', 'find', 'app_id:' + appId, 'state:' + состояние],
+          { env, timeout:3000 }, e => resolve(!e)));
+
+      const имена = [...new Set(list.filter(o => !o.оболочка && /^[\w.+-]+$/.test(o.appId))
+        .map(o => o.appId))].slice(0, 12);
+      const состояния = {};
+      await Promise.all(имена.map(async имя => {
+        const [развёрнуто, вовесь, активно] = await Promise.all(
+          ['maximized', 'fullscreen', 'active'].map(с => спроси_состояние(имя, с)));
+        состояния[имя] = { развёрнуто, вовесь, активно };
+      }));
+      list.forEach(o => { o.состояние = состояния[o.appId] || null; });
+
+      return { list, можно:!!allowLaunch,
+        вовесьЭкран:Object.values(состояния).some(с => с.вовесь) };
     },
 
     async 'sys.window'({ action, appId, title }){

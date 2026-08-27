@@ -77,6 +77,11 @@ function appIcon(app, size){
   const d = el('div', 'app-ico', app.glyph);
   d.style.background = app.bg;
   if (size){ d.style.width = d.style.height = size + 'px'; }
+  /* У настоящей программы машины есть свой значок — тот же, что видят во
+     всех остальных системах Linux. Показываем его, а не наш рисунок.
+     Изображение достаёт система, и приходит оно чуть позже: до тех пор
+     виден наш рисунок, а не пустое место. */
+  if (app.значок && typeof поставьЗначок === 'function') поставьЗначок(d, app.значок);
   return d;
 }
 

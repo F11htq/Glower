@@ -529,3 +529,20 @@ body.taskbar .toasts{bottom:calc(var(--dock-size) + 18px)}
   margin:10px 0 0;padding:10px 12px;border-radius:12px;
   background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.08);
   font:12px/1.5 ui-monospace,'Cascadia Code',Consolas,monospace}
+
+/* ---------- настоящие значки настоящих программ ----------
+   Значок программы машины — это её собственная картинка, а не наш рисунок:
+   показываем её целиком и без подложки, чтобы Telegram выглядел Telegram'ом. */
+.app-ico.свой{background:transparent!important;box-shadow:none;overflow:hidden}
+.app-ico.свой img{width:100%;height:100%;object-fit:contain;display:block}
+.dock-item .emo.свой{width:calc(var(--dock-size) * .78);height:calc(var(--dock-size) * .78);
+  display:grid;place-content:center;filter:none;overflow:hidden}
+.dock-item .emo.свой img{width:100%;height:100%;object-fit:contain;display:block}
+
+/* Развёрнутое чужое окно: полоска под значком шире, как у своих окон */
+.dock-item.развёрнуто::before{width:clamp(10px,calc(var(--dock-size) * .36),18px);border-radius:3px}
+
+/* Чужое окно во весь экран: панель не спорит с ним за место */
+body.чужой-вовесь .dock-wrap{opacity:0;pointer-events:none;transform:translateY(14px)}
+.set-row .emo.свой{width:26px;height:26px;display:grid;place-content:center;overflow:hidden}
+.set-row .emo.свой img{width:100%;height:100%;object-fit:contain;display:block}
