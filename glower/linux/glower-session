@@ -40,14 +40,17 @@ touch "$LOG" 2>/dev/null || LOG="$HOME/glower-session.log"
 
 say(){ printf '%s\n' "$1"; printf '%s\n' "$1" >> "$LOG" 2>/dev/null || true; }
 
+# Оболочку показывает своя программа на WebKit. Сборка Chromium нужна лишь
+# как запасной способ на машинах, где WebKit недоступен, и встроенной
+# смотрелке страниц. Требовать её всегда нельзя: в образе её нет, и сеанс
+# из-за этого не поднимался вовсе.
 BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
-[ -n "$BROWSER" ] || { say "GlowerOS: браузер не найден — оболочку нечем показать"; exit 1; }
 
 # Браузер норовит показать поверх оболочки свои предложения — например,
 # «перевести страницу». Ключа мало: часть таких подсказок читается из
 # настроек профиля, поэтому заводим профиль сразу с выключенным переводом.
 PROFILE="$HOME/.local/share/glower/browser"
-if [ ! -f "$PROFILE/Default/Preferences" ]; then
+if [ -n "$BROWSER" ] && [ ! -f "$PROFILE/Default/Preferences" ]; then
   mkdir -p "$PROFILE/Default"
   cat > "$PROFILE/Default/Preferences" <<'PREFS'
 {"translate":{"enabled":false},
@@ -142,6 +145,9 @@ GLOWER_PANEL_H="${GLOWER_PANEL_H:-48}" \
 # оболочку закрыли — значит, закончился и сеанс
 labwc -e >/dev/null 2>&1 || true
 STARTUP
+  elif [ -z "$BROWSER" ]; then
+    say "GlowerOS: нет ни WebKit, ни сборки Chromium — оболочку нечем показать"
+    return 1
   else
     say "GlowerOS: WebKit недоступен — показываю оболочку браузером"
     cat > "$START_SH" <<STARTUP
@@ -160,6 +166,7 @@ STARTUP
 
 run_cage(){
   command -v cage >/dev/null || return 1
+  [ -n "$BROWSER" ] || return 1
   [ "$HAVE_DRI" = yes ] || return 1
   say "GlowerOS: пробую cage (Wayland)"
   cage -- "$BROWSER" $(cmdline gpu) --ozone-platform=wayland >>"$LOG" 2>&1
@@ -170,6 +177,7 @@ run_cage(){
 
 run_x(){   # $1 — режим отрисовки
   command -v Xorg >/dev/null || command -v X >/dev/null || return 1
+  [ -n "$BROWSER" ] || return 1
   say "GlowerOS: пробую X-сервер ($1)"
   cat > "$HOME/.xinitrc" <<XRC
 exec "$BROWSER" $(cmdline "$1")
@@ -192,7 +200,8 @@ say ""
 say "  GlowerOS не смог показать оболочку на этой машине."
 say "  Что известно:"
 say "    графический узел: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo 'нет')"
-say "    браузер:          $BROWSER"
+say "    своя программа:   $(command -v glower-shell || echo 'нет')"
+say "    браузер:          ${BROWSER:-нет}"
 say "    labwc:            $(command -v labwc || echo 'нет')"
 say "    cage:             $(command -v cage || echo 'нет')"
 say "    X-сервер:         $(command -v Xorg || command -v X || echo 'нет')"
