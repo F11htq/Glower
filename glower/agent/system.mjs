@@ -251,6 +251,10 @@ export function wifi(allowNet){
 }
 
 /* ---------- процессы: читаем /proc, ничего не выдумываем ---------- */
+/* Прошлый замер: без него нельзя сказать, сколько процессор занят сейчас */
+let ПРОШЛЫЕ_ТАКТЫ = new Map();
+let ПРОШЛЫЙ_ЗАМЕР = 0;
+
 export const procs = {
   async 'sys.procs'(){
     const dirs = (await readdir('/proc')).filter(d => /^\d+$/.test(d));
@@ -258,6 +262,15 @@ export const procs = {
     const up = +(await readFile('/proc/uptime', 'utf8')).split(' ')[0];
     const page = 4096;
     const out = [];
+
+    /* Доля процессора — за время между двумя обращениями, а не в среднем за
+       всю жизнь процесса: человек хочет видеть, что машина делает сейчас.
+       При первом обращении сравнивать не с чем — тогда берём среднее за
+       жизнь, и это честно сказано полем «впервые». */
+    const сейчас = Date.now();
+    const прошло = ПРОШЛЫЙ_ЗАМЕР ? (сейчас - ПРОШЛЫЙ_ЗАМЕР) / 1000 : 0;
+    const стало = new Map();
+
     for (const pid of dirs){
       try {
         const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
@@ -266,13 +279,20 @@ export const procs = {
         const utime = +rest[11], stime = +rest[12], start = +rest[19];
         const rss = +rest[21] * page;
         const life = up - start / tick;
-        out.push({ pid:+pid, name,
-          cpu: life > 0 ? +(((utime + stime) / tick) / life * 100).toFixed(1) : 0,
-          mem: rss, lifetime: Math.round(life) });
-      } catch(e){}
+        const такты = utime + stime;
+        стало.set(pid, такты);
+        const было = ПРОШЛЫЕ_ТАКТЫ.get(pid);
+        const cpu = (прошло > 0.2 && typeof было === 'number')
+          ? Math.max(0, Math.min(100, ((такты - было) / tick) / прошло * 100))
+          : (life > 0 ? ((такты) / tick) / life * 100 : 0);
+        out.push({ pid:+pid, name, cpu:+cpu.toFixed(1), mem: rss, lifetime: Math.round(life) });
+      } catch(e){}                        // процесс мог закончиться — обычное дело
     }
-    out.sort((a, b) => b.mem - a.mem);
-    return { total:out.length, list:out.slice(0, 60),
+    ПРОШЛЫЕ_ТАКТЫ = стало;
+    ПРОШЛЫЙ_ЗАМЕР = сейчас;
+
+    out.sort((a, b) => (b.cpu - a.cpu) || (b.mem - a.mem));
+    return { total:out.length, list:out.slice(0, 60), 'впервые':!(прошло > 0.2),
       mem:{ total:os.totalmem(), free:os.freemem() }, load:os.loadavg() };
   }
 };
@@ -530,6 +550,19 @@ export function apps(allowLaunch){
       if (ЗНАЧКИ_ГОТОВЫЕ.size > 400) ЗНАЧКИ_ГОТОВЫЕ.clear();
       ЗНАЧКИ_ГОТОВЫЕ.set(ключ, ответ);
       return ответ;
+    },
+
+    /* Снять задачу: вежливая просьба закончиться (TERM), как делает любая
+       система. Убивать наотмашь и трогать первый процесс машины нельзя. */
+    async 'sys.stop'({ pid }){
+      if (!allowLaunch) throw new Error('снятие задач выключено: запустите агент с ключом --allow-launch');
+      const н = Number(pid);
+      if (!Number.isInteger(н) || н <= 1) throw new Error('неверный номер процесса');
+      if (н === process.pid) throw new Error('агент не станет снимать сам себя');
+      if (!existsSync('/proc/' + н)) throw new Error('такого процесса уже нет');
+      try { process.kill(н, 'SIGTERM'); }
+      catch(e){ throw new Error('не вышло снять задачу: ' + e.message); }
+      return { ok:true, pid:н };
     },
 
     /* ---------- общий буфер обмена ----------

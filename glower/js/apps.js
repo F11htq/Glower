@@ -888,33 +888,6 @@ APPS.taskmgr = {
 };
 
 /* ==========================================================================
-   МАГАЗИН
-   ========================================================================== */
-APPS.store = {
-  name:'Магазин', glyph:'🛍️', bg:'linear-gradient(140deg,#c4b5fd,#7c3aed)', w:820, h:600,
-  render(win){
-    const wrap = el('div', 'app col'); win.body.appendChild(wrap);
-    const s = el('div', 'scroll pad'); wrap.appendChild(s);
-    s.innerHTML = `<div class="st-hero"><h2 style="margin:0 0 6px">Microsoft Store</h2>
-      <div style="opacity:.85">Все приложения этого прототипа уже установлены</div></div>
-      <div class="card-t">Приложения системы</div><div class="st-grid"></div>`;
-    const g = $('.st-grid', s);
-    Object.entries(APPS).forEach(([id, a]) => {
-      const c = el('div', 'st-card');
-      c.append(appIcon(a, 52));
-      c.appendChild(el('div', '', `<b style="font-size:12.5px">${esc(a.name)}</b><br><small class="muted">Microsoft</small>`));
-      const b = el('button', 'btn pri', S.pinned.includes(id) ? 'Открыть' : 'Закрепить');
-      b.onclick = () => {
-        if (S.pinned.includes(id)) WM.open(id);
-        else { S.pinned.push(id); Store.save(); Shell.renderStart(); b.textContent = 'Открыть'; Shell.toast('Закреплено', a.name + ' в меню Пуск', a.glyph); }
-      };
-      c.appendChild(b);
-      g.appendChild(c);
-    });
-  }
-};
-
-/* ==========================================================================
    ПАРАМЕТРЫ
    ========================================================================== */
 APPS.settings = {

@@ -121,17 +121,15 @@ try {
     /неверный идентификатор|--allow-launch/.test(bad), bad);
 
   /* --- диспетчер задач показывает машину --- */
-  check('диспетчер задач показывает процессы машины',
+  check('диспетчер задач сразу показывает процессы машины',
     await page.evaluate(async () => {
       WM.open('taskmgr');
-      await new Promise(r => setTimeout(r, 900));
-      const w = WM.wins.find(x => x.appId === 'taskmgr');
-      const b = [...w.body.querySelectorAll('.btn')].find(x => x.textContent.includes('Процессы машины'));
-      if (!b) return false;
-      b.click();
       await new Promise(r => setTimeout(r, 1200));
+      const w = WM.wins.find(x => x.appId === 'taskmgr');
       const t = w.body.innerText;
-      return /Средняя нагрузка/.test(t) && /systemd|node|init/.test(t);
+      const итог = /Средняя нагрузка/.test(t) && /systemd|node|init|chrome/.test(t);
+      WM.close(w);
+      return итог;
     }));
 
   check('приложение «Программы машины» появилось только в этом режиме',
@@ -463,6 +461,37 @@ try {
   });
   check('при чужом окне во весь экран панель уходит с дороги',
     вовесь.ушла === true, JSON.stringify(вовесь).slice(0, 160));
+
+  /* --- диспетчер задач: настоящие числа и настоящее снятие задачи --- */
+  {
+    const п = await page.evaluate(async () => {
+      await Platform.rpc('sys.procs');
+      await new Promise(r => setTimeout(r, 700));
+      return Platform.rpc('sys.procs').then(d => d, e => ({ err:e.message }));
+    });
+    check('доля процессора считается за последние секунды, а не за всю жизнь процесса',
+      п['впервые'] === false && Array.isArray(п.list) && п.list.every(x => x.cpu >= 0 && x.cpu <= 100),
+      JSON.stringify((п.list || []).slice(0, 2)));
+    const снять = await page.evaluate(() => Platform.rpc('sys.stop', { pid:1 })
+      .then(() => 'выполнилось', e => e.message));
+    check('первый процесс машины снять нельзя',
+      /неверный номер|--allow-launch/.test(снять), String(снять));
+    const снятьЧужое = await page.evaluate(() => Platform.rpc('sys.stop', { pid:'-1; rm -rf /' })
+      .then(() => 'выполнилось', e => e.message));
+    check('вместо номера процесса команду подсунуть нельзя',
+      /неверный номер|--allow-launch/.test(снятьЧужое), String(снятьЧужое));
+
+    const окно = await page.evaluate(async () => {
+      const w = WM.open('taskmgr');
+      await new Promise(r => setTimeout(r, 1200));
+      const строки = [...w.body.querySelectorAll('.tm-row')].length;
+      const снять = [...w.body.querySelectorAll('.btn')].filter(b => b.textContent === 'Снять').length;
+      WM.close(w);
+      return { строки, снять };
+    });
+    check('в диспетчере задач видны настоящие процессы и их можно снять',
+      окно.строки > 3 && окно.снять > 3, JSON.stringify(окно));
+  }
 
   /* --- чем система открывает такой-то тип --- */
   {

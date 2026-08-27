@@ -70,9 +70,9 @@ window.OS = OS;
   wirePower();
   wireApps();
   wireMachineApps();
-  wireTaskManager();
   wireNativeWindows();
   wireRealApps();
+  wireTaskManager();
   wireNotifications();
 })();
 
@@ -350,61 +350,76 @@ function wireApps(){
   if (window.Shell && Shell.renderShell) Shell.renderShell();
 }
 
-/* ---------- диспетчер задач показывает настоящие процессы ---------- */
+/* ---------- настоящий диспетчер задач ----------
+
+   Раньше он показывал наши окна, а доля процессора и память в нём брались
+   случайными числами. Это ровно то притворство, от которого мы уходим.
+   На машине он показывает настоящие процессы — те же, что видит любая
+   другая программа этой системы, — и снимает задачу по-настоящему. */
 function wireTaskManager(){
-  const render = APPS.taskmgr.render;
+  if (!APPS.taskmgr) return;
+  const прежний = APPS.taskmgr.render;
+
   APPS.taskmgr.render = function(win, opts){
-    render.call(this, win, opts);
-    if (!OS.on()) return;
+    if (!OS.on()) return прежний.call(this, win, opts);
 
-    const body = win.body;
-    body.style.flexDirection = 'column';
-    const bar = el('div', 'toolbar');
-    const btn = el('button', 'btn pri', '🐧 Процессы машины');
-    bar.appendChild(btn);
-    body.prepend(bar);
+    const обёртка = el('div', 'app col'); win.body.appendChild(обёртка);
+    const сводка = el('div', 'card'); сводка.style.margin = '10px 12px 0';
+    const список = el('div', 'scroll pad');
+    обёртка.append(сводка, список);
+    let занят = false, часы = null;
 
-    const box = el('div', 'scroll pad');
-    box.style.display = 'none';
-    let timer = null;
+    const мб = b => (b / 1048576).toFixed(0) + ' МБ';
+    const гб = b => (b / 1073741824).toFixed(1) + ' ГБ';
 
-    const draw = async () => {
-      let d;
-      try { d = await OS.procs(); }
-      catch(e){ box.innerHTML = ''; box.appendChild(el('div', 'empty', 'Не удалось прочитать /proc: ' + e.message)); return; }
-      const mb = b => (b / 1048576).toFixed(1) + ' МБ';
-      box.innerHTML = `<div class="card" style="padding:0">
-        <div class="set-row"><div class="l"><b>Процессов</b><small>всего в системе</small></div><div class="ctl">${d.total}</div></div>
-        <div class="set-row"><div class="l"><b>Память</b><small>занято на машине</small></div>
-          <div class="ctl">${mb(d.mem.total - d.mem.free)} из ${mb(d.mem.total)}</div></div>
-        <div class="set-row"><div class="l"><b>Средняя нагрузка</b><small>1, 5 и 15 минут</small></div>
-          <div class="ctl">${d.load.map(x => x.toFixed(2)).join(' · ')}</div></div></div>
-        <div class="fe-table" style="margin-top:12px">
-          <div class="fe-tr head"><div class="c1">Процесс</div><div>PID</div><div>ЦП</div><div>Память</div></div>
-          ${d.list.map(p => `<div class="fe-tr"><div class="c1">${esc(p.name)}</div>
-            <div class="tiny muted">${p.pid}</div><div class="tiny">${p.cpu}%</div>
-            <div class="tiny">${mb(p.mem)}</div></div>`).join('')}
-        </div>`;
-    };
+    const нарисуй = async () => {
+      if (занят || !win.node.isConnected) return;
+      занят = true;
+      let d = null, беда = '';
+      try { d = await OS.procs(); } catch(e){ беда = String(e.message || e); }
+      занят = false;
+      if (!win.node.isConnected) return;
 
-    /* показываем что-то одно: либо окна оболочки, либо процессы машины */
-    const others = () => [...body.children].filter(n => n !== bar && n !== box);
-
-    btn.onclick = () => {
-      const on = btn.classList.toggle('on');
-      others().forEach(n => n.style.display = on ? 'none' : '');   // hidden не работает: у .app свой display
-      if (on){
-        body.appendChild(box);
-        box.style.display = '';
-        draw(); timer = setInterval(draw, 2000);
-        btn.textContent = '↩ Вернуться к окнам';
-      } else {
-        box.style.display = 'none'; clearInterval(timer); timer = null;
-        btn.textContent = '🐧 Процессы машины';
+      if (!d){
+        список.innerHTML = '';
+        список.appendChild(el('div', 'empty', 'Система не дала список процессов: ' + беда));
+        return;
       }
+
+      сводка.innerHTML = `<div class="set-row"><div class="l"><b>Процессов</b>
+          <small>всего на машине</small></div><div class="ctl">${d.total}</div></div>
+        <div class="set-row"><div class="l"><b>Память</b><small>занято из всей</small></div>
+          <div class="ctl">${гб(d.mem.total - d.mem.free)} из ${гб(d.mem.total)}</div></div>
+        <div class="set-row"><div class="l"><b>Средняя нагрузка</b><small>за 1, 5 и 15 минут</small></div>
+          <div class="ctl">${d.load.map(x => x.toFixed(2)).join(' · ')}</div></div>`;
+
+      список.innerHTML = '<div class="tm-row head"><div>Процесс</div><div>ЦП</div><div>Память</div><div></div></div>';
+      d.list.forEach(п => {
+        const r = el('div', 'tm-row');
+        r.innerHTML = `<div>${esc(п.name)} <small class="muted">${п.pid}</small>
+            <div class="bar"><i style="width:${Math.min(100, п.cpu)}%"></i></div></div>
+          <div>${п.cpu.toFixed(1)}%</div><div>${мб(п.mem)}</div>
+          <div><button class="btn">Снять</button></div>`;
+        r.querySelector('.btn').onclick = async () => {
+          if (!await Dlg.confirm('Снять задачу?',
+              'Процесс «' + п.name + '» получит просьбу закончить работу. ' +
+              'Несохранённое в нём может пропасть.', { okText:'Снять', danger:true })) return;
+          try {
+            await Platform.rpc('sys.stop', { pid:п.pid });
+            Shell.toast('Диспетчер задач', 'Задача снята', '🛑');
+          } catch(e){ Dlg.alert('Не вышло снять задачу', String(e.message || e), '⚠️'); }
+          setTimeout(нарисуй, 700);
+        };
+        список.appendChild(r);
+      });
+
+      win.setSub(`${d.total} процессов · ${гб(d.mem.total - d.mem.free)} памяти занято`);
     };
-    const close = win.onClose;
-    win.onClose = () => { clearInterval(timer); if (close) close(); };
+
+    нарисуй();
+    часы = setInterval(нарисуй, 2000);
+    const прежнееЗакрытие = win.onClose;
+    win.onClose = () => { clearInterval(часы); if (прежнееЗакрытие) прежнееЗакрытие(); };
   };
 }
 
