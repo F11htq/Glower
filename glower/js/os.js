@@ -461,10 +461,9 @@ function нарисуйЧужие(){
   if (!box) return;
   чужиеОкна.forEach(o => {
     const с = o.состояние || {};
-    const b = el('button', 'dock-item run'
-      + (с.активно ? ' active' : '') + (с.развёрнуто ? ' развёрнуто' : ''));
+    const b = el('button', 'dock-item run' + (с.активно ? ' active' : ''));
     b.dataset.tip = (o.title || o.appId) + ' — окно машины'
-      + (с.вовесь ? ' (во весь экран)' : с.развёрнуто ? ' (развёрнуто)' : '');
+      + (с.вовесь ? ' (во весь экран)' : '');
     b.appendChild(значокЧужого(o));
     b.onclick = () => Platform.rpc('sys.window', { action:'focus', appId:o.appId, title:o.title })
       .catch(e => Dlg.alert('Не удалось перейти к окну', String(e.message || e), '⚠️'));

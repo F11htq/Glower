@@ -96,6 +96,12 @@ echo "$wins2" | grep -qi 'foot' && r=да || r=нет
 проверь "окно настоящей программы видно системе" "$r" "$(echo "$wins2" | head -c 200)"
 снимок "st-программой"
 
+# Оболочку должна показывать своя программа на WebKit, а не сборка Chromium:
+# в образе её нет, и раньше сеанс из-за этого не поднимался вовсе.
+proc=$(спроси '{"method":"sys.procs","params":{}}')
+echo "$proc" | grep -qi 'WebKit' && r=да || r=нет
+проверь "оболочку показывает своя программа на WebKit" "$r" "$(echo "$proc" | head -c 160)"
+
 # Браузер и типы файлов: нажатая ссылка должна открываться, а не пропадать
 apps_json=$(спроси '{"method":"sys.apps","params":{}}')
 echo "$apps_json" | grep -qiE 'firefox|epiphany' && r=да || r=нет
@@ -106,7 +112,7 @@ echo "$mime" | grep -qiE 'firefox|epiphany' && r=да || r=нет
 проверь "ссылки открываются браузером" "$r" "$(echo "$mime" | head -c 200)"
 
 # Значок настоящей программы: человек узнаёт программу по её картинке
-icon=$(спроси '{"method":"sys.icon","params":{"имя":"thunar"}}')
+icon=$(спроси '{"method":"sys.icon","params":{"имя":"org.xfce.thunar"}}')
 echo "$icon" | grep -q '"есть":true' && r=да || r=нет
 проверь "у настоящей программы есть свой значок" "$r" "$(echo "$icon" | head -c 120)"
 

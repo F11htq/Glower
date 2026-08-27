@@ -539,9 +539,6 @@ body.taskbar .toasts{bottom:calc(var(--dock-size) + 18px)}
   display:grid;place-content:center;filter:none;overflow:hidden}
 .dock-item .emo.свой img{width:100%;height:100%;object-fit:contain;display:block}
 
-/* Развёрнутое чужое окно: полоска под значком шире, как у своих окон */
-.dock-item.развёрнуто::before{width:clamp(10px,calc(var(--dock-size) * .36),18px);border-radius:3px}
-
 /* Чужое окно во весь экран: панель не спорит с ним за место и уезжает вниз
    тем же движением, что и при её обычном скрытии. */
 body.чужой-вовесь .dock{transform:translateY(140%);opacity:0;pointer-events:none}

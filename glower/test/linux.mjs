@@ -416,7 +416,7 @@ try {
                 icon:'telegram', 'окно':'org.telegram.desktop', categories:[] }] });
       if (m === 'sys.windows') return Promise.resolve({ list:[
         { appId:'org.telegram.desktop', title:'Telegram', 'оболочка':false,
-          'состояние':{ 'развёрнуто':true, 'вовесь':false, 'активно':true } }], 'можно':true });
+          'состояние':{ 'вовесь':false, 'активно':true } }], 'можно':true });
       if (m === 'sys.icon') return Promise.resolve({ 'есть':true, 'тип':'image/png',
         'данные':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
       return было(m, p);
@@ -426,7 +426,6 @@ try {
       .find(b => /Telegram/.test(b.dataset.tip || ''));
     const ответ = {
       картинка:!!(кнопка && кнопка.querySelector('img')),
-      развёрнуто:!!(кнопка && кнопка.classList.contains('развёрнуто')),
       вработе:!!(кнопка && кнопка.classList.contains('active')),
       подпись:кнопка ? кнопка.dataset.tip : ''
     };
@@ -435,11 +434,8 @@ try {
   });
   check('у чужого окна в панели задач свой значок',
     значкиВПанели.картинка === true, JSON.stringify(значкиВПанели));
-  check('панель задач видит, что чужое окно развёрнуто',
-    значкиВПанели['развёрнуто'] === true && значкиВПанели.вработе === true,
-    JSON.stringify(значкиВПанели));
-  check('о развёрнутом окне сказано и словами',
-    /развёрнуто/.test(значкиВПанели.подпись || ''), значкиВПанели.подпись);
+  check('панель задач видит, какое чужое окно сейчас в работе',
+    значкиВПанели.вработе === true, JSON.stringify(значкиВПанели));
 
   /* --- чужое окно во весь экран: панель уходит с дороги --- */
   const вовесь = await page.evaluate(async () => {
@@ -448,7 +444,7 @@ try {
     Platform.rpc = (m, p) => {
       if (m === 'sys.windows') return Promise.resolve({ list:[
         { appId:'mpv', title:'Кино', 'оболочка':false,
-          'состояние':{ 'развёрнуто':false, 'вовесь':true, 'активно':true } }],
+          'состояние':{ 'вовесь':true, 'активно':true } }],
         'можно':true, 'вовесьЭкран':true });
       if (m === 'ui.say'){ сказано.push(p); return Promise.resolve({ ok:true }); }
       return было(m, p);
