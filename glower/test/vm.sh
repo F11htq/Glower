@@ -133,7 +133,9 @@ echo "$can_json" | grep -q '"ok":true' && r=да || r=нет
 проверь "установка разрешена и возможна" "$r" "$(echo "$can_json" | head -c 200)"
 
 disks_json=$(спроси '{"method":"install.disks","params":{}}')
-target=$(echo "$disks_json" | grep -o '"name":"[a-z0-9]*"' | head -1 | cut -d'"' -f4)
+# Установщику нужен полный путь диска (/dev/vda), а не короткое имя:
+# по короткому он честно отвечает «такого диска на машине нет».
+target=$(echo "$disks_json" | grep -o '"dev":"/dev/[a-z0-9]*"' | head -1 | cut -d'"' -f4)
 [ -n "$target" ] && r=да || r=нет
 проверь "диск для установки найден" "$r" "$(echo "$disks_json" | head -c 200)"
 
