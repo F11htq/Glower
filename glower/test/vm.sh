@@ -96,6 +96,20 @@ echo "$wins2" | grep -qi 'foot' && r=да || r=нет
 проверь "окно настоящей программы видно системе" "$r" "$(echo "$wins2" | head -c 200)"
 снимок "st-программой"
 
+# Браузер и типы файлов: нажатая ссылка должна открываться, а не пропадать
+apps_json=$(спроси '{"method":"sys.apps","params":{}}')
+echo "$apps_json" | grep -qiE 'firefox|epiphany' && r=да || r=нет
+проверь "браузер стоит в системе" "$r" "$(echo "$apps_json" | head -c 200)"
+
+mime=$(спроси '{"method":"sys.mime","params":{"тип":"x-scheme-handler/https"}}')
+echo "$mime" | grep -qiE 'firefox|epiphany' && r=да || r=нет
+проверь "ссылки открываются браузером" "$r" "$(echo "$mime" | head -c 200)"
+
+# Значок настоящей программы: человек узнаёт программу по её картинке
+icon=$(спроси '{"method":"sys.icon","params":{"имя":"thunar"}}')
+echo "$icon" | grep -q '"есть":true' && r=да || r=нет
+проверь "у настоящей программы есть свой значок" "$r" "$(echo "$icon" | head -c 120)"
+
 # Язык системы: программы должны говорить с человеком по-русски
 caps2=$(спроси '{"method":"sys.caps","params":{}}')
 echo "$caps2" | grep -qi 'ru_RU' && r=да || r=нет

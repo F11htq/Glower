@@ -29,19 +29,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools
 
-      - name: Chromium для образа
-        run: |
-          # В Ubuntu chromium идёт снапом, внутрь образа его не положить:
-          # берём официальную сборку Chrome for Testing.
-          VER=$(curl -s https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json \
-                | python3 -c 'import sys,json; print(json.load(sys.stdin)["channels"]["Stable"]["version"])')
-          curl -sL -o chrome.zip \
-            "https://storage.googleapis.com/chrome-for-testing-public/$VER/linux64/chrome-linux64.zip"
-          unzip -q chrome.zip
-          echo "CHROME_DIR=$PWD/chrome-linux64" >> $GITHUB_ENV
-
       - name: Собрать образ
-        run: sudo bash glower/linux/mkiso.sh --out glower.iso --chromium "$CHROME_DIR"
+        run: sudo bash glower/linux/mkiso.sh --out glower.iso
 
       - name: Контрольная сумма
         run: sha256sum glower.iso > glower.iso.sha256

@@ -131,30 +131,96 @@ install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
 install -d "$ROOTFS/usr/share/glower/labwc"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
 
+# --------------------------------------------------------------------------
+# Браузер.
+#
+# В Ubuntu 24.04 пакеты firefox и chromium — пустышки, ведущие к snap: внутрь
+# образа они не годятся. Поэтому берём Firefox из официального хранилища
+# Mozilla: свободная лицензия, распространять можно, есть русский язык.
+#
+# Закрытые сборки Google в образ не кладём: раздавать чужой закрытый продукт
+# без их согласия нельзя. Кому нужен именно Chrome — поставит его из Магазина
+# программ, и скачает его тогда своя машина, а не мы.
+step "3.5/6 браузер"
+chroot "$ROOTFS" /bin/bash -e <<'INBROWSER'
+export DEBIAN_FRONTEND=noninteractive
+install -d -m 0755 /etc/apt/keyrings
+if curl -fsSL https://packages.mozilla.org/apt/repo-signing-key.gpg -o /etc/apt/keyrings/packages.mozilla.org.asc; then
+  echo 'deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main' \
+    > /etc/apt/sources.list.d/mozilla.list
+  # Пустышка Ubuntu не должна побеждать настоящий пакет Mozilla
+  cat > /etc/apt/preferences.d/mozilla <<'PIN'
+Package: *
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+PIN
+  apt-get update -qq
+  apt-get install -y --no-install-recommends firefox 2>&1 | tail -1
+  apt-get install -y --no-install-recommends firefox-l10n-ru 2>&1 | tail -1 || true
+else
+  echo "  хранилище Mozilla недоступно"
+fi
+
+# Firefox мог не поставиться: нет сети до Mozilla, отказ хранилища. Образ без
+# браузера человеку не годится — тогда кладём GNOME Web (epiphany) из обычного
+# хранилища Ubuntu. Это настоящий браузер на движке WebKit, свободный, и он
+# говорит по-русски. Лучше так, чем «ссылки не работают».
+if [ ! -x /usr/bin/firefox ]; then
+  rm -f /etc/apt/sources.list.d/mozilla.list /etc/apt/preferences.d/mozilla
+  apt-get update -qq
+  apt-get install -y --no-install-recommends epiphany-browser 2>&1 | tail -1
+fi
+
+if [ -x /usr/bin/firefox ]; then echo "  браузер: Firefox"
+elif [ -x /usr/bin/epiphany-browser ]; then echo "  браузер: GNOME Web"
+else echo "  ВНИМАНИЕ: браузер в образ не попал"; fi
+INBROWSER
+
+# Сборку Chromium кладём, только если её дали ключом: она нужна лишь
+# встроенной смотрелке страниц, а на живой машине браузер настоящий.
 if [ -n "$CHROMIUM" ]; then
   install -d "$ROOTFS/opt/chromium"
   cp -r "$CHROMIUM/." "$ROOTFS/opt/chromium/"
   ln -sf /opt/chromium/chrome "$ROOTFS/usr/bin/chromium"
-  # Ярлык браузеру пишем сами: он положен в систему файлами, а не пакетом,
-  # и без ярлыка оболочка его не увидит среди программ машины.
-  install -d "$ROOTFS/usr/share/applications"
-  cat > "$ROOTFS/usr/share/applications/chromium.desktop" <<'DESK'
-[Desktop Entry]
-Type=Application
-Name=Браузер
-Name[en]=Browser
-Comment=Просмотр сайтов
-Exec=/usr/bin/chromium --ozone-platform=wayland %U
-Icon=web-browser
-Terminal=false
-Categories=Network;WebBrowser;
-MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
-DESK
-  echo "  браузер взят из $CHROMIUM"
-else
-  chroot "$ROOTFS" apt-get install -y --no-install-recommends chromium 2>&1 | tail -1 || \
-    echo "  ВНИМАНИЕ: chromium не установлен, укажите --chromium /путь"
+  echo "  дополнительно положен Chromium из $CHROMIUM"
 fi
+
+# --------------------------------------------------------------------------
+# Чем открывать: ссылки, картинки, тексты, музыку и папки.
+#
+# Без этого нажатая в чужом окне ссылка не откроется нигде, и для человека
+# это выглядит как «ссылки не работают».
+install -d "$ROOTFS/usr/share/applications"
+# Ссылки отдаём тому браузеру, который на самом деле лежит в образе.
+BROWSER_DESKTOP=""
+for cand in firefox.desktop org.gnome.Epiphany.desktop epiphany-browser.desktop; do
+  if [ -f "$ROOTFS/usr/share/applications/$cand" ]; then BROWSER_DESKTOP="$cand"; break; fi
+done
+[ -n "$BROWSER_DESKTOP" ] || BROWSER_DESKTOP=firefox.desktop
+echo "  ссылки открывает: $BROWSER_DESKTOP"
+cat > "$ROOTFS/usr/share/applications/mimeapps.list" <<MIME
+[Default Applications]
+x-scheme-handler/http=$BROWSER_DESKTOP
+x-scheme-handler/https=$BROWSER_DESKTOP
+x-scheme-handler/about=$BROWSER_DESKTOP
+x-scheme-handler/unknown=$BROWSER_DESKTOP
+text/html=$BROWSER_DESKTOP
+text/plain=org.xfce.mousepad.desktop
+inode/directory=thunar.desktop
+image/png=org.gnome.eog.desktop
+image/jpeg=org.gnome.eog.desktop
+image/gif=org.gnome.eog.desktop
+image/webp=org.gnome.eog.desktop
+image/svg+xml=org.gnome.eog.desktop
+audio/mpeg=mpv.desktop
+audio/flac=mpv.desktop
+audio/ogg=mpv.desktop
+video/mp4=mpv.desktop
+video/x-matroska=mpv.desktop
+video/webm=mpv.desktop
+application/pdf=$BROWSER_DESKTOP
+MIME
+chroot "$ROOTFS" update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 
 # --------------------------------------------------------------------------
 step "4/6 автозапуск сеанса"

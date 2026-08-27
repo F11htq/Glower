@@ -435,8 +435,10 @@ const НАСТОЯЩИЕ = {
   photos:  { ярлыки:['org.gnome.eog.desktop', 'eog.desktop', 'org.gnome.Loupe.desktop',
                      'ristretto.desktop'], подпись:'Просмотр изображений' },
   music:   { ярлыки:['mpv.desktop', 'io.mpv.Mpv.desktop'], подпись:'Проигрыватель' },
-  browser: { ярлыки:['chromium.desktop', 'chromium-browser.desktop', 'google-chrome.desktop',
-                     'firefox.desktop'], подпись:'Браузер системы' }
+  browser: { ярлыки:['firefox.desktop', 'firefox-esr.desktop',
+                     'org.gnome.Epiphany.desktop', 'epiphany-browser.desktop',
+                     'chromium.desktop', 'chromium-browser.desktop',
+                     'google-chrome.desktop'], подпись:'Браузер системы' }
 };
 
 /* Нарисованные приложения, которым на живой машине замены нет: они уходят,

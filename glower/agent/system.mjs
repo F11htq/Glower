@@ -384,6 +384,38 @@ export function apps(allowLaunch){
       return { total:list.length, list, canLaunch:!!allowLaunch };
     },
 
+    /* Чем система открывает такой-то тип файлов.
+
+       xdg-mime вне рабочего стола отвечает пустотой, поэтому читаем те же
+       списки, что читают все остальные программы, — сами. Порядок как в
+       правилах freedesktop: сначала списки человека, потом системные. */
+    async 'sys.mime'({ тип }){
+      const т = String(тип || '').trim();
+      if (!т || !/^[\w.+-]+\/[\w.+-]+$/.test(т) && !т.startsWith('x-scheme-handler/'))
+        return { есть:false, почему:'тип не назван или записан неверно' };
+      const списки = [
+        join(os.homedir(), '.config/mimeapps.list'),
+        join(os.homedir(), '.local/share/applications/mimeapps.list'),
+        '/etc/xdg/mimeapps.list',
+        '/usr/local/share/applications/mimeapps.list',
+        '/usr/share/applications/mimeapps.list'
+      ];
+      for (const файл of списки){
+        if (!existsSync(файл)) continue;
+        let текст = '';
+        try { текст = await readFile(файл, 'utf8'); } catch(e){ continue; }
+        /* Берём только раздел «Default Applications»: остальные разделы
+           говорят о том, что программа умеет, а не о том, чем открывать. */
+        const раздел = текст.split(/^\[/m).find(ч => ч.startsWith('Default Applications]'));
+        if (!раздел) continue;
+        const строка = раздел.split('\n').find(с => с.startsWith(т + '='));
+        if (!строка) continue;
+        const чем = строка.slice(т.length + 1).split(';').map(с => с.trim()).filter(Boolean)[0];
+        if (чем) return { есть:true, тип:т, чем, откуда:файл };
+      }
+      return { есть:false, тип:т, почему:'система не знает, чем открывать такой тип' };
+    },
+
     /* ---------- общий буфер обмена ----------
 
        Оболочка живёт в своём движке, чужие программы — в своих окнах. Без
