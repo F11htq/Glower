@@ -312,18 +312,28 @@ GLib.set_prgname('glowershell')
 Gtk.StyleContext.add_provider_for_screen(
     Gdk.Screen.get_default(), стиль, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
+# Под каким оконным сервером мы работаем. Слои (полоса под панель и
+# поверхности рабочего стола) — умение Wayland; под X-сервером их нет, и
+# просить их нельзя: программа просто упадёт. На такой машине рабочий стол
+# показывается обычным окном во весь экран, а панель рисуется поверх него.
+ПОД_WAYLAND = 'wayland' in type(Gdk.Display.get_default()).__name__.lower()
+if not ПОД_WAYLAND:
+    print('GlowerOS: оконный сервер без слоёв — рабочий стол будет обычным окном',
+          file=sys.stderr, flush=True)
+
 К = GtkLayerShell.Edge
 СЛОИ.update(background=GtkLayerShell.Layer.BACKGROUND, bottom=GtkLayerShell.Layer.BOTTOM,
             top=GtkLayerShell.Layer.TOP, overlay=GtkLayerShell.Layer.OVERLAY)
 РЕЖИМЫ.update(none=GtkLayerShell.KeyboardMode.NONE,
               on_demand=GtkLayerShell.KeyboardMode.ON_DEMAND,
               exclusive=GtkLayerShell.KeyboardMode.EXCLUSIVE)
-if ВИД_СТОЛА == 'окно':
+if ВИД_СТОЛА == 'окно' or not ПОД_WAYLAND:
     стол_окном('desktop')
 else:
     поверхность('desktop', СЛОИ.get(СЛОЙ, GtkLayerShell.Layer.BOTTOM),
                 [К.TOP, К.BOTTOM, К.LEFT, К.RIGHT], полоса=-1)
-if ПОЛОСА > 0:
+# Полосу под панель задач отводит оконный сервер, и умеет это только Wayland.
+if ПОЛОСА > 0 and ПОД_WAYLAND:
     следи_за_полосой(распорка(ПОЛОСА))
 приём_уведомлений()
 

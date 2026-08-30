@@ -177,11 +177,32 @@ run_cage(){
 
 run_x(){   # $1 — режим отрисовки
   command -v Xorg >/dev/null || command -v X >/dev/null || return 1
-  [ -n "$BROWSER" ] || return 1
   say "GlowerOS: пробую X-сервер ($1)"
-  cat > "$HOME/.xinitrc" <<XRC
+
+  # Старые машины часто не дают ядру управлять видеокартой: узла /dev/dri нет,
+  # и Wayland на такой машине не поднимется вовсе. Но X-сервер работает и там —
+  # простым способом, который понимает почти любое железо. Оболочку в нём
+  # показывает та же своя программа, что и обычно: браузер для этого не нужен.
+  if have_webkit; then
+    say "GlowerOS: оболочку показывает своя программа (X-сервер)"
+    cat > "$HOME/.xinitrc" <<XRC
+GDK_BACKEND=x11 \
+GLOWER_SURFACE=окно \
+GLOWER_PANEL_H=0 \
+GLOWER_URL="http://localhost:$PORT/" \
+GLOWER_QUERY="session=1$QUERY_EXTRA" \
+  exec /usr/bin/glower-shell
+XRC
+  elif [ -n "$BROWSER" ]; then
+    say "GlowerOS: WebKit недоступен — показываю оболочку браузером (X-сервер)"
+    cat > "$HOME/.xinitrc" <<XRC
 exec "$BROWSER" $(cmdline "$1")
 XRC
+  else
+    say "GlowerOS: нет ни WebKit, ни сборки Chromium — оболочку нечем показать"
+    return 1
+  fi
+
   startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp >>"$LOG" 2>&1
   code=$?
   say "GlowerOS: X-сервер завершился с кодом $code"
@@ -193,6 +214,9 @@ XRC
 [ "$HAVE_DRI" = yes ] && { run_labwc && exit 0; }
 [ "$HAVE_DRI" = yes ] && { run_cage && exit 0; }
 [ "$HAVE_DRI" = yes ] && { run_x gpu && exit 0; }
+# Видеоузла нет — идём сразу через X-сервер: так старые машины, где ядро не
+# берёт на себя видеокарту, всё равно показывают рабочий стол, а не чёрный
+# экран.
 run_x soft && exit 0
 
 # --- сюда попадаем, только если ничего не вышло ---
