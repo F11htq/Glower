@@ -610,10 +610,18 @@ export function apps(allowLaunch){
     async 'sys.terminal'(){
       if (!allowLaunch) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
 
-      const ярлыки = ['org.codeberg.dnkl.foot.desktop', 'foot.desktop',
-        'org.gnome.Terminal.desktop', 'gnome-terminal.desktop', 'kitty.desktop',
-        'Alacritty.desktop', 'alacritty.desktop', 'xterm.desktop',
-        'debian-xterm.desktop', 'org.kde.konsole.desktop'];
+      /* foot умеет только Wayland: под X-сервером он не запустится вовсе, и
+         предлагать его там — обещать несбыточное. На таких машинах впереди
+         идёт терминал, который работает и под X. */
+      const среда = await средаЭкрана();
+      const подX = !!среда.DISPLAY && !среда.WAYLAND_DISPLAY;
+      const ярлыки = подX
+        ? ['xfce4-terminal.desktop', 'org.gnome.Terminal.desktop', 'gnome-terminal.desktop',
+           'xterm.desktop', 'debian-xterm.desktop', 'org.kde.konsole.desktop']
+        : ['org.codeberg.dnkl.foot.desktop', 'foot.desktop',
+           'org.gnome.Terminal.desktop', 'gnome-terminal.desktop', 'kitty.desktop',
+           'Alacritty.desktop', 'alacritty.desktop', 'xterm.desktop',
+           'debian-xterm.desktop', 'org.kde.konsole.desktop'];
       for (const имя of ярлыки){
         const dir = APP_DIRS.find(d => existsSync(join(d, имя)));
         if (!dir) continue;
@@ -627,7 +635,10 @@ export function apps(allowLaunch){
           return запустить(программа, части, 'терминал');
       }
 
-      for (const имя of ['foot', 'x-terminal-emulator', 'gnome-terminal', 'kitty', 'alacritty', 'xterm']){
+      const запасные = подX
+        ? ['xfce4-terminal', 'x-terminal-emulator', 'gnome-terminal', 'xterm']
+        : ['foot', 'x-terminal-emulator', 'gnome-terminal', 'kitty', 'alacritty', 'xterm'];
+      for (const имя of запасные){
         if (await has(имя)) return запустить(имя, [], 'терминал');
       }
       throw new Error('на машине нет терминала — ставить его должен образ системы');
@@ -688,7 +699,8 @@ export function apps(allowLaunch){
             ['-id', id, '_NET_WM_STATE'], { env, timeout:3000 },
             (e, out) => resolve(e ? '' : String(out))));
           list.push({ appId:класс, title, id,
-            оболочка:класс === 'glowershell',
+            /* X пишет класс окна по-своему: Glower-shell вместо glowershell */
+            оболочка:класс.toLowerCase().replace(/[-_]/g, '') === 'glowershell',
             состояние:{
               развёрнуто:/MAXIMIZED_VERT/.test(состояние) && /MAXIMIZED_HORZ/.test(состояние),
               свёрнуто:/HIDDEN/.test(состояние),

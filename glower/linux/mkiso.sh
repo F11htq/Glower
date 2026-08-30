@@ -69,7 +69,7 @@ apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
-  thunar gvfs mousepad gnome-calculator eog mpv \
+  thunar gvfs mousepad gnome-calculator eog mpv xfce4-terminal \
   locales language-pack-ru language-pack-gnome-ru \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
