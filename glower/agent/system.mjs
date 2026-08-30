@@ -647,7 +647,7 @@ export function apps(allowLaunch){
          развёрнутое окно отвечает неверно: на labwc развёрнутое окно он
          называет неразвёрнутым. */
       if (await has('glower-toplevels')){
-        const текст = await new Promise(resolve => execFile('glower-toplevels', 'wmctrl', 'xprop', 'xdotool', [],
+        const текст = await new Promise(resolve => execFile('glower-toplevels', [],
           { env, timeout:4000 }, (e, out) => resolve(e ? '' : String(out))));
         let сырые = null;
         try { сырые = JSON.parse(текст); } catch(e){ сырые = null; }
