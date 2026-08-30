@@ -29,7 +29,7 @@ export async function has(cmd){
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
   'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl',
-  'glower-toplevels',
+  'glower-toplevels', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
@@ -381,6 +381,10 @@ async function собери_значки(){
   return карта;
 }
 
+/* X называет одно и то же окно то 0x03a00007, то 0x3a00007 — сравнивать
+   их можно только после отбрасывания незначащих нулей. */
+const kорень = id => '0x' + String(id || '').replace(/^0x/i, '').replace(/^0+/, '').toLowerCase();
+
 const ЗНАЧКИ_ГОТОВЫЕ = new Map();          // имя → готовая строка data:
 
 /* Список значков собираем заранее и в стороне от дела: обход тысяч файлов
@@ -643,7 +647,7 @@ export function apps(allowLaunch){
          развёрнутое окно отвечает неверно: на labwc развёрнутое окно он
          называет неразвёрнутым. */
       if (await has('glower-toplevels')){
-        const текст = await new Promise(resolve => execFile('glower-toplevels', [],
+        const текст = await new Promise(resolve => execFile('glower-toplevels', 'wmctrl', 'xprop', 'xdotool', [],
           { env, timeout:4000 }, (e, out) => resolve(e ? '' : String(out))));
         let сырые = null;
         try { сырые = JSON.parse(текст); } catch(e){ сырые = null; }
@@ -659,6 +663,43 @@ export function apps(allowLaunch){
             вовесьЭкран:чужие.some(o => o.состояние.вовесь),
             занятЭкран:чужие.some(o => (o.состояние.вовесь || o.состояние.развёрнуто) && !o.состояние.свёрнуто) };
         }
+      }
+
+      /* Под X-сервером протокола чужих окон нет вовсе: там про окна
+         рассказывает сам X. Так живут старые машины, где ядро не берёт на
+         себя видеокарту, — и панель задач должна работать и у них. */
+      if (env.DISPLAY && !env.WAYLAND_DISPLAY && await has('wmctrl')){
+        const строки = await new Promise(resolve => execFile('wmctrl', ['-l', '-x'],
+          { env, timeout:4000 }, (e, out) => resolve(e ? '' : String(out))));
+        const активное = await new Promise(resolve => execFile('xprop',
+          ['-root', '_NET_ACTIVE_WINDOW'], { env, timeout:3000 },
+          (e, out) => resolve(e ? '' : String(out))));
+        const кто = (активное.match(/0x[0-9a-f]+/i) || [''])[0].toLowerCase();
+
+        const list = [];
+        for (const строка of строки.split('\n').filter(Boolean)){
+          /* 0x03a00007  0 foot.foot  GlowerOS  заголовок окна */
+          const части = строка.split(/\s+/);
+          const id = части[0];
+          const класс = (части[2] || '').split('.').pop();
+          const title = части.slice(4).join(' ');
+          if (!id) continue;
+          const состояние = await new Promise(resolve => execFile('xprop',
+            ['-id', id, '_NET_WM_STATE'], { env, timeout:3000 },
+            (e, out) => resolve(e ? '' : String(out))));
+          list.push({ appId:класс, title, id,
+            оболочка:класс === 'glowershell',
+            состояние:{
+              развёрнуто:/MAXIMIZED_VERT/.test(состояние) && /MAXIMIZED_HORZ/.test(состояние),
+              свёрнуто:/HIDDEN/.test(состояние),
+              вовесь:/FULLSCREEN/.test(состояние),
+              активно:kорень(id) === kорень(кто)
+            } });
+        }
+        const чужие = list.filter(o => !o.оболочка);
+        return { list, можно:!!allowLaunch, через:'x',
+          вовесьЭкран:чужие.some(o => o.состояние.вовесь),
+          занятЭкран:чужие.some(o => (o.состояние.вовесь || o.состояние.развёрнуто) && !o.состояние.свёрнуто) };
       }
 
       /* Запасной путь: если своей программы на машине нет, читаем список
@@ -684,12 +725,33 @@ export function apps(allowLaunch){
       const что = можно[action];
       if (!что) throw new Error('неизвестное действие с окном: ' + action);
       if (!appId || !/^[\w.+-]+$/.test(String(appId))) throw new Error('неверное имя окна');
-      if (!await has('wlrctl')) throw new Error('на машине нет wlrctl — окнами управлять нечем');
-
-      const доводы = ['toplevel', что, 'app_id:' + appId];
-      if (title) доводы.push('title:' + String(title).slice(0, 120));
       const env = await средаЭкрана();
       const { execFile } = await import('node:child_process');
+
+      /* Под X-сервером окнами распоряжается сам X: там свои команды. Так
+         живут старые машины, где Wayland не поднимается. */
+      if (env.DISPLAY && !env.WAYLAND_DISPLAY && await has('wmctrl')){
+        const выполни = (программа, части) => new Promise((готово, беда) =>
+          execFile(программа, части, { env, timeout:4000 },
+            (e, out, err) => e ? беда(new Error(String(err || '').trim() || e.message)) : готово()));
+        const цель = ['-x', appId + '.' + appId];         // wmctrl ищет по классу окна
+        if (что === 'focus')      await выполни('wmctrl', ['-a', appId, '-x']);
+        else if (что === 'close') await выполни('wmctrl', ['-c', appId, '-x']);
+        else if (что === 'maximize')
+          await выполни('wmctrl', ['-r', appId, '-x', '-b', 'toggle,maximized_vert,maximized_horz']);
+        else if (что === 'fullscreen')
+          await выполни('wmctrl', ['-r', appId, '-x', '-b', 'toggle,fullscreen']);
+        else if (что === 'minimize'){
+          if (!await has('xdotool')) throw new Error('на машине нет xdotool — окно не свернуть');
+          await выполни('xdotool', ['search', '--class', appId, 'windowminimize', '%@']);
+        }
+        void цель;
+        return { ok:true, action:что, appId, через:'x' };
+      }
+
+      if (!await has('wlrctl')) throw new Error('на машине нечем управлять окнами');
+      const доводы = ['toplevel', что, 'app_id:' + appId];
+      if (title) доводы.push('title:' + String(title).slice(0, 120));
       const беда = await new Promise(resolve => execFile('wlrctl', доводы, { env, timeout:4000 },
         (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
       if (беда) throw new Error(беда);
@@ -729,6 +791,18 @@ export function apps(allowLaunch){
           куски.push('— ' + что + ' —', String(т).trim() || '(пусто)', '');
         }
       } else куски.push('journalctl на машине нет');
+
+      /* Сеанс пишет о себе отдельно: каким способом он показал оболочку и
+         что при этом не задалось. Без этих строк разбор поломки на живой
+         машине сводится к гаданию. */
+      for (const файл of ['/var/log/glower-session.log',
+                          join(os.homedir(), 'glower-session.log')]){
+        if (!existsSync(файл)) continue;
+        const т = await readFile(файл, 'utf8').catch(() => '');
+        const хвост = String(т).trim().split('\n').slice(-n).join('\n');
+        куски.push('— как поднимался сеанс (' + файл + ') —', хвост || '(пусто)', '');
+        break;
+      }
       return { текст:куски.join('\n') };
     },
 

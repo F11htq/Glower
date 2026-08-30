@@ -72,7 +72,8 @@ apt-get install -y --no-install-recommends \
   thunar gvfs mousepad gnome-calculator eog mpv \
   locales language-pack-ru language-pack-gnome-ru \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
-  xserver-xorg-core xserver-xorg-video-vmware xserver-xorg-video-fbdev \
+  xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
+  openbox wmctrl xdotool \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
@@ -151,6 +152,15 @@ install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
 #
 # Средства сборки нужны только здесь и сразу убираются: в готовом образе
 # остаётся один небольшой исполняемый файл.
+# X-сервер должен запускаться от имени человека, а не только от root: на
+# машинах без управления видеокартой это единственный способ показать
+# рабочий стол. Без этой настройки Xorg молча отказывается стартовать, и
+# человек видит чёрный экран.
+cat > "$ROOTFS/etc/X11/Xwrapper.config" <<'XWRAP'
+allowed_users=anybody
+needs_root_rights=yes
+XWRAP
+
 step "3.4/6 опрос чужих окон"
 install -d "$ROOTFS/tmp/toplevels"
 cp "$SRC/linux/toplevels/glower-toplevels.c" "$ROOTFS/tmp/toplevels/"

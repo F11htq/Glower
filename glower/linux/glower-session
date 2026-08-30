@@ -185,7 +185,10 @@ run_x(){   # $1 — режим отрисовки
   # показывает та же своя программа, что и обычно: браузер для этого не нужен.
   if have_webkit; then
     say "GlowerOS: оболочку показывает своя программа (X-сервер)"
+    # Оконный менеджер нужен и здесь: без него у чужих программ нет ни
+    # заголовков, ни перетаскивания, а окна валятся друг на друга.
     cat > "$HOME/.xinitrc" <<XRC
+if command -v openbox >/dev/null; then openbox --sm-disable & fi
 GDK_BACKEND=x11 \
 GLOWER_SURFACE=окно \
 GLOWER_PANEL_H=0 \
