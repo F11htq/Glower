@@ -416,7 +416,8 @@ try {
                 icon:'telegram', 'окно':'org.telegram.desktop', categories:[] }] });
       if (m === 'sys.windows') return Promise.resolve({ list:[
         { appId:'org.telegram.desktop', title:'Telegram', 'оболочка':false,
-          'состояние':{ 'вовесь':false, 'активно':true } }], 'можно':true });
+          'состояние':{ 'развёрнуто':true, 'свёрнуто':false, 'вовесь':false, 'активно':true } }],
+        'можно':true, 'занятЭкран':true });
       if (m === 'sys.icon') return Promise.resolve({ 'есть':true, 'тип':'image/png',
         'данные':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
       return было(m, p);
@@ -427,15 +428,21 @@ try {
     const ответ = {
       картинка:!!(кнопка && кнопка.querySelector('img')),
       вработе:!!(кнопка && кнопка.classList.contains('active')),
+      впритык:document.body.classList.contains('впритык'),
       подпись:кнопка ? кнопка.dataset.tip : ''
     };
     Platform.rpc = было;
+    document.body.classList.remove('впритык');
     return ответ;
   });
   check('у чужого окна в панели задач свой значок',
     значкиВПанели.картинка === true, JSON.stringify(значкиВПанели));
   check('панель задач видит, какое чужое окно сейчас в работе',
     значкиВПанели.вработе === true, JSON.stringify(значкиВПанели));
+  check('о развёрнутом окне сказано словами',
+    /развёрнуто/.test(значкиВПанели.подпись || ''), значкиВПанели.подпись);
+  check('при развёрнутом чужом окне панель прижимается к краю',
+    значкиВПанели.впритык === true, JSON.stringify(значкиВПанели));
 
   /* --- чужое окно во весь экран: панель уходит с дороги --- */
   const вовесь = await page.evaluate(async () => {
@@ -444,7 +451,7 @@ try {
     Platform.rpc = (m, p) => {
       if (m === 'sys.windows') return Promise.resolve({ list:[
         { appId:'mpv', title:'Кино', 'оболочка':false,
-          'состояние':{ 'вовесь':true, 'активно':true } }],
+          'состояние':{ 'развёрнуто':false, 'свёрнуто':false, 'вовесь':true, 'активно':true } }],
         'можно':true, 'вовесьЭкран':true });
       if (m === 'ui.say'){ сказано.push(p); return Promise.resolve({ ok:true }); }
       return было(m, p);
@@ -457,6 +464,23 @@ try {
   });
   check('при чужом окне во весь экран панель уходит с дороги',
     вовесь.ушла === true, JSON.stringify(вовесь).slice(0, 160));
+
+  /* --- размер панели растёт вместе с экраном --- */
+  {
+    const р = await page.evaluate(() => ({ посчитан:Shell.размерДока(),
+      высота:innerHeight, свой:S.dockSizeСвой }));
+    check('размер значков панели считается по размеру экрана',
+      р.свой === false && р.посчитан >= 44 && р.посчитан <= 92
+        && р.посчитан === Math.round(Math.min(92, Math.max(44, Math.max(600, р.высота) * 0.052))),
+      JSON.stringify(р));
+    const свой = await page.evaluate(() => {
+      S.dockSizeСвой = true; S.dockSize = 70;
+      const мой = Shell.размерДока();
+      S.dockSizeСвой = false;
+      return мой;
+    });
+    check('заданный человеком размер главнее расчёта', свой === 70, String(свой));
+  }
 
   /* --- диспетчер задач: настоящие числа и настоящее снятие задачи --- */
   {

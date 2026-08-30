@@ -102,6 +102,15 @@ proc=$(спроси '{"method":"sys.procs","params":{}}')
 echo "$proc" | grep -qi 'WebKit' && r=да || r=нет
 проверь "оболочку показывает своя программа на WebKit" "$r" "$(echo "$proc" | head -c 160)"
 
+# Состояние чужого окна: панель задач должна знать, развёрнуто ли оно
+спроси '{"method":"sys.window","params":{"action":"maximize","appId":"foot"}}' > /dev/null
+sleep 3
+wins3=$(спроси '{"method":"sys.windows","params":{}}')
+echo "$wins3" | grep -q '"развёрнуто":true' && r=да || r=нет
+проверь "система видит развёрнутое чужое окно" "$r" "$(echo "$wins3" | head -c 200)"
+echo "$wins3" | grep -q '"занятЭкран":true' && r=да || r=нет
+проверь "панель знает, что экран занят окном" "$r" "$(echo "$wins3" | head -c 200)"
+
 # Браузер и типы файлов: нажатая ссылка должна открываться, а не пропадать
 apps_json=$(спроси '{"method":"sys.apps","params":{}}')
 echo "$apps_json" | grep -qiE 'firefox|epiphany' && r=да || r=нет
@@ -142,11 +151,13 @@ target=$(echo "$disks_json" | grep -o '"dev":"/dev/[a-z0-9]*"' | head -1 | cut -
 if [ -n "$target" ]; then
   спроси "{\"method\":\"install.start\",\"params\":{\"disk\":\"$target\",\"confirm\":\"$target\"}}" > /dev/null
   done_ok=нет
-  for i in $(seq 1 90); do
+  # Под виртуальной машиной без ускорения перенос системы на диск идёт
+  # долго: ждём до часа и не считаем медленную работу провалом.
+  for i in $(seq 1 180); do
     sleep 20
     st=$(спроси '{"method":"install.state","params":{}}')
-    echo "$st" | grep -q '"готово":true\|"done":true' && { done_ok=да; break; }
-    echo "$st" | grep -q '"error"' && break
+    echo "$st" | grep -q '"percent":100\|"готово":true\|"done":true' && { done_ok=да; break; }
+    echo "$st" | grep -q '"error":"[^"]' && break
   done
   проверь "система установилась на диск" "$done_ok" "$(спроси '{"method":"install.state","params":{}}' | head -c 220)"
   снимок "после-установки"

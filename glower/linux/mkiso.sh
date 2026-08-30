@@ -141,6 +141,38 @@ install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
 # Закрытые сборки Google в образ не кладём: раздавать чужой закрытый продукт
 # без их согласия нельзя. Кому нужен именно Chrome — поставит его из Магазина
 # программ, и скачает его тогда своя машина, а не мы.
+# --------------------------------------------------------------------------
+# Опрос чужих окон.
+#
+# Панель задач должна знать, что происходит с окнами других программ:
+# развёрнуто ли окно, в работе ли оно, не занимает ли весь экран. wlrctl на
+# это отвечает неверно — развёрнутое окно он называет неразвёрнутым, —
+# поэтому спрашиваем оконный сервер сами маленькой своей программой.
+#
+# Средства сборки нужны только здесь и сразу убираются: в готовом образе
+# остаётся один небольшой исполняемый файл.
+step "3.4/6 опрос чужих окон"
+install -d "$ROOTFS/tmp/toplevels"
+cp "$SRC/linux/toplevels/glower-toplevels.c" "$ROOTFS/tmp/toplevels/"
+cp "$SRC/linux/toplevels/wlr-foreign-toplevel-management-unstable-v1.xml" "$ROOTFS/tmp/toplevels/"
+chroot "$ROOTFS" /bin/bash -e <<'INTOP'
+export DEBIAN_FRONTEND=noninteractive
+# Списки пакетов на этом шаге уже вычищены — читаем их заново
+apt-get update -qq
+apt-get install -y --no-install-recommends gcc libc6-dev libwayland-dev libwayland-bin 2>&1 | tail -1
+cd /tmp/toplevels
+wayland-scanner client-header wlr-foreign-toplevel-management-unstable-v1.xml ft.h
+wayland-scanner private-code  wlr-foreign-toplevel-management-unstable-v1.xml ft.c
+gcc -O2 -o /usr/bin/glower-toplevels glower-toplevels.c ft.c -lwayland-client
+chmod 755 /usr/bin/glower-toplevels
+apt-get purge -y gcc libc6-dev libwayland-dev libwayland-bin 2>&1 | tail -1
+apt-get autoremove -y 2>&1 | tail -1
+rm -rf /tmp/toplevels /var/lib/apt/lists/*
+INTOP
+chroot "$ROOTFS" test -x /usr/bin/glower-toplevels \
+  || { echo "  ОШИБКА: опрос чужих окон не собрался"; exit 1; }
+echo "  готово: /usr/bin/glower-toplevels"
+
 step "3.5/6 браузер"
 chroot "$ROOTFS" /bin/bash -e <<'INBROWSER'
 export DEBIAN_FRONTEND=noninteractive
@@ -388,11 +420,12 @@ if loadfont /boot/grub/fonts/unicode.pf2 ; then
   terminal_output gfxterm
 fi
 
-# Меню не показываем. Носитель делает одно из двух: ставит систему, если её
-# ещё нет, или уступает дорогу уже установленной. Выбор нужен только при
-# разборе поломок — он под клавишей Esc.
-set timeout=0
-set timeout_style=hidden
+# Меню показываем. На новой машине человек просто ждёт восемь секунд, зато на
+# старой — где обычная загрузка гаснет чёрным экраном — он видит, что выбор
+# есть, и берёт «безопасную графику». Прятать меню значило оставлять людей
+# со старыми ноутбуками наедине с погасшим экраном.
+set timeout=8
+set timeout_style=menu
 set default=0
 
 # Уже установленная система важнее носителя: иначе после установки образ,
@@ -412,18 +445,21 @@ menuentry "Установка GlowerOS" {
   linux /live/vmlinuz boot=live components quiet splash glower.install=1
   initrd /live/initrd
 }
-menuentry "Установка GlowerOS · безопасная графика" {
-  linux /live/vmlinuz boot=live components quiet glower.install=1 nomodeset \
+menuentry "Установка GlowerOS · безопасная графика (для старых машин)" {
+  # Ядро не берёт на себя управление видеокартой: изображение идёт простым
+  # способом, который понимает почти любое железо. Медленнее, зато видно.
+  linux /live/vmlinuz boot=live components glower.install=1 nomodeset \
         modprobe.blacklist=bochs,vmwgfx,virtio_gpu,qxl,vboxvideo
+  initrd /live/initrd
+}
+menuentry "Установка GlowerOS · с сообщениями системы" {
+  # Ничего не скрываем: если загрузка встанет, на экране будет видно, где.
+  linux /live/vmlinuz boot=live components glower.install=1
   initrd /live/initrd
 }
 menuentry "Восстановление установленной системы" {
   # Системные файлы кладутся заново, личные остаются на месте.
   linux /live/vmlinuz boot=live components quiet splash glower.install=1 glower.repair=1
-  initrd /live/initrd
-}
-menuentry "Подробный запуск установщика" {
-  linux /live/vmlinuz boot=live components glower.install=1
   initrd /live/initrd
 }
 GRUB

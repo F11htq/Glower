@@ -42,6 +42,23 @@ from gi.repository import Gtk, WebKit2, GLib   # noqa: E402
      " п.focus(); const было = document.activeElement === п;"
      " п.value = 'проба'; const держит = п.value === 'проба'; п.remove();"
      " return было && держит })()"),
+    # Панель меняет вид плавно, а мерить надо готовое положение — поэтому
+    # на время замера переходы выключаются.
+    ('панель прижимается к краю при развёрнутом окне',
+     "(function(){ const д = document.querySelector('.dock-wrap .dock');"
+     " const о = document.querySelector('.dock-wrap');"
+     " д.style.transition='none'; о.style.transition='none';"
+     " document.body.classList.add('впритык'); void д.offsetWidth;"
+     " const r = { радиус:parseFloat(getComputedStyle(д).borderRadius),"
+     "   низ:о.getBoundingClientRect().bottom, ширина:д.getBoundingClientRect().width,"
+     "   экран:innerHeight, экранШ:innerWidth };"
+     " document.body.classList.remove('впритык');"
+     " д.style.transition=''; о.style.transition='';"
+     " return r.радиус === 0 && r.низ >= r.экран - 1 && r.ширина >= r.экранШ - 2 })()"),
+    ('размер значков панели считается по экрану',
+     "(function(){ const р = Shell.размерДока();"
+     " const ждём = Math.round(Math.min(92, Math.max(44, Math.max(600, innerHeight) * 0.052)));"
+     " return р === ждём })()"),
     ('ошибок в коде страницы нет', "window.__ошибки.length === 0"),
 ]
 

@@ -58,7 +58,7 @@ const DEFAULTS = {
   wallpaper:'bloom', wallShuffle:false,
   radius:18, winRadius:16,
   speed:1, reduceMotion:false,
-  dockSize:52, dockAutohide:false, dockPos:'bottom',
+  dockSize:52, dockSizeСвой:false, dockAutohide:false, dockPos:'bottom',
   wctl:'win',                 // win | mac
   showDesktopIcons:true, showDeskWidgets:true, taskbarFull:true, trayInDock:true,
   deskWidgets:[{t:'clock'},{t:'weather'}], autostart:[],
@@ -102,7 +102,7 @@ function applySettings(){
   r.setProperty('--radius', S.radius + 'px');
   r.setProperty('--radius-win', S.winRadius + 'px');
   r.setProperty('--speed', S.reduceMotion ? 0.01 : S.speed);
-  r.setProperty('--dock-size', S.dockSize + 'px');
+  r.setProperty('--dock-size', (window.Shell && Shell.размерДока ? Shell.размерДока() : S.dockSize) + 'px');
   r.setProperty('--font', S.font);
   document.body.classList.toggle('reduced', S.reduceMotion);
   document.body.classList.toggle('dock-hidden', S.dockAutohide && !document.body.classList.contains('dock-peek'));

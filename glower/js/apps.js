@@ -1319,7 +1319,17 @@ APPS.settings = {
     /* --- Док --- */
     function pDock(){
       const c = card('Док / панель задач');
-      c.appendChild(row('📏', 'Размер значков', '', slider(() => S.dockSize, v => { set('dockSize', v); Shell.renderDock(); }, 34, 78, 1, v => v + 'px')));
+      c.appendChild(row('📏', 'Размер значков',
+        S.dockSizeСвой ? 'Задан вами' : 'Система считает его по размеру экрана',
+        slider(() => Shell.размерДока ? Shell.размерДока() : S.dockSize,
+          v => { set('dockSize', v); set('dockSizeСвой', true); Shell.renderDock(); Shell.fitDock(); },
+          34, 96, 1, v => v + 'px')));
+      if (S.dockSizeСвой){
+        const вернуть = el('button', 'btn', 'Вернуть');
+        вернуть.onclick = () => { set('dockSizeСвой', false); Shell.renderDock(); Shell.fitDock(); };
+        c.appendChild(row('↩️', 'Вернуть расчёт по экрану',
+          'Размер снова будет подбираться под экран', вернуть));
+      }
       c.appendChild(row('👻', 'Автоскрытие', 'Док появляется при наведении к низу экрана', toggle(() => S.dockAutohide, v => set('dockAutohide', v))));
       main.appendChild(c);
 

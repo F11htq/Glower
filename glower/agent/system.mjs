@@ -29,6 +29,7 @@ export async function has(cmd){
 const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
   'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl',
+  'glower-toplevels',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
@@ -382,6 +383,13 @@ async function собери_значки(){
 
 const ЗНАЧКИ_ГОТОВЫЕ = new Map();          // имя → готовая строка data:
 
+/* Список значков собираем заранее и в стороне от дела: обход тысяч файлов
+   занимает секунды, а панель задач, спросив значок, ждать столько не должна.
+   Если система в это время занята, спешить некуда — счётчик не держит агент
+   на плаву. */
+const заранее = setTimeout(() => { собери_значки().catch(() => {}); }, 2000);
+if (заранее.unref) заранее.unref();
+
 /* Пробный запуск для осмотра: ждём, чем дело кончится, и возвращаем жалобы. */
 function попытка_тихо(программа, части){
   return new Promise(async resolve => {
@@ -626,45 +634,47 @@ export function apps(allowLaunch){
        программ. Оконный сервер умеет о них рассказывать и ими управлять —
        через это система и становится системой, а не киоском. */
     async 'sys.windows'(){
-      if (!await has('wlrctl'))
-        return { list:[], можно:false, почему:'на машине нет wlrctl — окнами управлять нечем' };
       const env = await средаЭкрана();
       const { execFile } = await import('node:child_process');
+
+      /* Своя программа спрашивает оконный сервер напрямую и за один запуск
+         отдаёт всё: имя программы, заголовок и состояние окна. Раньше это
+         делал wlrctl — он отвечает «да/нет» на один вопрос за запуск, а про
+         развёрнутое окно отвечает неверно: на labwc развёрнутое окно он
+         называет неразвёрнутым. */
+      if (await has('glower-toplevels')){
+        const текст = await new Promise(resolve => execFile('glower-toplevels', [],
+          { env, timeout:4000 }, (e, out) => resolve(e ? '' : String(out))));
+        let сырые = null;
+        try { сырые = JSON.parse(текст); } catch(e){ сырые = null; }
+        if (Array.isArray(сырые)){
+          const list = сырые.map(о => ({
+            appId:о.appId || '', title:о.title || '',
+            оболочка:(о.appId || '') === 'glowershell',
+            состояние:{ развёрнуто:!!о['развёрнуто'], свёрнуто:!!о['свёрнуто'],
+                        активно:!!о['активно'], вовесь:!!о['вовесь'] }
+          }));
+          const чужие = list.filter(o => !o.оболочка);
+          return { list, можно:!!allowLaunch,
+            вовесьЭкран:чужие.some(o => o.состояние.вовесь),
+            занятЭкран:чужие.some(o => (o.состояние.вовесь || o.состояние.развёрнуто) && !o.состояние.свёрнуто) };
+        }
+      }
+
+      /* Запасной путь: если своей программы на машине нет, читаем список
+         через wlrctl. Состояний он в этом случае не даёт — и мы их не
+         выдумываем. */
+      if (!await has('wlrctl'))
+        return { list:[], можно:false, почему:'на машине нечем спросить про окна' };
       const текст = await new Promise(resolve => execFile('wlrctl', ['toplevel', 'list'],
         { env, timeout:4000 }, (e, out) => resolve(e ? '' : String(out))));
       const list = текст.split('\n').filter(Boolean).map(строка => {
         const п = строка.indexOf(': ');
         const appId = п < 0 ? строка.trim() : строка.slice(0, п).trim();
         const title = п < 0 ? '' : строка.slice(п + 2).trim();
-        return { appId, title, оболочка:appId === 'glowershell' };
+        return { appId, title, оболочка:appId === 'glowershell', состояние:null };
       });
-
-      /* Состояние окна: занимает ли оно весь экран и оно ли сейчас в работе.
-
-         Про «развёрнуто на пол-экрана» здесь ничего нет намеренно: labwc
-         не сообщает это состояние через протокол чужих окон — на живой
-         машине развёрнутое окно он называет неразвёрнутым. Показывать
-         неверное лучше не станем, поэтому и не спрашиваем.
-
-         Совпадаем по имени программы: если у одной программы несколько
-         окон, состояние получится общее на все её окна. Это честное
-         приближение, а не точное знание, и выдавать его за большее нельзя. */
-      const спроси_состояние = (appId, состояние) => new Promise(resolve =>
-        execFile('wlrctl', ['toplevel', 'find', 'app_id:' + appId, 'state:' + состояние],
-          { env, timeout:3000 }, e => resolve(!e)));
-
-      const имена = [...new Set(list.filter(o => !o.оболочка && /^[\w.+-]+$/.test(o.appId))
-        .map(o => o.appId))].slice(0, 12);
-      const состояния = {};
-      await Promise.all(имена.map(async имя => {
-        const [вовесь, активно] = await Promise.all(
-          ['fullscreen', 'active'].map(с => спроси_состояние(имя, с)));
-        состояния[имя] = { вовесь, активно };
-      }));
-      list.forEach(o => { o.состояние = состояния[o.appId] || null; });
-
-      return { list, можно:!!allowLaunch,
-        вовесьЭкран:Object.values(состояния).some(с => с.вовесь) };
+      return { list, можно:!!allowLaunch, вовесьЭкран:false, занятЭкран:false };
     },
 
     async 'sys.window'({ action, appId, title }){
