@@ -577,6 +577,35 @@ export function apps(allowLaunch){
       return { ok:true, pid:н };
     },
 
+    /* Программа одним файлом (AppImage).
+
+       Такую программу не ставят: файл сам себе установка — его делают
+       исполняемым и запускают. Мы так и делаем, но только для файлов из тех
+       мест, куда человек кладёт скачанное, и только по его согласию: запуск
+       чужого файла из интернета — дело серьёзное. */
+    async 'sys.appimage'({ путь }){
+      if (!allowLaunch) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
+      const п = String(путь || '');
+      if (!п.startsWith('/')) throw new Error('нужен полный путь к файлу');
+      if (/[\n\r\0]/.test(п)) throw new Error('в пути к файлу недопустимые знаки');
+      if (!existsSync(п)) throw new Error('такого файла нет: ' + п);
+      if (!/\.appimage$/i.test(п)) throw new Error('это не программа одним файлом');
+
+      const дом = os.homedir();
+      const можно = [дом, '/tmp', '/var/tmp', '/media', '/mnt', '/run/media'];
+      if (!можно.some(м => п === м || п.startsWith(м + '/')))
+        throw new Error('файл лежит там, откуда система запускать не станет: ' + п);
+
+      const { chmod } = await import('node:fs/promises');
+      await chmod(п, 0o755).catch(e => { throw new Error('не вышло разрешить запуск: ' + e.message); });
+
+      const env = await средаЭкрана();
+      const { spawn } = await import('node:child_process');
+      const дитя = spawn(п, [], { env, detached:true, stdio:'ignore' });
+      дитя.unref();
+      return { ok:true, запущено:п };
+    },
+
     /* ---------- общий буфер обмена ----------
 
        Оболочка живёт в своём движке, чужие программы — в своих окнах. Без

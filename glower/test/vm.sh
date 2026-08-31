@@ -120,6 +120,15 @@ mime=$(спроси '{"method":"sys.mime","params":{"тип":"x-scheme-handler/h
 echo "$mime" | grep -qiE 'firefox|epiphany' && r=да || r=нет
 проверь "ссылки открываются браузером" "$r" "$(echo "$mime" | head -c 200)"
 
+# Скачанный файл-установщик должен открываться установщиком системы
+mimedeb=$(спроси '{"method":"sys.mime","params":{"тип":"application/vnd.debian.binary-package"}}')
+echo "$mimedeb" | grep -q 'glower-package' && r=да || r=нет
+проверь "скачанный .deb открывает установщик системы" "$r" "$(echo "$mimedeb" | head -c 160)"
+
+badfile=$(спроси '{"method":"pkg.file.info","params":{"путь":"/etc/passwd"}}')
+echo "$badfile" | grep -q '"ok":false' && r=да || r=нет
+проверь "вместо пакета чужой файл система не берёт" "$r" "$(echo "$badfile" | head -c 160)"
+
 # Значок настоящей программы: человек узнаёт программу по её картинке
 icon=$(спроси '{"method":"sys.icon","params":{"имя":"org.xfce.thunar"}}')
 echo "$icon" | grep -q '"есть":true' && r=да || r=нет

@@ -465,6 +465,108 @@ try {
   check('при чужом окне во весь экран панель уходит с дороги',
     вовесь.ушла === true, JSON.stringify(вовесь).slice(0, 160));
 
+  /* --- программа, скачанная файлом: .deb ставится двойным щелчком --- */
+  {
+    const { mkdir, writeFile, rm, chmod } = await import('node:fs/promises');
+    const { execFile:вызов } = await import('node:child_process');
+    const собери = () => new Promise(готово => вызов('dpkg-deb',
+      ['--build', join(WS, 'пробный'), join(WS, 'проба.deb')],
+      { timeout:20000 }, e => готово(!e)));
+
+    await mkdir(join(WS, 'пробный/DEBIAN'), { recursive:true });
+    await mkdir(join(WS, 'пробный/usr/bin'), { recursive:true });
+    await writeFile(join(WS, 'пробный/DEBIAN/control'),
+      'Package: glower-proba\nVersion: 1.0\nSection: utils\nPriority: optional\n' +
+      'Architecture: all\nMaintainer: GlowerOS <glower@localhost>\nInstalled-Size: 24\n' +
+      'Description: Пробная программа\n');
+    await writeFile(join(WS, 'пробный/usr/bin/glower-proba'), '#!/bin/sh\necho проба\n');
+    await chmod(join(WS, 'пробный/usr/bin/glower-proba'), 0o755);
+    const собран = await собери();
+
+    if (собран){
+      const про = await page.evaluate(п => Platform.rpc('pkg.file.info', { 'путь':п })
+        .then(d => d, e => ({ err:e.message })), join(WS, 'проба.deb'));
+      check('система читает, что за программа в файле',
+        про['имя'] === 'glower-proba' && про['версия'] === '1.0' && про['размер'] > 0,
+        JSON.stringify(про).slice(0, 200));
+    } else check('система читает, что за программа в файле', true, 'dpkg-deb на машине нет — пропущено');
+
+    const чужой = await page.evaluate(() => Platform.rpc('pkg.file.info', { 'путь':'/etc/passwd' })
+      .then(() => 'принял', e => e.message));
+    check('вместо пакета чужой файл подсунуть нельзя',
+      /такие файлы не ставит|нет|повреждён/.test(String(чужой)), String(чужой));
+
+    const относительный = await page.evaluate(() => Platform.rpc('pkg.file.info', { 'путь':'проба.deb' })
+      .then(() => 'принял', e => e.message));
+    check('путь к файлу должен быть полным',
+      /полный путь/.test(String(относительный)), String(относительный));
+
+    const безКлюча = await page.evaluate(п => Platform.rpc('pkg.file.install', { 'путь':п })
+      .then(() => 'поставил', e => e.message), join(WS, 'проба.deb'));
+    check('без --allow-packages программу из файла не поставить',
+      /--allow-packages/.test(String(безКлюча)), String(безКлюча));
+
+    /* Оболочка должна спросить согласия, а не ставить молча */
+    const спросила = await page.evaluate(async () => {
+      const было = Platform.rpc.bind(Platform);
+      let звали = null;
+      Platform.rpc = (m, p) => {
+        if (m === 'pkg.file.info') return Promise.resolve({ 'имя':'проба', 'версия':'1.0',
+          'размер':1024, 'место':2048, 'описание':'проба', файл:p['путь'] });
+        if (m === 'pkg.file.install'){ звали = p; return Promise.resolve({ ok:true }); }
+        return было(m, p);
+      };
+      const обещание = спросиПроУстановку({ путь:'/tmp/проба.deb' });
+      await new Promise(r => setTimeout(r, 400));
+      const окно = document.querySelector('.dlg');
+      const текст = окно ? окно.innerText : '';
+      /* отказываемся: система не должна ставить ничего */
+      const отказ = окно && [...окно.querySelectorAll('button')].find(b => !/Поставить/.test(b.textContent));
+      if (отказ) отказ.click();
+      await обещание.catch(() => {});
+      await new Promise(r => setTimeout(r, 200));
+      Platform.rpc = было;
+      return { текст, звали };
+    });
+    check('перед установкой из файла система спрашивает человека',
+      /Поставить/.test(спросила.текст || '') && /проба/.test(спросила.текст || ''),
+      JSON.stringify(спросила).slice(0, 200));
+    check('на отказ система ничего не ставит',
+      спросила.звали === null, JSON.stringify(спросила.звали));
+
+    /* Программа одним файлом: её не ставят, а запускают — и только по
+       согласию человека. */
+    const одинФайл = await page.evaluate(async () => {
+      const было = Platform.rpc.bind(Platform);
+      let звали = null;
+      Platform.rpc = (m, p) => {
+        if (m === 'sys.appimage'){ звали = p; return Promise.resolve({ ok:true }); }
+        return было(m, p);
+      };
+      const обещание = спросиПроУстановку({ путь:'/tmp/Программа.AppImage' });
+      await new Promise(r => setTimeout(r, 400));
+      const окно = document.querySelector('.dlg');
+      const текст = окно ? окно.innerText : '';
+      const да = окно && [...окно.querySelectorAll('button')].find(b => /Запустить/.test(b.textContent));
+      if (да) да.click();
+      await обещание.catch(() => {});
+      await new Promise(r => setTimeout(r, 200));
+      Platform.rpc = было;
+      return { текст, звали };
+    });
+    check('о программе одним файлом система спрашивает и запускает её',
+      /Запустить/.test(одинФайл.текст || '') && одинФайл.звали
+        && одинФайл.звали['путь'] === '/tmp/Программа.AppImage',
+      JSON.stringify(одинФайл).slice(0, 200));
+
+    const чужойЗапуск = await page.evaluate(() => Platform.rpc('sys.appimage', { 'путь':'/usr/bin/id' })
+      .then(() => 'запустил', e => e.message));
+    check('вместо программы одним файлом системную не запустить',
+      /это не программа одним файлом|--allow-launch/.test(String(чужойЗапуск)), String(чужойЗапуск));
+
+    await rm(join(WS, 'проба.deb'), { force:true });
+  }
+
   /* --- размер панели растёт вместе с экраном --- */
   {
     const р = await page.evaluate(() => ({ посчитан:Shell.размерДока(),

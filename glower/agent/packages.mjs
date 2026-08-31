@@ -12,7 +12,9 @@
      — идёт ровно одна работа за раз, её ход виден оболочке построчно.
    ========================================================================== */
 import { spawn, execFile } from 'node:child_process';
+import { homedir } from 'node:os';
 import { promisify } from 'node:util';
+import { readFile } from 'node:fs/promises';
 
 const run = promisify(execFile);
 
@@ -23,6 +25,37 @@ const проверьИмя = n => {
   if (!NAME.test(s)) throw new Error('недопустимое имя пакета: ' + s);
   return s;
 };
+
+/* ---------- файлы-установщики ----------
+
+   Человек скачивает программу файлом — .deb с сайта, .flatpakref со страницы
+   Flathub — и ждёт, что двойной щелчок её поставит. Так работают все обычные
+   системы, и здесь должно быть так же.
+
+   Правила те же, что и везде: путь проверяется, ключей в нём быть не может,
+   ставится файл только из тех мест, куда человек кладёт скачанное. */
+const МЕСТА_ФАЙЛОВ = () => [homedir(), '/tmp', '/var/tmp', '/media', '/mnt', '/run/media'];
+
+function проверьФайл(путь, расширения){
+  const п = String(путь || '');
+  if (!п.startsWith('/')) throw new Error('нужен полный путь к файлу');
+  if (/[\n\r\0]/.test(п)) throw new Error('в пути к файлу недопустимые знаки');
+  if (!existsSync(п)) throw new Error('такого файла нет: ' + п);
+
+  let настоящий;
+  try { настоящий = realpathSync(п); } catch(e){ throw new Error('файл не читается: ' + e.message); }
+  if (!statSync(настоящий).isFile()) throw new Error('это не файл: ' + п);
+
+  const низ = настоящий.toLowerCase();
+  if (!расширения.some(р => низ.endsWith(р)))
+    throw new Error('этим система такие файлы не ставит: ' + п);
+
+  /* Ставим только то, что лежит там, куда человек кладёт скачанное. Иначе
+     через «установку файла» можно было бы дотянуться куда угодно. */
+  if (!МЕСТА_ФАЙЛОВ().some(м => настоящий === м || настоящий.startsWith(м + '/')))
+    throw new Error('файл лежит там, откуда система ставить не станет: ' + настоящий);
+  return настоящий;
+}
 
 /* без этого система перестанет быть системой */
 const НЕЛЬЗЯ_УДАЛЯТЬ = [
@@ -63,7 +96,7 @@ async function flatpak(args, timeout = 60000){
 /* строки flatpak приходят через табуляцию */
 const колонки = out => out.trim().split('\n').filter(Boolean).map(l => l.split('\t'));
 
-import { existsSync, statfsSync } from 'node:fs';
+import { existsSync, statfsSync, statSync, realpathSync } from 'node:fs';
 
 /* живая система держит всё в памяти — это меняет и место, и советы человеку */
 const живая = () => existsSync('/run/live/medium') || existsSync('/cdrom/live');
@@ -412,6 +445,68 @@ export function packages(allowPackages){
           'которая ставит её через Snap. Snap в GlowerOS не работает, поэтому установка ' +
           'зависла бы. Поищите программу под другим именем.');
       return запусти('install', n, ['install', '-y', '--no-install-recommends', n]);
+    },
+
+    /* Что за файл нам дали: имя программы, версия, размер, описание.
+       Читает сам dpkg — гадать по имени файла мы не станем. */
+    async 'pkg.file.info'({ путь }){
+      const файл = проверьФайл(путь, ['.deb', '.flatpakref']);
+
+      /* Страница Flathub отдаёт маленький файл-описание: в нём сказано, что
+         за программа и откуда её брать. Ставит такое сам flatpak. */
+      if (файл.toLowerCase().endsWith('.flatpakref')){
+        const текст = await readFile(файл, 'utf8').catch(() => '');
+        const поле = к => (текст.match(new RegExp('^' + к + '=(.*)$', 'm')) || [])[1] || '';
+        const имя = поле('Name');
+        if (!имя) throw new Error('в этом файле нет имени программы — flatpak его не поймёт');
+        return { файл, вид:'flatpak', имя, версия:'', железо:'',
+          описание:поле('Title') || поле('Comment') || '',
+          откуда:поле('Url') || поле('RuntimeRepo') || '',
+          зависимости:[], размер:statSync(файл).size, место:null };
+      }
+
+      let текст = '';
+      try {
+        const { stdout } = await run('dpkg-deb', ['-f', файл,
+          'Package', 'Version', 'Architecture', 'Installed-Size', 'Depends', 'Description'],
+          { timeout:15000, maxBuffer:1 << 20 });
+        текст = String(stdout);
+      } catch(e){
+        throw new Error('это не пакет Debian или он повреждён: ' + (e.stderr || e.message));
+      }
+      const поле = к => (текст.match(new RegExp('^' + к + ':\\s*(.*)$', 'm')) || [])[1] || '';
+      const размерФайла = statSync(файл).size;
+      const место = parseInt(поле('Installed-Size'), 10);
+      return {
+        файл, имя:поле('Package'), версия:поле('Version'),
+        железо:поле('Architecture'), описание:поле('Description'),
+        зависимости:поле('Depends').split(',').map(x => x.trim()).filter(Boolean),
+        размер:размерФайла,
+        место:Number.isFinite(место) ? место * 1024 : null
+      };
+    },
+
+    /* Поставить программу из файла. Зависимости apt подтянет сам — этим
+       установка из файла и отличается от голого dpkg, который на нехватке
+       зависимостей просто ломается. */
+    async 'pkg.file.install'({ путь }){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      const про = await this['pkg.file.info']({ путь });
+
+      if (про.вид === 'flatpak'){
+        await этоFlathub();
+        return запустиFlatpak('install', про.имя,
+          ['install', '-y', '--noninteractive', '--system', '--from', про.файл]);
+      }
+
+      const своё = process.arch === 'x64' ? ['amd64', 'all'] : [process.arch, 'all'];
+      if (про.железо && !своё.includes(про.железо))
+        throw new Error('этот пакет собран для другого железа (' + про.железо +
+          '), а машина — ' + своё[0]);
+
+      return запусти('install', про.имя || про.файл,
+        ['install', '-y', '--no-install-recommends', про.файл]);
     },
 
     async 'pkg.remove'({ name, source }){

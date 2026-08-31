@@ -128,6 +128,8 @@ install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 # своя программа-оболочка: рабочий стол и полоса под панель задач
 install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
+# открыть скачанный файл-установщик: передаёт его оболочке, а та спрашивает
+install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
 # настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё
 install -d "$ROOTFS/usr/share/glower/labwc"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
@@ -233,6 +235,21 @@ fi
 # Без этого нажатая в чужом окне ссылка не откроется нигде, и для человека
 # это выглядит как «ссылки не работают».
 install -d "$ROOTFS/usr/share/applications"
+
+# Скачанный .deb должен ставиться двойным щелчком, как в любой системе.
+cat > "$ROOTFS/usr/share/applications/glower-package.desktop" <<'PKG'
+[Desktop Entry]
+Type=Application
+Name=Установка программы
+Name[en]=Install package
+Comment=Поставить программу из скачанного файла
+Exec=/usr/bin/glower-open-package %f
+Icon=system-software-install
+Terminal=false
+NoDisplay=true
+MimeType=application/vnd.debian.binary-package;application/x-deb;application/vnd.flatpak.ref;application/vnd.appimage;application/x-iso9660-appimage;
+PKG
+
 # Ссылки отдаём тому браузеру, который на самом деле лежит в образе.
 BROWSER_DESKTOP=""
 for cand in firefox.desktop org.gnome.Epiphany.desktop epiphany-browser.desktop; do
@@ -261,6 +278,11 @@ video/mp4=mpv.desktop
 video/x-matroska=mpv.desktop
 video/webm=mpv.desktop
 application/pdf=$BROWSER_DESKTOP
+application/vnd.debian.binary-package=glower-package.desktop
+application/x-deb=glower-package.desktop
+application/vnd.flatpak.ref=glower-package.desktop
+application/vnd.appimage=glower-package.desktop
+application/x-iso9660-appimage=glower-package.desktop
 MIME
 chroot "$ROOTFS" update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 
