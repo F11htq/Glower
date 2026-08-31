@@ -22,7 +22,10 @@ pass_n=0; fail_n=0
 проверь(){ if [ "$2" = "да" ]; then pass_n=$((pass_n+1)); echo "  ✅ $1";
            else fail_n=$((fail_n+1)); echo "  ❌ $1${3:+ — $3}"; fi }
 
-спроси(){ curl -s --max-time 8 -X POST "http://localhost:$PORT/rpc" \
+# Часть вопросов система обдумывает подолгу: осмотр песочницы делает пробный
+# запуск, первый значок обходит тысячи файлов. Восьми секунд им не хватало, и
+# молчание выглядело как поломка — ждём дольше.
+спроси(){ curl -s --max-time 30 -X POST "http://localhost:$PORT/rpc" \
   -H 'Content-Type: application/json' --data "$1" 2>/dev/null; }
 снимок(){ printf 'screendump %s\n' "$WORKDIR/$1.ppm" | socat - UNIX-CONNECT:"$MON" >/dev/null 2>&1; }
 стоп(){ printf 'quit\n' | socat - UNIX-CONNECT:"$MON" >/dev/null 2>&1; sleep 2; }
@@ -67,6 +70,19 @@ for k in power launch install net packages; do
   echo "$caps" | grep -q "\"$k\":true" && r=да || r=нет
   проверь "разрешение $k доехало до агента" "$r"
 done
+
+# Агент отвечает раньше, чем поднимается сеанс: сперва дожидаемся оболочки,
+# иначе спрашивать про оконный сервер и WebKit бессмысленно — их ещё нет.
+дождись(){   # $1 — что ищем в списке процессов, $2 — сколько секунд ждать
+  waited_p=0
+  while [ $waited_p -lt "$2" ]; do
+    спроси '{"method":"sys.procs","params":{}}' | grep -qi "$1" && return 0
+    sleep 10; waited_p=$((waited_p+10))
+  done
+  return 1
+}
+дождись 'labwc' 240 || true
+дождись 'WebKit' 240 || true
 
 # Какой оконный сервер на самом деле держит сеанс: настоящий или киоск
 procs=$(спроси '{"method":"sys.procs","params":{}}')
