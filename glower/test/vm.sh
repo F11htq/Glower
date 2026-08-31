@@ -145,6 +145,53 @@ badfile=$(спроси '{"method":"pkg.file.info","params":{"путь":"/etc/pas
 echo "$badfile" | grep -q '"ok":false' && r=да || r=нет
 проверь "вместо пакета чужой файл система не берёт" "$r" "$(echo "$badfile" | head -c 160)"
 
+# Установка программы из скачанного файла — от начала до конца. Пробный пакет
+# собираем здесь же и кладём в машину так же, как это делает браузер: файлом
+# в папку человека.
+pkgdir=/tmp/glower-proba-vm
+rm -rf "$pkgdir"; mkdir -p "$pkgdir/DEBIAN" "$pkgdir/usr/bin"
+cat > "$pkgdir/DEBIAN/control" <<'CTRL'
+Package: glower-proba
+Version: 1.0
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: GlowerOS <glower@localhost>
+Installed-Size: 24
+Description: Пробная программа для проверки установки из файла
+CTRL
+printf '#!/bin/sh\necho проба\n' > "$pkgdir/usr/bin/glower-proba"
+chmod 755 "$pkgdir/usr/bin/glower-proba"
+
+if dpkg-deb --build "$pkgdir" /tmp/glower-proba.deb >/dev/null 2>&1; then
+  b64=$(base64 -w0 /tmp/glower-proba.deb)
+  printf '{"method":"fs.writeDataUrl","params":{"path":"Загрузки/glower-proba.deb","dataUrl":"data:application/vnd.debian.binary-package;base64,%s"}}' "$b64" > /tmp/glower-pkg.json
+  curl -s --max-time 30 -X POST "http://localhost:$PORT/rpc" \
+    -H 'Content-Type: application/json' --data @/tmp/glower-pkg.json > /dev/null
+
+  pkgfile="/home/glower/GlowerOS/Загрузки/glower-proba.deb"
+  about=$(спроси "{\"method\":\"pkg.file.info\",\"params\":{\"путь\":\"$pkgfile\"}}")
+  echo "$about" | grep -q '"имя":"glower-proba"' && r=да || r=нет
+  проверь "система читает скачанный пакет" "$r" "$(echo "$about" | head -c 160)"
+
+  спроси "{\"method\":\"pkg.file.install\",\"params\":{\"путь\":\"$pkgfile\"}}" > /dev/null
+  done_pkg=нет
+  job=''
+  for i in $(seq 1 30); do
+    sleep 10
+    job=$(спроси '{"method":"pkg.job","params":{}}')
+    if echo "$job" | grep -q '"running":false'; then
+      echo "$job" | grep -q '"ok":true' && done_pkg=да
+      break
+    fi
+  done
+  проверь "программа из файла ставится" "$done_pkg" "$(echo "$job" | head -c 200)"
+
+  have=$(спроси '{"method":"pkg.info","params":{"name":"glower-proba"}}')
+  echo "$have" | grep -q '"installed":"1.0"' && r=да || r=нет
+  проверь "поставленная программа числится в системе" "$r" "$(echo "$have" | head -c 160)"
+fi
+
 # Значок настоящей программы: человек узнаёт программу по её картинке
 icon=$(спроси '{"method":"sys.icon","params":{"имя":"org.xfce.thunar"}}')
 echo "$icon" | grep -q '"есть":true' && r=да || r=нет
