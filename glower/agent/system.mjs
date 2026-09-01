@@ -30,6 +30,8 @@ const ALLOWED = new Set([
   'which', 'systemctl', 'loginctl', 'wpctl', 'pactl', 'amixer', 'brightnessctl',
   'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl',
   'glower-toplevels', 'wmctrl', 'xprop', 'xdotool',
+  'lsblk', 'udisksctl', 'bluetoothctl', 'passwd', 'chpasswd',
+  'lpstat', 'lpoptions', 'lp', 'cancel', 'wlr-randr', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
@@ -385,6 +387,32 @@ async function собери_значки(){
    их можно только после отбрасывания незначащих нулей. */
 const kорень = id => '0x' + String(id || '').replace(/^0x/i, '').replace(/^0+/, '').toLowerCase();
 
+/* Проверка пароля — настоящая, той же программой, что спрашивает пароль при
+   входе в консоль: /usr/sbin/unix_chkpwd из PAM. Через sudo проверять
+   нельзя: в системе он разрешён без пароля, и тогда подошёл бы любой.
+
+   Возвращает true/false, а null — если проверять нечем. Пароль живёт только
+   в этой функции: ни в журнал, ни в память системы он не попадает. */
+async function проверь_пароль(кто, пароль){
+  if (!/^[a-z_][a-z0-9_-]*$/.test(String(кто || ''))) return null;
+  const { existsSync } = await import('node:fs');
+  const путь = ['/usr/sbin/unix_chkpwd', '/sbin/unix_chkpwd'].find(п => existsSync(п));
+  if (!путь) return null;
+
+  const { spawn } = await import('node:child_process');
+  return await new Promise(готово => {
+    const п2 = spawn(путь, [кто, 'nonull'], { stdio:['pipe', 'ignore', 'ignore'],
+      env:{ ...process.env, LC_ALL:'C' } });
+    const часы = setTimeout(() => { try { п2.kill('SIGKILL'); } catch(e){} готово(false); }, 5000);
+    п2.on('close', код => { clearTimeout(часы); готово(код === 0); });
+    п2.on('error', () => { clearTimeout(часы); готово(null); });
+    п2.stdin.end(пароль + '\0');
+  });
+}
+
+/* Сколько раз подряд не угадали пароль и до какого времени ждать */
+const ВХОД = { промахи:0, до:0 };
+
 const ЗНАЧКИ_ГОТОВЫЕ = new Map();          // имя → готовая строка data:
 
 /* Список значков собираем заранее и в стороне от дела: обход тысяч файлов
@@ -604,6 +632,389 @@ export function apps(allowLaunch){
       const дитя = spawn(п, [], { env, detached:true, stdio:'ignore' });
       дитя.unref();
       return { ok:true, запущено:п };
+    },
+
+    /* ---------- вход в систему ----------
+
+       Экран блокировки должен спрашивать настоящий пароль машины, а не свой
+       собственный: иначе это не защита, а рисунок замка. */
+    async 'sys.auth'({ пароль }){
+      const п = String(пароль == null ? '' : пароль);
+      if (!п) return { ok:false, почему:'пароль не введён' };
+
+      const сейчас = Date.now();
+      if (ВХОД.до > сейчас)
+        return { ok:false, почему:'слишком много попыток, подождите',
+          ждать:Math.ceil((ВХОД.до - сейчас) / 1000) };
+
+      const кто = os.userInfo().username;
+
+      /* У пользователя может не быть пароля вовсе — так живёт система с
+         носителя. Тогда проверять нечего, и говорить «подошёл» нельзя. */
+      const состояние = await call('sudo', ['-n', 'passwd', '-S', кто]).catch(() => '');
+      if (/ NP /.test(String(состояние)))
+        return { ok:false, безПароля:true,
+          почему:'у этого пользователя пароля нет — задайте его в Параметрах' };
+
+      const ok = await проверь_пароль(кто, п);
+      if (ok === null)
+        return { ok:false, почему:'на машине нечем проверить пароль' };
+      if (ok){ ВХОД.промахи = 0; ВХОД.до = 0; return { ok:true }; }
+
+      ВХОД.промахи++;
+      if (ВХОД.промахи >= 3)
+        ВХОД.до = сейчас + Math.min(60000, 2000 * Math.pow(2, ВХОД.промахи - 3));
+      return { ok:false, почему:'пароль не подошёл' };
+    },
+
+    /* Сменить свой пароль. Старый спрашиваем не для вида. */
+    async 'sys.passwd'({ старый, новый }){
+      if (!allowLaunch) throw new Error('смена пароля выключена: запустите агент с ключом --allow-launch');
+      const н = String(новый == null ? '' : новый);
+      if (н.length < 4) throw new Error('пароль короче четырёх знаков система не примет');
+      if (/[\n\r\0:]/.test(н)) throw new Error('в пароле недопустимые знаки');
+
+      const кто = os.userInfo().username;
+      if (!/^[a-z_][a-z0-9_-]*$/.test(кто)) throw new Error('непонятное имя пользователя');
+
+      const верно = await проверь_пароль(кто, String(старый == null ? '' : старый));
+      if (верно === false){
+        const пусто = await call('sudo', ['-n', 'passwd', '-S', кто]).catch(() => '');
+        const безПароля = / NP /.test(String(пусто));
+        if (!безПароля) throw new Error('старый пароль не подошёл');
+      }
+
+      const { spawn } = await import('node:child_process');
+      const итог = await new Promise(готово => {
+        const п2 = spawn('sudo', ['-n', 'chpasswd'], { stdio:['pipe', 'ignore', 'pipe'],
+          env:{ ...process.env, LC_ALL:'C' } });
+        let беда = '';
+        п2.stderr.on('data', д => { беда += д; });
+        п2.on('close', код => готово({ код, беда }));
+        п2.on('error', e => готово({ код:1, беда:e.message }));
+        п2.stdin.end(кто + ':' + н + '\n');
+      });
+      if (итог.код !== 0)
+        throw new Error('не вышло сменить пароль: ' + (итог.беда.trim().split('\n')[0] || 'система отказала'));
+      return { ok:true, кто };
+    },
+
+    /* Кто мы в системе: имя, полное имя, группы, есть ли пароль. */
+    async 'sys.me'(){
+      const кто = os.userInfo().username;
+      const о = { имя:кто, дом:os.homedir(), полное:'', группы:[], пароль:null };
+      try {
+        const строки = (await readFile('/etc/passwd', 'utf8')).split('\n');
+        const наша = строки.find(с => с.startsWith(кто + ':'));
+        if (наша) о.полное = (наша.split(':')[4] || '').split(',')[0];
+      } catch(e){}
+      try { о.группы = String(await call('id', ['-Gn'])).trim().split(/\s+/); } catch(e){}
+      try {
+        const с = String(await call('sudo', ['-n', 'passwd', '-S', кто]));
+        о.пароль = / P /.test(с) ? 'задан' : / NP /.test(с) ? 'нет' : / L /.test(с) ? 'закрыт' : null;
+      } catch(e){}
+      return о;
+    },
+
+    /* ---------- печать ----------
+       Всё делает CUPS — тот же сервер печати, что во всех остальных Linux. */
+    async 'sys.printers'(){
+      if (!await has('lpstat'))
+        return { есть:false, почему:'на машине нет CUPS — печатать нечем', list:[] };
+
+      const текст = await call('lpstat', ['-l', '-p', '-d']).catch(() => '');
+      const list = [];
+      let текущий = null;
+      for (const строка of String(текст).split('\n')){
+        const м = строка.match(/^printer\s+(\S+)\s+(.*)$/);
+        if (м){
+          const как = м[2];
+          const состояние = /disabled|stopped/i.test(как) ? 'остановлен'
+            : /now printing|printing/i.test(как) ? 'печатает'
+            : /is idle/i.test(как) ? 'готов' : как.replace(/\.$/, '');
+          текущий = { имя:м[1], состояние,
+            готов:/is idle|printing/i.test(как) && !/disabled|stopped/i.test(как),
+            подробно:как.replace(/\.$/, ''), описание:'', где:'' };
+          list.push(текущий);
+          continue;
+        }
+        if (!текущий) continue;
+        const о = строка.match(/^\s+Description:\s*(.*)$/);
+        if (о) текущий.описание = о[1].trim();
+        const г = строка.match(/^\s+Location:\s*(.*)$/);
+        if (г) текущий.где = г[1].trim();
+      }
+
+      const поумолчанию = (String(текст).match(/system default destination:\s*(\S+)/i) || [])[1] || '';
+      let задания = [];
+      try {
+        const о = await call('lpstat', ['-o']);
+        задания = String(о).split('\n').filter(Boolean).map(с => {
+          const ч = с.trim().split(/\s+/);
+          return { задание:ч[0], кто:ч[1] || '', размер:ч[2] || '' };
+        });
+      } catch(e){}
+
+      return { есть:true, list, поумолчанию, задания, можно:!!allowLaunch };
+    },
+
+    async 'sys.printer'({ action, принтер, задание }){
+      if (!allowLaunch) throw new Error('управление печатью выключено: запустите агент с ключом --allow-launch');
+      const можно = { 'проба':1, 'умолчание':1, 'снять':1, 'настройка':1 };
+      if (!можно[action]) throw new Error('неизвестное действие с печатью: ' + action);
+
+      if (action === 'настройка'){
+        if (!await has('xdg-open')) throw new Error('на машине нет xdg-open — открывать нечем');
+        const env = await средаЭкрана();
+        const { spawn } = await import('node:child_process');
+        spawn('xdg-open', ['http://localhost:631/admin'], { env, detached:true, stdio:'ignore' }).unref();
+        return { ok:true, action, куда:'http://localhost:631/admin' };
+      }
+
+      /* Имя принтера человек мог задать и по-русски — CUPS это разрешает.
+         Важно лишь, чтобы оно не притворялось ключом. */
+      const имяЛадно = н => /^[^\s\\/#\0-]{1}[^\s\\/#\0]{0,63}$/.test(String(н || ''));
+
+      if (action === 'снять'){
+        if (!имяЛадно(задание)) throw new Error('неверный номер задания');
+        await call('cancel', [String(задание)])
+          .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+        return { ok:true, action, задание };
+      }
+
+      if (!имяЛадно(принтер)) throw new Error('неверное имя принтера');
+
+      if (action === 'умолчание'){
+        await call('lpoptions', ['-d', принтер])
+          .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+        return { ok:true, action, принтер };
+      }
+
+      const { existsSync } = await import('node:fs');
+      const страница = ['/usr/share/cups/data/testprint',
+                        '/usr/share/cups/data/default-testpage.pdf']
+        .find(п => existsSync(п));
+      if (!страница) throw new Error('у CUPS нет пробной страницы для печати');
+      const ответ = await call('lp', ['-d', принтер, страница])
+        .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+      return { ok:true, action, принтер, ответ:String(ответ).trim() };
+    },
+
+    /* ---------- экраны и масштаб ----------
+       На плотном экране всё выходит мелким. Масштаб — дело оконного сервера:
+       он увеличивает всё разом, и свои окна, и чужие. */
+    async 'sys.screens'(){
+      if (!await has('wlr-randr'))
+        return { есть:false, почему:'на машине нет wlr-randr — масштабом управлять нечем', list:[] };
+      const env = await средаЭкрана();
+      if (!env.WAYLAND_DISPLAY)
+        return { есть:false, почему:'масштаб задаёт оконный сервер Wayland, а сейчас его нет', list:[] };
+
+      const { execFile } = await import('node:child_process');
+      const спроси = доводы => new Promise(resolve => execFile('wlr-randr', доводы,
+        { env, timeout:5000 }, (e, out) => resolve(e ? '' : String(out))));
+
+      /* Новые wlr-randr отвечают JSON, старые — только словами: понимаем оба */
+      const какJSON = await спроси(['--json']);
+      let сырые = null;
+      try { сырые = JSON.parse(какJSON); } catch(e){ сырые = null; }
+
+      let list = [];
+      if (Array.isArray(сырые) && сырые.length){
+        list = сырые.map(э => {
+          const режим = (э.modes || []).find(м => м.current) || {};
+          return { имя:э.name, описание:[э.make, э.model].filter(Boolean).join(' ').trim(),
+            включён:э.enabled !== false, масштаб:Number(э.scale) || 1,
+            ширина:режим.width || 0, высота:режим.height || 0,
+            частота:режим.refresh ? Math.round(режим.refresh) : 0 };
+        });
+      } else {
+        const словами = await спроси([]);
+        let текущий = null;
+        for (const строка of String(словами).split('\n')){
+          const шапка = строка.match(/^(\S+)\s*(?:"([^"]*)")?/);
+          if (строка && !/^\s/.test(строка) && шапка){
+            текущий = { имя:шапка[1], описание:(шапка[2] || '').trim(),
+              включён:true, масштаб:1, ширина:0, высота:0, частота:0 };
+            list.push(текущий);
+            continue;
+          }
+          if (!текущий) continue;
+          const вкл = строка.match(/^\s+Enabled:\s*(\S+)/);
+          if (вкл) текущий.включён = /yes/i.test(вкл[1]);
+          const масш = строка.match(/^\s+Scale:\s*([\d.]+)/);
+          if (масш) текущий.масштаб = Number(масш[1]) || 1;
+          const реж = строка.match(/^\s+(\d+)x(\d+) px,\s*([\d.]+) Hz.*current/);
+          if (реж){ текущий.ширина = +реж[1]; текущий.высота = +реж[2];
+                    текущий.частота = Math.round(Number(реж[3])); }
+        }
+      }
+
+      if (!list.length)
+        return { есть:false, почему:'оконный сервер не назвал ни одного экрана', list:[] };
+      return { есть:true, list, можно:!!allowLaunch };
+    },
+
+    async 'sys.screen.scale'({ экран, масштаб }){
+      if (!allowLaunch) throw new Error('управление экраном выключено: запустите агент с ключом --allow-launch');
+      const м = Number(масштаб);
+      if (!(м >= 0.5 && м <= 3)) throw new Error('такой масштаб система не примет: ' + масштаб);
+      if (!/^[A-Za-z0-9_.:-]{1,32}$/.test(String(экран || ''))) throw new Error('неверное имя экрана');
+      if (!await has('wlr-randr')) throw new Error('на машине нет wlr-randr');
+
+      const env = await средаЭкрана();
+      const { execFile } = await import('node:child_process');
+      const беда = await new Promise(resolve => execFile('wlr-randr',
+        ['--output', экран, '--scale', String(м)], { env, timeout:5000 },
+        (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
+      if (беда) throw new Error(беда);
+      return { ok:true, экран, масштаб:м };
+    },
+
+    /* ---------- съёмные носители ----------
+
+       Воткнутая флешка должна появляться сама и открываться одним нажатием —
+       так ведёт себя любая система. Список берём у ядра (lsblk), подключаем и
+       отключаем через udisks: он делает это от имени человека и кладёт
+       носитель в /media, как и положено. */
+    async 'sys.drives'(){
+      if (!await has('lsblk'))
+        return { есть:false, почему:'на машине нет lsblk — про носители спросить нечем', list:[] };
+      let данные;
+      try {
+        const текст = await call('lsblk', ['-J', '-b', '-o',
+          'NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT,RM,HOTPLUG,MODEL,RO']);
+        данные = JSON.parse(текст);
+      } catch(e){ return { есть:false, почему:'lsblk не ответил: ' + e.message, list:[] }; }
+
+      const свои = [];
+      const обойди = (узлы, родитель) => {
+        for (const у of узлы || []){
+          const съёмный = !!(у.rm || у.hotplug) || !!(родитель && родитель.съёмный);
+          const запись = {
+            имя:у.name, dev:у.path, размер:Number(у.size) || 0, вид:у.type,
+            файловая:у.fstype || '', метка:у.label || '', где:у.mountpoint || '',
+            съёмный, модель:(у.model || (родитель && родитель.модель) || '').trim(),
+            толькоЧтение:у.ro === true || у.ro === '1'
+          };
+          if (у.type === 'part' || у.type === 'disk') свои.push(запись);
+          обойди(у.children, запись);
+        }
+      };
+      обойди(данные.blockdevices, null);
+
+      /* Флешку могут отдать и без разметки: файловая система записана прямо
+         на устройство. Такой носитель — тоже носитель. */
+      const сРазделами = new Set(свои.filter(з => з.вид === 'part')
+        .map(з => String(з.dev).replace(/p?\d+$/, '')));
+      const носители = свои.filter(з => з.съёмный && з.файловая
+        && !['swap', 'crypto_LUKS'].includes(з.файловая)
+        && (з.вид === 'part' || (з.вид === 'disk' && !сРазделами.has(з.dev)))
+        && з.где !== '/' && !String(з.где).startsWith('/boot'));
+
+      return { есть:true, list:носители, всего:свои.length,
+        можно:!!allowLaunch && await has('udisksctl') };
+    },
+
+    /* Подключить, отключить или открыть носитель. Свои разделы системы не
+       трогаем: ошибиться здесь — потерять данные. */
+    async 'sys.drive'({ action, dev }){
+      if (!allowLaunch) throw new Error('работа с носителями выключена: запустите агент с ключом --allow-launch');
+      const можно = { mount:'mount', unmount:'unmount', open:'open' };
+      const что = можно[action];
+      if (!что) throw new Error('неизвестное действие с носителем: ' + action);
+      if (!/^\/dev\/[a-zA-Z0-9_\/-]{1,40}$/.test(String(dev || '')))
+        throw new Error('неверное имя носителя');
+      if (!await has('udisksctl')) throw new Error('на машине нет udisks — подключать носители нечем');
+
+      const { list } = await this['sys.drives']();
+      const наш = (list || []).find(з => з.dev === dev);
+      if (!наш) throw new Error('такого съёмного носителя система не видит: ' + dev);
+
+      /* «Открыть» — это подключить, если ещё не подключен, и показать
+         содержимое файловым менеджером. Путь берём из ответа системы. */
+      if (что === 'open'){
+        let где = наш.где;
+        if (!где){
+          const ответ = await call('udisksctl', ['mount', '-b', dev, '--no-user-interaction'])
+            .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+          где = ((String(ответ).match(/at (\S+)/) || [])[1] || '').replace(/\.$/, '');
+        }
+        if (!где) throw new Error('носитель подключён, но система не сказала, куда');
+        if (!await has('xdg-open')) throw new Error('на машине нет xdg-open — открывать нечем');
+        const env = await средаЭкрана();
+        const { spawn } = await import('node:child_process');
+        spawn('xdg-open', [где], { env, detached:true, stdio:'ignore' }).unref();
+        return { ok:true, action:'open', dev, где };
+      }
+
+      const ответ = await call('udisksctl', [что, '-b', dev, '--no-user-interaction'])
+        .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+      const где = (String(ответ).match(/at (\S+)/) || [])[1] || '';
+      return { ok:true, action:что, dev, где:где.replace(/\.$/, '') };
+    },
+
+    /* ---------- Bluetooth ----------
+       Наушники, мышь, клавиатура. Всё делает bluetoothctl — та же программа,
+       которой пользуются в любом Linux. Нет адаптера — так и скажем. */
+    async 'sys.bt'(){
+      if (!await has('bluetoothctl'))
+        return { есть:false, почему:'на машине нет bluetoothctl — Bluetooth не настроен', list:[] };
+
+      const список = await call('bluetoothctl', ['list']).catch(() => '');
+      if (!String(список).trim())
+        return { есть:false, почему:'Bluetooth-адаптера на этой машине нет', list:[] };
+
+      const сведения = await call('bluetoothctl', ['show']).catch(() => '');
+      const поле = к => (String(сведения).match(new RegExp('^\\s*' + к + ':\\s*(.*)$', 'm')) || [])[1] || '';
+      const включён = /yes/i.test(поле('Powered'));
+
+      const устройства = await call('bluetoothctl', ['devices']).catch(() => '');
+      const list = String(устройства).split('\n').filter(Boolean).map(строка => {
+        const м = строка.match(/^Device\s+([0-9A-F:]{17})\s+(.*)$/i);
+        return м ? { адрес:м[1], имя:м[2] } : null;
+      }).filter(Boolean);
+
+      for (const у of list.slice(0, 20)){
+        const про = await call('bluetoothctl', ['info', у.адрес]).catch(() => '');
+        у.соединено = /Connected:\s*yes/i.test(про);
+        у.своё = /Paired:\s*yes/i.test(про);
+      }
+
+      return { есть:true, включён, имя:поле('Name'), адрес:поле('Controller') || '',
+        list, можно:!!allowLaunch };
+    },
+
+    async 'sys.bt.power'({ включить }){
+      if (!allowLaunch) throw new Error('управление Bluetooth выключено: запустите агент с ключом --allow-launch');
+      if (!await has('bluetoothctl')) throw new Error('на машине нет bluetoothctl');
+      await call('bluetoothctl', ['power', включить ? 'on' : 'off'])
+        .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+      return { ok:true, включён:!!включить };
+    },
+
+    async 'sys.bt.scan'({ секунд = 8 } = {}){
+      if (!allowLaunch) throw new Error('управление Bluetooth выключено: запустите агент с ключом --allow-launch');
+      if (!await has('bluetoothctl')) throw new Error('на машине нет bluetoothctl');
+      const сек = Math.min(20, Math.max(3, parseInt(секунд, 10) || 8));
+      await call('bluetoothctl', ['--timeout', String(сек), 'scan', 'on'],
+        { timeout:(сек + 5) * 1000 }).catch(() => {});
+      return await this['sys.bt']();
+    },
+
+    async 'sys.bt.device'({ action, адрес }){
+      if (!allowLaunch) throw new Error('управление Bluetooth выключено: запустите агент с ключом --allow-launch');
+      const можно = { pair:'pair', connect:'connect', disconnect:'disconnect',
+                      trust:'trust', remove:'remove' };
+      const что = можно[action];
+      if (!что) throw new Error('неизвестное действие с устройством: ' + action);
+      if (!/^[0-9A-F:]{17}$/i.test(String(адрес || '')))
+        throw new Error('неверный адрес устройства');
+      if (!await has('bluetoothctl')) throw new Error('на машине нет bluetoothctl');
+
+      const ответ = await call('bluetoothctl', [что, адрес], { timeout:30000 })
+        .catch(e => { throw new Error(String(e.stderr || e.stdout || e.message).trim().split('\n').pop()); });
+      return { ok:true, action:что, адрес, ответ:String(ответ).trim().split('\n').pop() };
     },
 
     /* ---------- общий буфер обмена ----------

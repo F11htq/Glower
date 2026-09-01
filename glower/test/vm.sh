@@ -32,7 +32,14 @@ pass_n=0; fail_n=0
 
 пуск(){   # $1 — st чего грузиться: iso | диск
   rm -f "$MON"
+  # Небольшая флешка: без неё проверить работу со съёмными носителями нечем
+  if [ ! -f "$WORKDIR/флешка.img" ]; then
+    dd if=/dev/zero of="$WORKDIR/флешка.img" bs=1M count=64 2>/dev/null
+    mkfs.vfat -n ПРОБА "$WORKDIR/флешка.img" >/dev/null 2>&1 || true
+  fi
   qargs=(-m "$RAM" -smp 2 -display none -vga std
+    -device qemu-xhci -drive "if=none,id=usb1,format=raw,file=$WORKDIR/флешка.img"
+    -device usb-storage,drive=usb1,removable=on
     -netdev "user,id=n0,hostfwd=tcp::$PORT-:8123" -device e1000,netdev=n0
     -monitor "unix:$MON,server,nowait" -serial "file:$WORKDIR/консоль-$1.log"
     -drive "file=$DISK,format=qcow2,if=virtio")
@@ -104,9 +111,16 @@ echo "$sand" | grep -q 'проба bwrap: работает' && r=да || r=не�
 
 # настоящая программа системы: открываем её и ищем в списке окон
 # Имя ярлыка у настоящей программы своё: берём его из списка программ машины
-label=$(спроси '{"method":"sys.apps","params":{}}' | grep -o '"id":"[^"]*foot[^"]*"' | head -1 | cut -d'"' -f4)
-[ -n "$label" ] && спроси "{\"method\":\"sys.launch\",\"params\":{\"id\":\"$label\"}}" > /dev/null
+# Терминал открываем так же, как это делает сама система: она знает, какой
+# из терминалов настоящий. Первый ярлык со словом foot мог оказаться
+# footclient, который без своего сервера окна не открывает.
+спроси '{"method":"sys.terminal","params":{}}' > /dev/null
 sleep 6
+waited_w=0
+while [ $waited_w -lt 60 ]; do
+  спроси '{"method":"sys.windows","params":{}}' | grep -qi 'foot\|terminal' && break
+  sleep 5; waited_w=$((waited_w+5))
+done
 wins2=$(спроси '{"method":"sys.windows","params":{}}')
 echo "$wins2" | grep -qi 'foot' && r=да || r=нет
 проверь "окно настоящей программы видно системе" "$r" "$(echo "$wins2" | head -c 200)"
@@ -191,6 +205,35 @@ if dpkg-deb --build "$pkgdir" /tmp/glower-proba.deb >/dev/null 2>&1; then
   echo "$have" | grep -q '"installed":"1.0"' && r=да || r=нет
   проверь "поставленная программа числится в системе" "$r" "$(echo "$have" | head -c 160)"
 fi
+
+# Съёмный носитель, Bluetooth, обновления, вход, печать и экраны
+drv=$(спроси '{"method":"sys.drives","params":{}}')
+echo "$drv" | grep -q '"есть":true' && r=да || r=нет
+проверь "система перечисляет съёмные носители" "$r" "$(echo "$drv" | head -c 180)"
+
+bt=$(спроси '{"method":"sys.bt","params":{}}')
+echo "$bt" | grep -qE '"есть":(true|false)' && r=да || r=нет
+проверь "про Bluetooth система отвечает честно" "$r" "$(echo "$bt" | head -c 140)"
+
+upd=$(спроси '{"method":"pkg.upgrade.check","params":{}}')
+echo "$upd" | grep -q '"всего"' && r=да || r=нет
+проверь "система умеет проверять обновления" "$r" "$(echo "$upd" | head -c 180)"
+
+auth=$(спроси '{"method":"sys.auth","params":{"пароль":""}}')
+echo "$auth" | grep -q '"ok":false' && r=да || r=нет
+проверь "пустой пароль система не принимает" "$r" "$(echo "$auth" | head -c 140)"
+
+me=$(спроси '{"method":"sys.me","params":{}}')
+echo "$me" | grep -q '"имя":"glower"' && r=да || r=нет
+проверь "система называет свою учётную запись" "$r" "$(echo "$me" | head -c 180)"
+
+prn=$(спроси '{"method":"sys.printers","params":{}}')
+echo "$prn" | grep -q '"есть":true' && r=да || r=нет
+проверь "сервер печати в системе работает" "$r" "$(echo "$prn" | head -c 140)"
+
+scr=$(спроси '{"method":"sys.screens","params":{}}')
+echo "$scr" | grep -q '"есть":true' && r=да || r=нет
+проверь "система знает свои экраны и их масштаб" "$r" "$(echo "$scr" | head -c 180)"
 
 # Значок настоящей программы: человек узнаёт программу по её картинке
 icon=$(спроси '{"method":"sys.icon","params":{"имя":"org.xfce.thunar"}}')

@@ -584,6 +584,93 @@ try {
     check('заданный человеком размер главнее расчёта', свой === 70, String(свой));
   }
 
+  /* --- съёмные носители --- */
+  {
+    const н = await page.evaluate(() => Platform.rpc('sys.drives').then(d => d, e => ({ err:e.message })));
+    check('система перечисляет носители или честно говорит, почему нет',
+      н['есть'] === true ? Array.isArray(н.list) : !!н['почему'], JSON.stringify(н).slice(0, 180));
+    const чужой = await page.evaluate(() => Platform.rpc('sys.drive', { action:'mount', dev:'/etc/passwd' })
+      .then(() => 'принял', e => e.message));
+    check('вместо носителя чужой путь подсунуть нельзя',
+      /неверное имя носителя|--allow-launch/.test(String(чужой)), String(чужой));
+  }
+
+  /* --- Bluetooth --- */
+  {
+    const bt = await page.evaluate(() => Platform.rpc('sys.bt').then(d => d, e => ({ err:e.message })));
+    check('про Bluetooth система отвечает честно',
+      bt['есть'] === true ? Array.isArray(bt.list) : !!bt['почему'], JSON.stringify(bt).slice(0, 140));
+    const плохой = await page.evaluate(() => Platform.rpc('sys.bt.device', { action:'connect', 'адрес':'; rm -rf /' })
+      .then(() => 'принял', e => e.message));
+    check('вместо адреса устройства команду подсунуть нельзя',
+      /неверный адрес|bluetoothctl|--allow-launch/.test(String(плохой)), String(плохой));
+  }
+
+  /* --- обновления системы --- */
+  {
+    const о = await page.evaluate(() => Platform.rpc('pkg.upgrade.check').then(d => d, e => ({ err:e.message })));
+    check('система умеет проверять обновления',
+      Array.isArray(о.list) && typeof о['всего'] === 'number',
+      JSON.stringify({ всего:о['всего'], err:о.err }));
+    const безКлюча = await page.evaluate(() => Platform.rpc('pkg.upgrade.run', {})
+      .then(() => 'пошло', e => e.message));
+    check('без --allow-packages система не обновляется',
+      /--allow-packages/.test(String(безКлюча)), String(безКлюча));
+  }
+
+  /* --- вход по настоящему паролю --- */
+  {
+    const пусто = await page.evaluate(() => Platform.rpc('sys.auth', { 'пароль':'' })
+      .then(d => d, e => ({ err:e.message })));
+    check('пустой пароль система не принимает', пусто.ok === false, JSON.stringify(пусто));
+
+    const кто = await page.evaluate(() => Platform.rpc('sys.me').then(d => d, e => ({ err:e.message })));
+    check('система называет свою учётную запись',
+      !!кто['имя'] && Array.isArray(кто['группы']), JSON.stringify(кто).slice(0, 140));
+
+    const короткий = await page.evaluate(() => Platform.rpc('sys.passwd', { 'старый':'x', 'новый':'12' })
+      .then(() => 'принял', e => e.message));
+    check('слишком короткий пароль система не примет',
+      /короче четырёх|--allow-launch/.test(String(короткий)), String(короткий));
+
+    const спросил = await page.evaluate(async () => {
+      const было = Platform.rpc.bind(Platform);
+      let звали = null;
+      Platform.rpc = (m, p) => {
+        if (m === 'sys.auth'){ звали = p; return Promise.resolve({ ok:false, 'почему':'пароль не подошёл' }); }
+        return было(m, p);
+      };
+      const итог = await Profiles.verify((Profiles.current() || {}).id, 'что-то');
+      Platform.rpc = было;
+      return { звали, итог };
+    });
+    check('вход спрашивает пароль у системы, а не у себя',
+      спросил.звали && спросил.звали['пароль'] === 'что-то' && спросил.итог === false,
+      JSON.stringify(спросил));
+  }
+
+  /* --- печать --- */
+  {
+    const п = await page.evaluate(() => Platform.rpc('sys.printers').then(d => d, e => ({ err:e.message })));
+    check('система отвечает про принтеры честно',
+      п['есть'] === true ? Array.isArray(п.list) : !!п['почему'], JSON.stringify(п).slice(0, 160));
+    const ключ = await page.evaluate(() => Platform.rpc('sys.printer', { action:'проба', 'принтер':'-o' })
+      .then(() => 'принял', e => e.message));
+    check('вместо имени принтера ключ подсунуть нельзя',
+      /неверное имя принтера|--allow-launch/.test(String(ключ)), String(ключ));
+  }
+
+  /* --- масштаб экрана --- */
+  {
+    const э = await page.evaluate(() => Platform.rpc('sys.screens').then(d => d, e => ({ err:e.message })));
+    check('система отвечает про экраны честно',
+      э['есть'] === true ? Array.isArray(э.list) : !!э['почему'], JSON.stringify(э).slice(0, 140));
+    const дикий = await page.evaluate(() => Platform.rpc('sys.screen.scale', { 'экран':'HDMI-1', 'масштаб':9 })
+      .then(() => 'принял', e => e.message));
+    check('несуразный масштаб система не примет',
+      /не примет|--allow-launch/.test(String(дикий)), String(дикий));
+  }
+
   /* --- диспетчер задач: настоящие числа и настоящее снятие задачи --- */
   {
     const п = await page.evaluate(async () => {

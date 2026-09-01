@@ -509,6 +509,57 @@ export function packages(allowPackages){
         ['install', '-y', '--no-install-recommends', про.файл]);
     },
 
+    /* ---------- обновления системы ----------
+
+       «Что можно обновить» читает то, что система уже знает: быстро и без
+       сети. Обновить сами списки — отдельное дело (pkg.update), у него свой
+       ход работы, потому что оно ходит в интернет и бывает долгим. */
+    async 'pkg.upgrade.check'(){
+      let текст = '';
+      try {
+        const { stdout } = await run('sudo', ['-n', 'apt-get', '-s',
+          '-o', 'APT::Get::Show-User-Simulation-Note=false', 'upgrade'],
+          { timeout:30000, maxBuffer:8 << 20,
+            env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' } });
+        текст = String(stdout);
+      } catch(e){
+        const вывод = String(e.stderr || '').trim() || String(e.stdout || '').trim();
+        throw new Error('не вышло спросить про обновления: ' +
+          (вывод.split('\n').filter(Boolean).pop() || ('код ' + (e.code != null ? e.code : '?'))));
+      }
+
+      /* Строки вида: Inst firefox [1.0] (2.0 Mozilla:mozilla [amd64]) */
+      const list = [];
+      for (const строка of String(текст).split('\n')){
+        const м = строка.match(/^Inst\s+(\S+)\s+\[([^\]]*)\]\s+\(([^\s)]+)/);
+        if (м) list.push({ name:м[1], было:м[2], станет:м[3] });
+      }
+
+      let когда = null;
+      try {
+        const { statSync } = await import('node:fs');
+        когда = statSync('/var/lib/apt/periodic/update-success-stamp').mtimeMs;
+      } catch(e){
+        try {
+          const { statSync } = await import('node:fs');
+          когда = statSync('/var/lib/apt/lists').mtimeMs;
+        } catch(e2){}
+      }
+
+      return { list, всего:list.length, когда, можно:!!allowPackages };
+    },
+
+    /* Поставить обновления — тем же способом, что и установку программ. */
+    async 'pkg.upgrade.run'({ source } = {}){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      if (source === 'flatpak'){
+        await этоFlathub();
+        return запустиFlatpak('update', '', ['update', '-y', '--noninteractive', '--system']);
+      }
+      return запусти('upgrade', 'система', ['upgrade', '-y', '--no-install-recommends']);
+    },
+
     async 'pkg.remove'({ name, source }){
       нужноРазрешение();
       if (source === 'flatpak'){

@@ -67,9 +67,12 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
-  labwc wlrctl foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
+  labwc wlrctl wlr-randr foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
-  thunar gvfs mousepad gnome-calculator eog mpv xfce4-terminal \
+  thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
+  udisks2 ntfs-3g exfatprogs dosfstools \
+  bluez bluez-tools \
+  cups cups-filters cups-browsed cups-pdf avahi-daemon printer-driver-gutenprint \
   locales language-pack-ru language-pack-gnome-ru \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
@@ -292,7 +295,7 @@ chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
 id glower >/dev/null 2>&1 || useradd -m -s /bin/bash glower
 # Группы задаём отдельно: при повторной сборке пользователь уже есть, и
 # строка выше не выполняется — а группы всё равно должны быть на месте.
-usermod -aG video,audio,input,render,tty,adm,systemd-journal glower
+usermod -aG video,audio,input,render,tty,adm,systemd-journal,lpadmin,lp glower
 passwd -d glower
 # как в любой живой системе: разбор на месте без пароля
 usermod -aG sudo glower 2>/dev/null || true
@@ -410,7 +413,9 @@ UNIT
 # вообще без сети — ни провода, ни Wi-Fi.
 chroot "$ROOTFS" /bin/sh -c '
   for unit in dbus.socket dbus.service polkit.service NetworkManager.service \
-              wpa_supplicant.service systemd-timesyncd.service; do
+              wpa_supplicant.service systemd-timesyncd.service \
+              cups.service cups-browsed.service avahi-daemon.service \
+              bluetooth.service udisks2.service; do
     systemctl enable "$unit" >/dev/null 2>&1 || true
   done' || true
 
@@ -460,18 +465,10 @@ set timeout=8
 set timeout_style=menu
 set default=0
 
-# Уже установленная система важнее носителя: иначе после установки образ,
-# оставшийся в приводе, снова лез бы вперёд со своим установщиком.
-insmod part_gpt
-insmod ext2
-insmod search_label
-search --no-floppy --label GlowerOS --set=glower_root
-if [ -n "$glower_root" ]; then
-  if [ -f ($glower_root)/boot/grub/grub.cfg ]; then
-    set root=$glower_root
-    configfile /boot/grub/grub.cfg
-  fi
-fi
+# Носитель делает то, за чем его выбрали. Раньше он сперва искал уже
+# установленную систему и уступал ей дорогу — но человек, выбравший флешку в
+# меню загрузки, хочет установщик, а не то, что стоит на диске. Мешать ему
+# незачем: чтобы загрузиться с диска, достаточно вынуть флешку.
 
 menuentry "Установка GlowerOS" {
   linux /live/vmlinuz boot=live components quiet splash glower.install=1

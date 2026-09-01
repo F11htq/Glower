@@ -24,8 +24,27 @@ const Profiles = {
     for (const c of data) h = ((h << 5) + h + c) >>> 0;
     return 'w' + h.toString(16);
   },
+  /* Проверка пароля.
+
+     На машине пароль проверяет сама система — той же программой, что
+     спрашивает его при входе в консоль. Свой отпечаток в памяти оболочки
+     для этого не годится: он живёт в браузере, и защита из него никакая. */
   async verify(id, pw){
     const p = this.list().find(x => x.id === id);
+
+    if (window.Platform && Platform.mode === 'native'){
+      try {
+        const о = await Platform.rpc('sys.auth', { 'пароль':pw });
+        if (о && о.ok) return true;
+        this.последняяБеда = (о && о['почему']) || 'пароль не подошёл';
+        if (о && о['ждать']) this.последняяБеда += ' (' + о['ждать'] + ' с)';
+        return false;
+      } catch(e){
+        this.последняяБеда = 'система не ответила: ' + (e.message || e);
+        return false;
+      }
+    }
+
     if (!p || !p.hash) return true;
     return (await this.hash(id, pw)) === p.hash;
   },
@@ -37,7 +56,17 @@ const Profiles = {
     return true;
   },
 
-  authorized(){ return this.ok || !(this.current() || {}).hash; },
+  authorized(){ return this.ok || !((this.current() || {}).hash || this.системныйПароль); },
+
+  /* Узнаём у системы, задан ли пароль у нашего пользователя */
+  async узнайПроПароль(){
+    if (!window.Platform || Platform.mode !== 'native') return;
+    try {
+      const я = await Platform.rpc('sys.me');
+      this.системныйПароль = я && я['пароль'] === 'задан';
+      this.системноеИмя = (я && я['имя']) || '';
+    } catch(e){}
+  },
 
   /* ---------- профили ---------- */
   async add(name, emoji, pw){
@@ -73,7 +102,8 @@ const Profiles = {
     const name = el('div', 'lock-name', esc(p.name));
     bottom.append(ava, name);
 
-    if (p.hash){
+    /* На машине спрашиваем пароль, если он задан у пользователя системы */
+    if (p.hash || this.системныйПароль){
       const box = el('div', 'lock-pw');
       const inp = el('input'); inp.type = 'password'; inp.placeholder = 'Пароль'; inp.autocomplete = 'off';
       const go = el('button', '', '→');
@@ -84,7 +114,7 @@ const Profiles = {
           this.ok = true; err.textContent = '';
           window.__unlock && window.__unlock();
         } else {
-          err.textContent = 'Неверный пароль';
+          err.textContent = this.последняяБеда || 'Неверный пароль';
           box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake');
           inp.select();
         }

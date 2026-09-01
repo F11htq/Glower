@@ -619,12 +619,15 @@ const Shell = {
   },
 
   /* ================= УВЕДОМЛЕНИЯ ================= */
-  toast(title, text, icon = '🔔', ms = 4200){
+  /* Последним доводом можно передать дело: тогда нажатие на сообщение его
+     выполняет — так открывается воткнутая флешка одним щелчком. */
+  toast(title, text, icon = '🔔', ms = 4200, дело = null){
     if (S.dnd) return;
     const t = el('div', 'toast');
     t.innerHTML = `<div class="app-ico" style="background:linear-gradient(140deg,var(--accent),var(--accent-2))">${icon}</div>
       <div class="tx"><b>${esc(title)}</b>${esc(text)}</div>`;
-    t.onclick = () => close();
+    if (дело) t.style.cursor = 'pointer';
+    t.onclick = () => { if (дело){ try { дело(); } catch(e){} } close(); };
     $('#toasts').appendChild(t);
     Snd.note();
     const close = () => { t.classList.add('out'); setTimeout(() => t.remove(), 320); };

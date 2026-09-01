@@ -907,6 +907,8 @@ APPS.settings = {
       { id:'sound',  n:'Звук',                     e:'🔊' },
       { id:'display',n:'Дисплей',                  e:'💡' },
       { id:'net',    n:'Сеть и Интернет',          e:'📶' },
+      { id:'drives', n:'Носители',                 e:'💾' },
+      { id:'print',  n:'Принтеры',                 e:'🖨️' },
       { id:'bt',     n:'Устройства и датчики',     e:'🎧' },
       { id:'notif',  n:'Уведомления и фокус',      e:'🔔' },
       { id:'apps',   n:'Приложения',               e:'📦' },
@@ -915,7 +917,7 @@ APPS.settings = {
       { id:'keys',   n:'Клавиатура',               e:'⌨️' },
       { id:'a11y',   n:'Спец. возможности',        e:'♿' },
       { id:'privacy',n:'Конфиденциальность',       e:'🔐' },
-      { id:'update', n:'Сборка',                    e:'📦' },
+      { id:'update', n:'Обновления',                e:'⬆️' },
       { id:'about',  n:'О системе',                e:'ℹ️' }
     ];
     let cur = (opts && opts.section) || 'home';
@@ -928,7 +930,9 @@ APPS.settings = {
     const KEYS = {
       person:'обои тема цвет акцент шрифт оформление тёмная светлая',
       dock:'док панель задач иконки', motion:'анимации скорость плавность', sound:'звук громкость',
-      display:'яркость масштаб ночной свет', a11y:'доступность контраст курсор', about:'версия система'
+      display:'яркость масштаб ночной свет экран', drives:'флешка носитель диск usb карта памяти',
+      print:'принтер печать распечатать бумага cups', update:'обновления обновить система версия',
+      bt:'bluetooth блютуз наушники мышь', a11y:'доступность контраст курсор', about:'версия система'
     };
     const drawNav = (filter = '') => {
       navBox.innerHTML = '';
@@ -949,7 +953,7 @@ APPS.settings = {
       win.setSub(sec.n);
       main.appendChild(el('h2', '', sec.e + ' ' + sec.n)).style.cssText = 'margin:0 0 16px;font-size:22px;font-weight:600';
       ({ home:pHome, system:pSystem, person:pPerson, glass:pGlass, dock:pDock, motion:pMotion, sound:pSound,
-         display:pDisplay, net:pNet, bt:pBt, notif:pNotif, apps:pApps, acc:pAcc, time:pTime, keys:pKeys, a11y:pA11y,
+         display:pDisplay, net:pNet, drives:pDrives, print:pPrint, bt:pBt, notif:pNotif, apps:pApps, acc:pAcc, time:pTime, keys:pKeys, a11y:pA11y,
          privacy:pPrivacy, update:pUpdate, about:pAbout })[cur]();
       main.scrollTop = 0;
     }
@@ -1435,13 +1439,57 @@ APPS.settings = {
 
     /* --- Дисплей --- */
     function pDisplay(){
+      /* Масштаб всей системы: его задаёт оконный сервер, и увеличивается всё
+         разом — и наши окна, и чужие программы. */
+      if (window.Platform && Platform.mode === 'native'){
+        const э = card('Экран машины');
+        const место = el('div');
+        э.appendChild(место);
+        main.appendChild(э);
+
+        const рисуй = () => {
+          место.innerHTML = '';
+          место.appendChild(el('div', 'set-note', 'Спрашиваю систему об экранах…'));
+          Platform.rpc('sys.screens').then(d => {
+            место.innerHTML = '';
+            if (!d || !d['есть']){
+              место.appendChild(row('🖥️', 'Масштабом системы управлять нечем',
+                String((d && d['почему']) || ''), el('span')));
+              return;
+            }
+            (d.list || []).forEach(экр => {
+              const выбор = seg(
+                [{ n:'100%', v:1 }, { n:'125%', v:1.25 }, { n:'150%', v:1.5 },
+                 { n:'175%', v:1.75 }, { n:'200%', v:2 }],
+                () => экр['масштаб'],
+                v => Platform.rpc('sys.screen.scale', { 'экран':экр['имя'], 'масштаб':v })
+                  .then(() => { Shell.toast('Экран', 'Масштаб ' + Math.round(v * 100) + '%', '🔎');
+                                setTimeout(рисуй, 1200); })
+                  .catch(e => Dlg.alert('Не вышло изменить масштаб', String(e.message || e), '⚠️')));
+              место.appendChild(row('🖥️', экр['описание'] || экр['имя'],
+                [экр['ширина'] ? экр['ширина'] + '×' + экр['высота'] : '',
+                 экр['частота'] ? экр['частота'] + ' Гц' : '',
+                 'масштаб ' + Math.round(экр['масштаб'] * 100) + '%'].filter(Boolean).join(' · '),
+                выбор));
+            });
+            место.appendChild(el('div', 'set-note',
+              'Масштаб увеличивает всё сразу — и оболочку, и окна программ. ' +
+              'Отдельно ниже есть масштаб текста самой оболочки.'));
+          }).catch(e => {
+            место.innerHTML = '';
+            место.appendChild(row('🖥️', 'Система не ответила про экраны', String(e.message || e), el('span')));
+          });
+        };
+        рисуй();
+      }
+
       const c = card('Яркость и цвет');
       c.appendChild(row('☀️', 'Яркость', 'Программное затемнение картинки, не аппаратная подсветка',
         slider(() => S.brightness, v => set('brightness', v), 30, 100, 1, v => v + '%')));
       c.appendChild(row('🌙', 'Ночной свет', 'Тёплые тона', toggle(() => S.nightLight, v => set('nightLight', v))));
       c.appendChild(row('🌗', 'Тема по времени суток', 'Светлая днём, тёмная ночью',
         toggle(() => S.autoTheme, v => { set('autoTheme', v); Shell.autoTheme(); })));
-      c.appendChild(row('🔎', 'Масштаб интерфейса', 'Размер текста и элементов',
+      c.appendChild(row('🔤', 'Масштаб текста оболочки', 'Только наши окна; масштаб всей системы — выше',
         seg([{ n:'90%', v:.9 }, { n:'100%', v:1 }, { n:'110%', v:1.1 }, { n:'125%', v:1.25 }],
             () => KV.get('zoom', 1), v => { KV.set('zoom', v); document.documentElement.style.fontSize = (16 * v) + 'px'; })));
       main.appendChild(c);
@@ -1639,7 +1687,204 @@ APPS.settings = {
       box.appendChild(row('⚠️', 'Не удалось опросить машину', String(e && e.message || e), el('span'))); };
 
     /* --- Устройства --- */
+    /* --- Носители: флешки, карты памяти, чужие диски --- */
+    function pDrives(){
+      const c = card('Съёмные носители');
+      const место = el('div');
+      c.appendChild(место);
+      main.appendChild(c);
+
+      if (!window.Platform || Platform.mode !== 'native'){
+        место.appendChild(row('💾', 'Носители показывает система',
+          'Сейчас оболочка работает без неё — в обычном браузере.', el('span')));
+        return;
+      }
+
+      const рисуй = () => {
+        место.innerHTML = '';
+        место.appendChild(el('div', 'set-note', 'Спрашиваю систему…'));
+        Platform.rpc('sys.drives').then(d => {
+          место.innerHTML = '';
+          if (!d || !d['есть']){
+            место.appendChild(row('💾', 'Система не смогла перечислить носители',
+              String((d && d['почему']) || ''), el('span')));
+            return;
+          }
+          const список = d.list || [];
+          if (!список.length){
+            место.appendChild(row('💾', 'Съёмных носителей нет',
+              'Воткните флешку или карту памяти — она появится здесь сама', el('span')));
+            return;
+          }
+          список.forEach(н => {
+            const кнопки = el('div', 'row');
+            const открыть = el('button', 'btn pri', н['где'] ? 'Открыть' : 'Подключить и открыть');
+            открыть.onclick = () => Platform.rpc('sys.drive', { action:'open', dev:н.dev })
+              .then(о => { Shell.toast('Носитель', 'Открываю ' + (о['где'] || ''), '📂'); setTimeout(рисуй, 800); })
+              .catch(e => Dlg.alert('Не удалось открыть', String(e.message || e), '⚠️'));
+            кнопки.appendChild(открыть);
+            if (н['где']){
+              const убрать = el('button', 'btn', 'Отключить');
+              убрать.onclick = async () => {
+                if (!await Dlg.confirm('Отключить носитель?',
+                  'Система допишет всё начатое, и флешку можно будет вынимать.',
+                  { okText:'Отключить', icon:'⏏️' })) return;
+                Platform.rpc('sys.drive', { action:'unmount', dev:н.dev })
+                  .then(() => { Shell.toast('Носитель', 'Можно вынимать', '⏏️'); setTimeout(рисуй, 800); })
+                  .catch(e => Dlg.alert('Не удалось отключить', String(e.message || e), '⚠️'));
+              };
+              кнопки.appendChild(убрать);
+            }
+            const размер = н['размер'] > 1073741824
+              ? (н['размер'] / 1073741824).toFixed(1) + ' ГБ'
+              : Math.round(н['размер'] / 1048576) + ' МБ';
+            место.appendChild(row('💾', н['метка'] || н['модель'] || н.dev,
+              [размер, н['файловая'] || 'без файловой системы',
+               н['где'] ? 'подключён: ' + н['где'] : 'не подключён'].join(' · '), кнопки));
+          });
+        }).catch(e => {
+          место.innerHTML = '';
+          место.appendChild(row('💾', 'Система не ответила про носители', String(e.message || e), el('span')));
+        });
+      };
+      рисуй();
+    }
+
+    /* --- Принтеры: всё делает CUPS, мы показываем и просим --- */
+    function pPrint(){
+      const c = card('Печать');
+      const место = el('div');
+      c.appendChild(место);
+      main.appendChild(c);
+
+      if (!window.Platform || Platform.mode !== 'native'){
+        место.appendChild(row('🖨️', 'Печатью распоряжается система',
+          'Сейчас оболочка работает без неё — в обычном браузере.', el('span')));
+        return;
+      }
+
+      const рисуй = () => {
+        место.innerHTML = '';
+        место.appendChild(el('div', 'set-note', 'Спрашиваю систему о принтерах…'));
+        Platform.rpc('sys.printers').then(d => {
+          место.innerHTML = '';
+          if (!d || !d['есть']){
+            место.appendChild(row('🖨️', 'Печать в системе не настроена',
+              String((d && d['почему']) || ''), el('span')));
+            return;
+          }
+          const добавить = el('button', 'btn pri', 'Добавить принтер');
+          добавить.onclick = () => Platform.rpc('sys.printer', { action:'настройка' })
+            .then(() => Shell.toast('Печать', 'Открываю настройку принтеров', '🖨️'))
+            .catch(e => Dlg.alert('Не вышло открыть настройку', String(e.message || e), '⚠️'));
+          место.appendChild(row('➕', 'Добавить или настроить принтер',
+            'Откроется страница настройки CUPS — та же, что во всех Linux', добавить));
+
+          const список = d.list || [];
+          if (!список.length)
+            место.appendChild(row('🖨️', 'Принтеров пока нет',
+              'Подключите принтер кабелем или добавьте сетевой кнопкой выше', el('span')));
+
+          список.forEach(п => {
+            const кн = el('div', 'row');
+            const проба = el('button', 'btn', 'Пробная страница');
+            проба.onclick = () => Platform.rpc('sys.printer', { action:'проба', 'принтер':п['имя'] })
+              .then(() => { Shell.toast('Печать', 'Пробная страница отправлена', '🖨️'); setTimeout(рисуй, 1200); })
+              .catch(e => Dlg.alert('Не вышло напечатать', String(e.message || e), '⚠️'));
+            кн.appendChild(проба);
+            if (d['поумолчанию'] !== п['имя']){
+              const глав = el('button', 'btn pri', 'По умолчанию');
+              глав.onclick = () => Platform.rpc('sys.printer', { action:'умолчание', 'принтер':п['имя'] })
+                .then(() => { Shell.toast('Печать', п['имя'] + ' — основной принтер', '🖨️'); рисуй(); })
+                .catch(e => Dlg.alert('Не вышло', String(e.message || e), '⚠️'));
+              кн.appendChild(глав);
+            }
+            место.appendChild(row(п['готов'] ? '🖨️' : '⚠️', п['имя'],
+              [п['состояние'], п['описание'] && п['описание'] !== п['имя'] ? п['описание'] : '',
+               п['где'], d['поумолчанию'] === п['имя'] ? 'основной' : '']
+                .filter(Boolean).join(' · '), кн));
+          });
+
+          (d['задания'] || []).forEach(з => {
+            const снять = el('button', 'btn', 'Снять');
+            снять.onclick = () => Platform.rpc('sys.printer', { action:'снять', 'задание':з['задание'] })
+              .then(() => { Shell.toast('Печать', 'Задание снято', '🛑'); setTimeout(рисуй, 800); })
+              .catch(e => Dlg.alert('Не вышло снять', String(e.message || e), '⚠️'));
+            место.appendChild(row('📄', 'В очереди: ' + з['задание'],
+              [з['кто'], з['размер']].filter(Boolean).join(' · '), снять));
+          });
+        }).catch(e => {
+          место.innerHTML = '';
+          место.appendChild(row('🖨️', 'Система не ответила про принтеры', String(e.message || e), el('span')));
+        });
+      };
+      рисуй();
+    }
+
     function pBt(){
+      /* Настоящий Bluetooth машины: наушники, мышь, клавиатура. */
+      if (window.Platform && Platform.mode === 'native'){
+        const bt = card('Bluetooth');
+        const место = el('div');
+        bt.appendChild(место);
+        main.appendChild(bt);
+
+        const рисуй = (искать) => {
+          место.innerHTML = '';
+          место.appendChild(el('div', 'set-note', искать ? 'Ищу устройства вокруг…' : 'Спрашиваю систему…'));
+          Platform.rpc(искать ? 'sys.bt.scan' : 'sys.bt', искать ? { 'секунд':8 } : {}).then(d => {
+            место.innerHTML = '';
+            if (!d || !d['есть']){
+              место.appendChild(row('🎧', 'Bluetooth недоступен',
+                String((d && d['почему']) || 'система не сказала причину'), el('span')));
+              return;
+            }
+            const пер = el('label', 'sw');
+            const ч = el('input'); ч.type = 'checkbox'; ч.checked = !!d['включён'];
+            ч.onchange = () => Platform.rpc('sys.bt.power', { 'включить':ч.checked })
+              .then(() => setTimeout(() => рисуй(false), 600))
+              .catch(e => { ч.checked = !ч.checked; Dlg.alert('Не вышло', String(e.message || e), '⚠️'); });
+            пер.appendChild(ч); пер.appendChild(el('span', 'sl'));
+            место.appendChild(row('🔵', d['имя'] || 'Адаптер',
+              d['включён'] ? 'включён' : 'выключен', пер));
+
+            const искатьБтн = el('button', 'btn pri', '🔎 Искать устройства');
+            искатьБтн.onclick = () => рисуй(true);
+            место.appendChild(row('📡', 'Поиск устройств',
+              'Включите на наушниках режим соединения и нажмите', искатьБтн));
+
+            (d.list || []).forEach(у => {
+              const кн = el('div', 'row');
+              const главная = el('button', 'btn' + (у['соединено'] ? '' : ' pri'),
+                у['соединено'] ? 'Отключить' : (у['своё'] ? 'Соединить' : 'Подключить'));
+              главная.onclick = () => {
+                const действие = у['соединено'] ? 'disconnect' : (у['своё'] ? 'connect' : 'pair');
+                главная.disabled = true;
+                Platform.rpc('sys.bt.device', { action:действие, 'адрес':у['адрес'] })
+                  .then(() => { Shell.toast('Bluetooth', у['имя'] + ' — готово', '🎧'); рисуй(false); })
+                  .catch(e => { главная.disabled = false;
+                    Dlg.alert('Не получилось', String(e.message || e), '⚠️'); });
+              };
+              кн.appendChild(главная);
+              if (у['своё']){
+                const забыть = el('button', 'btn', 'Забыть');
+                забыть.onclick = () => Platform.rpc('sys.bt.device', { action:'remove', 'адрес':у['адрес'] })
+                  .then(() => рисуй(false))
+                  .catch(e => Dlg.alert('Не получилось', String(e.message || e), '⚠️'));
+                кн.appendChild(забыть);
+              }
+              место.appendChild(row(у['соединено'] ? '🎧' : '🔈', у['имя'] || у['адрес'],
+                [у['адрес'], у['своё'] ? 'своё устройство' : 'рядом',
+                 у['соединено'] ? 'соединено' : ''].filter(Boolean).join(' · '), кн));
+            });
+          }).catch(e => {
+            место.innerHTML = '';
+            место.appendChild(row('🎧', 'Система не ответила про Bluetooth', String(e.message || e), el('span')));
+          });
+        };
+        рисуй(false);
+      }
+
       const inp = Real.input(), sy = Real.system();
       const c = card('Ввод');
       c.appendChild(row('🖱', 'Указатель', 'Мышь или трекпад',
@@ -1851,6 +2096,54 @@ APPS.settings = {
 
     /* --- Учётные записи --- */
     function pAcc(){
+      /* Настоящая учётная запись машины: имя, группы, пароль. */
+      if (window.Platform && Platform.mode === 'native'){
+        const c0 = card('Учётная запись машины');
+        const место = el('div');
+        c0.appendChild(место);
+        main.appendChild(c0);
+
+        Platform.rpc('sys.me').then(я => {
+          место.innerHTML = '';
+          место.appendChild(row('👤', я['имя'] || 'пользователь',
+            [я['полное'] || '', 'дом: ' + (я['дом'] || ''),
+             'групп: ' + ((я['группы'] || []).length)].filter(Boolean).join(' · '), el('span')));
+
+          const состояние = я['пароль'] === 'задан' ? 'Пароль задан'
+            : я['пароль'] === 'нет' ? 'Пароля нет — вход без спроса'
+            : 'Состояние пароля системе неизвестно';
+
+          const сменить = el('button', 'btn pri', я['пароль'] === 'задан' ? 'Сменить' : 'Задать');
+          сменить.onclick = async () => {
+            let старый = '';
+            if (я['пароль'] === 'задан'){
+              старый = await Dlg.prompt('Смена пароля', 'Введите нынешний пароль', '', '🔑', { password:true });
+              if (старый === null) return;
+            }
+            const новый = await Dlg.prompt('Смена пароля',
+              'Новый пароль — не короче четырёх знаков', '', '🔑', { password:true });
+            if (!новый) return;
+            const ещё = await Dlg.prompt('Смена пароля', 'Повторите новый пароль', '', '🔑', { password:true });
+            if (ещё !== новый) return Dlg.alert('Пароли не совпали',
+              'Введённые пароли различаются — система ничего не меняла.', '⚠️');
+            try {
+              await Platform.rpc('sys.passwd', { 'старый':старый, 'новый':новый });
+              Shell.toast('Учётная запись', 'Пароль изменён', '🔑');
+              if (Profiles.узнайПроПароль) Profiles.узнайПроПароль();
+              drawMain();
+            } catch(e){ Dlg.alert('Не вышло сменить пароль', String(e.message || e), '⚠️'); }
+          };
+          место.appendChild(row('🔑', состояние,
+            'Этим паролем система спрашивает вас при входе и на экране блокировки', сменить));
+
+          const группы = (я['группы'] || []).join(', ');
+          if (группы) место.appendChild(row('👥', 'Группы', группы, el('span')));
+        }).catch(e => {
+          место.innerHTML = '';
+          место.appendChild(row('👤', 'Система не ответила про учётную запись', String(e.message || e), el('span')));
+        });
+      }
+
       const me = Profiles.current();
       const hero = el('div', 'set-hero');
       hero.innerHTML = `<div class="ava">${esc(me.emoji || me.name[0])}</div>
@@ -2133,6 +2426,88 @@ APPS.settings = {
 
     /* --- Сборка --- */
     function pUpdate(){
+      /* Настоящие обновления системы: то же, что «Обновления» в любом
+         дистрибутиве. Проверяет и ставит система, мы показываем и просим. */
+      if (window.Platform && Platform.mode === 'native'){
+        const о = card('Обновления системы');
+        const место = el('div');
+        о.appendChild(место);
+        main.appendChild(о);
+
+        const следи = () => {
+          const шаг = el('div', 'set-note', 'Идёт работа…');
+          место.innerHTML = '';
+          место.appendChild(шаг);
+          const часы = setInterval(() => {
+            Platform.rpc('pkg.job').then(j => {
+              if (!j) return;
+              if (j.running){ шаг.textContent = (j.step || 'Работаю') + ' · ' + (j.percent || 0) + '%'; return; }
+              clearInterval(часы);
+              if (j.ok){ Shell.toast('Обновления', 'Готово', '✅', 8000); проверь(); }
+              else {
+                место.innerHTML = '';
+                место.appendChild(row('⚠️', 'Не вышло',
+                  String(j.error || 'система не сказала, что пошло не так'), el('span')));
+              }
+            }).catch(() => clearInterval(часы));
+          }, 1500);
+        };
+
+        const проверь = () => {
+          место.innerHTML = '';
+          место.appendChild(el('div', 'set-note', 'Спрашиваю систему об обновлениях…'));
+          Platform.rpc('pkg.upgrade.check').then(d => {
+            место.innerHTML = '';
+            const всего = d['всего'] || 0;
+            if (d['когда'])
+              место.appendChild(el('div', 'set-note',
+                'Списки программ читались ' + new Date(d['когда']).toLocaleString('ru-RU') +
+                '. Чтобы узнать о самом новом, обновите их кнопкой выше.'));
+
+            if (!всего){
+              место.appendChild(row('✅', 'Система обновлена',
+                'Ничего нового в репозиториях для неё нет', el('span')));
+            } else {
+              const ставить = el('button', 'btn pri', 'Обновить всё');
+              ставить.onclick = async () => {
+                if (!await Dlg.confirm('Обновить систему?',
+                  'Будет обновлено программ: ' + всего + '. Это займёт время и потребует сети.',
+                  { okText:'Обновить', icon:'⬆️' })) return;
+                Platform.rpc('pkg.upgrade.run', {}).then(следи)
+                  .catch(e => Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'));
+              };
+              место.appendChild(row('⬆️', 'Доступно обновлений: ' + всего,
+                'Программы Ubuntu', ставить));
+
+              (d.list || []).slice(0, 40).forEach(x =>
+                место.appendChild(row('📦', x.name, x['было'] + ' → ' + x['станет'], el('span'))));
+              if ((d.list || []).length > 40)
+                место.appendChild(el('div', 'set-note',
+                  'И ещё ' + ((d.list || []).length - 40) + ' — весь список система покажет при установке.'));
+            }
+          }).catch(e => {
+            место.innerHTML = '';
+            место.appendChild(row('⚠️', 'Система не ответила про обновления', String(e.message || e), el('span')));
+          });
+        };
+
+        const кнСписки = el('button', 'btn', 'Обновить списки');
+        кнСписки.onclick = () => {
+          кнСписки.disabled = true;
+          Platform.rpc('pkg.update', {}).then(() => следи())
+            .catch(e => { кнСписки.disabled = false;
+              Dlg.alert('Не вышло обновить списки', String(e.message || e), '⚠️'); });
+        };
+        о.appendChild(row('🔄', 'Обновить списки программ',
+          'Система спросит репозитории Ubuntu, что нового появилось', кнСписки));
+
+        const кнПроверь = el('button', 'btn', 'Показать заново');
+        кнПроверь.onclick = проверь;
+        о.appendChild(row('📋', 'Что можно обновить',
+          'Читает то, что система уже знает — быстро и без сети', кнПроверь));
+        проверь();
+      }
+
       const c = card('Сборка');
       c.appendChild(row('📦', Brand.full(), Brand.versionLine(), el('div', 'muted tiny', 'локальная')));
       c.appendChild(row('🔄', 'Автоматических обновлений нет',
