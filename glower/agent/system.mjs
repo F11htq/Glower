@@ -31,7 +31,8 @@ const ALLOWED = new Set([
   'nmcli', 'ip', 'xdg-open', 'gio', 'flatpak', 'bwrap', 'df', 'journalctl', 'wlrctl',
   'glower-toplevels', 'wmctrl', 'xprop', 'xdotool',
   'lsblk', 'udisksctl', 'bluetoothctl', 'passwd', 'chpasswd',
-  'lpstat', 'lpoptions', 'lp', 'cancel', 'wlr-randr', 'wmctrl', 'xprop', 'xdotool',
+  'lpstat', 'lpoptions', 'lp', 'cancel', 'wlr-randr',
+  'useradd', 'usermod', 'userdel', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
@@ -714,6 +715,141 @@ export function apps(allowLaunch){
         о.пароль = / P /.test(с) ? 'задан' : / NP /.test(с) ? 'нет' : / L /.test(с) ? 'закрыт' : null;
       } catch(e){}
       return о;
+    },
+
+    /* ---------- люди в системе ----------
+
+       Компьютером пользуется не один человек: у каждого должна быть своя
+       учётная запись, свои файлы и свой пароль. Всё это умеет сам Linux —
+       useradd, passwd, группы; мы лишь просим его об этом понятными словами.
+
+       Правила строгие: имя проверяется по образцу, служебные учётные записи
+       системы (root и все, чей номер меньше тысячи) не трогаются вовсе,
+       последнего человека с правами хозяина удалить нельзя. */
+    async 'sys.users'(){
+      const строки = await readFile('/etc/passwd', 'utf8').catch(() => '');
+      const админы = new Set();
+      try {
+        const г = await readFile('/etc/group', 'utf8');
+        for (const с of г.split('\n')){
+          const ч = с.split(':');
+          if (ч[0] === 'sudo' || ч[0] === 'admin')
+            (ч[3] || '').split(',').filter(Boolean).forEach(и => админы.add(и));
+        }
+      } catch(e){}
+
+      const list = [];
+      for (const с of String(строки).split('\n')){
+        const ч = с.split(':');
+        if (ч.length < 7) continue;
+        const uid = Number(ч[2]);
+        /* Люди — это учётные записи от тысячи и выше, кроме служебной nobody */
+        if (!(uid >= 1000 && uid < 65000)) continue;
+        const имя = ч[0];
+        let пароль = null;
+        try {
+          const п = String(await call('sudo', ['-n', 'passwd', '-S', имя]));
+          пароль = / P /.test(п) ? 'задан' : / NP /.test(п) ? 'нет' : / L /.test(п) ? 'закрыт' : null;
+        } catch(e){}
+        list.push({ имя, полное:(ч[4] || '').split(',')[0], дом:ч[5], оболочка:ч[6],
+          uid, хозяин:админы.has(имя), пароль, это_я:имя === os.userInfo().username });
+      }
+      list.sort((a, b) => a.uid - b.uid);
+      return { list, можно:!!allowLaunch, я:os.userInfo().username };
+    },
+
+    /* Завести человека, дать или снять права хозяина, сменить пароль,
+       удалить. Всё — настоящими средствами системы. */
+    async 'sys.user'({ action, имя, пароль, полное, хозяин, сФайлами }){
+      if (!allowLaunch) throw new Error('управление людьми выключено: запустите агент с ключом --allow-launch');
+      const можно = { 'завести':1, 'пароль':1, 'хозяин':1, 'удалить':1, 'имя':1 };
+      if (!можно[action]) throw new Error('неизвестное действие с учётной записью: ' + action);
+
+      const и = String(имя || '');
+      if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(и))
+        throw new Error('имя учётной записи: маленькие латинские буквы, цифры, дефис — и начинаться с буквы');
+
+      /* Служебные записи системы не наши: их трогать нельзя */
+      const строки = await readFile('/etc/passwd', 'utf8').catch(() => '');
+      const наша = String(строки).split('\n').find(с => с.startsWith(и + ':'));
+      const uid = наша ? Number(наша.split(':')[2]) : null;
+      if (action !== 'завести'){
+        if (!наша) throw new Error('такого человека в системе нет: ' + и);
+        if (!(uid >= 1000 && uid < 65000))
+          throw new Error('это служебная учётная запись системы — её не трогаем');
+      }
+
+      const пусто = п => { const т = String(п == null ? '' : п);
+        if (т.length < 4) throw new Error('пароль короче четырёх знаков система не примет');
+        if (/[\n\r\0:]/.test(т)) throw new Error('в пароле недопустимые знаки');
+        return т; };
+
+      const задайПароль = async (кому, что) => {
+        const { spawn } = await import('node:child_process');
+        const итог = await new Promise(готово => {
+          const п2 = spawn('sudo', ['-n', 'chpasswd'], { stdio:['pipe', 'ignore', 'pipe'],
+            env:{ ...process.env, LC_ALL:'C' } });
+          let беда = '';
+          п2.stderr.on('data', д => { беда += д; });
+          п2.on('close', код => готово({ код, беда }));
+          п2.on('error', e => готово({ код:1, беда:e.message }));
+          п2.stdin.end(кому + ':' + что + '\n');
+        });
+        if (итог.код !== 0)
+          throw new Error('не вышло задать пароль: ' + (итог.беда.trim().split('\n')[0] || 'система отказала'));
+      };
+
+      if (action === 'завести'){
+        if (наша) throw new Error('такой человек в системе уже есть: ' + и);
+        const п = пусто(пароль);
+        const полн = String(полное || '').replace(/[:,\n\r\0]/g, ' ').slice(0, 60);
+        await call('sudo', ['-n', 'useradd', '-m', '-s', '/bin/bash', '-c', полн, и])
+          .catch(e => { throw new Error('не вышло завести: ' +
+            String(e.stderr || e.message).trim().split('\n')[0]); });
+        await задайПароль(и, п);
+        /* Те же группы, что у хозяина машины: без них не будет ни звука, ни
+           экрана, ни доступа к принтеру. */
+        await call('sudo', ['-n', 'usermod', '-aG',
+          'video,audio,input,render,tty,adm,systemd-journal,lpadmin,lp', и]).catch(() => {});
+        if (хозяин) await call('sudo', ['-n', 'usermod', '-aG', 'sudo', и]).catch(() => {});
+        return { ok:true, action, имя:и };
+      }
+
+      if (action === 'пароль'){
+        await задайПароль(и, пусто(пароль));
+        return { ok:true, action, имя:и };
+      }
+
+      if (action === 'имя'){
+        const полн = String(полное || '').replace(/[:,\n\r\0]/g, ' ').slice(0, 60);
+        await call('sudo', ['-n', 'usermod', '-c', полн, и])
+          .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+        return { ok:true, action, имя:и, полное:полн };
+      }
+
+      if (action === 'хозяин'){
+        const { list } = await this['sys.users']();
+        const хозяева = list.filter(ч => ч.хозяин);
+        if (!хозяин && хозяева.length <= 1 && хозяева[0] && хозяева[0].имя === и)
+          throw new Error('это последний хозяин машины — без него систему будет некому настраивать');
+        const доводы = хозяин ? ['-aG', 'sudo', и] : ['-rG', 'sudo', и];
+        await call('sudo', ['-n', 'usermod', ...доводы])
+          .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+        return { ok:true, action, имя:и, хозяин:!!хозяин };
+      }
+
+      /* удалить */
+      if (и === os.userInfo().username)
+        throw new Error('нельзя удалить учётную запись, из-под которой работает система');
+      const { list } = await this['sys.users']();
+      const хозяева = list.filter(ч => ч.хозяин);
+      if (хозяева.length <= 1 && хозяева[0] && хозяева[0].имя === и)
+        throw new Error('это последний хозяин машины — удалять его нельзя');
+      const доводы = сФайлами ? ['-n', 'userdel', '-r', и] : ['-n', 'userdel', и];
+      await call('sudo', доводы)
+        .catch(e => { throw new Error('не вышло удалить: ' +
+          String(e.stderr || e.message).trim().split('\n')[0]); });
+      return { ok:true, action, имя:и, файлы:сФайлами ? 'удалены' : 'оставлены' };
     },
 
     /* ---------- печать ----------

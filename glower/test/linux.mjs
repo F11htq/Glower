@@ -649,6 +649,37 @@ try {
       JSON.stringify(спросил));
   }
 
+  /* --- люди в системе --- */
+  {
+    const л = await page.evaluate(() => Platform.rpc('sys.users').then(d => d, e => ({ err:e.message })));
+    check('система перечисляет своих людей',
+      Array.isArray(л.list) && л.list.every(ч => ч['имя'] && ч.uid >= 1000),
+      JSON.stringify((л.list || []).slice(0, 2)));
+
+    const служебная = await page.evaluate(() => Platform.rpc('sys.user', { action:'удалить', 'имя':'root' })
+      .then(() => 'принял', e => e.message));
+    check('служебную учётную запись система не трогает',
+      /служебная|--allow-launch/.test(String(служебная)), String(служебная));
+
+    const дурное = await page.evaluate(() => Platform.rpc('sys.user',
+      { action:'завести', 'имя':'Плохое Имя', 'пароль':'1234' }).then(() => 'принял', e => e.message));
+    check('имя учётной записи проверяется по образцу',
+      /имя учётной записи|--allow-launch/.test(String(дурное)), String(дурное));
+
+    const слабый = await page.evaluate(() => Platform.rpc('sys.user',
+      { action:'завести', 'имя':'ктото', 'пароль':'12' }).then(() => 'принял', e => e.message));
+    check('слишком короткий пароль при заведении не принимается',
+      /короче четырёх|--allow-launch/.test(String(слабый)), String(слабый));
+
+    const себя = await page.evaluate(async () => {
+      const я = await Platform.rpc('sys.me');
+      return Platform.rpc('sys.user', { action:'удалить', 'имя':я['имя'] })
+        .then(() => 'принял', e => e.message);
+    });
+    check('себя система удалить не даёт',
+      /из-под которой работает|последний хозяин|служебная|--allow-launch/.test(String(себя)), String(себя));
+  }
+
   /* --- печать --- */
   {
     const п = await page.evaluate(() => Platform.rpc('sys.printers').then(d => d, e => ({ err:e.message })));
