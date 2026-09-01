@@ -24,7 +24,8 @@ mkdir -p "$HOMEDIR" 2>/dev/null || true
 # разговор с greetd и список людей из /etc/passwd.
 node "$UI/agent/server.mjs" --port "$PORT" --root "$HOMEDIR" >>"$LOG" 2>&1 &
 AGENT=$!
-trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
+LABWC=""
+trap 'kill $AGENT $LABWC 2>/dev/null' EXIT INT TERM
 
 i=0
 while [ $i -lt 50 ]; do
@@ -50,4 +51,12 @@ chmod +x "$HOMEDIR/пуск.sh"
 # отказывается рисовать программно, пока его об этом не попросят прямо.
 export WLR_RENDERER_ALLOW_SOFTWARE=1
 
-HOME="$HOMEDIR" labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc-вход}" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1
+# Оконный сервер запускаем в стороне и ждём его отдельно. Разница не
+# косметическая: пока оболочка стояла на переднем плане, сигнал «закончили»
+# от службы входа доходил только до сценария и лежал без движения до её
+# возвращения. Экран входа оставался на экране поверх уже начавшегося
+# сеанса — человек вводил пароль и продолжал смотреть на тот же экран.
+# Ожидание сигнала прерывает, обработчик снимает и сервер, и агента.
+HOME="$HOMEDIR" labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc-вход}" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
+LABWC=$!
+wait $LABWC

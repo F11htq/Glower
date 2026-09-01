@@ -32,8 +32,18 @@
       <div class="вход-люди"></div>
     </div>
     <div class="вход-низ">
-      <button class="вход-кнопка" data-что="reboot" title="Перезагрузить">⟳</button>
-      <button class="вход-кнопка" data-что="poweroff" title="Выключить">⏻</button>
+      <button class="вход-кнопка" data-что="reboot" title="Перезагрузить" aria-label="Перезагрузить">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+          <path d="M20 4v4.4h-4.4"/>
+        </svg>
+      </button>
+      <button class="вход-кнопка" data-что="poweroff" title="Выключить" aria-label="Выключить">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.6v8"/>
+          <path d="M7.1 6.6a7.4 7.4 0 1 0 9.8 0"/>
+        </svg>
+      </button>
     </div>`;
   document.body.appendChild(экран);
 

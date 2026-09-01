@@ -566,7 +566,17 @@ html.вход-в-систему, html.вход-в-систему body{overflow:h
 html.вход-в-систему #desktop{filter:none}
 .вход{position:fixed;inset:0;z-index:9000;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:26px;
-  background:radial-gradient(120% 120% at 50% 0%, #1b2036 0%, #0a0c15 60%, #05060b 100%);
+  /* Те же обои, что у рабочего стола: система выглядит одинаково и до
+     входа, и после. Поверх — тонкая тёмная вуаль, иначе белые буквы
+     теряются в светлых местах картинки. */
+  background:
+    linear-gradient(180deg,rgba(6,8,20,.34) 0%,rgba(6,8,20,.06) 34%,rgba(6,8,20,.46) 100%),
+    radial-gradient(66% 54% at 14% 86%,rgba(255,146,72,.92) 0%,rgba(255,88,124,.46) 42%,rgba(255,88,124,0) 74%),
+    radial-gradient(56% 50% at 86% 18%,rgba(64,232,214,.72) 0%,rgba(52,138,255,.40) 46%,rgba(52,138,255,0) 78%),
+    radial-gradient(74% 68% at 66% 94%,rgba(176,84,255,.72) 0%,rgba(176,84,255,0) 70%),
+    radial-gradient(86% 80% at 26% 8%,rgba(126,96,255,.60) 0%,rgba(126,96,255,0) 68%),
+    linear-gradient(158deg,#1b2554 0%,#241a48 46%,#0d1026 100%);
+  background-size:cover;
   color:#eef1ff;font:15px/1.5 var(--font, system-ui, sans-serif)}
 .вход-часы{position:absolute;top:9vh;text-align:center}
 .вход-время{font-size:64px;font-weight:200;letter-spacing:2px}
@@ -591,6 +601,15 @@ html.вход-в-систему #desktop{filter:none}
 .вход-человек:hover{background:rgba(255,255,255,.12)}
 .вход-человек.он{background:rgba(140,120,255,.28);border-color:rgba(160,140,255,.6)}
 .вход-низ{position:absolute;bottom:26px;right:28px;display:flex;gap:10px}
-.вход-кнопка{width:42px;height:42px;border-radius:11px;cursor:pointer;font-size:17px;
-  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#e8ecff}
-.вход-кнопка:hover{background:rgba(255,255,255,.14)}
+/* Знаки выключения и перезагрузки рисуем сами. Шрифтовые «⏻» и «⟳»
+   выглядят по-разному на каждой машине — где-то тонкая закорючка, где-то
+   и вовсе пустой квадрат, потому что нужного знака в шрифте нет. */
+.вход-кнопка{width:42px;height:42px;border-radius:12px;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#eef1ff;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  transition:background .15s ease, transform .15s ease}
+.вход-кнопка svg{width:20px;height:20px;fill:none;stroke:currentColor;
+  stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.вход-кнопка:hover{background:rgba(255,255,255,.18)}
+.вход-кнопка:active{transform:scale(.94)}

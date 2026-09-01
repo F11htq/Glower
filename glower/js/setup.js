@@ -70,7 +70,7 @@ const Setup = {
 
   /* собранные ответы */
   data:{ lang:'ru', layouts:['en', 'ru'], city:'Москва', name:'', emoji:'',
-         pass:'', theme:'dark', accent:0, wallpaper:'bloom' },
+         pass:'', theme:'dark', accent:0, wallpaper:'gora' },
 
   /* ---------- каркас ---------- */
   open(){

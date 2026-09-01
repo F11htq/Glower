@@ -10,8 +10,32 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const pad2 = n => String(n).padStart(2, '0');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-/* ---------- Обои ---------- */
+/* ---------- Обои ----------
+
+   Первые три сделаны иначе, чем остальные. Обычный градиент — это переход
+   между двумя-тремя красками по прямой: видно, откуда и куда он идёт, и
+   картинка выходит плоской. Здесь вместо перехода лежат несколько мягких
+   цветовых пятен друг поверх друга, каждое со своим краем, растворяющимся
+   в прозрачность. Границ ни у одного не видно, а вместе они дают глубину —
+   так устроены обои, к которым все привыкли по macOS.
+   ---------- */
 const WALLPAPERS = [
+  { id:'gora',    name:'Гора',
+    css:'radial-gradient(66% 54% at 14% 86%,rgba(255,146,72,.92) 0%,rgba(255,88,124,.46) 42%,rgba(255,88,124,0) 74%),'
+      + 'radial-gradient(56% 50% at 86% 18%,rgba(64,232,214,.72) 0%,rgba(52,138,255,.40) 46%,rgba(52,138,255,0) 78%),'
+      + 'radial-gradient(74% 68% at 66% 94%,rgba(176,84,255,.72) 0%,rgba(176,84,255,0) 70%),'
+      + 'radial-gradient(86% 80% at 26% 8%,rgba(126,96,255,.60) 0%,rgba(126,96,255,0) 68%),'
+      + 'linear-gradient(158deg,#1b2554 0%,#241a48 46%,#0d1026 100%)' },
+  { id:'zaliv',   name:'Залив',
+    css:'radial-gradient(62% 54% at 78% 84%,rgba(255,196,120,.50) 0%,rgba(255,140,110,.24) 42%,rgba(255,140,110,0) 74%),'
+      + 'radial-gradient(70% 56% at 20% 24%,rgba(94,214,255,.42) 0%,rgba(46,120,220,.22) 46%,rgba(46,120,220,0) 78%),'
+      + 'radial-gradient(80% 70% at 50% 106%,rgba(24,66,140,.60) 0%,rgba(24,66,140,0) 68%),'
+      + 'linear-gradient(168deg,#0d2246 0%,#102a52 40%,#050b1a 100%)' },
+  { id:'utro',    name:'Утро',
+    css:'radial-gradient(64% 50% at 22% 18%,rgba(255,214,168,.85) 0%,rgba(255,178,168,.42) 44%,rgba(255,178,168,0) 76%),'
+      + 'radial-gradient(60% 52% at 84% 30%,rgba(190,168,255,.60) 0%,rgba(190,168,255,0) 72%),'
+      + 'radial-gradient(90% 72% at 46% 104%,rgba(120,150,255,.55) 0%,rgba(120,150,255,0) 70%),'
+      + 'linear-gradient(160deg,#ffe6cf 0%,#e9c8f0 46%,#8fa3e8 100%)' },
   { id:'bloom',   name:'Bloom',    css:'radial-gradient(120% 120% at 18% 12%,#4f6bff 0%,#8b3dff 32%,#ff4d9d 58%,#ff9d4d 78%,#151a2e 100%)' },
   { id:'aurora',  name:'Aurora',   css:'radial-gradient(90% 90% at 78% 18%,#00e0c6 0%,#0f8bff 38%,#7a3cff 66%,#0a0f22 100%)' },
   { id:'dusk',    name:'Сумерки',  css:'linear-gradient(200deg,#f7b267 0%,#f4845f 22%,#c1428a 48%,#5b2a86 72%,#101433 100%)' },
@@ -55,7 +79,7 @@ window.zoned = function(d){
 const DEFAULTS = {
   theme:'dark', autoTheme:false,
   accent:0, accentCustom:null,
-  wallpaper:'bloom', wallShuffle:false,
+  wallpaper:'gora', wallShuffle:false,
   radius:18, winRadius:16,
   speed:1, reduceMotion:false,
   dockSize:52, dockSizeСвой:false, dockAutohide:false, dockPos:'bottom',
@@ -113,7 +137,7 @@ function applySettings(){
     const w = WALLPAPERS.find(x => x.id === S.wallpaper) || WALLPAPERS[0];
     wp.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
       ? `url(${window.__customWall})` : w.css;
-    const dim = S.theme === 'dark' ? 0.55 : 1;      // в настоящей тёмной теме обои приглушены
+    const dim = S.theme === 'dark' ? 0.82 : 1;      // в тёмной теме обои чуть тише, но не в темноту
     wp.style.filter = `brightness(${S.brightness / 100 * dim}) ${S.theme === 'dark' ? 'saturate(.8)' : ''} ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
   }
   document.body.style.filter = S.nightLight ? 'sepia(.14) saturate(1.06)' : '';
