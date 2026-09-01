@@ -191,7 +191,7 @@ run_x(){   # $1 — режим отрисовки
 if command -v openbox >/dev/null; then openbox --sm-disable & fi
 GDK_BACKEND=x11 \
 GLOWER_SURFACE=окно \
-GLOWER_PANEL_H=0 \
+GLOWER_PANEL_H="\${GLOWER_PANEL_H:-48}" \
 GLOWER_URL="http://localhost:$PORT/" \
 GLOWER_QUERY="session=1$QUERY_EXTRA" \
   exec /usr/bin/glower-shell

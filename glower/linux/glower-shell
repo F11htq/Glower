@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import urllib.request
+import ctypes
 
 import cairo
 
@@ -134,6 +135,97 @@ def распорка(высота):
             return False
         GLib.timeout_add(1500, покажи)
     return окно
+
+
+def распорка_x(высота):
+    """То же самое под X-сервером: полоса внизу, которую уважают чужие окна.
+
+    В X нет протокола слоёв, зато есть договорённость ровесница самого X:
+    окно может объявить себя доком и попросить себе полосу экрана свойством
+    _NET_WM_STRUT_PARTIAL. Оконный менеджер вычитает её из рабочей области —
+    развёрнутое окно до этой полосы уже не достаёт. Раньше здесь не было
+    ничего, и на старой машине чужая программа во весь экран просто
+    закрывала панель задач собой."""
+    окно = Gtk.Window()
+    окно.set_decorated(False)
+    окно.set_app_paintable(True)
+    окно.set_type_hint(Gdk.WindowTypeHint.DOCK)
+    окно.set_keep_above(True)
+    окно.set_skip_taskbar_hint(True)
+    окно.set_skip_pager_hint(True)
+    окно.set_accept_focus(False)
+    окно.set_focus_on_map(False)
+
+    экран = окно.get_screen()
+    if экран is not None and экран.get_rgba_visual() is not None:
+        окно.set_visual(экран.get_rgba_visual())
+    ширина = экран.get_width() if экран is not None else 1024
+    высота_экрана = экран.get_height() if экран is not None else 768
+
+    окно.add(Gtk.DrawingArea())
+    окно.set_default_size(ширина, высота)
+    окно.move(0, высота_экрана - высота)
+    окно.show_all()
+    окно.resize(ширина, высота)
+    окно.move(0, высота_экрана - высота)
+
+    окно_gdk = окно.get_window()
+    if окно_gdk is not None:
+        # Полоса ничего не рисует и щелчков не ловит: нажатие проходит сквозь
+        # неё на рабочий стол, где панель и живёт.
+        окно_gdk.input_shape_combine_region(cairo.Region(), 0, 0)
+        попроси_полосу(окно_gdk, ширина, высота_экрана, высота)
+    return окно
+
+
+def попроси_полосу(окно_gdk, ширина, высота_экрана, высота):
+    """Сказать оконному менеджеру, сколько экрана снизу занято.
+
+    Свойство ставим сами, через ту же библиотеку X, которой пользуются все
+    остальные. Соблазн позвать стороннюю программу xprop был велик, но её
+    в системе может не оказаться — а тогда полоса молча не появится, и
+    беда вернётся ровно туда, откуда её убирали.
+
+    Тонкость, ради которой всё и написано руками: X ждёт здесь чисел
+    размером в машинное слово, а не в объявленные тридцать два бита. Это
+    его давняя странность, и промах в ней означает не ошибку, а мусор в
+    свойстве и полосу неизвестной ширины."""
+    try:
+        xid = окно_gdk.get_xid()
+    except Exception:
+        return
+    полоса = [0, 0, 0, высота,          # слева, справа, сверху, снизу
+              0, 0, 0, 0, 0, 0,         # начала и концы первых трёх
+              0, max(0, ширина - 1)]    # и наша — по всей ширине
+    try:
+        x11 = ctypes.CDLL('libX11.so.6')
+        x11.XOpenDisplay.restype = ctypes.c_void_p
+        x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        x11.XInternAtom.restype = ctypes.c_ulong
+        x11.XChangeProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong,
+                                        ctypes.c_ulong, ctypes.c_int, ctypes.c_int,
+                                        ctypes.c_void_p, ctypes.c_int]
+        x11.XFlush.argtypes = [ctypes.c_void_p]
+        экран_x = x11.XOpenDisplay(None)
+        if not экран_x:
+            return
+        try:
+            КАРДИНАЛ = 6            # XA_CARDINAL
+            ЗАМЕНИТЬ = 0            # PropModeReplace
+            for имя, значения in (('_NET_WM_STRUT_PARTIAL', полоса),
+                                  ('_NET_WM_STRUT', полоса[:4])):
+                свойство = x11.XInternAtom(экран_x, имя.encode(), False)
+                данные = (ctypes.c_long * len(значения))(*значения)
+                x11.XChangeProperty(экран_x, ctypes.c_ulong(xid), свойство,
+                                    ctypes.c_ulong(КАРДИНАЛ), 32, ЗАМЕНИТЬ,
+                                    ctypes.byref(данные), len(значения))
+            x11.XFlush(экран_x)
+        finally:
+            x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+            x11.XCloseDisplay(экран_x)
+    except Exception as e:
+        print('GlowerOS: не вышло попросить полосу под панель: %s' % e,
+              file=sys.stderr, flush=True)
 
 
 СЛОИ = {}
@@ -308,7 +400,17 @@ def следи_за_полосой(окно):
         if высота and 20 <= высота <= 200 and высота != состояние['высота']:
             состояние['высота'] = высота
             окно.set_size_request(-1, высота)
-            GtkLayerShell.set_exclusive_zone(окно, высота)
+            if ПОД_WAYLAND:
+                GtkLayerShell.set_exclusive_zone(окно, высота)
+            else:
+                экран = окно.get_screen()
+                ш = экран.get_width() if экран is not None else 1024
+                в = экран.get_height() if экран is not None else 768
+                окно.resize(ш, высота)
+                окно.move(0, в - высота)
+                окно_gdk = окно.get_window()
+                if окно_gdk is not None:
+                    попроси_полосу(окно_gdk, ш, в, высота)
         return True
 
     GLib.timeout_add_seconds(2, спроси)
@@ -342,9 +444,9 @@ if ВИД_СТОЛА == 'окно' or not ПОД_WAYLAND:
 else:
     поверхность('desktop', СЛОИ.get(СЛОЙ, GtkLayerShell.Layer.BOTTOM),
                 [К.TOP, К.BOTTOM, К.LEFT, К.RIGHT], полоса=-1)
-# Полосу под панель задач отводит оконный сервер, и умеет это только Wayland.
-if ПОЛОСА > 0 and ПОД_WAYLAND:
-    следи_за_полосой(распорка(ПОЛОСА))
+# Полосу под панель задач отводит оконный сервер — каждый своим способом.
+if ПОЛОСА > 0:
+    следи_за_полосой(распорка(ПОЛОСА) if ПОД_WAYLAND else распорка_x(ПОЛОСА))
 приём_уведомлений()
 
 Gtk.main()

@@ -77,7 +77,7 @@ apt-get install -y --no-install-recommends \
   locales language-pack-ru language-pack-gnome-ru \
   python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
   xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
-  openbox wmctrl xdotool \
+  openbox wmctrl xdotool x11-utils \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \

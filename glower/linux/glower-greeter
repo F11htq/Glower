@@ -57,6 +57,26 @@ export WLR_RENDERER_ALLOW_SOFTWARE=1
 # возвращения. Экран входа оставался на экране поверх уже начавшегося
 # сеанса — человек вводил пароль и продолжал смотреть на тот же экран.
 # Ожидание сигнала прерывает, обработчик снимает и сервер, и агента.
-HOME="$HOMEDIR" labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc-вход}" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
+
+# На машине, где ядро не управляет видеокартой, Wayland не поднимется вовсе:
+# ему нужен узел /dev/dri, а его там нет. Раньше экран входа на такой машине
+# просто не появлялся — система доходила до пустоты. Здесь тот же запасной
+# путь, что и у сеанса: X-сервер, который рисует простым способом.
+if ls /dev/dri/card* >/dev/null 2>&1; then
+  HOME="$HOMEDIR" labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc-вход}" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
+else
+  cat > "$HOMEDIR/.xinitrc" <<XRC
+#!/bin/sh
+if command -v openbox >/dev/null; then openbox --sm-disable & fi
+GDK_BACKEND=x11 \
+GLOWER_URL="http://localhost:$PORT/" \
+GLOWER_QUERY="login=1" \
+GLOWER_PANEL_H=0 \
+GLOWER_SURFACE=окно \
+  exec /usr/bin/glower-shell
+XRC
+  chmod +x "$HOMEDIR/.xinitrc"
+  HOME="$HOMEDIR" startx "$HOMEDIR/.xinitrc" -- :0 vt1 -nolisten tcp >>"$LOG" 2>&1 &
+fi
 LABWC=$!
 wait $LABWC
