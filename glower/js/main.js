@@ -4,6 +4,17 @@
 'use strict';
 
 (function boot(){
+  /* Экран входа — не рабочий стол. Здесь нечего запускать: ни оконного
+     хозяйства, ни своего замка. Раньше оболочка всё равно проходила всю
+     загрузку и её собственный замок забирал себе клавиатуру — в поле
+     пароля на экране входа нельзя было напечатать ни буквы. */
+  if (/[?&]login=1/.test(location.search)){
+    const убрать = с => { const н = document.querySelector(с); if (н) н.remove(); };
+    убрать('#boot'); убрать('#lock'); убрать('#desktop');
+    document.body.classList.remove('locked');
+    return;
+  }
+
   applySettings();
   document.documentElement.style.fontSize = (16 * KV.get('zoom', 1)) + 'px';
   WM.init();

@@ -155,8 +155,11 @@ const Platform = {
 };
 window.Platform = Platform;
 
-/* ---------- подключение при запуске ---------- */
-(async function boot(){
+/* ---------- подключение при запуске ----------
+   Обещание сохраняем: тот, кому агент нужен с первой секунды (например,
+   экран входа), должен уметь его дождаться, а не стрелять в пустоту.
+   Без этого первый же запрос уходил по адресу «null/rpc». */
+Platform.подключение = (async function boot(){
   const ok = await Platform.connect();
   if (!ok) return;
   document.body.classList.add('native');

@@ -1,0 +1,53 @@
+#!/bin/sh
+# ==========================================================================
+#  Экран входа GlowerOS
+#
+#  Запускается службой greetd до всякого рабочего стола и от имени особого
+#  пользователя без прав. Показывает ту же оболочку, что и система, но в
+#  режиме входа: список людей и вопрос о пароле.
+#
+#  Пароль проверяет не он: ответ уходит greetd, а тот спрашивает саму
+#  систему через PAM и заводит настоящий сеанс. Так и должно быть — экран
+#  входа не может решать, кого пускать.
+# ==========================================================================
+set -u
+
+PORT="${GLOWER_GREETER_PORT:-8124}"
+UI="${GLOWER_UI:-/usr/share/glower/ui}"
+LOG=/tmp/glower-greeter.log
+
+# Своя папка на время экрана входа: у этого пользователя нет своего дома
+HOMEDIR="${XDG_RUNTIME_DIR:-/tmp}/glower-greeter"
+mkdir -p "$HOMEDIR" 2>/dev/null || true
+
+# Агент экрана входа: без системного слоя и без прав — ему нужен только
+# разговор с greetd и список людей из /etc/passwd.
+node "$UI/agent/server.mjs" --port "$PORT" --root "$HOMEDIR" >>"$LOG" 2>&1 &
+AGENT=$!
+trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
+
+i=0
+while [ $i -lt 50 ]; do
+  curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
+  i=$((i+1)); sleep 0.2
+done
+
+# Оболочка в режиме входа. Полосу под панель не отводим: панели здесь нет.
+mkdir -p "$HOMEDIR/.local/share/glower"
+cat > "$HOMEDIR/пуск.sh" <<STARTUP
+#!/bin/sh
+GLOWER_URL="http://localhost:$PORT/" \
+GLOWER_QUERY="login=1" \
+GLOWER_PANEL_H=0 \
+GLOWER_SURFACE=окно \
+  /usr/bin/glower-shell
+# оболочка закрылась — значит, вход состоялся или отменён
+labwc -e >/dev/null 2>&1 || true
+STARTUP
+chmod +x "$HOMEDIR/пуск.sh"
+
+# На машинах без видеоускорения (виртуалки, старое железо) wlroots
+# отказывается рисовать программно, пока его об этом не попросят прямо.
+export WLR_RENDERER_ALLOW_SOFTWARE=1
+
+HOME="$HOMEDIR" labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc-вход}" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1

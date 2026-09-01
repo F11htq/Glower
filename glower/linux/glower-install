@@ -187,6 +187,14 @@ IN_EFI=0
 # кавычки и особые знаки
 if [ -n "$PASS" ]; then
   printf 'glower:%s\n' "$PASS" | chroot "$TARGET" chpasswd || die "не удалось задать пароль"
+
+  # Пароль задан — значит, при включении система должна спрашивать, кто за
+  # ней сидит. Убираем самостоятельный вход первого сеанса: дальше человека
+  # встречает экран входа.
+  if [ -f "$TARGET/etc/greetd/config.toml" ]; then
+    sed -i '/^\[initial_session\]/,$d' "$TARGET/etc/greetd/config.toml"
+    say 85 "Вход по паролю включён"
+  fi
 fi
 
 chroot "$TARGET" /bin/sh -e <<CHROOT

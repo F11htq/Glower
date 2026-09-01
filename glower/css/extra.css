@@ -558,3 +558,39 @@ body.впритык .toasts{bottom:calc(var(--dock-size) + 18px)}
 
 /* Свёрнутое чужое окно в панели: значок приглушён, как и у своих окон */
 .dock-item.свёрнуто{opacity:.62}
+
+/* ---------- экран входа ----------
+   До рабочего стола ещё далеко: на экране только время, человек и вопрос о
+   пароле. Ничего лишнего — как и должно быть у входа в систему. */
+html.вход-в-систему, html.вход-в-систему body{overflow:hidden}
+html.вход-в-систему #desktop{filter:none}
+.вход{position:fixed;inset:0;z-index:9000;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:26px;
+  background:radial-gradient(120% 120% at 50% 0%, #1b2036 0%, #0a0c15 60%, #05060b 100%);
+  color:#eef1ff;font:15px/1.5 var(--font, system-ui, sans-serif)}
+.вход-часы{position:absolute;top:9vh;text-align:center}
+.вход-время{font-size:64px;font-weight:200;letter-spacing:2px}
+.вход-дата{opacity:.62;margin-top:4px;text-transform:capitalize}
+.вход-окно{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:320px}
+.вход-лого{width:96px;height:96px;border-radius:50%;display:grid;place-content:center;
+  font-size:38px;font-weight:500;color:#fff;
+  background:linear-gradient(140deg,#6d5cff,#c04bff);
+  box-shadow:0 10px 40px rgba(109,92,255,.35)}
+.вход-имя{font-size:20px;font-weight:500}
+.вход-строка{display:flex;gap:8px;align-items:center}
+.вход-пароль{width:260px;padding:11px 14px;border-radius:11px;border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.07);color:#fff;font-size:15px;outline:none}
+.вход-пароль:focus{border-color:rgba(160,140,255,.75);background:rgba(255,255,255,.1)}
+.вход-да{width:44px;height:44px;border-radius:11px;border:none;cursor:pointer;font-size:19px;
+  color:#fff;background:linear-gradient(140deg,#6d5cff,#a24bff)}
+.вход-да:hover{filter:brightness(1.12)}
+.вход-беда{min-height:20px;font-size:13px;opacity:.85;color:#ffb3c1}
+.вход-люди{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px;max-width:560px}
+.вход-человек{padding:7px 13px;border-radius:9px;cursor:pointer;font-size:13.5px;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#e8ecff}
+.вход-человек:hover{background:rgba(255,255,255,.12)}
+.вход-человек.он{background:rgba(140,120,255,.28);border-color:rgba(160,140,255,.6)}
+.вход-низ{position:absolute;bottom:26px;right:28px;display:flex;gap:10px}
+.вход-кнопка{width:42px;height:42px;border-radius:11px;cursor:pointer;font-size:17px;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#e8ecff}
+.вход-кнопка:hover{background:rgba(255,255,255,.14)}

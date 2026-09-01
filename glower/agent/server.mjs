@@ -118,9 +118,17 @@ if (SYSTEM){
 /* разговор поверхностей оболочки: рабочий стол и панель задач */
 const BUS = (await import('./bus.mjs')).bus();
 
+/* Экран входа: он живёт до всякого рабочего стола, и системный слой ему не
+   нужен — нужен только разговор с greetd. Появляется, лишь когда агент
+   запущен именно как экран входа. */
+const LOGIN = process.env.GREETD_SOCK
+  ? (await import('./login.mjs')).login()
+  : {};
+
 /* ---------- методы, доступные оболочке ---------- */
 const API = {
   ...BUS,
+  ...LOGIN,
   async ping(){
     return { ok:true, agent:'glower-agent', version:'1.2', root:ROOT,
              platform:process.platform, node:process.version, pid:process.pid,

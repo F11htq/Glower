@@ -68,7 +68,7 @@ apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   plymouth plymouth-label plymouth-themes \
-  labwc wlrctl wlr-randr foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
+  labwc wlrctl wlr-randr foot cage seatd greetd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
   udisks2 ntfs-3g exfatprogs dosfstools \
@@ -134,9 +134,15 @@ install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
 # открыть скачанный файл-установщик: передаёт его оболочке, а та спрашивает
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
+# экран входа: та же оболочка, но до всякого рабочего стола
+install -m 755 "$SRC/linux/glower-greeter" "$ROOTFS/usr/bin/glower-greeter"
 # настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё
 install -d "$ROOTFS/usr/share/glower/labwc"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
+# Экрану входа — своя настройка: там оболочка обычное окно с фокусом,
+# а не фон рабочего стола, который клавиатуры не получает.
+install -d "$ROOTFS/usr/share/glower/labwc-вход"
+install -m 644 "$SRC/linux/labwc-вход/rc.xml" "$ROOTFS/usr/share/glower/labwc-вход/rc.xml"
 
 # --------------------------------------------------------------------------
 # Браузер.
@@ -450,10 +456,45 @@ chroot "$ROOTFS" /bin/sh -c '
     systemctl enable "$unit" >/dev/null 2>&1 || true
   done' || true
 
-chroot "$ROOTFS" systemctl enable glower.service seatd.service >/dev/null 2>&1 || true
+# --------------------------------------------------------------------------
+# Вход в систему.
+#
+# Кто сидит за машиной, решает служба входа greetd: она спрашивает пароль у
+# самой системы через PAM и заводит настоящий сеанс. Экран входа рисует наша
+# же оболочка — вид у системы один и тот же и до входа, и после.
+#
+# На живом носителе входить некому и незачем: пароля там ни у кого нет,
+# поэтому первый сеанс запускается сам. На установленной системе этот кусок
+# убирает установщик, если человек задал пароль.
+install -d "$ROOTFS/etc/greetd"
+cat > "$ROOTFS/etc/greetd/config.toml" <<'GREETD'
+[terminal]
+vt = 1
+
+[default_session]
+command = "/usr/bin/glower-greeter"
+user = "_greetd"
+
+[initial_session]
+command = "/usr/bin/glower-session"
+user = "glower"
+GREETD
+
+chroot "$ROOTFS" /bin/sh -c '
+  id _greetd >/dev/null 2>&1 || useradd -r -M -s /usr/sbin/nologin _greetd
+  usermod -aG video,input,tty,seat _greetd 2>/dev/null || \
+    usermod -aG video,input,tty _greetd 2>/dev/null || true
+' || true
+
+# Сеанс запускает служба входа, а не он сам: иначе они спорили бы за экран
+chroot "$ROOTFS" systemctl enable greetd.service seatd.service >/dev/null 2>&1 || true
+chroot "$ROOTFS" systemctl disable glower.service >/dev/null 2>&1 || true
 # первая консоль принадлежит сеансу; для разбора остаются Ctrl+Alt+F2 и дальше
 chroot "$ROOTFS" systemctl mask getty@tty1.service >/dev/null 2>&1 || true
-chroot "$ROOTFS" systemctl set-default multi-user.target >/dev/null 2>&1 || true
+# Цель загрузки — графическая: именно её ждёт служба входа. При обычной
+# многопользовательской цели greetd остаётся включённым, но не запускается —
+# и машина доходит до чёрного экрана с текстовым приглашением.
+chroot "$ROOTFS" systemctl set-default graphical.target >/dev/null 2>&1 || true
 
 # --------------------------------------------------------------------------
 step "5/6 сжатие файловой системы"
