@@ -72,6 +72,8 @@ apt-get install -y --no-install-recommends \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
   udisks2 ntfs-3g exfatprogs dosfstools \
+  cryptsetup cryptsetup-initramfs \
+  ufw gnome-keyring libsecret-1-0 libsecret-tools seahorse \
   bluez bluez-tools \
   cups cups-filters cups-browsed cups-pdf avahi-daemon printer-driver-gutenprint \
   locales language-pack-ru language-pack-gnome-ru \
@@ -487,6 +489,36 @@ chroot "$ROOTFS" /bin/sh -c '
 ' || true
 
 # Сеанс запускает служба входа, а не он сам: иначе они спорили бы за экран
+# --------------------------------------------------------------------------
+# Стена и хранилище паролей.
+#
+# Стена включена сразу и по умолчанию не пускает никого внутрь, а наружу
+# пускает всё. Дома за роутером она почти не нужна — но та же машина
+# оказывается в кафе и в аэропорту, а там в неё стучатся все подряд.
+# Открытым оставлен только mDNS: им система находит принтеры в сети, и без
+# него печать по сети перестала бы работать молча.
+chroot "$ROOTFS" /bin/sh -c '
+  ufw default deny incoming  >/dev/null 2>&1 || true
+  ufw default allow outgoing >/dev/null 2>&1 || true
+  ufw allow 5353/udp         >/dev/null 2>&1 || true
+  ufw --force enable         >/dev/null 2>&1 || true
+' || true
+chroot "$ROOTFS" systemctl enable ufw.service >/dev/null 2>&1 || true
+
+# Хранилище паролей отпирается тем же паролем, которым человек вошёл: PAM
+# передаёт его службе прямо во время входа. Иначе хранилище есть, но заперто,
+# и каждая программа спрашивает пароль от него отдельно — люди в такой
+# ситуации выбирают «не сохранять», и пароли расходятся по диску открытым
+# текстом, чего мы и хотели избежать.
+for pf in greetd greetd-greeter login; do
+  [ -f "$ROOTFS/etc/pam.d/$pf" ] || continue
+  grep -q pam_gnome_keyring "$ROOTFS/etc/pam.d/$pf" && continue
+  {
+    printf 'auth     optional  pam_gnome_keyring.so\n'
+    printf 'session  optional  pam_gnome_keyring.so auto_start\n'
+  } >> "$ROOTFS/etc/pam.d/$pf"
+done
+
 chroot "$ROOTFS" systemctl enable greetd.service seatd.service >/dev/null 2>&1 || true
 chroot "$ROOTFS" systemctl disable glower.service >/dev/null 2>&1 || true
 # первая консоль принадлежит сеансу; для разбора остаются Ctrl+Alt+F2 и дальше

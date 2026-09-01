@@ -46,6 +46,7 @@ const INSTALLER_APP = {
     wrap.append(body, foot);
 
     const S2 = { step:0, disk:null, disks:[], pass:'', host:'GlowerOS', can:null, busy:false,
+                 crypt:false, cryptPass:'',
                  repair:Install.repairing() };
 
     const draw = async () => {
@@ -118,9 +119,43 @@ const INSTALLER_APP = {
         hn.oninput = () => S2.host = hn.value;
         c.append(row('🔑', 'Пароль системной записи', 'Нужен для входа в консоль и для sudo. Можно оставить пустым, как в живой системе.', p1),
                  row('🏷', 'Имя машины', 'Так система будет представляться в сети', hn));
+
+        /* Шифрование диска. Пароль входа защищает систему от того, кто сядет
+           за включённую машину. Шифрование — от того, кто унесёт её с собой:
+           без него диск читается на любом другом компьютере, и никакой
+           пароль входа этому не мешает. */
+        const шифр = el('input'); шифр.type = 'checkbox'; шифр.checked = S2.crypt;
+        const p2 = el('input', 'inp'); p2.type = 'password';
+        p2.placeholder = 'Пароль диска (не короче 8 знаков)'; p2.value = S2.cryptPass;
+        const строкаШифра = row('🔒', 'Зашифровать диск',
+          'Система будет спрашивать пароль при включении. Без него файлы не прочитать даже вынув диск.', шифр);
+        const строкаПароля = row('🔑', 'Пароль диска',
+          'Отдельный от пароля записи. Забыть его нельзя: восстановить данные будет нечем.', p2);
+        строкаПароля.style.display = S2.crypt ? '' : 'none';
+        шифр.onchange = () => {
+          S2.crypt = шифр.checked;
+          строкаПароля.style.display = S2.crypt ? '' : 'none';
+          проверь();
+        };
+        p2.oninput = () => { S2.cryptPass = p2.value; проверь(); };
+        const беда = el('div', 'ins-warn'); беда.style.display = 'none';
+        const проверь = () => {
+          /* Пароль диска набирается до загрузки системы: там нет ни раскладок,
+             ни переключения языка. Русские буквы в нём — запертый сундук без
+             ключа, поэтому не даём их ввести молча. */
+          const нелатиница = /[^\x20-\x7e]/.test(S2.cryptPass);
+          беда.textContent = нелатиница
+            ? 'Пароль диска можно набрать только латиницей: при включении машины раскладки ещё нет.'
+            : '';
+          беда.style.display = нелатиница ? '' : 'none';
+          next.disabled = S2.crypt && (S2.cryptPass.length < 8 || нелатиница);
+        };
+        c.append(строкаШифра, строкаПароля, беда);
+
         body.appendChild(c);
         body.appendChild(el('div', 'ins-note',
           'Имя пользователя и пароль самой оболочки вы зададите при первом запуске установленной системы.'));
+        проверь();
         win.setSub('Шаг 3 из 4');
         return;
       }
@@ -135,6 +170,7 @@ const INSTALLER_APP = {
             <div class="r"><span>Объём</span><b>${Install.size(d.size || 0)}</b></div>
             <div class="r"><span>Имя машины</span><b>${esc(S2.host)}</b></div>
             <div class="r"><span>Пароль</span><b>${S2.pass ? 'задан' : 'без пароля'}</b></div>
+            <div class="r"><span>Шифрование</span><b>${S2.crypt ? 'диск будет зашифрован' : 'нет'}</b></div>
           </div>`;
         body.appendChild(el('div', S2.repair ? 'ins-note' : 'ins-warn', S2.repair
           ? 'Разметка и личные файлы не трогаются. Заменяются файлы системы: ' + esc(S2.disk) + '.'
@@ -156,7 +192,9 @@ const INSTALLER_APP = {
         const bar = $('.ins-bar i', body), stepEl = $('.ins-step', body), pre = $('.ins-log pre', body);
 
         try { await Install.start({ disk:S2.disk, password:S2.pass, hostname:S2.host,
-                                    tz:S.tz || undefined, repair:S2.repair }); }
+                                    tz:S.tz || undefined, repair:S2.repair,
+                                    crypt:S2.crypt || undefined,
+                                    cryptPassword:S2.crypt ? S2.cryptPass : undefined }); }
         catch(e){ return fail(e); }
 
         const tick = async () => {

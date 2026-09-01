@@ -16,12 +16,15 @@
 set -eu
 
 DISK=""; PASS=""; HOST="GlowerOS"; TZ=""; DRY=0; YES=0; REPAIR=0
+CRYPT=0; CRYPTPASS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --disk) DISK="$2"; shift 2 ;;
     --pass) PASS="$2"; shift 2 ;;
     --hostname) HOST="$2"; shift 2 ;;
     --tz) TZ="$2"; shift 2 ;;
+    --crypt) CRYPT=1; shift ;;
+    --crypt-pass) CRYPTPASS="$2"; CRYPT=1; shift 2 ;;
     --repair) REPAIR=1; shift ;;
     --dry-run) DRY=1; shift ;;
     --yes) YES=1; shift ;;
@@ -56,7 +59,14 @@ case "$DISK" in
   *[0-9]) P="${DISK}p" ;;
   *) P="$DISK" ;;
 esac
-ESP="${P}2"; ROOT="${P}3"
+ESP="${P}2"
+# С шифрованием разделов на один больше: ядро и загрузчик должны лежать
+# открыто, иначе их некому прочитать до того, как введён пароль.
+if [ "$CRYPT" = 1 ]; then
+  BOOT="${P}3"; CRYPTPART="${P}4"; ROOT=/dev/mapper/glower
+else
+  BOOT=""; CRYPTPART=""; ROOT="${P}3"
+fi
 
 # Лучше отказаться сразу и назвать, чего не хватает, чем упасть посреди
 # разметки уже начатого диска.
@@ -67,13 +77,36 @@ for tool in sfdisk wipefs partprobe blkid blockdev lsblk findmnt \
 done
 [ -z "$missing" ] || die "для установки не хватает программ:$missing"
 
+if [ "$CRYPT" = 1 ]; then
+  command -v cryptsetup >/dev/null 2>&1 || die "на носителе нет cryptsetup — зашифровать диск нечем"
+  # Пароль диска отдельный от пароля человека, но если задан только один,
+  # берём его: спросить два разных пароля и промолчать об этом было бы
+  # ловушкой, а молча оставить диск открытым — обманом.
+  [ -n "$CRYPTPASS" ] || CRYPTPASS="$PASS"
+  [ -n "$CRYPTPASS" ] || die "шифрование без пароля не имеет смысла: задайте --crypt-pass"
+  case "$CRYPTPASS" in
+    ?|??|???|????|?????|??????|???????) die "пароль диска короче восьми знаков — такой подбирается за минуты" ;;
+  esac
+  # Пароль диска набирается до того, как система загрузилась: там нет ни
+  # раскладок, ни переключения языка — только латиница. Пароль с русскими
+  # буквами превратил бы диск в запертый сундук без ключа.
+  if printf '%s' "$CRYPTPASS" | LC_ALL=C grep -q '[^ -~]'; then
+    die "пароль диска можно набрать только латиницей: при включении машины раскладки ещё нет"
+  fi
+fi
+
 SIZE="$(blockdev --getsize64 "$DISK" 2>/dev/null || echo 0)"
 [ "$SIZE" -gt 8000000000 ] || die "на диске меньше 8 ГБ — системе не хватит места"
 
 if [ "$DRY" = 1 ]; then
   echo "ПЛАН"
   echo "  диск:        $DISK ($((SIZE / 1000000000)) ГБ)"
-  echo "  разметка:    GPT · 1 МБ загрузчик BIOS · 512 МБ EFI · остальное — система"
+  if [ "$CRYPT" = 1 ]; then
+    echo "  разметка:    GPT · 1 МБ загрузчик BIOS · 512 МБ EFI · 1 ГБ ядро · остальное — система под шифром"
+    echo "  шифрование:  LUKS2, пароль спрашивается при включении"
+  else
+    echo "  разметка:    GPT · 1 МБ загрузчик BIOS · 512 МБ EFI · остальное — система"
+  fi
   echo "  система из:  $SQFS"
   echo "  имя машины:  $HOST"
   [ -n "$TZ" ] && echo "  часовой пояс: $TZ"
@@ -84,10 +117,24 @@ fi
 [ "$YES" = 1 ] || die "это меняет содержимое диска: подтвердите ключом --yes"
 
 TARGET=/mnt/glower-install
-trap 'umount -R "$TARGET" 2>/dev/null || true' EXIT INT TERM
+trap 'umount -R "$TARGET" 2>/dev/null || true; cryptsetup close glower 2>/dev/null || true' EXIT INT TERM
 
-umount -R "$TARGET" 2>/dev/null || true
+# Обычного отключения мало: после прерванной установки внутри целевой папки
+# остаются привязанные /dev, /proc и сам живой носитель, и они держат друг
+# друга. Ленивое отключение снимает их в любом случае — ядро отпустит, как
+# только последний, кто ими пользуется, закончит.
+umount -R "$TARGET" 2>/dev/null || umount -Rl "$TARGET" 2>/dev/null || true
 for part in $(lsblk -lno NAME "$DISK" | tail -n +2); do umount "/dev/$part" 2>/dev/null || true; done
+# Открытый зашифрованный раздел держит диск не хуже подключённой файловой
+# системы: разметить его не даст ни sfdisk, ни ядро. После прерванной
+# установки такой раздел остаётся открытым, и вторая попытка упиралась в
+# «диск сейчас используется» без единого намёка, кто именно им занят.
+if [ -e /dev/mapper/glower ]; then
+  umount /dev/mapper/glower 2>/dev/null || umount -l /dev/mapper/glower 2>/dev/null || true
+  cryptsetup close glower 2>/dev/null || true
+  sleep 1
+  [ -e /dev/mapper/glower ] && die "зашифрованный раздел занят и не закрывается: перезагрузите носитель и повторите"
+fi
 
 if [ "$REPAIR" = 1 ]; then
   # Восстановление: разметку не трогаем совсем. Системные файлы кладём заново
@@ -102,24 +149,57 @@ else
   wipefs -a "$DISK" >/dev/null 2>&1 || true
 
   say 6 "Размечаю разделы"
+if [ "$CRYPT" = 1 ]; then
+  # Отдельный открытый раздел под ядро: загрузчик читает его до того, как
+  # кто-либо ввёл пароль, и прочитать зашифрованное ему нечем.
+sfdisk --quiet --wipe always --wipe-partitions always "$DISK" <<PART
+label: gpt
+start=1MiB,   size=1MiB,   type=21686148-6449-6E6F-744E-656564454649, name="bios"
+start=2MiB,   size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="efi"
+start=514MiB, size=1024MiB,type=BC13C2FF-59E6-4262-A352-B275FD6F7172, name="boot"
+start=1538MiB,             type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="glower"
+PART
+else
 sfdisk --quiet --wipe always --wipe-partitions always "$DISK" <<PART
 label: gpt
 start=1MiB,   size=1MiB,   type=21686148-6449-6E6F-744E-656564454649, name="bios"
 start=2MiB,   size=512MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="efi"
 start=514MiB,              type=4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, name="glower"
 PART
+fi
 partprobe "$DISK" 2>/dev/null || partx -u "$DISK" 2>/dev/null || blockdev --rereadpt "$DISK" 2>/dev/null || true
 udevadm settle 2>/dev/null || sleep 2
-[ -b "$ROOT" ] || { sleep 2; [ -b "$ROOT" ] || die "разделы не появились: ядро не перечитало таблицу"; }
+WAITDEV="$ROOT"; [ "$CRYPT" = 1 ] && WAITDEV="$CRYPTPART"
+[ -b "$WAITDEV" ] || { sleep 2; [ -b "$WAITDEV" ] || die "разделы не появились: ядро не перечитало таблицу"; }
 
   say 10 "Создаю файловые системы"
   mkfs.vfat -F32 -n GLOWER-EFI "$ESP" >/dev/null
+  if [ "$CRYPT" = 1 ]; then
+    mkfs.ext4 -F -q -L GlowerOS-boot "$BOOT" >/dev/null
+    say 11 "Запираю диск"
+    # Пароль уходит через ввод, а не через строку запуска: строку видно в
+    # списке процессов любому, кто в этот момент сидит за машиной.
+    printf '%s' "$CRYPTPASS" | cryptsetup luksFormat --type luks2 --batch-mode \
+      --key-file - "$CRYPTPART" >/dev/null 2>&1 || die "не удалось зашифровать раздел"
+    printf '%s' "$CRYPTPASS" | cryptsetup open --key-file - "$CRYPTPART" glower \
+      >/dev/null 2>&1 || die "зашифрованный раздел не открывается"
+    [ -b "$ROOT" ] || die "после отпирания не появилось устройство $ROOT"
+  fi
   mkfs.ext4 -F -q -L GlowerOS "$ROOT" >/dev/null
 fi
 
 say 14 "Подключаю разделы"
 mkdir -p "$TARGET"
+# При восстановлении зашифрованной системы раздел ещё заперт — отпираем.
+if [ "$CRYPT" = 1 ] && [ "$REPAIR" = 1 ] && [ ! -b "$ROOT" ]; then
+  printf '%s' "$CRYPTPASS" | cryptsetup open --key-file - "$CRYPTPART" glower \
+    >/dev/null 2>&1 || die "зашифрованный раздел не открывается: не тот пароль?"
+fi
 mount "$ROOT" "$TARGET"
+mkdir -p "$TARGET/boot"
+if [ "$CRYPT" = 1 ]; then
+  mount "$BOOT" "$TARGET/boot" || die "не подключается раздел с ядром"
+fi
 mkdir -p "$TARGET/boot/efi"
 # На машине, загруженной через UEFI, раздел EFI обязателен. На старой,
 # загруженной через BIOS, он лишь задел на будущее: если ядро этой машины
@@ -154,8 +234,19 @@ UUID_ROOT="$(blkid -s UUID -o value "$ROOT")"
 UUID_ESP="$(blkid -s UUID -o value "$ESP" 2>/dev/null || echo '')"
 {
   printf 'UUID=%s  /          ext4  errors=remount-ro  0 1\n' "$UUID_ROOT"
+  if [ "$CRYPT" = 1 ]; then
+    printf 'UUID=%s  /boot      ext4  defaults           0 2\n' \
+      "$(blkid -s UUID -o value "$BOOT")"
+  fi
   [ "$ESP_OK" = 1 ] && printf 'UUID=%s   /boot/efi  vfat  umask=0077         0 1\n' "$UUID_ESP"
 } > "$TARGET/etc/fstab"
+
+if [ "$CRYPT" = 1 ]; then
+  # Отсюда система при включении узнаёт, какой раздел отпирать. Без этой
+  # строки ядро дойдёт до корня, не найдёт его и остановится в initramfs.
+  printf 'glower UUID=%s none luks,discard\n' \
+    "$(blkid -s UUID -o value "$CRYPTPART")" > "$TARGET/etc/crypttab"
+fi
 printf '%s\n' "$HOST" > "$TARGET/etc/hostname"
 printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "$HOST" > "$TARGET/etc/hosts"
 [ -n "$TZ" ] && [ -f "$TARGET/usr/share/zoneinfo/$TZ" ] && \
@@ -178,6 +269,11 @@ say 80 "Подключаю служебные каталоги"
 for d in dev dev/pts proc sys run; do
   mkdir -p "$TARGET/$d"
   mount --rbind "/$d" "$TARGET/$d" 2>/dev/null || mount --bind "/$d" "$TARGET/$d" 2>/dev/null || true
+  # Привязка по умолчанию остаётся в родстве с оригиналом: отключение копии
+  # уходит обратно и снимает настоящий каталог. Один раз это уже стоило
+  # живой системе /dev/pts — sudo перестал работать посреди установки.
+  # Родство разрываем сразу: копия живёт своей жизнью.
+  mount --make-rslave "$TARGET/$d" 2>/dev/null || true
 done
 
 say 84 "Ставлю загрузчик"
@@ -197,6 +293,13 @@ if [ -n "$PASS" ]; then
   fi
 fi
 
+if [ "$CRYPT" = 1 ]; then
+  # Без этого initramfs собирается без cryptsetup, и машина при включении
+  # доходит до «корень не найден» вместо вопроса о пароле.
+  mkdir -p "$TARGET/etc/cryptsetup-initramfs"
+  printf 'CRYPTSETUP=y\n' > "$TARGET/etc/cryptsetup-initramfs/conf-hook"
+fi
+
 chroot "$TARGET" /bin/sh -e <<CHROOT
 grub-install --target=i386-pc --boot-directory=/boot "$DISK" >/dev/null 2>&1 || true
 if [ -d /sys/firmware/efi ] && [ "$ESP_OK" = 1 ]; then
@@ -204,7 +307,14 @@ if [ -d /sys/firmware/efi ] && [ "$ESP_OK" = 1 ]; then
     --bootloader-id=GlowerOS --removable >/dev/null 2>&1 || true
 fi
 update-grub >/dev/null 2>&1 || grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
-update-initramfs -u >/dev/null 2>&1 || true
+# При шифровании пересборка образа — не украшение: без неё машина не спросит
+# пароль, а остановится в initramfs с «корень не найден». Поэтому здесь без
+# «|| true»: пусть установка честно упадёт, чем оставит незагружаемый диск.
+if [ -s /etc/crypttab ]; then
+  update-initramfs -u
+else
+  update-initramfs -u >/dev/null 2>&1 || true
+fi
 CHROOT
 
 # grub-mkconfig определяет корень по устройству и на некоторых машинах
@@ -214,6 +324,25 @@ CHROOT
 # exist». Поэтому корень в меню всегда переписываем на UUID раздела.
 sed -i "s|root=/dev/[A-Za-z0-9/]*|root=UUID=$UUID_ROOT|g" "$TARGET/boot/grub/grub.cfg"
 printf 'GRUB_DISABLE_LINUX_UUID=false\n' >> "$TARGET/etc/default/grub" 2>/dev/null || true
+
+if [ "$CRYPT" = 1 ]; then
+  say 93 "Проверяю, чем машина будет отпирать диск"
+  [ -s "$TARGET/etc/crypttab" ] || die "не записан /etc/crypttab — система не нашла бы, что отпирать"
+  # Заглядывать внутрь образа начальной загрузки мы не будем: lsinitramfs
+  # распаковывает его целиком, а это сто с лишним мегабайт во временную
+  # папку живой системы, то есть в память, и десять минут ожидания на
+  # ровном месте. Проверяем то же самое дешёвыми признаками: есть ли в
+  # системе то, что кладёт cryptsetup в образ, и моложе ли сам образ, чем
+  # запись о шифровании, — то есть пересобирался ли он после неё.
+  [ -f "$TARGET/usr/share/initramfs-tools/hooks/cryptroot" ] || \
+    die "в системе нет cryptsetup-initramfs — диск было бы нечем отпереть при включении"
+  HAVEC=0
+  for img in "$TARGET"/boot/initrd.img-*; do
+    [ -f "$img" ] || continue
+    [ "$img" -nt "$TARGET/etc/crypttab" ] && HAVEC=1
+  done
+  [ "$HAVEC" = 1 ] || die "образ начальной загрузки не пересобран после включения шифрования"
+fi
 
 say 94 "Проверяю загрузчик"
 [ -f "$TARGET/boot/grub/grub.cfg" ] || die "загрузчик не встал: /boot/grub/grub.cfg не создан"
@@ -226,6 +355,7 @@ fi
 say 97 "Отключаю разделы"
 sync
 umount -R "$TARGET" 2>/dev/null || true
+[ "$CRYPT" = 1 ] && cryptsetup close glower 2>/dev/null || true
 
 say 100 "Готово"
 echo "УСТАНОВЛЕНО $DISK"

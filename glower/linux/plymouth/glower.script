@@ -52,11 +52,52 @@ fun refresh_callback(){
 }
 Plymouth.SetRefreshFunction(refresh_callback);
 
-# Если система спросит пароль (зашифрованный диск) — покажем подсказку
+# Если система спросит пароль (зашифрованный диск) — покажем подсказку.
+#
+# Спрайты заводим заранее и один раз. Каждое нажатие клавиши — это новый
+# вызов сюда, и если создавать спрайт на каждый вызов, старые остаются
+# лежать на экране: подсказка расплывается в кашу, а точки множатся.
+prompt_sprite = Sprite();
+prompt_sprite.SetOpacity(0);
+bullet_sprite = Sprite();
+bullet_sprite.SetOpacity(0);
+
 fun display_password_callback(prompt, bullets){
+  # Вопрос приходит из недр начальной загрузки и всегда по-английски:
+  # «Please unlock disk glower». Человеку, который включил свою машину,
+  # незачем читать служебную латынь — подменяем на понятное.
+  if (prompt.SubString(0, 6) == "Please"){
+    prompt = "Введите пароль диска";
+  }
   text = Image.Text(prompt, 1, 1, 1);
-  t = Sprite(text);
-  t.SetX(screen_w / 2 - text.GetWidth() / 2);
-  t.SetY(screen_h / 2 + size);
+  prompt_sprite.SetImage(text);
+  prompt_sprite.SetX(screen_w / 2 - text.GetWidth() / 2);
+  prompt_sprite.SetY(screen_h / 2 + size);
+  prompt_sprite.SetOpacity(1);
+
+  # Сколько букв набрано, столько и точек: человек должен видеть, что
+  # машина его слышит. Пустую строку рисовать нельзя — вместо этого прячем.
+  if (bullets > 0){
+    str = "";
+    i = 0;
+    while (i < bullets){
+      str += "*";
+      i++;
+    }
+    marks = Image.Text(str, 1, 1, 1);
+    bullet_sprite.SetImage(marks);
+    bullet_sprite.SetX(screen_w / 2 - marks.GetWidth() / 2);
+    bullet_sprite.SetY(screen_h / 2 + size + text.GetHeight() + 10);
+    bullet_sprite.SetOpacity(1);
+  } else {
+    bullet_sprite.SetOpacity(0);
+  }
 }
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+# Пароль принят или спрашивать больше нечего — убираем вопрос с экрана
+fun display_normal_callback(){
+  prompt_sprite.SetOpacity(0);
+  bullet_sprite.SetOpacity(0);
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);

@@ -34,6 +34,7 @@ const ALLOWED = new Set([
   'lpstat', 'lpoptions', 'lp', 'cancel', 'wlr-randr',
   'useradd', 'usermod', 'userdel', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
+  'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -1127,6 +1128,59 @@ export function apps(allowLaunch){
       await call('bluetoothctl', ['power', включить ? 'on' : 'off'])
         .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
       return { ok:true, включён:!!включить };
+    },
+
+    /* ---------- Брандмауэр ----------
+       Дома за роутером входящих соединений почти не бывает, и стена кажется
+       лишней. Но та же машина попадает в кафе, в аэропорт, в чужую сеть —
+       там в неё стучатся все, кому не лень. Поэтому стена включена сразу, а
+       не «когда понадобится»: понадобится она внезапно. */
+    async 'sys.firewall'(){
+      if (!await has('ufw')) return { есть:false };
+      const { stdout } = await call('sudo', ['-n', 'ufw', 'status', 'verbose'])
+        .catch(e => ({ stdout:String(e.stdout || '') }));
+      const текст = String(stdout || '');
+      const строки = текст.split('\n');
+      const шапка = (строки.find(с => /^Status:/i.test(с)) || '').trim();
+      const вход = (строки.find(с => /^Default:/i.test(с)) || '').trim();
+      const правила = строки
+        .filter(с => /\bALLOW\b|\bDENY\b/.test(с) && !/^Default:/i.test(с))
+        .map(с => с.replace(/\s+/g, ' ').trim())
+        .slice(0, 40);
+      return { есть:true, включён:/active/i.test(шапка), по_умолчанию:вход, правила };
+    },
+
+    async 'sys.firewall.set'({ включить }){
+      if (!allowLaunch) throw new Error('управление брандмауэром выключено: запустите агент с ключом --allow-launch');
+      if (!await has('ufw')) throw new Error('на машине нет ufw');
+      await call('sudo', ['-n', 'ufw', '--force', включить ? 'enable' : 'disable'])
+        .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+      return await this['sys.firewall']();
+    },
+
+    /* ---------- Хранилище паролей ----------
+       Программам нужно где-то держать свои ключи: почта, мессенджеры,
+       браузер. Без общего хранилища каждая заводит своё, и пароли ложатся
+       на диск открытым текстом. Здесь оно одно на всех и отпирается тем же
+       паролем, которым человек вошёл в систему. */
+    async 'sys.keyring'(){
+      const есть = await has('gnome-keyring-daemon');
+      if (!есть) return { есть:false };
+      const { stdout } = await call('pgrep', ['-x', 'gnome-keyring-d'])
+        .catch(() => call('pgrep', ['-f', 'gnome-keyring-daemon']).catch(() => ({ stdout:'' })));
+      const работает = !!String(stdout || '').trim();
+      /* Отперто ли хранилище, честно говорит только сама служба секретов:
+         спрашиваем её тем же способом, каким пользуются программы. */
+      let отперто = null;
+      if (работает && await has('secret-tool')){
+        /* Ищем заведомо несуществующую запись: служба либо ответит пустотой
+           (значит, отперта и говорит с нами), либо откажет. Пустой ответ —
+           это код возврата 1, и он здесь такой же хороший знак, как ноль. */
+        отперто = await call('secret-tool', ['search', 'glower-проверка', '1'], { timeout:4000 })
+          .then(() => true)
+          .catch(e => (e && e.code === 1) ? true : false);
+      }
+      return { есть:true, работает, отперто };
     },
 
     async 'sys.bt.scan'({ секунд = 8 } = {}){

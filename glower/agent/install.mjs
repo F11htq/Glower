@@ -100,7 +100,7 @@ export function install(allowInstall){
       return { plan:stdout };
     },
 
-    async 'install.start'({ disk, password, hostname, tz, repair }){
+    async 'install.start'({ disk, password, hostname, tz, repair, crypt, cryptPassword }){
       if (!allowInstall) throw new Error('установка выключена: запустите агент с ключом --allow-install');
       if (job && !job.done) throw new Error('установка уже идёт');
       await checkDisk(disk);
@@ -108,6 +108,11 @@ export function install(allowInstall){
       const args = ['--disk', disk, '--yes'];
       if (repair) args.push('--repair');
       if (password) args.push('--pass', String(password));
+      /* Пароль диска не то же самое, что пароль человека: первый отпирает
+         железо до того, как система вообще началась. Сценарий сам решит
+         взять пароль человека, если отдельного не дали. */
+      if (crypt) args.push('--crypt');
+      if (crypt && cryptPassword) args.push('--crypt-pass', String(cryptPassword));
       if (hostname) args.push('--hostname', String(hostname).replace(/[^\w.-]/g, '') || 'GlowerOS');
       if (tz) args.push('--tz', String(tz).replace(/[^\w/+-]/g, ''));
 
