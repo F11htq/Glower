@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=GlowerOS
+Description=Заставка загрузки GlowerOS: логотип и полоса ожидания
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/glower
+ScriptFile=/usr/share/plymouth/themes/glower/glower.script

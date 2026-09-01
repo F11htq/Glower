@@ -67,6 +67,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
+  plymouth plymouth-label plymouth-themes \
   labwc wlrctl wlr-randr foot cage seatd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
@@ -112,7 +113,7 @@ cat > /etc/modprobe.d/glower-vmwgfx.conf <<'MOD'
 install vmwgfx /bin/sh -c 'grep -qi virtualbox /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null || exec modprobe --ignore-install vmwgfx "$@"'
 MOD
 
-# initramfs пересобираем: в него должны попасть хуки live-boot
+# initramfs пересобираем: в него должны попасть хуки live-boot и заставка
 update-initramfs -u -k all 2>&1 | tail -1
 apt-get clean
 rm -rf /var/lib/apt/lists/*
@@ -165,6 +166,36 @@ cat > "$ROOTFS/etc/X11/Xwrapper.config" <<'XWRAP'
 allowed_users=anybody
 needs_root_rights=yes
 XWRAP
+
+# --------------------------------------------------------------------------
+# Заставка загрузки.
+#
+# Раньше при включении по экрану бежали сообщения служб — так выглядит
+# сервер, а не система для человека. Теперь их место занимает своя заставка:
+# логотип и точки, по которым видно, что система жива. Сообщения никуда не
+# делись — они под пунктом меню «с сообщениями системы».
+step "3.3/6 заставка загрузки"
+install -d "$ROOTFS/usr/share/plymouth/themes/glower"
+install -m 644 "$SRC/linux/plymouth/glower.plymouth" "$ROOTFS/usr/share/plymouth/themes/glower/"
+install -m 644 "$SRC/linux/plymouth/glower.script"   "$ROOTFS/usr/share/plymouth/themes/glower/"
+install -m 644 "$SRC/linux/plymouth/dot.png"         "$ROOTFS/usr/share/plymouth/themes/glower/"
+install -m 644 "$SRC/assets/logo.png"                "$ROOTFS/usr/share/plymouth/themes/glower/logo.png"
+chroot "$ROOTFS" /bin/bash -e <<'INPLY'
+export DEBIAN_FRONTEND=noninteractive
+# Тема заставки выбирается через альтернативы: отдельной программы для этого
+# в Ubuntu нет, а ссылка default.plymouth и есть выбор системы.
+update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+  default.plymouth /usr/share/plymouth/themes/glower/glower.plymouth 200 >/dev/null 2>&1 || true
+update-alternatives --set default.plymouth \
+  /usr/share/plymouth/themes/glower/glower.plymouth >/dev/null 2>&1 || true
+# Заставка живёт в initramfs — без пересборки её не будет видно
+update-initramfs -u -k all 2>&1 | tail -1
+INPLY
+if chroot "$ROOTFS" readlink -f /usr/share/plymouth/themes/default.plymouth 2>/dev/null | grep -q glower; then
+  echo "  заставка: своя"
+else
+  echo "  ВНИМАНИЕ: заставка не выбрана — загрузка будет с сообщениями"
+fi
 
 step "3.4/6 опрос чужих окон"
 install -d "$ROOTFS/tmp/toplevels"

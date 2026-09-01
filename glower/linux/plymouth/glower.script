@@ -1,0 +1,62 @@
+# Заставка загрузки GlowerOS.
+#
+# Показывает то, что человеку важно: систему, которая загружается, и что она
+# жива. Бегущим сообщениям место в пункте меню «с сообщениями системы» — для
+# разбора поломок, а не для каждого включения.
+#
+# Язык заставки простой и понимает только латинские имена, поэтому имена
+# здесь английские, а поясняем по-русски.
+
+Window.SetBackgroundTopColor(0.05, 0.05, 0.08);
+Window.SetBackgroundBottomColor(0.02, 0.02, 0.04);
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+# Логотип по центру, ростом в шестую часть экрана
+logo_img = Image("logo.png");
+size = screen_h / 6;
+k = size / logo_img.GetHeight();
+logo = logo_img.Scale(logo_img.GetWidth() * k, size);
+logo_sprite = Sprite(logo);
+logo_sprite.SetX(screen_w / 2 - logo.GetWidth() / 2);
+logo_sprite.SetY(screen_h / 2 - logo.GetHeight() / 2 - screen_h / 20);
+
+# Точки под логотипом: по ним видно, что система жива, а не встала
+dots = 5;
+tick = 0;
+dot_sprites = [];
+i = 0;
+while (i < dots){
+  d = Image("dot.png");
+  s = Sprite(d);
+  s.SetX(screen_w / 2 - (dots * 26) / 2 + i * 26);
+  s.SetY(screen_h / 2 + size / 2 + screen_h / 22);
+  s.SetOpacity(0.25);
+  dot_sprites[i] = s;
+  i++;
+}
+
+fun refresh_callback(){
+  tick++;
+  n = Math.Int(tick / 6) % dots;
+  j = 0;
+  while (j < dots){
+    if (j == n){
+      dot_sprites[j].SetOpacity(1);
+    } else {
+      dot_sprites[j].SetOpacity(0.25);
+    }
+    j++;
+  }
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Если система спросит пароль (зашифрованный диск) — покажем подсказку
+fun display_password_callback(prompt, bullets){
+  text = Image.Text(prompt, 1, 1, 1);
+  t = Sprite(text);
+  t.SetX(screen_w / 2 - text.GetWidth() / 2);
+  t.SetY(screen_h / 2 + size);
+}
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
