@@ -74,6 +74,8 @@ apt-get install -y --no-install-recommends \
   udisks2 ntfs-3g exfatprogs dosfstools \
   cryptsetup cryptsetup-initramfs \
   ufw gnome-keyring libsecret-1-0 libsecret-tools seahorse \
+  fwupd \
+  sane-utils sane-airscan simple-scan \
   bluez bluez-tools \
   cups cups-filters cups-browsed cups-pdf avahi-daemon printer-driver-gutenprint \
   locales language-pack-ru language-pack-gnome-ru \
@@ -505,6 +507,24 @@ chroot "$ROOTFS" /bin/sh -c '
 ' || true
 chroot "$ROOTFS" systemctl enable ufw.service >/dev/null 2>&1 || true
 
+# Служба прошивок и опрос сканеров по сети. Вторая нужна для нынешних
+# «всё в одном»: они показывают себя не по кабелю, а по сети, тем же
+# способом, каким находятся принтеры.
+#
+# Служба прошивок поднимается по требованию, через шину, но обход железа у
+# неё занимает до полуминуты — первый же запрос успевал отвалиться по
+# таймауту. Поднимаем её вместе с системой: полминуты в фоне при загрузке
+# лучше, чем полминуты ожидания перед лицом человека.
+chroot "$ROOTFS" /bin/sh -c '
+  systemctl enable fwupd.service >/dev/null 2>&1 || true
+  mkdir -p /etc/systemd/system/multi-user.target.wants
+  ln -sf /usr/lib/systemd/system/fwupd.service \
+    /etc/systemd/system/multi-user.target.wants/fwupd.service 2>/dev/null || true
+' || true
+chroot "$ROOTFS" systemctl enable saned.socket >/dev/null 2>&1 || true
+# Сканер — это устройство на шине, и по умолчанию к нему пускают не всех.
+chroot "$ROOTFS" usermod -aG scanner,lp glower >/dev/null 2>&1 || true
+
 # Хранилище паролей отпирается тем же паролем, которым человек вошёл: PAM
 # передаёт его службе прямо во время входа. Иначе хранилище есть, но заперто,
 # и каждая программа спрашивает пароль от него отдельно — люди в такой
@@ -561,12 +581,21 @@ if loadfont /boot/grub/fonts/unicode.pf2 ; then
   terminal_output gfxterm
 fi
 
-# Меню показываем. На новой машине человек просто ждёт восемь секунд, зато на
-# старой — где обычная загрузка гаснет чёрным экраном — он видит, что выбор
-# есть, и берёт «безопасную графику». Прятать меню значило оставлять людей
-# со старыми ноутбуками наедине с погасшим экраном.
-set timeout=8
-set timeout_style=menu
+# Меню не показываем: человек вставил флешку, чтобы поставить систему, а не
+# чтобы читать список. Установка начинается сразу.
+#
+# Но выбор при этом никуда не делся. Секунду загрузчик молча ждёт нажатия —
+# и по Esc показывает меню целиком, вместе с «безопасной графикой» для
+# машин, где обычная загрузка гаснет чёрным экраном. Прятать меню совсем
+# значило бы оставить таких людей наедине с погасшим экраном; прятать его с
+# оставленной дверью — просто не мешать всем остальным.
+#
+# Раньше меню висело восемь секунд у всех. Теперь запасной путь нужен реже:
+# сеанс сам переходит на X-сервер, если Wayland не поднялся, и экран входа
+# делает то же самое. «Безопасная графика» осталась на случай, когда не
+# помогает и это.
+set timeout=1
+set timeout_style=hidden
 set default=0
 
 # Носитель делает то, за чем его выбрали. Раньше он сперва искал уже

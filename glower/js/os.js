@@ -50,7 +50,9 @@ const OS = {
   async devices(){ return Platform.rpc('sys.devices'); },
 
   /* ---------- питание ---------- */
-  async power(action){ return Platform.rpc('sys.power', { action }); }
+  /* «сразу» — перезагрузка без аккуратного отключения. Нужна только там,
+     где корень системы лежит на носителе, который вот-вот исчезнет. */
+  async power(action, сразу){ return Platform.rpc('sys.power', { action, 'сразу':!!сразу }); }
 };
 window.OS = OS;
 

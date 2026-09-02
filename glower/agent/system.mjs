@@ -34,7 +34,7 @@ const ALLOWED = new Set([
   'lpstat', 'lpoptions', 'lp', 'cancel', 'wlr-randr',
   'useradd', 'usermod', 'userdel', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
-  'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep',
+  'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep', 'fwupdmgr', 'scanimage',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -56,7 +56,7 @@ async function call(cmd, args = []){
 /* ---------- питание ---------- */
 export function power(allowPower){
   return {
-    async 'sys.power'({ action }){
+    async 'sys.power'({ action, сразу }){
       if (!allowPower) throw new Error('управление питанием выключено: запустите агент с ключом --allow-power');
       const map = { poweroff:'poweroff', reboot:'reboot', suspend:'suspend', lock:'lock' };
       const a = map[action];
@@ -70,7 +70,22 @@ export function power(allowPower){
          может не быть; тогда пробуем через sudo, потом через loginctl.
          Молча делать вид, что получилось, нельзя: это ровно тот случай,
          когда человек ждёт, что машина погаснет. */
-      const tries = [
+      /* Живой носитель — особый случай. Обычная перезагрузка сперва
+         аккуратно отключает всё подключённое, а корень системы здесь лежит
+         на самой флешке: если её уже вынули (а установщик именно об этом и
+         просил) или она просто отвалилась от старого разъёма, отключать
+         становится нечего и нечем — система не может прочитать даже
+         программу выключения и остаётся стоять с экраном ошибок.
+         Поэтому отсюда перезагружаемся немедленно, минуя отключение: терять
+         в живой системе нечего, диск установщик отключил сам, а машине от
+         такой перезагрузки ровно так же, как от кнопки на корпусе. */
+      const немедленно = !!сразу && a !== 'suspend';
+      const tries = немедленно ? [
+        ['systemctl', ['--force', '--force', a]],
+        ['sudo', ['-n', 'systemctl', '--force', '--force', a]],
+        ['systemctl', [a]],
+        ['sudo', ['-n', 'systemctl', a]]
+      ] : [
         ['systemctl', [a]],
         ['sudo', ['-n', 'systemctl', a]],
         ['loginctl', [a === 'poweroff' ? 'poweroff' : a === 'reboot' ? 'reboot' : 'suspend']]
@@ -1128,6 +1143,113 @@ export function apps(allowLaunch){
       await call('bluetoothctl', ['power', включить ? 'on' : 'off'])
         .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
       return { ok:true, включён:!!включить };
+    },
+
+    /* ---------- Прошивки ----------
+       Программы обновляются сами, а прошивки — нет: они живут в самом
+       железе, и о них обычно вспоминают, когда что-то уже сломалось.
+       Производители кладут их в общую базу LVFS, и fwupd умеет оттуда
+       брать. Ставим только то, что производитель выпустил для этой самой
+       машины, — ничего своего мы сюда не добавляем. */
+    async 'sys.firmware'(){
+      if (!await has('fwupdmgr')) return { есть:false, почему:'на машине нет fwupd' };
+
+      const разбери = текст => {
+        try { return JSON.parse(String(текст || '{}')); } catch(e){ return {}; }
+      };
+
+      /* Служба прошивок поднимается не мгновенно: она обходит всё железо
+         машины и на медленной может думать полминуты. Шина успевает
+         сдаться раньше и возвращает отказ — а человек видел бы «система не
+         ответила» на ровном месте. Поэтому спрашиваем ещё раз, дав ей
+         время встать. */
+      const спроси = async (что, сколько) => {
+        for (let попытка = 0; попытка < 2; попытка++){
+          const о = await call('fwupdmgr', [что, '--json'], { timeout:сколько })
+            .catch(e => ({ stdout:String(e.stdout || '') }));
+          const д = разбери(о.stdout);
+          if (д && (д.Devices || д.Releases)) return д;
+          if (!попытка) await new Promise(готово => setTimeout(готово, 4000));
+        }
+        return {};
+      };
+
+      const устройства = await спроси('get-devices', 45000);
+      const обновления = await спроси('get-updates', 45000);
+
+      const список = (устройства.Devices || [])
+        .filter(у => у.Name)
+        .map(у => ({
+          имя:String(у.Name),
+          кто:String(у.Vendor || ''),
+          версия:String(у.Version || ''),
+          обновляемый:Array.isArray(у.Flags) ? у.Flags.includes('updatable') : false,
+          ид:String(у.DeviceId || '')
+        }));
+
+      const новое = (обновления.Devices || [])
+        .filter(у => Array.isArray(у.Releases) && у.Releases.length)
+        .map(у => ({
+          имя:String(у.Name || ''),
+          ид:String(у.DeviceId || ''),
+          было:String(у.Version || ''),
+          станет:String(у.Releases[0].Version || ''),
+          зачем:String(у.Releases[0].Summary || у.Releases[0].Description || '')
+            .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+        }));
+
+      return { есть:true, list:список, новое };
+    },
+
+    async 'sys.firmware.refresh'(){
+      if (!allowLaunch) throw new Error('обновление прошивок выключено: запустите агент с ключом --allow-launch');
+      if (!await has('fwupdmgr')) throw new Error('на машине нет fwupd');
+      /* Ключ --force велит перечитать список, даже если он свежий по мнению
+         самой службы: человек нажал кнопку, значит, хочет узнать сейчас. */
+      const о = await call('fwupdmgr', ['refresh', '--force', '--json'], { timeout:60000 })
+        .catch(e => ({ stdout:'', stderr:String(e.stderr || e.message || '') }));
+      const беда = String(о.stderr || '').trim().split('\n').filter(Boolean).pop();
+      return { ok:!беда, почему:беда || '' };
+    },
+
+    async 'sys.firmware.update'({ ид }){
+      if (!allowLaunch) throw new Error('обновление прошивок выключено: запустите агент с ключом --allow-launch');
+      if (!await has('fwupdmgr')) throw new Error('на машине нет fwupd');
+      if (!ид || !/^[0-9a-f]{8,64}$/i.test(String(ид))) throw new Error('неверное имя устройства');
+      /* Прошивку заливаем только в названное устройство и только ту, что
+         предлагает сам fwupd. Своих файлов мы сюда не носим: подсунутая
+         прошивка — это кирпич, а не неудачная установка программы. */
+      const о = await call('fwupdmgr', ['update', String(ид), '--assume-yes', '--no-reboot-check'],
+        { timeout:600000 }).catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n').pop()); });
+      return { ok:true, вывод:String(о.stdout || '').trim().split('\n').slice(-4).join('\n') };
+    },
+
+    /* ---------- Сканеры ----------
+       Печать мы сделали целиком, а вторая половина той же железки —
+       сканер — до сих пор оставалась немой. */
+    async 'sys.scanners'(){
+      if (!await has('scanimage')) return { есть:false, почему:'на машине нет sane — сканировать нечем', list:[] };
+      /* Опрос сканеров идёт по сети и по шине и бывает небыстрым: даём ему
+         время, но не бесконечное — человек ждёт ответа, а не тишины. */
+      const { stdout } = await call('scanimage', ['-L'], { timeout:25000 }).catch(() => ({ stdout:'' }));
+      const list = [];
+      for (const строка of String(stdout).split('\n')){
+        const м = строка.match(/^device\s+`([^']+)'\s+is a\s+(.*)$/);
+        if (м) list.push({ ид:м[1], имя:м[2].trim() });
+      }
+      return { есть:true, list };
+    },
+
+    async 'sys.scan.open'(){
+      if (!allowLaunch) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
+      for (const прог of ['simple-scan', 'xsane', 'skanlite']){
+        if (await has(прог)){
+          const { spawn } = await import('node:child_process');
+          spawn(прог, [], { detached:true, stdio:'ignore', env:await средаЭкрана() }).unref();
+          return { ok:true, чем:прог };
+        }
+      }
+      throw new Error('в системе нет программы для сканирования');
     },
 
     /* ---------- Брандмауэр ----------

@@ -52,6 +52,7 @@ const INSTALLER_APP = {
     const draw = async () => {
       body.innerHTML = '';
       back.style.visibility = S2.step > 0 && S2.step < 4 ? '' : 'hidden';
+      next.style.visibility = '';
       next.disabled = false;
       next.textContent = 'Далее';
 
@@ -187,6 +188,13 @@ const INSTALLER_APP = {
           <div class="ins-step muted">Начинаю…</div>
           <details class="ins-log"><summary>Подробности</summary><pre></pre></details>`;
         back.style.visibility = 'hidden';
+        /* Кнопку убираем совсем, а не просто гасим. Пока она стоит на месте
+           с надписью «Далее», человек ждёт от неё продолжения — а по
+           окончании установки ровно там же появляется «Перезагрузить». Две
+           разные кнопки в одной точке экрана: рука тянется по привычке и
+           нажимает не то, что собиралась. Пока идёт запись на диск, жать
+           нечего вовсе — значит, и кнопки быть не должно. */
+        next.style.visibility = 'hidden';
         next.disabled = true;
         win.setSub('Установка идёт');
         const bar = $('.ins-bar i', body), stepEl = $('.ins-step', body), pre = $('.ins-log pre', body);
@@ -217,8 +225,10 @@ const INSTALLER_APP = {
           <img class="os-logo ins-logo" src="assets/logo.png" alt="" draggable="false">
           <h1>${S2.repair ? 'Система восстановлена' : 'Система установлена'}</h1>
           <p class="ins-lead">${esc(Brand.name)} перенесена на ${esc(S2.disk)}.
-            Выньте установочный носитель и перезагрузите машину — дальше она будет грузиться с диска
-            и запомнит всё, что вы настроите.</p>`;
+            Нажмите «Перезагрузить» — и выньте установочный носитель, когда экран погаснет.
+            Дальше машина будет грузиться с диска и запомнит всё, что вы настроите.</p>
+          <p class="ins-note">Носитель нужен до самой перезагрузки: пока она не началась,
+            система работает с него и без него остановится.</p>`;
         back.style.visibility = 'hidden';
         next.textContent = 'Перезагрузить';
         win.setSub('Готово');
@@ -232,6 +242,7 @@ const INSTALLER_APP = {
       body.appendChild(el('div', 'ins-note',
         'Диск мог остаться размеченным наполовину. Можно попробовать снова — установка начинается с полной очистки диска.'));
       back.style.visibility = '';
+      next.style.visibility = '';
       next.disabled = false;
       next.textContent = 'Начать заново';
       S2.step = 6;
@@ -239,10 +250,36 @@ const INSTALLER_APP = {
 
     const done = () => { S2.step = 5; draw(); };
 
+    /* Перезагрузка после установки идёт особым путём. Обычная сперва
+       аккуратно отключает всё подключённое, а корень живой системы лежит на
+       установочном носителе: стоит его вынуть — и отключать становится
+       нечем, машина не может прочитать даже собственную программу
+       выключения и остаётся стоять с экраном ошибок. Здесь терять нечего:
+       система на диске уже собрана и отключена, живой сеанс — временный.
+       Поэтому уходим немедленно, как от кнопки на корпусе. */
+    const перезагрузи = async () => {
+      const занавес = el('div', 'shutdown-fade');
+      занавес.innerHTML = '<div style="text-align:center"><div class="boot-ring">' +
+        '<svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"/></svg></div>' +
+        '<div style="margin-top:14px;opacity:.7">Перезагрузка…</div></div>';
+      document.body.appendChild(занавес);
+      if (window.OS && window.Platform && Platform.mode === 'native'){
+        try { await OS.power('reboot', true); return; }
+        catch(e){
+          занавес.remove();
+          Dlg.alert('Перезагрузка не удалась', String(e.message || e) +
+            ' Выключите машину кнопкой и включите заново — система на диске уже готова.', '⚠️');
+          return;
+        }
+      }
+      занавес.remove();
+      Shell.power('restart');
+    };
+
     back.onclick = () => { S2.step = Math.max(0, S2.step - 1); draw(); };
     next.onclick = async () => {
       if (S2.step === 6){ S2.step = 1; return draw(); }
-      if (S2.step === 5){ return Shell.power('restart'); }
+      if (S2.step === 5){ return перезагрузи(); }
       if (S2.step === 3){
         const ok = S2.repair
           ? await Dlg.confirm('Восстановить систему на ' + S2.disk + '?',
