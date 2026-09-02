@@ -62,11 +62,19 @@ mount -t sysfs sys "$ROOTFS/sys" 2>/dev/null || true
 cleanup(){ umount -l "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys" 2>/dev/null || true; }
 trap cleanup EXIT
 
+# Ставим строго то, что перечислено: рекомендации тянут за собой половину
+# рабочего стола GNOME. Но у этой строгости есть цена, и однажды она нас
+# уже подвела — linux-firmware приходит к ядру именно рекомендацией, а без
+# него Wi-Fi-карта остаётся куском кремния: драйвер есть, прошивки к нему
+# нет, и система честно говорит, что беспроводных устройств не видно.
+# Поэтому прошивки названы явно, первой же строкой после ядра.
 chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
+  linux-firmware \
+  pciutils usbutils \
   plymouth plymouth-label plymouth-themes \
   labwc wlrctl wlr-randr foot cage seatd greetd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
