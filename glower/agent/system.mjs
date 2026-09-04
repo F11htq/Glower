@@ -35,6 +35,7 @@ const ALLOWED = new Set([
   'useradd', 'usermod', 'userdel', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep', 'fwupdmgr', 'scanimage',
+  'rfkill', 'lspci',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -205,13 +206,54 @@ export function wifi(allowNet){
       try { radio = (await call('nmcli', ['radio', 'wifi'])).trim() === 'enabled'; } catch(e){}
       const active = await call('nmcli', ['-t', '-f', 'NAME,DEVICE,TYPE', 'connection', 'show', '--active'])
         .catch(() => '');
+      /* Если беспроводных устройств нет, «их нет» — плохой ответ. Карта может
+         стоять в машине и молчать: у части ноутбуков Wi-Fi и Bluetooth это
+         одна железка, Bluetooth к ней подключается общим драйвером и живёт,
+         а Wi-Fi требует закрытого, которого в ядре нет. Человек в это время
+         читает «устройств не видно» и ищет неисправность там, где её нет.
+         Поэтому спрашиваем саму шину и говорим, что на ней стоит. */
+      let железо = null;
+      if (!wifiDevs.length && await has('lspci')){
+        const шина = await call('lspci', ['-nnk']).catch(() => '');
+        const куски = String(шина).split(/\n(?=\S)/);
+        for (const кусок of куски){
+          if (!/Network controller|Wireless|802\.11/i.test(кусок)) continue;
+          const имя = (кусок.split('\n')[0] || '').replace(/^\S+\s+/, '').trim();
+          const др = кусок.match(/Kernel driver in use:\s*(\S+)/);
+          железо = { имя:имя.slice(0, 160), драйвер:др ? др[1] : null };
+          break;
+        }
+      }
+
+      /* Заодно смотрим, не выключено ли радио рубильником. Мягкая блокировка
+         снимается одной командой, и знать об этом человеку полезнее, чем
+         гадать. */
+      let рубильник = null;
+      if (!wifiDevs.length && await has('rfkill')){
+        const рк = await call('rfkill', ['list', 'wlan']).catch(() => '');
+        if (/Soft blocked:\s*yes/i.test(String(рк))) рубильник = 'мягкая';
+        else if (/Hard blocked:\s*yes/i.test(String(рк))) рубильник = 'жёсткая';
+      }
+
+      const почему = wifiDevs.length ? null
+        : рубильник === 'жёсткая'
+          ? 'Wi-Fi выключен переключателем на корпусе или в BIOS'
+        : рубильник === 'мягкая'
+          ? 'Wi-Fi выключен программно — его можно включить'
+        : железо && !железо.драйвер
+          ? 'карта есть, но система не знает, чем её включить: ' + железо.имя
+        : железо
+          ? 'карта есть (' + железо.имя + '), но NetworkManager её не показывает'
+          : 'беспроводных устройств на машине не видно';
+
       return {
         supported:wifiDevs.length > 0, allowed:!!allowNet, radio, devices:wifiDevs,
+        железо, рубильник,
         active:active.trim().split('\n').filter(Boolean).map(l => {
           const [name, device, type] = l.split(':');
           return { name, device, type };
         }),
-        reason:wifiDevs.length ? null : 'беспроводных устройств на машине не видно'
+        reason:почему
       };
     },
 
@@ -264,6 +306,11 @@ export function wifi(allowNet){
 
     async 'sys.wifi.radio'({ on }){
       await need();
+      /* Включить радио в NetworkManager мало, если оно погашено рубильником
+         ядра: команда пройдёт, а карта останется молчать. Снимаем мягкую
+         блокировку заодно — жёсткую снять нельзя, она в железе. */
+      if (on && await has('rfkill'))
+        await call('rfkill', ['unblock', 'wlan']).catch(() => {});
       await call('nmcli', ['radio', 'wifi', on ? 'on' : 'off']);
       return { ok:true, on:!!on };
     }
@@ -1140,6 +1187,11 @@ export function apps(allowLaunch){
     async 'sys.bt.power'({ включить }){
       if (!allowLaunch) throw new Error('управление Bluetooth выключено: запустите агент с ключом --allow-launch');
       if (!await has('bluetoothctl')) throw new Error('на машине нет bluetoothctl');
+      /* То же, что и с Wi-Fi: пока держит рубильник ядра, включение через
+         bluetoothctl проходит впустую. На ноутбуках он часто остаётся
+         опущенным после нажатия клавиши на клавиатуре. */
+      if (включить && await has('rfkill'))
+        await call('rfkill', ['unblock', 'bluetooth']).catch(() => {});
       await call('bluetoothctl', ['power', включить ? 'on' : 'off'])
         .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
       return { ok:true, включён:!!включить };
