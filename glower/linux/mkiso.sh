@@ -619,14 +619,43 @@ chroot "$ROOTFS" systemctl mask getty@tty1.service >/dev/null 2>&1 || true
 chroot "$ROOTFS" systemctl set-default graphical.target >/dev/null 2>&1 || true
 
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Чистка того, чего на живой системе никто не читает.
+#
+# Прошивки не трогаем ни одной: образ должен заводиться на чужом железе, и
+# угадывать, какая карта встретится, мы не в праве. Место берём там, где
+# теряется только вес: описания пакетов, страницы руководств, переводы на
+# языки, которых в системе нет, и кэш пакетного менеджера.
+#
+# Это не косметика. GitHub не принимает в релиз файлы больше двух гигабайт,
+# и образ однажды уже упёрся в этот потолок — а всё перечисленное здесь
+# никак не влияет на то, заработает ли Wi-Fi у человека.
+chroot "$ROOTFS" /bin/sh -c '
+  rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/lintian
+  rm -rf /usr/share/help /usr/share/gtk-doc /usr/share/devhelp
+  # переводы: оставляем русский и английский, остальные не нужны никому
+  find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+       ! -name "ru*" ! -name "en*" -exec rm -rf {} + 2>/dev/null || true
+  apt-get clean
+  rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+' || true
+
 step "5/6 сжатие файловой системы"
 cleanup
 rm -rf "$ISO"; mkdir -p "$ISO/live" "$ISO/boot/grub"
 KVER="$(basename "$(ls -1 "$ROOTFS"/boot/vmlinuz-* | tail -1)" | sed 's/vmlinuz-//')"
 cp "$ROOTFS/boot/vmlinuz-$KVER" "$ISO/live/vmlinuz"
 cp "$ROOTFS/boot/initrd.img-$KVER" "$ISO/live/initrd"
+# Сжимаем настолько плотно, насколько умеет zstd, и большими блоками.
+# Уровень сжатия у zstd влияет только на время сборки: распаковка идёт с
+# той же скоростью на любом уровне, так что на старой машине это ничего не
+# стоит. Блок в мегабайт вместо стандартных 128 КБ даёт ещё несколько
+# процентов — алгоритму есть где найти повторы.
+#
+# Плотность здесь не украшение: GitHub не принимает в релиз файлы больше
+# двух гигабайт, и образ однажды уже упёрся в этот потолок.
 mksquashfs "$ROOTFS" "$ISO/live/filesystem.squashfs" \
-  -comp zstd -Xcompression-level 12 -noappend \
+  -comp zstd -Xcompression-level 22 -b 1M -noappend \
   -e boot/vmlinuz-\* -e boot/initrd.img-\* -e .debootstrapped -quiet
 
 # Своим встроенным шрифтом GRUB кириллицу не рисует: названия пунктов
@@ -704,6 +733,19 @@ grub-mkrescue -o "$OUT" "$ISO" -- -volid GLOWEROS
 # загрузочная запись обязана быть на месте — это проверялось на живой загрузке
 if ! xorriso -indev "$OUT" -report_el_torito plain 2>/dev/null | grep -q "El Torito"; then
   echo "  ОШИБКА: в образе нет загрузочной записи — грузиться он не будет"; exit 1
+fi
+
+# Потолок релиза. GitHub не принимает файлы больше двух гигабайт, и узнать
+# об этом через одиннадцать минут сборки, на самом последнем шаге, — плохой
+# способ. Говорим здесь и сразу.
+ISOSIZE=$(stat -c %s "$OUT" 2>/dev/null || echo 0)
+ISOMAX=2147483648
+if [ "$ISOSIZE" -ge "$ISOMAX" ]; then
+  echo
+  echo "  ВНИМАНИЕ: образ больше 2 ГиБ ($(du -h "$OUT" | cut -f1))."
+  echo "  GitHub такой файл в релиз не примет — сборка дойдёт до конца и упадёт"
+  echo "  на выкладке. Уберите что-нибудь из списка пакетов или сожмите плотнее."
+  echo
 fi
 
 echo
