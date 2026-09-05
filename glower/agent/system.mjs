@@ -8,7 +8,7 @@
    — чего на машине нет, о том честно сообщается, а не подделывается.
    ========================================================================== */
 import { execFile } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -1378,7 +1378,30 @@ export function apps(allowLaunch){
           .then(() => true)
           .catch(e => (e && e.code === 1) ? true : false);
       }
-      return { есть:true, работает, отперто };
+      /* Сломанное хранилище отличается от просто запертого: его завела
+         прежняя версия системы с пустым паролем, и теперь вход открыть
+         его не может. Признак — файл есть, а замок закрыт после входа. */
+      const дом = process.env.HOME || ('/home/' + (process.env.USER || 'glower'));
+      const вход = дом + '/.local/share/keyrings/login.keyring';
+      return { есть:true, работает, отперто, 'файлВхода':existsSync(вход) };
+    },
+
+    /* Починка ровно одного случая: хранилище входа заведено не тем паролем
+       и потому не открывается. Чинить его нечем — пароль внутри, и мы его
+       не знаем. Поэтому единственный способ — убрать испорченное, чтобы
+       вход завёл новое, уже с настоящим паролем. Всё, что в нём лежало,
+       пропадёт: спрашиваем об этом наверху, а не здесь. */
+    async 'sys.keyring.reset'(){
+      if (!allowLaunch) throw new Error('починка выключена: запустите агент с ключом --allow-launch');
+      const дом = process.env.HOME || ('/home/' + (process.env.USER || 'glower'));
+      const вход = дом + '/.local/share/keyrings/login.keyring';
+      if (!existsSync(вход)) throw new Error('хранилища входа нет — чинить нечего');
+      const запас = вход + '.сломанное-' + new Date().toISOString().slice(0, 10);
+      /* Не удаляем, а отодвигаем: если пароль всё-таки вспомнится, старое
+         хранилище можно будет открыть вручную. */
+      await rename(вход, запас);
+      return { ok:true, 'отложено':запас,
+               'дальше':'Выйдите и войдите снова — хранилище заведётся заново с вашим паролем' };
     },
 
     async 'sys.bt.scan'({ секунд = 8 } = {}){
