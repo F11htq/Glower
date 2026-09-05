@@ -24,7 +24,7 @@
 .br-url{flex:1;display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:11px;
   background:rgba(var(--tint),.12);box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);
   transition:background var(--t1),box-shadow var(--t1)}
-.br-url:focus-within{background:rgba(var(--tint),.2);box-shadow:inset 0 0 0 1px rgba(var(--acc-r),var(--acc-g),var(--acc-b),.6)}
+.br-url:focus-within{background:rgba(var(--tint),.2);box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb, 58,134,255),.6)}
 .br-url input{flex:1;background:none;border:0;outline:0;color:var(--fg);font-size:13px}
 .br-lock{font-size:12px;opacity:.75}
 
@@ -43,14 +43,14 @@
   color:var(--fg);background:rgba(var(--tint),.14);box-shadow:inset 0 0 0 1px rgba(var(--tint),.16);
   transition:background var(--t1),box-shadow var(--t1)}
 .br-search input:focus{background:rgba(var(--tint),.22);
-  box-shadow:inset 0 0 0 1px rgba(var(--acc-r),var(--acc-g),var(--acc-b),.65)}
+  box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb, 58,134,255),.65)}
 .br-tiles{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:min(680px,96%);margin-top:6px}
 .br-tile{width:132px;padding:14px 10px;border-radius:16px;background:rgba(var(--tint),.10);
   display:flex;flex-direction:column;align-items:center;gap:4px;
   transition:transform var(--t2) var(--e-spring),background var(--t1)}
 .br-tile:hover{background:rgba(var(--tint),.2);transform:translateY(-3px)}
 .br-tile .e{width:34px;height:34px;border-radius:11px;display:grid;place-content:center;font-weight:600;
-  background:linear-gradient(140deg,rgba(var(--acc-r),var(--acc-g),var(--acc-b),.9),rgba(var(--acc-r),var(--acc-g),var(--acc-b),.5));
+  background:linear-gradient(140deg,rgba(var(--accent-rgb, 58,134,255),.9),rgba(var(--accent-rgb, 58,134,255),.5));
   color:#fff;margin-bottom:4px}
 .br-tile b{font-size:13px}
 .br-tile small{font-size:11px;opacity:.6}
@@ -88,7 +88,7 @@
 .ins-disk{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;text-align:left;
   background:rgba(var(--tint),.10);transition:background var(--t1),box-shadow var(--t1)}
 .ins-disk:hover:not(.off){background:rgba(var(--tint),.18)}
-.ins-disk.on{box-shadow:inset 0 0 0 2px rgba(var(--acc-r),var(--acc-g),var(--acc-b),.8)}
+.ins-disk.on{box-shadow:inset 0 0 0 2px rgba(var(--accent-rgb, 58,134,255),.8)}
 .ins-disk.off{opacity:.45}
 .ins-disk .e{font-size:20px}
 .ins-disk .l{display:flex;flex-direction:column;gap:2px}
@@ -99,9 +99,15 @@
 .ins-sum .r + .r{border-top:1px solid rgba(var(--tint),.10)}
 .ins-sum span{opacity:.65}
 
+/* Заливка полосы брала цвет из переменных --acc-r/--acc-g/--acc-b, которых
+   в системе никогда не существовало. Дорожка рисовалась, заливка — нет, и
+   со стороны это выглядело как «полоса есть, но не работает»: она честно
+   росла, только невидимо. Цвет берём из --accent-rgb, который система
+   действительно задаёт, а запасное значение оставляем на случай, если тема
+   ещё не применилась. */
 .ins-bar{width:100%;height:8px;border-radius:6px;background:rgba(var(--tint),.16);overflow:hidden}
 .ins-bar i{display:block;height:100%;border-radius:6px;transition:width .4s var(--e-out);
-  background:linear-gradient(90deg,rgba(var(--acc-r),var(--acc-g),var(--acc-b),.7),rgba(var(--acc-r),var(--acc-g),var(--acc-b),1))}
+  background:linear-gradient(90deg,rgba(var(--accent-rgb, 58,134,255),.7),rgba(var(--accent-rgb, 58,134,255),1))}
 .ins-step{font-size:13px}
 .ins-log{width:100%;text-align:left;font-size:11.5px;opacity:.7}
 .ins-log pre{max-height:160px;overflow:auto;white-space:pre-wrap;margin:8px 0 0;
@@ -114,5 +120,5 @@
 .br-wait .s{font-size:12.5px;opacity:.65;max-width:340px}
 .br-wait .btn{margin-top:6px}
 .br-spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.18);
-  border-top-color:rgba(var(--acc-r),var(--acc-g),var(--acc-b),.95);animation:br-spin 1s linear infinite}
+  border-top-color:rgba(var(--accent-rgb, 58,134,255),.95);animation:br-spin 1s linear infinite}
 @keyframes br-spin{to{transform:rotate(360deg)}}
