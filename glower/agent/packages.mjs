@@ -200,7 +200,13 @@ export function packages(allowPackages){
         } catch(e){}
       }
 
-      const устарело = /Unable to fetch|Failed to fetch|404\s+Not Found/i.test(job.log + ' ' + (job.error || ''));
+      /* «Невозможно найти пакет» здесь — не опечатка человека, а пустой
+         индекс: образ мы отдаём без списков пакетов, чтобы влезть в лимит
+         на размер, и до первого обновления apt не знает ни одного пакета,
+         которого нет на диске. Признак другой, а лечится тем же самым, так
+         что и его считаем поводом обновиться и попробовать снова. */
+      const устарело = /Unable to fetch|Failed to fetch|404\s+Not Found|Unable to locate package|Невозможно найти пакет|Couldn't find any package/i
+        .test(job.log + ' ' + (job.error || ''));
       if (устарело && !job.повтор && action !== 'update'){
         job.повтор = true;
         job.step = 'Обновляю списки и пробую снова';

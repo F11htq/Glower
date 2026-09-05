@@ -604,6 +604,38 @@ chroot "$ROOTFS" /bin/sh -c '
   ln -sf /usr/lib/systemd/system/fwupd.service \
     /etc/systemd/system/multi-user.target.wants/fwupd.service 2>/dev/null || true
 ' || true
+# Индекс пакетов мы из образа выбрасываем: со списками ISO не влезает в
+# лимит на размер. Цена этого вылезает на установленной системе — apt не
+# знает ни одного пакета, которого нет на диске, и на любую попытку
+# что-нибудь поставить отвечает «Невозможно найти пакет». Человеку это
+# читается как «такого пакета не существует», хотя дело лишь в том, что
+# списков ещё не скачивали.
+#
+# Поэтому обновляем их сами, один раз, когда у машины впервые появится
+# сеть. Служба после этого себя выключает: постоянно дёргать репозитории
+# незачем, для этого есть обычное обслуживание.
+cat > "$ROOTFS/usr/lib/systemd/system/glower-apt-first.service" <<'UNITEOF'
+[Unit]
+Description=Первое обновление списков пакетов
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/glower/apt-updated
+# на живом носителе списки легли бы в оперативную память, где место дорого
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/apt-get update
+ExecStartPost=/bin/mkdir -p /var/lib/glower
+ExecStartPost=/bin/touch /var/lib/glower/apt-updated
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+chmod 0644 "$ROOTFS/usr/lib/systemd/system/glower-apt-first.service"
+chroot "$ROOTFS" systemctl enable glower-apt-first.service >/dev/null 2>&1 || true
+
 chroot "$ROOTFS" systemctl enable saned.socket >/dev/null 2>&1 || true
 # Сканер — это устройство на шине, и по умолчанию к нему пускают не всех.
 chroot "$ROOTFS" usermod -aG scanner,lp glower >/dev/null 2>&1 || true
