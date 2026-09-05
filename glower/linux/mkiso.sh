@@ -86,7 +86,7 @@ apt-get install -y --no-install-recommends \
   linux-firmware \
   pciutils usbutils \
   plymouth plymouth-label plymouth-themes \
-  labwc wlrctl wlr-randr foot cage seatd greetd libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
+  labwc wlrctl wlr-randr foot cage seatd greetd swaylock i3lock libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
   udisks2 ntfs-3g exfatprogs dosfstools \
@@ -604,13 +604,41 @@ chroot "$ROOTFS" usermod -aG scanner,lp glower >/dev/null 2>&1 || true
 # и каждая программа спрашивает пароль от него отдельно — люди в такой
 # ситуации выбирают «не сохранять», и пароли расходятся по диску открытым
 # текстом, чего мы и хотели избежать.
-for pf in greetd greetd-greeter login; do
-  [ -f "$ROOTFS/etc/pam.d/$pf" ] || continue
-  grep -q pam_gnome_keyring "$ROOTFS/etc/pam.d/$pf" && continue
-  {
-    printf 'auth     optional  pam_gnome_keyring.so\n'
-    printf 'session  optional  pam_gnome_keyring.so auto_start\n'
-  } >> "$ROOTFS/etc/pam.d/$pf"
+# Строки ниже имеют смысл, только если сам модуль лежит в образе. Если его
+# нет — не пишем ничего: пусть лучше хранилище останется запертым, чем PAM
+# на каждом входе будет ругаться на несуществующий файл.
+if ls "$ROOTFS"/usr/lib/*/security/pam_gnome_keyring.so >/dev/null 2>&1; then
+  for pf in greetd greetd-greeter login; do
+    [ -f "$ROOTFS/etc/pam.d/$pf" ] || continue
+    grep -q pam_gnome_keyring "$ROOTFS/etc/pam.d/$pf" && continue
+    {
+      printf 'auth     optional  pam_gnome_keyring.so\n'
+      printf 'session  optional  pam_gnome_keyring.so auto_start\n'
+    } >> "$ROOTFS/etc/pam.d/$pf"
+  done
+else
+  echo "ВНИМАНИЕ: pam_gnome_keyring.so нет в образе — хранилище паролей останется запертым" >&2
+fi
+
+# В noble модуля pam_lastlog.so больше нет, а настройка greetd на него всё
+# ещё ссылается: на каждом входе в журнал падают две строки про «faulty
+# module». Настоящей работы это не ломает, но мешает читать журнал, когда
+# ищешь настоящую ошибку. Убираем ссылку там, где модуля действительно нет.
+if ! ls "$ROOTFS"/usr/lib/*/security/pam_lastlog.so >/dev/null 2>&1; then
+  for pf in "$ROOTFS"/etc/pam.d/greetd "$ROOTFS"/etc/pam.d/greetd-greeter; do
+    [ -f "$pf" ] || continue
+    sed -i 's/^\([^#].*pam_lastlog\.so\)/# \1/' "$pf"
+  done
+fi
+
+# Экран запирает swaylock (под Wayland) или i3lock (на машинах без KMS, где
+# сеанс идёт под Xorg), а пароль оба проверяют через PAM. Своей настройки в
+# пакете может не оказаться — тогда PAM отказывает всем подряд, и человек
+# остаётся перед запертым экраном, который не открывается вообще ничем.
+for lk in swaylock i3lock; do
+  [ -f "$ROOTFS/etc/pam.d/$lk" ] && continue
+  printf 'auth    include  common-auth\n' > "$ROOTFS/etc/pam.d/$lk"
+  chmod 0644 "$ROOTFS/etc/pam.d/$lk"
 done
 
 chroot "$ROOTFS" systemctl enable greetd.service seatd.service >/dev/null 2>&1 || true

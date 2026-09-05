@@ -128,23 +128,8 @@ body.blurred .wallpaper{filter:blur(18px) brightness(.8);transform:scale(1.12)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .boot-text{color:rgba(255,255,255,.5);font-size:13px;letter-spacing:.4px;animation:fade .8s .3s both}
 @keyframes fade{from{opacity:0}}
-
-.lock{position:fixed;inset:0;z-index:1900;display:flex;flex-direction:column;justify-content:space-between;
-  align-items:center;padding:8vh 0 10vh;text-align:center;cursor:pointer;
-  transition:opacity var(--t4) var(--e-io), transform var(--t4) var(--e-out), visibility var(--t4);
-  background:linear-gradient(180deg,rgba(0,0,0,.25),transparent 30%,rgba(0,0,0,.35))}
-.lock.gone{opacity:0;visibility:hidden;transform:scale(1.08) translateY(-30px);pointer-events:none}
-.lock-time{font-size:clamp(64px,11vw,140px);font-weight:250;letter-spacing:-4px;line-height:1;text-shadow:0 8px 40px rgba(0,0,0,.4);animation:up .8s var(--e-out) both}
-.lock-date{font-size:20px;font-weight:400;opacity:.9;margin-top:6px;animation:up .8s .06s var(--e-out) both}
-.lock-weather{display:inline-flex;gap:10px;align-items:center;padding:8px 16px;margin-top:20px;font-size:14px;border-radius:14px;animation:up .8s .12s var(--e-out) both}
+/* «up» осталось от экрана блокировки, но им же пользуется мастер настройки */
 @keyframes up{from{opacity:0;transform:translateY(22px);filter:blur(6px)}}
-.lock-bottom{display:grid;justify-items:center;gap:10px;animation:up .8s .18s var(--e-out) both}
-.lock-avatar{width:88px;height:88px;border-radius:50%;display:grid;place-content:center;font-size:34px;font-weight:300;
-  background:linear-gradient(140deg,var(--accent),var(--accent-2));box-shadow:0 10px 40px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.4)}
-.lock-name{font-size:20px}
-.lock-btn{padding:9px 40px;border-radius:12px;font-size:14px}
-.lock-btn:hover{background:rgba(var(--tint),.3)}
-.lock-hint{font-size:12px;opacity:.45}
 
 /* ==========================================================================
    DESKTOP + TOPBAR

@@ -1,6 +1,6 @@
 /* ==========================================================================
    Оболочка: док, Пуск, центр управления, виджеты, поиск, Task View,
-   уведомления, контекстные меню, экран блокировки
+   уведомления, контекстные меню, обращение к системному замку
    ========================================================================== */
 'use strict';
 
@@ -649,12 +649,7 @@ const Shell = {
     const tt = $('#tray-time'), td = $('#tray-date');
     if (tt) tt.textContent = time;
     if (td) td.textContent = date;
-    const lt = $('#lock-time'), ld = $('#lock-date');
-    if (lt) lt.textContent = `${S.clock24 ? pad2(h) : h}:${pad2(n.getMinutes())}${suf}`;
-    if (ld) ld.textContent = raw.toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long' });
     const dw = $('#dw-clock'); if (dw) dw.textContent = `${pad2(n.getHours())}:${pad2(n.getMinutes())}`;
-    const lw = $('#lock-weather');
-    if (lw){ const w = this.weather(); lw.innerHTML = `${w.ico} ${w.t > 0 ? '+' : ''}${w.t}° · ${w.desc} · ${esc(S.city)}`; }
     const tb = $('#tbw-temp'); if (tb){ const w = this.weather(); tb.textContent = (w.t > 0 ? '+' : '') + w.t + '°'; $('#tb-weather .tbw-icon').textContent = w.ico; }
   },
 
@@ -728,11 +723,11 @@ const Shell = {
   power(act){
     $('#power-overlay').classList.remove('on');
     if (act === 'cancel') return;
-    if (act === 'lock'){ this.lock(true); return; }
+    if (act === 'lock'){ this.lock(); return; }
     if (act === 'sleep'){
       const f = el('div', 'shutdown-fade', '<div style="text-align:center;opacity:.7">Спящий режим…<br><small>Нажмите, чтобы разбудить</small></div>');
       document.body.appendChild(f);
-      f.onclick = () => { f.remove(); this.lock(true); };
+      f.onclick = () => { f.remove(); };
       return;
     }
     const f = el('div', 'shutdown-fade');
@@ -743,12 +738,25 @@ const Shell = {
     setTimeout(() => location.reload(), act === 'restart' ? 1800 : 1500);
   },
 
-  lock(on){
-    const l = $('#lock');
-    l.classList.toggle('gone', !on);
-    document.body.classList.toggle('blurred', on);
-    /* заблокированный экран не должен показывать чужие окна и файлы */
-    document.body.classList.toggle('locked', on);
-    if (on) this.closePanels();
+  /* Настоящая блокировка экрана.
+
+     Прежний замок был картинкой внутри оболочки: он закрывал собой страницу
+     и спрашивал пароль у самой оболочки. Защищал он ровно ничего — под ним
+     продолжали работать чужие окна, а уйти из-под него можно было
+     переключением консоли. Хуже того, он появлялся при входе вторым
+     вопросом после настоящего.
+
+     Теперь блокировкой занимается система: экран гасит отдельная программа,
+     которая держит его до правильного пароля и спрашивает этот пароль у
+     PAM. Программы при этом продолжают работать — именно этим блокировка и
+     отличается от выхода из системы. */
+  async lock(){
+    this.closePanels();
+    if (!window.Platform || Platform.mode !== 'native'){
+      Shell.toast('Блокировка', 'Здесь нечего блокировать: оболочка работает без системы', '🔒');
+      return;
+    }
+    try { await Platform.rpc('sys.power', { action:'lock' }); }
+    catch(e){ Dlg.alert('Заблокировать не вышло', String(e.message || e), '🔒'); }
   }
 };

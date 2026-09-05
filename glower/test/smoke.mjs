@@ -493,9 +493,11 @@ try {
 
   check('автоблокировка срабатывает после бездействия и молчит при активности',
     await page.evaluate(async () => {
-      const orig = Profiles.lock.bind(Profiles);
+      // замок теперь системный: бездействие зовёт Shell.lock(), а тот —
+      // отдельную программу через агента. Подменяем именно его.
+      const orig = Shell.lock.bind(Shell);
       let locked = 0;
-      Profiles.lock = () => { locked++; };
+      Shell.lock = () => { locked++; };
       KV.set('autoLock', 1);
 
       AutoLock.last = Date.now() - 120000;   // две минуты без ввода
@@ -511,7 +513,7 @@ try {
       AutoLock.tick();                        // выключенная настройка ничего не делает
       const afterOff = locked;
 
-      Profiles.lock = orig;
+      Shell.lock = orig;
       AutoLock.touch();
       return afterIdle === 1 && afterTouch === 1 && afterOff === 1;
     }));
@@ -549,25 +551,24 @@ try {
       return alive;
     }));
 
-  /* --- экран блокировки --- */
-  check('экран блокировки: уведомления, плеер и скрытый рабочий стол',
+  /* --- замок --- */
+  /* Своего экрана блокировки у оболочки больше нет: замок системный, его
+     показывает отдельная программа поверх всего. Проверяем то, что осталось
+     на нашей стороне — что оболочка зовёт систему, а без системы честно
+     говорит об этом и ничего не прячет. */
+  check('замок без системы не прячет рабочий стол, а объясняет, почему',
     await page.evaluate(async () => {
-      Shell.nowPlaying = { t:'Дорога домой', a:'Прототип', e:'🎵' };
-      Notif.add('Календарь', 'Встреча в 14:00', '📅');
-      Profiles.lock();
-      await new Promise(r => setTimeout(r, 500));
-      const media = !!document.querySelector('#lock-extra .lock-media');
-      const notif = (document.querySelectorAll('#lock-extra .lock-notif').length > 0)
-        && document.querySelector('#lock-extra .lock-notif').textContent.includes('Встреча');
-      KV.set('lockNotifText', false); LockScreen.paint();
-      const hidden = document.querySelector('#lock-extra .lock-notif').textContent.includes('скрыто');
-      KV.set('lockNotifText', true);
-      const hiddenDesktop = document.body.classList.contains('locked');
-      window.__unlock && window.__unlock();
-      await new Promise(r => setTimeout(r, 700));
-      Shell.nowPlaying = null;
-      const shown = !document.body.classList.contains('locked');
-      return media && notif && hidden && hiddenDesktop && shown;
+      const было = document.body.className;
+      let сказано = '';
+      const orig = Shell.toast.bind(Shell);
+      Shell.toast = (title, text) => { сказано = String(text || ''); };
+      await Shell.lock();
+      Shell.toast = orig;
+      await new Promise(r => setTimeout(r, 200));
+      const целостность = document.body.className === было
+        && !document.body.classList.contains('locked')
+        && !document.getElementById('lock');
+      return целостность && сказано.length > 0;
     }));
 
   /* --- переключение окон --- */
@@ -746,16 +747,18 @@ try {
     await Profiles.add('Гость', 'Г', '');
   });
   await page.reload(); await page.waitForTimeout(2600);
-  await page.keyboard.press('Enter'); await page.waitForTimeout(400);
-  check('без пароля вход закрыт', await page.evaluate(() => !$('#lock').classList.contains('gone')));
-  await page.fill('.lock-pw input', 'wrong'); await page.keyboard.press('Enter'); await page.waitForTimeout(400);
-  check('неверный пароль отклоняется', await page.$eval('.lock-err', n => n.textContent.length > 0));
-  await page.fill('.lock-pw input', 'pass123'); await page.keyboard.press('Enter'); await page.waitForTimeout(800);
-  check('верный пароль пускает', await page.evaluate(() => $('#lock').classList.contains('gone')));
+
+  /* Своего экрана входа у оболочки больше нет — машину отпирает система.
+     Пароль профиля остался при одном: он спрашивается, когда переходишь в
+     чужой профиль, и именно это здесь и проверяем. */
+  check('пароль профиля отклоняет чужого',
+    await page.evaluate(async () => !(await Profiles.проверьПрофиль('default', 'wrong'))));
+  check('пароль профиля пускает своего',
+    await page.evaluate(async () => await Profiles.проверьПрофиль('default', 'pass123')));
 
   const guest = await page.evaluate(() => Profiles.list().find(p => p.name === 'Гость').id);
   await page.evaluate(id => Profiles.switchTo(id), guest);
-  await page.waitForTimeout(2700); await page.keyboard.press('Enter'); await page.waitForTimeout(700);
+  await page.waitForTimeout(2700);
   check('данные профилей изолированы',
     await page.evaluate(() => S.userName === 'Гость' && !FS.node(['Документы', 'личное.txt'])));
 
@@ -863,8 +866,7 @@ try {
     await page.evaluate(async () => {
       await new Promise(r => setTimeout(r, 3400));
       return !document.querySelector('.welcome')
-        && document.querySelector('#desktop').classList.contains('on')
-        && document.querySelector('#lock').classList.contains('gone');
+        && document.querySelector('#desktop').classList.contains('on');
     }));
 
   check('второй запуск проходит без настройки',
@@ -973,11 +975,10 @@ try {
       const l = Profiles.list();
       l[0].name = 'Тестовый'; l[0].emoji = 'Т';
       Profiles.save(l);
-      Profiles.buildLock();
+      Profiles.renderChip();
       await new Promise(r => setTimeout(r, 200));
       const chip = document.querySelector('#start-user').textContent;
-      const lock = document.querySelector('#lock .lock-name').textContent;
-      return chip.includes('Тестовый') && lock.includes('Тестовый');
+      return chip.includes('Тестовый');
     }));
 
   /* --- часовой пояс --- */
@@ -1052,7 +1053,7 @@ try {
         null, { timeout:20000 }).catch(() => {});
       return await p2.evaluate(() => ({
         настройка:!!document.querySelector('#setup.on'),
-        заблокировано:!document.querySelector('#lock').classList.contains('gone'),
+        заблокировано:!!document.querySelector('#lock'),   // замка в странице быть не должно вовсе
         рабочий:document.querySelector('#desktop').classList.contains('on'),
         средаУстановки:document.body.classList.contains('setup-env'),
         докВиден:getComputedStyle(document.querySelector('.dock-wrap')).display !== 'none',

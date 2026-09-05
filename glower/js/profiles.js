@@ -7,7 +7,6 @@
 const Profiles = {
   KEY:'glower.profiles',
   CUR:'glower.profile',
-  ok:false,                       // пройден ли вход в текущей сессии
 
   list(){ try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch(e){ return []; } },
   save(l){ try { localStorage.setItem(this.KEY, JSON.stringify(l)); } catch(e){} },
@@ -56,14 +55,12 @@ const Profiles = {
     return true;
   },
 
-  authorized(){ return this.ok || !((this.current() || {}).hash || this.системныйПароль); },
-
   /* Узнаём у системы, задан ли пароль у нашего пользователя */
   async узнайПроПароль(){
     if (!window.Platform || Platform.mode !== 'native') return;
     try {
       const я = await Platform.rpc('sys.me');
-      this.системныйПароль = я && я['пароль'] === 'задан';
+      this.системныйПароль = я && я['пароль'] === 'задан';   // показываем в Параметрах
       this.системноеИмя = (я && я['имя']) || '';
     } catch(e){}
   },
@@ -86,76 +83,45 @@ const Profiles = {
       .forEach(k => localStorage.removeItem(k));
     return true;
   },
-  switchTo(id){
+  /* Пароль профиля — не пароль машины. Машину проверяет система (sys.auth),
+     а здесь мы сверяем отпечаток того профиля, в который переходим: иначе
+     «Войти как» пускало бы в чужие данные одним щелчком. Защита эта ровно
+     той же силы, что и раньше — от чужого взгляда за общим столом, не от
+     того, у кого есть корень. Настоящий замок машины — системный. */
+  async проверьПрофиль(id, pw){
+    const p = this.list().find(x => x.id === id);
+    if (!p || !p.hash) return true;
+    return (await this.hash(id, pw)) === p.hash;
+  },
+
+  async switchTo(id){
+    const p = this.list().find(x => x.id === id);
+    if (p && p.hash){
+      for (;;){
+        const pw = await Dlg.prompt('Войти как ' + p.name,
+          'Профиль защищён паролем.', '', p.emoji || '👤',
+          { password:true, okText:'Войти' });
+        if (pw === null) return false;              // передумали
+        if (await this.проверьПрофиль(id, pw)) break;
+        await Dlg.alert('Пароль не подошёл',
+          'Проверьте раскладку и регистр — профиль остался прежним.', '⚠️');
+      }
+    }
     localStorage.setItem(this.CUR, id);
     location.reload();
+    return true;
   },
 
-  /* ---------- экран блокировки ---------- */
-  buildLock(){
-    const lock = $('#lock'), bottom = $('.lock-bottom', lock);
-    const p = this.current();
-    bottom.innerHTML = '';
-    if (this.renderChip) this.renderChip();   // имя в Пуске идёт за именем профиля
-
-    const ava = el('div', 'lock-avatar', esc(p.emoji || p.name[0]));
-    const name = el('div', 'lock-name', esc(p.name));
-    bottom.append(ava, name);
-
-    /* На машине спрашиваем пароль, если он задан у пользователя системы */
-    if (p.hash || this.системныйПароль){
-      const box = el('div', 'lock-pw');
-      const inp = el('input'); inp.type = 'password'; inp.placeholder = 'Пароль'; inp.autocomplete = 'off';
-      const go = el('button', '', '→');
-      box.append(inp, go);
-      const err = el('div', 'lock-err', '');
-      const submit = async () => {
-        if (await this.verify(p.id, inp.value)){
-          this.ok = true; err.textContent = '';
-          window.__unlock && window.__unlock();
-        } else {
-          err.textContent = this.последняяБеда || 'Неверный пароль';
-          box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake');
-          inp.select();
-        }
-      };
-      go.onclick = e => { e.stopPropagation(); submit(); };
-      inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') submit(); };
-      inp.onclick = e => e.stopPropagation();
-      bottom.append(box, err);
-      this._pw = inp;
-      setTimeout(() => inp.focus(), 600);
-    } else {
-      const b = el('button', 'lock-btn glass', 'Войти');
-      b.onclick = e => { e.stopPropagation(); this.ok = true; window.__unlock && window.__unlock(); };
-      bottom.append(b, el('div', 'lock-hint', 'нажмите куда угодно или Enter'));
-    }
-
-    const others = this.list().filter(x => x.id !== p.id);
-    if (others.length){
-      const sw = el('div', 'lock-users');
-      others.forEach(o => {
-        const b = el('button', 'lock-user', `<span class="ava">${esc(o.emoji || o.name[0])}</span>${esc(o.name)}${o.hash ? ' 🔒' : ''}`);
-        b.onclick = e => { e.stopPropagation(); this.switchTo(o.id); };
-        sw.appendChild(b);
-      });
-      bottom.append(el('div', 'lock-sw-t', 'Другие пользователи'), sw);
-    }
-  },
-  focusPassword(){ if (this._pw) this._pw.focus(); },
-
-  /* блокировка экрана без выхода из профиля */
-  lock(){
-    this.ok = false;
-    this.buildLock();
-    Shell.lock(true);
-  }
+  /* Экран блокировки оболочки убран целиком. Он был картинкой внутри
+     страницы: закрывал её собой и спрашивал пароль у самой оболочки.
+     Защищал он ровно ничего — под ним продолжали работать чужие окна, а
+     уйти из-под него можно было переключением консоли. Настоящей
+     блокировкой занимается система: Shell.lock() зовёт её. */
 };
 window.Profiles = Profiles;
 
 /* ---------- интеграция с оболочкой ---------- */
 (function wire(){
-  Profiles.buildLock();
 
   // меню пользователя в Пуске
   const chip = $('#start-user');
@@ -173,7 +139,7 @@ window.Profiles = Profiles;
     const others = Profiles.list().filter(p => p.id !== window.__profile);
     Shell.ctx(e.clientX, e.clientY - 180, [
       { i:'⚙️', t:'Параметры учётной записи', f:() => { WM.open('settings', { section:'acc' }); Shell.closePanels(); } },
-      { i:'🔒', t:'Заблокировать', f:() => { Shell.closePanels(); Profiles.lock(); }, k:'Win+L' },
+      { i:'🔒', t:'Заблокировать', f:() => Shell.lock(), k:'Win+L' },
       ...(others.length ? ['hr'] : []),
       ...others.map(p => ({ i:p.emoji || '👤', t:'Войти как ' + p.name, f:() => Profiles.switchTo(p.id) }))
     ]);
@@ -182,21 +148,30 @@ window.Profiles = Profiles;
   // питание: смена пользователя
   const box = $('#power-overlay .power-actions');
   const sw = el('button', '', `<svg viewBox="0 0 24 24" class="ic"><circle cx="9" cy="9" r="3.3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.2a3.2 3.2 0 0 1 0 5.9"/><path d="M17.5 14.4a5.5 5.5 0 0 1 3 4.6"/></svg><span>Сменить пользователя</span>`);
+  /* «Сменить пользователя» — это именно смена профиля оболочки, а не замок:
+     запереть экран можно кнопкой рядом. Если профиль всего один, менять
+     не на что, и честнее сказать это, чем молча ничего не сделать. */
   sw.onclick = () => {
     $('#power-overlay').classList.remove('on');
-    Profiles.ok = false; Profiles.buildLock(); Shell.lock(true);
+    const others = Profiles.list().filter(p => p.id !== window.__profile);
+    if (!others.length)
+      return Shell.toast('Пользователи',
+        'На этой машине пока один профиль. Добавить второй можно в Параметрах', '👥');
+    const r = sw.getBoundingClientRect();
+    Shell.ctx(r.left, Math.max(80, r.top - 40 - others.length * 34),
+      others.map(p => ({ i:p.emoji || '👤', t:'Войти как ' + p.name,
+                         f:() => Profiles.switchTo(p.id) })));
   };
   box.insertBefore(sw, box.firstChild);
 
   // Win+L
   addEventListener('keydown', e => {
     if ((e.metaKey || (e.ctrlKey && e.altKey)) && e.key.toLowerCase() === 'l'){
-      e.preventDefault(); Shell.closePanels(); Profiles.lock();
+      e.preventDefault(); Shell.lock();
     }
   });
 
   // блокировка из меню питания использует профильный экран
-  const powerOrig = Shell.power.bind(Shell);
-  Shell.power = act => { if (act === 'lock'){ $('#power-overlay').classList.remove('on'); return Profiles.lock(); }
-    return powerOrig(act); };
+  /* Блокировкой занимается сама оболочка через систему — перехватывать
+     здесь больше нечего. */
 })();

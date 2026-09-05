@@ -24,7 +24,13 @@ const Platform = {
   },
 
   async rpc(method, params, base){
-    const url = (base || this.url) + '/rpc';
+    /* Без агента адреса нет, и склеивать «null/rpc» бессмысленно: браузер
+       всё равно откажет, зато в консоли останется пугающая ошибка CORS
+       вместо понятной причины. Отвечаем сразу и по-человечески — все, кто
+       нас зовёт, уже умеют ловить отказ. */
+    const корень = base || this.url;
+    if (!корень) throw new Error('система недоступна: оболочка работает без агента');
+    const url = корень + '/rpc';
     const r = await fetch(url, {
       method:'POST', headers:{ 'Content-Type':'application/json' },
       body:JSON.stringify({ method, params })

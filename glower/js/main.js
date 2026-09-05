@@ -10,8 +10,7 @@
      пароля на экране входа нельзя было напечатать ни буквы. */
   if (/[?&]login=1/.test(location.search)){
     const убрать = с => { const н = document.querySelector(с); if (н) н.remove(); };
-    убрать('#boot'); убрать('#lock'); убрать('#desktop');
-    document.body.classList.remove('locked');
+    убрать('#boot'); убрать('#desktop');
     return;
   }
 
@@ -32,19 +31,18 @@
     return r;
   };
 
-  const boot = $('#boot'), lock = $('#lock'), desktop = $('#desktop');
+  const boot = $('#boot'), desktop = $('#desktop');
   const skip = KV.get('skipBoot', false);
 
   const showDesktop = () => { desktop.classList.add('on'); };
 
+  /* Показать рабочий стол. Раньше здесь снимался замок оболочки — тот самый
+     второй вопрос после настоящего входа. Замка больше нет, и открывать
+     стол не мешает ничто. */
   const unlock = () => {
-    if (window.Profiles && !Profiles.authorized()){ Profiles.focusPassword(); return; }
-    if (!lock.classList.contains('gone')){
-      Shell.lock(false);
-      Snd.blip(660, .12, 'sine', .04);
-      setTimeout(() => Snd.blip(990, .16, 'sine', .035), 90);
-      showDesktop();
-    }
+    showDesktop();
+    Snd.blip(660, .12, 'sine', .04);
+    setTimeout(() => Snd.blip(990, .16, 'sine', .035), 90);
   };
 
   /* Решение о первом запуске принимаем, только когда все скрипты выполнены.
@@ -70,21 +68,16 @@
        как в любой системе при первой установке. */
     if (/[?&]install=1/.test(location.search)){
       document.body.classList.add('setup-env');
-      if (window.Profiles) Profiles.ok = true;
       unlock();
       return;
     }
     if (window.Setup && Setup.needed()){
-      lock.classList.add('gone');
-      document.body.classList.remove('locked');
       setTimeout(() => Setup.open(), 350);
       return;
     }
     /* смена языка в настройке перезагружает страницу — здесь досматриваем приветствие */
     if (window.Welcome && KV.get('welcome.pending', false)){
       KV.set('welcome.pending', false);
-      lock.classList.add('gone');
-      document.body.classList.remove('locked');
       setTimeout(() => Welcome.play(), 300);
       return;
     }
@@ -104,12 +97,6 @@
   }, skip ? 200 : 1900);
 
   window.__unlock = unlock;
-  lock.addEventListener('click', unlock);
-  $('#lock-enter').addEventListener('click', e => { e.stopPropagation(); unlock(); });
-  addEventListener('keydown', function once(e){
-    if (lock.classList.contains('gone')) return;
-    if (['Enter',' ','Escape'].includes(e.key)) unlock();
-  });
 
   // адаптация окон при изменении размера экрана
   let rt = null;

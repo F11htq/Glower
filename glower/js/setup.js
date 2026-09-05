@@ -25,13 +25,13 @@ const Setup = {
       'Ваш город':'Your city',
       'Нужен только для погоды. Данные берутся из открытого сервиса Open-Meteo.':'Used only for weather, from the open Open-Meteo service.',
       'Как к вам обращаться':'What should we call you',
-      'Имя видно в меню Пуск и на экране блокировки.':'The name appears in Start and on the lock screen.',
+      'Имя видно в меню Пуск и при смене пользователя.':'The name appears in Start and when switching users.',
       'Имя пользователя':'User name',
       'Без имени дальше нельзя — так система будет к вам обращаться':'A name is required — this is how the system will address you',
       'Пароль':'Password',
-      'Можно оставить пустым — тогда вход будет свободным.':'Leave it empty for a free sign-in.',
+      'Можно оставить пустым — тогда профиль не будет ничего спрашивать.':'Leave it empty and the profile will not ask for anything.',
       'Пароль (не обязательно)':'Password (optional)',
-      'Честно о том, что это даёт: пароль запирает экран блокировки внутри системы. Его хеш хранится на этой машине, сами файлы не шифруются. Это защита от чужого взгляда, а не от того, у кого есть доступ к компьютеру.':'Honestly about what this gives you: the password locks the system\u2019s lock screen. Its hash is stored on this machine and the files themselves are not encrypted. It guards against a passing glance, not against someone with access to the computer.',
+      'Честно о том, что это даёт: этот пароль разделяет профили внутри оболочки. Его хеш хранится на этой машине, сами файлы не шифруются. Запертый экран машины отпирается паролем учётной записи, а не этим.':'Honestly about what this gives you: this password separates profiles inside the shell. Its hash is stored on this machine and the files themselves are not encrypted. A locked screen is unlocked with the account password, not with this one.',
       'Оформление':'Appearance',
       'Тему и цвет тоже можно менять когда угодно.':'Theme and colour can be changed at any time too.',
       'Тёмная':'Dark', 'Светлая':'Light',
@@ -196,7 +196,7 @@ const Setup = {
         area.appendChild(i);
       } },
 
-    { title:'Как к вам обращаться', sub:'Имя видно в меню Пуск и на экране блокировки.',
+    { title:'Как к вам обращаться', sub:'Имя видно в меню Пуск и при смене пользователя.',
       fill(area){
         const wrap = el('div', 'setup-name');
         const i = el('input', 'inp setup-input');
@@ -217,16 +217,16 @@ const Setup = {
         return false;
       } },
 
-    { title:'Пароль', sub:'Можно оставить пустым — тогда вход будет свободным.',
+    { title:'Пароль', sub:'Можно оставить пустым — тогда профиль не будет ничего спрашивать.',
       fill(area){
         const i = el('input', 'inp setup-input'); i.type = 'password';
         i.placeholder = this.t('Пароль (не обязательно)'); i.value = this.data.pass;
         i.oninput = () => this.data.pass = i.value;
         area.appendChild(i);
         area.appendChild(el('div', 'setup-note', this.t(
-          'Честно о том, что это даёт: пароль запирает экран блокировки внутри системы. ' +
-          'Его хеш хранится на этой машине, сами файлы не шифруются. Это защита от чужого ' +
-          'взгляда, а не от того, у кого есть доступ к компьютеру.')));
+          'Честно о том, что это даёт: этот пароль разделяет профили внутри оболочки. ' +
+          'Его хеш хранится на этой машине, сами файлы не шифруются. Запертый экран ' +
+          'машины отпирается паролем учётной записи, а не этим.')));
       } },
 
     { title:'Оформление', sub:'Тему и цвет тоже можно менять когда угодно.',
@@ -323,9 +323,9 @@ const Setup = {
       if (p){ p.name = d.name.trim(); p.emoji = d.emoji || d.name.trim()[0] || '🙂'; Profiles.save(l); }
       if (d.pass) await Profiles.setPassword(me.id, d.pass);
     }
-    /* имя выбрано только что — экран блокировки и кнопка в Пуске должны
-       показать его сразу, а не после перезапуска системы */
-    Profiles.buildLock();
+    /* имя выбрано только что — кнопка в Пуске должна показать его сразу,
+       а не после перезапуска системы */
+
     if (Profiles.renderChip) Profiles.renderChip();
     Shell.renderShell();
 
@@ -371,7 +371,7 @@ const Welcome = {
       ov.classList.add('bye');
       setTimeout(() => ov.remove(), 900);
       $('#desktop').classList.add('on');
-      Shell.lock(false);
+
       Shell.toast('Система', 'Настройка завершена — добро пожаловать', '✨', 4000);
     }, 2600);
   }

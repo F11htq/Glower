@@ -35,7 +35,7 @@ const ALLOWED = new Set([
   'useradd', 'usermod', 'userdel', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep', 'fwupdmgr', 'scanimage',
-  'rfkill', 'lspci',
+  'rfkill', 'lspci', 'swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -63,8 +63,32 @@ export function power(allowPower){
       const a = map[action];
       if (!a) throw new Error('неизвестное действие: ' + action);
       if (a === 'lock'){
-        if (await has('loginctl')) { await call('loginctl', ['lock-session']); return { ok:true, via:'loginctl' }; }
-        throw new Error('на машине нет loginctl — блокировать нечем');
+        /* Блокировка экрана — это отдельная программа, которая берёт экран
+           себе и держит его до правильного пароля. Пароль она спрашивает у
+           системы, а не у нас: оболочка не может и не должна решать, кого
+           пускать обратно. Программы при этом продолжают работать — этим
+           блокировка и отличается от выхода из системы.
+
+           loginctl lock-session сюда не годится: он лишь объявляет о
+           желании заблокировать, и если слушать это некому, не происходит
+           ровно ничего — а человек уходит от машины, думая, что запер её. */
+        const среда = await средаЭкрана();
+        /* Замки не взаимозаменяемы: swaylock умеет только Wayland, i3lock —
+           только X. На машинах без KMS сеанс поднимается под Xorg, и там
+           swaylock просто не запустится. Порядок выбираем по тому, какой
+           сеанс на самом деле идёт. */
+        const ключи = { swaylock:['-f'], waylock:[], gtklock:['-d'], i3lock:['-c', '101828'], xsecurelock:[] };
+        const порядок = среда.WAYLAND_DISPLAY
+          ? ['swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock']
+          : ['i3lock', 'xsecurelock', 'gtklock', 'swaylock'];
+        for (const прог of порядок){
+          if (!await has(прог)) continue;
+          const { spawn } = await import('node:child_process');
+          spawn(прог, ключи[прог] || [],
+            { detached:true, stdio:'ignore', env:среда }).unref();
+          return { ok:true, via:прог };
+        }
+        throw new Error('в системе нет программы блокировки экрана — запирать нечем');
       }
       /* Выключение — единственное место, где одной команды мало.
          От имени пользователя systemctl обращается к polkit, а его на машине

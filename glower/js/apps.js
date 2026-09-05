@@ -1180,17 +1180,6 @@ APPS.settings = {
         wd.appendChild(row(d.e, d.n, 'На рабочем столе', rm));
       });
       main.appendChild(wd);
-
-      const lk = card('Экран блокировки');
-      lk.appendChild(row('🖼️', 'Фон блокировки', 'Совпадает с рабочим столом', el('div', 'muted tiny', 'Обои')));
-      lk.appendChild(row('🌤', 'Погода на экране блокировки', '', toggle(() => KV.get('lockWeather', true), v => KV.set('lockWeather', v))));
-      lk.appendChild(row('🔔', 'Уведомления на экране блокировки', 'Видно, что пришло, не разблокировав систему',
-        toggle(() => KV.get('lockNotif', true), v => { KV.set('lockNotif', v); LockScreen.paint(); })));
-      lk.appendChild(row('🙈', 'Скрывать содержимое уведомлений', 'Останутся только названия приложений',
-        toggle(() => !KV.get('lockNotifText', true), v => { KV.set('lockNotifText', !v); LockScreen.paint(); })));
-      lk.appendChild(row('🎵', 'Плеер на экране блокировки', 'Управление музыкой без разблокировки',
-        toggle(() => KV.get('lockMedia', true), v => { KV.set('lockMedia', v); LockScreen.paint(); })));
-      main.appendChild(lk);
     }
 
     /* --- форма поверхностей (внутри Персонализации) --- */
@@ -1295,17 +1284,6 @@ APPS.settings = {
         wd.appendChild(row(d.e, d.n, 'На рабочем столе', rm));
       });
       main.appendChild(wd);
-
-      const lk = card('Экран блокировки');
-      lk.appendChild(row('🖼️', 'Фон блокировки', 'Совпадает с рабочим столом', el('div', 'muted tiny', 'Обои')));
-      lk.appendChild(row('🌤', 'Погода на экране блокировки', '', toggle(() => KV.get('lockWeather', true), v => KV.set('lockWeather', v))));
-      lk.appendChild(row('🔔', 'Уведомления на экране блокировки', 'Видно, что пришло, не разблокировав систему',
-        toggle(() => KV.get('lockNotif', true), v => { KV.set('lockNotif', v); LockScreen.paint(); })));
-      lk.appendChild(row('🙈', 'Скрывать содержимое уведомлений', 'Останутся только названия приложений',
-        toggle(() => !KV.get('lockNotifText', true), v => { KV.set('lockNotifText', !v); LockScreen.paint(); })));
-      lk.appendChild(row('🎵', 'Плеер на экране блокировки', 'Управление музыкой без разблокировки',
-        toggle(() => KV.get('lockMedia', true), v => { KV.set('lockMedia', v); LockScreen.paint(); })));
-      main.appendChild(lk);
     }
 
     /* --- форма поверхностей (внутри Персонализации) --- */
@@ -2197,7 +2175,7 @@ APPS.settings = {
             } catch(e){ Dlg.alert('Не вышло сменить пароль', String(e.message || e), '⚠️'); }
           };
           место.appendChild(row('🔑', состояние,
-            'Этим паролем система спрашивает вас при входе и на экране блокировки', сменить));
+            'Этим паролем система спрашивает вас при входе и когда экран заперт', сменить));
 
           const группы = (я['группы'] || []).join(', ');
           if (группы) место.appendChild(row('👥', 'Группы', группы, el('span')));
@@ -2312,11 +2290,11 @@ APPS.settings = {
       ni.onchange = () => {
         const l = Profiles.list(); const p = l.find(x => x.id === me.id);
         p.name = ni.value || 'Пользователь'; Profiles.save(l);
-        set('userName', p.name); Shell.renderShell(); Profiles.buildLock(); drawMain();
+        set('userName', p.name); Shell.renderShell(); drawMain();
       };
-      c.appendChild(row('👤', 'Имя', 'Показывается в Пуске и на экране блокировки', ni));
+      c.appendChild(row('👤', 'Имя', 'Показывается в Пуске и при смене пользователя', ni));
 
-      c.appendChild(row('🔒', 'Блокировать при бездействии', 'Экран блокировки включится сам, если системой не пользуются',
+      c.appendChild(row('🔒', 'Блокировать при бездействии', 'Система запрёт экран сама, если машиной не пользуются',
         sel([{ n:'Никогда', v:'0' }, { n:'1 минута', v:'1' }, { n:'5 минут', v:'5' },
              { n:'10 минут', v:'10' }, { n:'30 минут', v:'30' }],
             () => String(KV.get('autoLock', 0)),
@@ -2327,7 +2305,7 @@ APPS.settings = {
       ei.onchange = () => {
         const l = Profiles.list(); const p = l.find(x => x.id === me.id);
         p.emoji = ei.value || p.name[0]; Profiles.save(l);
-        Shell.renderShell(); Profiles.buildLock(); drawMain();
+        Shell.renderShell(); drawMain();
       };
       c.appendChild(row('🙂', 'Значок', 'Буква или эмодзи', ei));
       main.appendChild(c);
@@ -2340,26 +2318,26 @@ APPS.settings = {
         if (p1.value !== p2.value) return Shell.toast('Учётная запись', 'Пароли не совпадают', '⚠️');
         if (!p1.value) return Shell.toast('Учётная запись', 'Пустой пароль — используйте «Убрать»', '⚠️');
         await Profiles.setPassword(me.id, p1.value);
-        Profiles.ok = true; Profiles.buildLock(); drawMain();
+        drawMain();
         Shell.toast('Учётная запись', 'Пароль установлен', '🔒');
       };
       const rw = row('🔑', me.hash ? 'Сменить пароль' : 'Установить пароль',
-        'Запрашивается на экране блокировки и при смене пользователя', el('span'));
+        'Спрашивается при смене пользователя в оболочке. Запертый экран машины отпирается паролем учётной записи выше', el('span'));
       rw.querySelector('.ctl').append(p1, p2, sv);
       pw.appendChild(rw);
       if (me.hash){
         const del = el('button', 'btn', 'Убрать');
         del.onclick = async () => {
           if (!await Dlg.confirm('Убрать пароль',
-              'Вход станет свободным: экран блокировки перестанет что-либо спрашивать.',
+              'Переключаться на этот профиль сможет любой, кто сидит за машиной.',
               { icon:'🔓', okText:'Убрать' })) return;
-          await Profiles.setPassword(me.id, null); Profiles.buildLock(); drawMain();
+          await Profiles.setPassword(me.id, null); drawMain();
           Shell.toast('Учётная запись', 'Пароль удалён', '🔓');
         };
-        pw.appendChild(row('🔓', 'Убрать пароль', 'Вход станет свободным', del));
+        pw.appendChild(row('🔓', 'Убрать пароль', 'Переход в этот профиль перестанет спрашивать', del));
       }
       pw.appendChild(row('ℹ️', 'Что даёт пароль честно',
-        'Это блокировка экрана: хеш SHA-256 хранится локально, сами данные при этом не шифруются. Защита от случайного взгляда, а не от того, у кого есть полный доступ к машине.', el('span')));
+        'Это пароль профиля оболочки: хеш SHA-256 хранится локально, сами данные при этом не шифруются. Он разделяет профили между своими, а не защищает от того, у кого есть полный доступ к машине. Экран машины запирает система — паролем учётной записи.', el('span')));
       main.appendChild(pw);
 
       const others = Profiles.list().filter(x => x.id !== me.id);
@@ -2372,7 +2350,7 @@ APPS.settings = {
           if (!await Dlg.confirm('Удалить профиль',
               `«${o.name}» будет удалён вместе со своими файлами, настройками и заметками.`,
               { icon:'🗑️', okText:'Удалить', danger:true })) return;
-          Profiles.remove(o.id); Profiles.buildLock(); drawMain();
+          Profiles.remove(o.id); drawMain();
           Shell.toast('Учётные записи', 'Профиль удалён', '🗑️');
         };
         const r2 = row(o.emoji || '👤', o.name, (o.hash ? '🔒 с паролем' : 'без пароля') +
@@ -2389,8 +2367,8 @@ APPS.settings = {
       add.onclick = async () => {
         if (!nn.value.trim()) return Shell.toast('Учётные записи', 'Введите имя', '⚠️');
         const id = await Profiles.add(nn.value.trim(), ne.value.trim(), np.value);
-        Profiles.buildLock(); drawMain();
-        Shell.toast('Учётные записи', 'Профиль создан. Войти можно с экрана блокировки', '👥');
+        drawMain();
+        Shell.toast('Учётные записи', 'Профиль создан. Переключиться можно через меню Пуск', '👥');
       };
       const ar = row('➕', 'Новый профиль', 'Отдельные файловая система, обои и параметры', el('span'));
       ar.querySelector('.ctl').append(nn, ne, np, add);

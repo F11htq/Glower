@@ -103,12 +103,11 @@ const AutoLock = {
   tick(){
     const m = this.minutes();
     if (!m) return;
-    if (!$('#lock').classList.contains('gone')) return;   // уже заблокировано
     if (!$('#desktop').classList.contains('on')) return;
     if (Date.now() - this.last < m * 60000) return;
     this.touch();
     Shell.closePanels();
-    Profiles.lock();
+    Shell.lock();
   },
 
   install(){
@@ -211,83 +210,13 @@ Alarms.ui = function(body){
 };
 
 /* ==========================================================================
-   6. Экран блокировки: уведомления и то, что играет
+   6. (свободно)
 
-   Не разблокировав систему, видно, что пришло и что
-   звучит. Управление плеером работает прямо с замка, содержимое уведомлений
-   можно скрыть — на случай, если экран видно не только вам.
+   Здесь жил экран блокировки оболочки: уведомления и плеер на замке.
+   Замка больше нет — блокировкой занимается система, отдельной программой,
+   которая держит экран до правильного пароля. Показывать на ней свои
+   уведомления мы не можем и не должны: это чужое окно, и в этом весь смысл.
    ========================================================================== */
-const LockScreen = {
-  showText(){ return KV.get('lockNotifText', true); },
-  showNotif(){ return KV.get('lockNotif', true); },
-  showMedia(){ return KV.get('lockMedia', true); },
-
-  box(){
-    let b = $('#lock-extra');
-    if (!b){
-      b = el('div', 'lock-extra');
-      b.id = 'lock-extra';
-      const top = $('.lock-top', $('#lock'));
-      if (!top) return null;
-      top.appendChild(b);
-    }
-    return b;
-  },
-
-  paint(){
-    const b = this.box();
-    if (!b) return;
-    b.innerHTML = '';
-
-    /* --- что играет --- */
-    const np = Shell.nowPlaying;
-    if (np && this.showMedia()){
-      const m = el('div', 'lock-media glass');
-      m.innerHTML = `<div class="art">${np.e || '🎵'}</div>
-        <div class="txt"><b>${esc(np.t)}</b><span>${esc(np.a || '')}</span></div>`;
-      const btns = el('div', 'mb');
-      [['prev','⏮'], ['pp','⏸'], ['next','⏭']].forEach(([a, g]) => {
-        const x = el('button', '', g);
-        x.onclick = e => {
-          e.stopPropagation();
-          const w = WM.wins.find(v => v.appId === 'music');
-          if (!w) return;
-          const sel = { prev:'[data-a="prev"]', pp:'[data-a="pp"]', next:'[data-a="next"]' }[a];
-          const t = $(sel, w.body); if (t) t.click();
-          setTimeout(() => this.paint(), 150);
-        };
-        btns.appendChild(x);
-      });
-      m.appendChild(btns);
-      b.appendChild(m);
-    }
-
-    /* --- уведомления --- */
-    if (!this.showNotif()) return;
-    const list = (window.Notif ? Notif.list() : []).slice(0, 4);
-    if (!list.length) return;
-    const box = el('div', 'lock-notifs');
-    list.forEach(n => {
-      const c = el('div', 'lock-notif glass');
-      c.innerHTML = `<span class="ic">${n.icon || '🔔'}</span>
-        <div><b>${esc(n.title)}</b>
-        <span>${this.showText() ? esc(n.text || '') : 'Содержимое скрыто'}</span></div>`;
-      box.appendChild(c);
-    });
-    b.appendChild(box);
-  }
-};
-window.LockScreen = LockScreen;
-
-/* перерисовываем замок, когда он появляется и когда что-то меняется */
-(function wireLock(){
-  const lock = $('#lock');
-  const locked = () => !lock.classList.contains('gone');
-  new MutationObserver(() => { if (locked()) LockScreen.paint(); })
-    .observe(lock, { attributes:true, attributeFilter:['class'] });
-  setInterval(() => { if (locked()) LockScreen.paint(); }, 4000);
-  if (locked()) LockScreen.paint();
-})();
 
 /* ==========================================================================
    7. Переключение окон: Alt + `
