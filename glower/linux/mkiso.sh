@@ -123,6 +123,7 @@ apt-get install -y --no-install-recommends \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
+  file less nano \
   apt-utils debconf-utils \
   parted fdisk dosfstools e2fsprogs squashfs-tools \
   flatpak bubblewrap apparmor \

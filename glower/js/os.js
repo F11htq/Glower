@@ -106,12 +106,17 @@ function wirePower(){
     if (!OS.on() || !OS.can('power')) return orig(act);
     const map = { shutdown:['poweroff', 'Выключение', 'Машина выключится.'],
                   restart:['reboot', 'Перезагрузка', 'Машина перезагрузится.'],
-                  sleep:['suspend', 'Спящий режим', 'Машина уснёт.'] };
+                  sleep:['suspend', 'Спящий режим', 'Машина уснёт.'],
+                  logout:['logout', 'Выйти из системы',
+                          'Программы закроются, и вы вернётесь к экрану входа. Машина при этом останется включённой.'] };
     const m = map[act];
     if (!m) return orig(act);
     const ov = $('#power-overlay'); if (ov) ov.classList.remove('on');
-    if (!await Dlg.confirm(m[1], m[2] + ' Это действие затронет всю машину, а не только оболочку.',
-        { icon:'⏻', okText:m[1], danger:true })) return;
+    /* Выход из системы машину не трогает — не надо пугать человека тем,
+       чего не произойдёт. Остальным трём предупреждение по делу. */
+    const хвост = act === 'logout' ? '' : ' Это действие затронет всю машину, а не только оболочку.';
+    if (!await Dlg.confirm(m[1], m[2] + хвост,
+        { icon:act === 'logout' ? '🚪' : '⏻', okText:m[1], danger:true })) return;
 
     /* Экран гаснет сразу, как в настоящей системе. Но если машина откажется
        выключаться, занавес надо убрать и сказать почему — иначе человек
@@ -120,6 +125,7 @@ function wirePower(){
     fade.innerHTML = act === 'restart'
       ? '<div style="text-align:center"><div class="boot-ring"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"/></svg></div><div style="margin-top:14px;opacity:.7">Перезагрузка…</div></div>'
       : act === 'sleep' ? '<div style="opacity:.6">Засыпаю…</div>'
+      : act === 'logout' ? '<div style="opacity:.6">Выхожу из системы…</div>'
       : '<div style="opacity:.6">Завершение работы…</div>';
     document.body.appendChild(fade);
 
@@ -130,12 +136,15 @@ function wirePower(){
       return;
     }
     /* Машина уходит не мгновенно: подождём, и если через десять секунд мы
-       всё ещё здесь — значит, не ушла. */
+       всё ещё здесь — значит, не ушла. Для выхода из системы говорим о
+       сеансе, а не о машине: машина и не должна была никуда уходить. */
     if (act !== 'sleep') setTimeout(() => {
       if (!document.body.contains(fade)) return;
       fade.remove();
-      Dlg.alert(m[1], 'Команда принята, но машина всё ещё работает. ' +
-        'Похоже, systemd не довёл действие до конца.', '⚠️');
+      Dlg.alert(m[1], act === 'logout'
+        ? 'Команда принята, но сеанс всё ещё идёт. Похоже, systemd не довёл выход до конца.'
+        : 'Команда принята, но машина всё ещё работает. Похоже, systemd не довёл действие до конца.',
+        '⚠️');
     }, 10000);
     else setTimeout(() => fade.remove(), 1500);
   };

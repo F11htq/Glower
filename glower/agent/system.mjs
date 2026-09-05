@@ -59,9 +59,26 @@ export function power(allowPower){
   return {
     async 'sys.power'({ action, сразу }){
       if (!allowPower) throw new Error('управление питанием выключено: запустите агент с ключом --allow-power');
-      const map = { poweroff:'poweroff', reboot:'reboot', suspend:'suspend', lock:'lock' };
+      const map = { poweroff:'poweroff', reboot:'reboot', suspend:'suspend',
+                    lock:'lock', logout:'logout' };
       const a = map[action];
       if (!a) throw new Error('неизвестное действие: ' + action);
+
+      if (a === 'logout'){
+        /* Выход из системы — это конец сеанса, а не выключение машины:
+           программы закрываются, а служба входа поднимает экран входа
+           заново. Просить об этом надо не оболочку и не оконный сервер по
+           отдельности, а systemd: он знает, из чего сеанс состоит, и
+           закончит его целиком. Без этого у человека с экраном входа и
+           несколькими пользователями нет способа вернуться к выбору — а он
+           нужен и для того, чтобы подхватились новые части системы. */
+        if (await has('loginctl')){
+          const кто = process.env.XDG_SESSION_ID;
+          await call('loginctl', кто ? ['terminate-session', кто] : ['terminate-user', String(process.getuid())]);
+          return { ok:true, via:'loginctl' };
+        }
+        throw new Error('на машине нет loginctl — закончить сеанс нечем');
+      }
       if (a === 'lock'){
         /* Блокировка экрана — это отдельная программа, которая берёт экран
            себе и держит его до правильного пароля. Пароль она спрашивает у
@@ -532,15 +549,40 @@ async function запустить(программа, части, via){
 
 /* Агент поднимается раньше оконного сервера, поэтому про экран он ничего
    не знает и узнаёт каждый раз заново: ищет сокет Wayland в папке сеанса. */
+/* Агент поднимается раньше оконного сервера и потому не знает от него
+   ничего: ни WAYLAND_DISPLAY, ни DISPLAY в его окружении нет. Адреса
+   приходится искать самим — по сокетам, которые сервер оставляет.
+
+   Раньше здесь стояло «или — или»: нашёлся сокет Wayland — выставляем
+   WAYLAND_DISPLAY, не нашёлся — DISPLAY. Под labwc сокет Wayland есть
+   всегда, поэтому DISPLAY не выставлялся никогда, и ни одна программа для
+   X11 не знала, куда ей рисовать. Xwayland при этом мог работать — сказать
+   о нём было некому. Программа честно отвечала «could not connect to
+   display», и выглядело это как её собственная поломка.
+
+   Теперь выставляем оба, каждый по факту наличия своего сокета: у машины
+   вполне может быть и то и другое сразу, и это норма, а не противоречие. */
 async function средаЭкрана(){
   const env = Object.assign({}, process.env);
   const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
   env.XDG_RUNTIME_DIR = дом;
-  if (!env.WAYLAND_DISPLAY && !env.DISPLAY){
+
+  if (!env.WAYLAND_DISPLAY){
     const сокет = (existsSync(дом) ? (await readdir(дом).catch(() => [])) : [])
       .find(f => /^wayland-\d+$/.test(f));
-    if (сокет) env.WAYLAND_DISPLAY = сокет; else env.DISPLAY = ':0';
+    if (сокет) env.WAYLAND_DISPLAY = сокет;
   }
+
+  if (!env.DISPLAY){
+    /* Xwayland и обычный X-сервер оставляют сокет в одном и том же месте,
+       и различать их нам незачем: программе нужен номер, а не родословная. */
+    const иксы = (await readdir('/tmp/.X11-unix').catch(() => []))
+      .map(f => /^X(\d+)$/.exec(f)).filter(Boolean).map(m => Number(m[1]))
+      .sort((a, b) => a - b);
+    if (иксы.length) env.DISPLAY = ':' + иксы[0];
+    else if (!env.WAYLAND_DISPLAY) env.DISPLAY = ':0';
+  }
+
   return env;
 }
 
