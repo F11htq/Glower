@@ -96,6 +96,42 @@ if command -v gnome-keyring-daemon >/dev/null 2>&1 && [ -z "${GNOME_KEYRING_CONT
   fi
 fi
 
+# Права по запросу. polkitd в системе есть, но сам он ничего не спрашивает:
+# он лишь решает, кому что можно, и ждёт, что пароль у человека попросит
+# кто-то другой — агент проверки подлинности. Без него любая программа,
+# которой нужны права, получает молчаливый отказ. Ни окна, ни ошибки: она
+# просто не делает того, о чём её попросили.
+#
+# Проявляется это неочевидно. Например, VPN-клиент не может включить режим
+# туннеля: создать сетевой интерфейс и переписать маршруты обычному
+# пользователю нельзя, а спросить разрешения не у кого. Человек видит
+# переключатель, который не включается, и никаких объяснений.
+find_polkit_agent(){
+  [ -n "${GLOWER_NO_POLKIT:-}" ] && return 1
+  for a in \
+    /usr/lib/*/polkit-mate/polkit-mate-authentication-agent-1 \
+    /usr/libexec/polkit-mate-authentication-agent-1 \
+    /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 \
+    /usr/lib/*/libexec/polkit-gnome-authentication-agent-1 \
+    /usr/bin/lxqt-policykit-agent
+  do
+    [ -x "$a" ] || continue
+    printf '%s\n' "$a"
+    return 0
+  done
+  return 1
+}
+
+# Агенту нужен уже поднятый экран, иначе ему негде показать своё окно.
+# Поэтому путь мы находим здесь, а запускаем его из стартового скрипта —
+# рядом с оболочкой, когда оконный сервер уже готов.
+POLKIT_AGENT="$(find_polkit_agent || true)"
+if [ -n "$POLKIT_AGENT" ]; then
+  say "GlowerOS: агент прав — $POLKIT_AGENT"
+else
+  say "GlowerOS: агента прав нет — программы не смогут попросить у системы разрешение"
+fi
+
 # --- агент: мост между оболочкой и машиной ---
 # GLOWER_BROWSER передаём и агенту: тем же движком он рисует страницы
 # во встроенном браузере системы.
@@ -216,6 +252,9 @@ run_labwc(){
     say "GlowerOS: оболочку показывает своя программа на WebKit"
     cat > "$START_SH" <<STARTUP
 #!/bin/sh
+# окно с вопросом «разрешить?» показывает он — без него запросы прав
+# проваливаются молча
+[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
 GLOWER_URL="http://localhost:$PORT/" \
 GLOWER_QUERY="session=1$QUERY_EXTRA" \
 GLOWER_PANEL_H="${GLOWER_PANEL_H:-48}" \
@@ -230,6 +269,7 @@ STARTUP
     say "GlowerOS: WebKit недоступен — показываю оболочку браузером"
     cat > "$START_SH" <<STARTUP
 #!/bin/sh
+[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
 "$BROWSER" $(cmdline gpu) --ozone-platform=wayland
 labwc -e >/dev/null 2>&1 || true
 STARTUP
@@ -296,6 +336,8 @@ run_x(){   # $1 — режим отрисовки
     # заголовков, ни перетаскивания, а окна валятся друг на друга.
     cat > "$HOME/.xinitrc" <<XRC
 if command -v openbox >/dev/null; then openbox --sm-disable & fi
+# без него запросы прав проваливаются молча
+[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
 GDK_BACKEND=x11 \
 GLOWER_SURFACE=окно \
 GLOWER_PANEL_H="\${GLOWER_PANEL_H:-48}" \
@@ -306,6 +348,7 @@ XRC
   elif [ -n "$BROWSER" ]; then
     say "GlowerOS: WebKit недоступен — показываю оболочку браузером (X-сервер)"
     cat > "$HOME/.xinitrc" <<XRC
+[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
 exec "$BROWSER" $(cmdline "$1")
 XRC
   else
