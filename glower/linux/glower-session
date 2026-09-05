@@ -195,6 +195,17 @@ run_labwc(){
   command -v labwc >/dev/null || return 1
   [ "$HAVE_DRI" = yes ] || return 1
   say "GlowerOS: пробую labwc (Wayland)"
+
+  # Чужие программы должны знать, куда они попали. Без этого Qt по привычке
+  # идёт через X11, упирается в «could not connect to display» и молча
+  # заканчивается — даже когда умеет Wayland и его поддержка тут же рядом.
+  # Список через точку с запятой Qt понимает как «сначала первое, потом
+  # второе»: своим ходом по Wayland, а кто не умеет — через Xwayland.
+  XDG_SESSION_TYPE=wayland
+  XDG_CURRENT_DESKTOP=labwc
+  QT_QPA_PLATFORM='wayland;xcb'
+  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM
+
   mkdir -p "$HOME/.local/share/glower"
   START_SH="$HOME/.local/share/glower/shell.sh"
 
@@ -266,6 +277,14 @@ run_cage(){
 run_x(){   # $1 — режим отрисовки
   command -v Xorg >/dev/null || command -v X >/dev/null || return 1
   say "GlowerOS: пробую X-сервер ($1)"
+
+  # Сюда мы попадаем, в том числе не сумев поднять labwc, — а он успел
+  # объявить сеанс вейландовским. Возвращаем правду: под X это X, и Qt
+  # должен идти прямым путём, а не искать несуществующий Wayland.
+  XDG_SESSION_TYPE=x11
+  XDG_CURRENT_DESKTOP=openbox
+  QT_QPA_PLATFORM=xcb
+  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM
 
   # Старые машины часто не дают ядру управлять видеокартой: узла /dev/dri нет,
   # и Wayland на такой машине не поднимется вовсе. Но X-сервер работает и там —

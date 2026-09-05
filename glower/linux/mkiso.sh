@@ -86,6 +86,14 @@ trap cleanup EXIT
 # libgl1, а libOpenGL.so.0 — совсем в другом пакете, и одно другого не
 # заменяет. Именно на нём спотыкался Happ.
 #
+# Там же xwayland, и это не мелочь: без него на нашем рабочем столе не
+# запускается вообще ни одна программа для X11, а таких среди сторонних
+# приложений большинство. Они честно ищут дисплей, не находят его и
+# заканчиваются, ничего не показав. Рядом qtwayland5 и qt6-wayland —
+# чтобы программы на Qt умели рисовать напрямую, не через прослойку, — и
+# libxcb-cursor0, без которого Qt начиная с 6.5 отказывается запускать
+# свой же xcb-путь.
+#
 # Внутрь самой команды комментарии не ставить: строки склеены обратными
 # слешами, и комментарий посреди списка съедает всё, что после него, —
 # пакеты молча не попадают в образ, а bash -n такого не замечает.
@@ -126,6 +134,7 @@ apt-get install -y --no-install-recommends \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
   libopengl0 libglx0 libglu1-mesa \
+  xwayland qtwayland5 qt6-wayland libxcb-cursor0 \
   2>&1 | tail -2
 # VirtualBox выдаёт себя за видеокарту VMware, но её драйвер под ним не
 # работает и сам об этом пишет: «unsupported hypervisor, configuration is
