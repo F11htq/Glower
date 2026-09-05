@@ -86,6 +86,11 @@ trap cleanup EXIT
 # libgl1, а libOpenGL.so.0 — совсем в другом пакете, и одно другого не
 # заменяет. Именно на нём спотыкался Happ.
 #
+# libglib2.0-bin даёт gsettings. Им чужие программы прописывают системный
+# прокси — VPN-клиенты в режиме прокси делают именно это. Без него команда
+# просто не находится, программа молча не может настроить систему, и адрес
+# прокси приходится вбивать в каждую программу руками.
+#
 # Там же xwayland, и это не мелочь: без него на нашем рабочем столе не
 # запускается вообще ни одна программа для X11, а таких среди сторонних
 # приложений большинство. Они честно ищут дисплей, не находят его и
@@ -124,6 +129,7 @@ apt-get install -y --no-install-recommends \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
   file less nano \
+  libglib2.0-bin \
   apt-utils debconf-utils \
   parted fdisk dosfstools e2fsprogs squashfs-tools \
   flatpak bubblewrap apparmor \
