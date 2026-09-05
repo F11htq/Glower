@@ -1660,9 +1660,15 @@ export function apps(allowLaunch){
         const список = await call('flatpak', ['list', '--columns=application,origin,installation'])
           .catch(e => e.message);
         скажи('установлено', (список || '').trim() || 'ничего');
-        if (id && /^[\w.-]+$/.test(id)){
+        /* Спрашиваем flatpak только о том, что вообще может быть его
+           программой: имена у него из трёх частей через точку. Иначе он
+           отвечает «Некорректный ID», и человек читает это как ошибку
+           системы, хотя мы просто спросили не у того. */
+        if (id && /^[\w-]+(\.[\w-]+){2,}$/.test(id)){
           const про = await call('flatpak', ['info', id]).catch(e => e.message);
           скажи('о программе', (про || '').trim().split('\n').slice(0, 6).join(' · '));
+        } else if (id){
+          скажи('о программе', id + ' — это не программа flatpak, спрашивать о ней нечего');
         }
       }
 

@@ -91,7 +91,7 @@ apt-get install -y --no-install-recommends \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
   udisks2 ntfs-3g exfatprogs dosfstools \
   cryptsetup cryptsetup-initramfs \
-  ufw gnome-keyring libsecret-1-0 libsecret-tools seahorse \
+  ufw gnome-keyring libpam-gnome-keyring libsecret-1-0 libsecret-tools seahorse \
   fwupd \
   sane-utils sane-airscan simple-scan \
   bluez bluez-tools \
@@ -597,7 +597,10 @@ chroot "$ROOTFS" systemctl enable saned.socket >/dev/null 2>&1 || true
 chroot "$ROOTFS" usermod -aG scanner,lp glower >/dev/null 2>&1 || true
 
 # Хранилище паролей отпирается тем же паролем, которым человек вошёл: PAM
-# передаёт его службе прямо во время входа. Иначе хранилище есть, но заперто,
+# передаёт его службе прямо во время входа. Сам модуль живёт в отдельном
+# пакете libpam-gnome-keyring — без него строки ниже ложатся в настройку
+# впустую, PAM на каждом входе жалуется «cannot open shared object file», а
+# хранилище так и остаётся запертым. Иначе хранилище есть, но заперто,
 # и каждая программа спрашивает пароль от него отдельно — люди в такой
 # ситуации выбирают «не сохранять», и пароли расходятся по диску открытым
 # текстом, чего мы и хотели избежать.

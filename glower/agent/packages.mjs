@@ -103,6 +103,7 @@ const живая = () => existsSync('/run/live/medium') || existsSync('/cdrom/li
 
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
+  let память = null; // что на машине есть: спрошено один раз, а не каждый раз
 
   const нужноРазрешение = () => {
     if (!allowPackages)
@@ -266,9 +267,18 @@ export function packages(allowPackages){
   return {
     /* умеет ли машина ставить программы и что для этого есть */
     async 'pkg.state'(){
-      let apt_ = false, sudo = false;
-      try { await run('which', ['apt-get']); apt_ = true; } catch(e){}
-      try { await run('sudo', ['-n', 'true']); sudo = true; } catch(e){}
+      /* Что на машине есть, за время работы не меняется, а оболочка
+         спрашивает об этом часто. Раньше каждый такой вопрос дёргал sudo, и
+         в журнале безопасности копились записи «COMMAND=/usr/bin/true» — по
+         одной в секунду. Спрашиваем один раз и помним ответ. */
+      const теперь = Date.now();
+      if (!память || теперь - память.когда > 60000){
+        let apt_ = false, sudo = false;
+        try { await run('which', ['apt-get']); apt_ = true; } catch(e){}
+        try { await run('sudo', ['-n', 'true']); sudo = true; } catch(e){}
+        память = { когда:теперь, apt_, sudo };
+      }
+      const { apt_, sudo } = память;
       /* Списки пакетов в образе вычищены, чтобы он не пух. Пока их не
          обновили, поиск честно ничего не найдёт — и оболочка должна об
          этом знать, а не показывать пустоту как «ничего не найдено». */
