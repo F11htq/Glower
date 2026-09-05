@@ -78,6 +78,17 @@ trap cleanup EXIT
 # него Wi-Fi-карта остаётся куском кремния: драйвер есть, прошивки к нему
 # нет, и система честно говорит, что беспроводных устройств не видно.
 # Поэтому прошивки названы явно, первой же строкой после ядра.
+#
+# Ближе к концу списка идёт то, чего просят чужие программы на Electron и
+# Qt. Они часто не объявляют эти зависимости в своих .deb: пакет ставится
+# без единой жалобы, а при запуске падает с «cannot open shared object
+# file». libopengl0 там не случайно рядом с libgl1: libGL.so.1 лежит в
+# libgl1, а libOpenGL.so.0 — совсем в другом пакете, и одно другого не
+# заменяет. Именно на нём спотыкался Happ.
+#
+# Внутрь самой команды комментарии не ставить: строки склеены обратными
+# слешами, и комментарий посреди списка съедает всё, что после него, —
+# пакеты молча не попадают в образ, а bash -n такого не замечает.
 chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -114,6 +125,7 @@ apt-get install -y --no-install-recommends \
   brightnessctl xdg-utils libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
+  libopengl0 libglx0 libglu1-mesa \
   2>&1 | tail -2
 # VirtualBox выдаёт себя за видеокарту VMware, но её драйвер под ним не
 # работает и сам об этом пишет: «unsupported hypervisor, configuration is

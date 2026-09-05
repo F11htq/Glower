@@ -158,6 +158,39 @@ from gi.repository import Gtk, WebKit2, GtkLayerShell
 PYCHECK
 }
 
+# Гасит повторяющиеся сообщения. Считать «подряд идущие» здесь мало: в
+# настоящем журнале две строки про LVDS чередуются, и подряд одинаковых нет
+# ни одной. Поэтому считаем каждое сообщение отдельно: первые три раза
+# показываем целиком, дальше молчим и лишь на круглых числах — 10, 100,
+# 1000 — печатаем строку со счётчиком. Так видно и что это было, и сколько
+# его набралось, а журнал остаётся читаемым.
+#
+# Время в начале строки при сравнении отбрасываем: у повторов оно разное, а
+# сообщение одно и то же. Имена внутри awk — латиницей: кириллицу в именах
+# awk не принимает, и это уже стоило нам трёх поломок.
+fold_repeats(){
+  awk '
+    function key_of(s) {
+      sub(/^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9]+ /, "", s)
+      return s
+    }
+    {
+      k = key_of($0)
+      seen[k]++
+      if (seen[k] <= 3) { print; fflush(); next }
+      if (seen[k] == 10 || seen[k] == 100 || seen[k] == 1000 || seen[k] == 10000) {
+        printf "  ... это сообщение повторилось %d раз, дальше молчу: %s\n", seen[k], k
+        fflush()
+      }
+    }
+    END {
+      for (k in seen)
+        if (seen[k] > 3)
+          printf "  ... всего повторов за сеанс: %d — %s\n", seen[k], k
+    }
+  '
+}
+
 run_labwc(){
   command -v labwc >/dev/null || return 1
   [ "$HAVE_DRI" = yes ] || return 1
@@ -192,10 +225,31 @@ STARTUP
   fi
 
   chmod +x "$START_SH"
-  labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc}" -s "$START_SH" >>"$LOG" 2>&1
-  code=$?
+
+  # Экран этой машины labwc отдаёт не с первого раза: на старых Intel с
+  # матрицей LVDS атомарная установка режима возвращает EBUSY, wlroots
+  # повторяет попытку, и в журнал сыплется «Atomic commit failed» — по
+  # десятку строк в секунду. Картинка при этом живёт (повтор срабатывает),
+  # а вот журнал превращается в мусор: полезные строки вымывает за минуту,
+  # и разбирать по нему уже нечего. Поэтому:
+  #   1) на машинах с LVDS просим wlroots не пользоваться атомарным путём —
+  #      старый работает там без сбоев;
+  #   2) что всё-таки повторяется, сворачиваем в одну строку со счётчиком.
+  if ls -d /sys/class/drm/*LVDS* >/dev/null 2>&1; then
+    say "GlowerOS: матрица LVDS — переключаю вывод на неатомарный путь"
+    WLR_DRM_NO_ATOMIC=1
+    export WLR_DRM_NO_ATOMIC
+  fi
+
+  STATUS="$HOME/.local/share/glower/labwc.code"
+  rm -f "$STATUS"
+  {
+    labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc}" -s "$START_SH" 2>&1
+    echo $? > "$STATUS"
+  } | fold_repeats >> "$LOG"
+  code="$(cat "$STATUS" 2>/dev/null || echo 0)"
   say "GlowerOS: labwc завершился с кодом $code"
-  return $code
+  return "$code"
 }
 
 run_cage(){
