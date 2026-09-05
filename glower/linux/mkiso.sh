@@ -104,6 +104,7 @@ apt-get install -y --no-install-recommends \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
   nodejs curl ca-certificates \
+  apt-utils debconf-utils \
   parted fdisk dosfstools e2fsprogs squashfs-tools \
   flatpak bubblewrap apparmor \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \

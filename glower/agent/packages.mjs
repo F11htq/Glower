@@ -118,10 +118,14 @@ export function packages(allowPackages){
     /* apt умеет отдавать свой собственный ход работы числами — просим его об
        этом. Раньше проценты выводились по узнаваемым строкам, и на длинной
        закачке полоса просто стояла на месте. */
+    /* Ход работы apt отдаёт в отдельный канал, а не в общий вывод. Раньше он
+       шёл туда же, куда и обычные сообщения, и служебные строки протокола
+       попадали человеку прямо в окно ошибки: «pmerror:happ:60.0000:...».
+       Читать такое невозможно, а главное — незачем. */
     const p = spawn('sudo', ['-n', 'apt-get',
       '-o', 'Dpkg::Use-Pty=0', '-o', 'Dpkg::Options::=--force-confold',
-      '-o', 'APT::Status-Fd=1', ...args], {
-      stdio:['ignore', 'pipe', 'pipe'],
+      '-o', 'APT::Status-Fd=3', ...args], {
+      stdio:['ignore', 'pipe', 'pipe', 'pipe'],
       detached:true,     // своя группа процессов: иначе работу нечем остановить
       env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' }
     });
@@ -156,6 +160,13 @@ export function packages(allowPackages){
       const lines = tail.split('\n'); tail = lines.pop();
       lines.forEach(шаг);
     });
+    /* тот самый отдельный канал: только числа хода работы */
+    let хвостСостояния = '';
+    if (p.stdio[3]) p.stdio[3].on('data', d => {
+      хвостСостояния += d;
+      const строки = хвостСостояния.split('\n'); хвостСостояния = строки.pop();
+      строки.forEach(шаг);
+    });
     p.stderr.on('data', d => {
       const t = String(d).trim();
       job.слышно = Date.now();
@@ -170,6 +181,24 @@ export function packages(allowPackages){
       /* «Unable to fetch» значит, что списки устарели: в репозитории пакеты
          уже другие. Это чинится обновлением, и незачем гонять человека —
          обновляемся сами и пробуем ещё раз, но только один. */
+      /* Пакет, у которого не отработал сценарий настройки, остаётся в системе
+         наполовину: dpkg помечает его как ненастроенный, и следующая же
+         установка чего угодно упирается в него. Человек в этом не виноват и
+         починить это одним нажатием не может, а лечится оно одной командой,
+         которую сам apt и советует. Делаем её сами — один раз, и говорим об
+         этом в журнале работы. */
+      const недонастроен = /dpkg was interrupted|--configure -a|not configured yet|returned an error code/i
+        .test(job.log + ' ' + (job.error || ''));
+      if (недонастроен && !job.починка){
+        job.починка = true;
+        job.step = 'Привожу пакеты в порядок';
+        job.log = (job.log + '\n— dpkg остался с ненастроенным пакетом, выполняю dpkg --configure -a\n').slice(-8000);
+        try {
+          await run('sudo', ['-n', 'dpkg', '--configure', '-a'],
+            { timeout:600000, env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' } });
+        } catch(e){}
+      }
+
       const устарело = /Unable to fetch|Failed to fetch|404\s+Not Found/i.test(job.log + ' ' + (job.error || ''));
       if (устарело && !job.повтор && action !== 'update'){
         job.повтор = true;
