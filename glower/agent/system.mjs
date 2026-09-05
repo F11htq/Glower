@@ -8,7 +8,7 @@
    — чего на машине нет, о том честно сообщается, а не подделывается.
    ========================================================================== */
 import { execFile } from 'node:child_process';
-import { readFile, readdir, rename } from 'node:fs/promises';
+import { readFile, readdir, rename, writeFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -1349,7 +1349,7 @@ export function apps(allowLaunch){
       if (!await has('scanimage')) return { есть:false, почему:'на машине нет sane — сканировать нечем', list:[] };
       /* Опрос сканеров идёт по сети и по шине и бывает небыстрым: даём ему
          время, но не бесконечное — человек ждёт ответа, а не тишины. */
-      const { stdout } = await call('scanimage', ['-L'], { timeout:25000 }).catch(() => ({ stdout:'' }));
+      const stdout = await call('scanimage', ['-L'], { timeout:25000 }).catch(() => '');
       const list = [];
       for (const строка of String(stdout).split('\n')){
         const м = строка.match(/^device\s+`([^']+)'\s+is a\s+(.*)$/);
@@ -1377,8 +1377,8 @@ export function apps(allowLaunch){
        не «когда понадобится»: понадобится она внезапно. */
     async 'sys.firewall'(){
       if (!await has('ufw')) return { есть:false };
-      const { stdout } = await call('sudo', ['-n', 'ufw', 'status', 'verbose'])
-        .catch(e => ({ stdout:String(e.stdout || '') }));
+      const stdout = await call('sudo', ['-n', 'ufw', 'status', 'verbose'])
+        .catch(e => String(e.stdout || ''));
       const текст = String(stdout || '');
       const строки = текст.split('\n');
       const шапка = (строки.find(с => /^Status:/i.test(с)) || '').trim();
@@ -1398,6 +1398,63 @@ export function apps(allowLaunch){
       return await this['sys.firewall']();
     },
 
+    /* ---------- IPv6 ----------
+       Выключать IPv6 всем подряд неправильно: это половина современной
+       сети. Но у машины за VPN он часто мешает по-настоящему. Туннели
+       нередко поднимают маршрут только для IPv4, и тогда часть трафика
+       идёт мимо туннеля: сайт с адресом IPv6 не открывается, а ваш
+       настоящий адрес при этом виден тому, к кому вы пришли. Поэтому
+       переключатель есть, но решение остаётся за человеком.
+
+       Держим настройку в /etc/sysctl.d — там ей и место: она переживает
+       перезагрузку и не спорит с NetworkManager. */
+    async 'sys.ipv6'(){
+      const файл = '/etc/sysctl.d/99-glower-ipv6.conf';
+      let живой = null;
+      try {
+        живой = (await readFile('/proc/sys/net/ipv6/conf/all/disable_ipv6', 'utf8')).trim() !== '1';
+      } catch(e){ живой = null; }   // ядро без IPv6 вовсе
+      return {
+        есть:живой !== null,
+        включён:живой,
+        закреплено:existsSync(файл)
+      };
+    },
+
+    async 'sys.ipv6.set'({ включить }){
+      if (!allowLaunch) throw new Error('управление сетью выключено: запустите агент с ключом --allow-launch');
+      const файл = '/etc/sysctl.d/99-glower-ipv6.conf';
+      const выкл = включить ? '0' : '1';
+
+      /* Сначала закрепляем, потом применяем. Если наоборот и что-то
+         сорвётся посередине, человек получит настройку, которая пропадёт
+         при перезагрузке, — а он будет думать, что она стоит. */
+      if (включить){
+        await call('sudo', ['-n', 'rm', '-f', файл]).catch(() => {});
+      } else {
+        /* call() умеет только передавать программе доводы, но не текст на
+           вход, поэтому пишем во временный файл от своего имени и кладём
+           его на место одной командой. */
+        const врем = join(os.tmpdir(), 'glower-ipv6-' + process.pid + '.conf');
+        await writeFile(врем, 'net.ipv6.conf.all.disable_ipv6=1\n'
+                            + 'net.ipv6.conf.default.disable_ipv6=1\n');
+        try {
+          await call('sudo', ['-n', 'cp', врем, файл]);
+          await call('sudo', ['-n', 'chmod', '0644', файл]);
+        } catch(e){
+          throw new Error('не выходит записать настройку: ' + (e.message || e));
+        } finally {
+          await unlink(врем).catch(() => {});
+        }
+      }
+
+      for (const ключ of ['net.ipv6.conf.all.disable_ipv6', 'net.ipv6.conf.default.disable_ipv6']){
+        await call('sudo', ['-n', 'sysctl', '-w', ключ + '=' + выкл])
+          .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
+      }
+      return await this['sys.ipv6']();
+    },
+
     /* ---------- Хранилище паролей ----------
        Программам нужно где-то держать свои ключи: почта, мессенджеры,
        браузер. Без общего хранилища каждая заводит своё, и пароли ложатся
@@ -1406,8 +1463,8 @@ export function apps(allowLaunch){
     async 'sys.keyring'(){
       const есть = await has('gnome-keyring-daemon');
       if (!есть) return { есть:false };
-      const { stdout } = await call('pgrep', ['-x', 'gnome-keyring-d'])
-        .catch(() => call('pgrep', ['-f', 'gnome-keyring-daemon']).catch(() => ({ stdout:'' })));
+      const stdout = await call('pgrep', ['-x', 'gnome-keyring-d'])
+        .catch(() => call('pgrep', ['-f', 'gnome-keyring-daemon']).catch(() => ''));
       const работает = !!String(stdout || '').trim();
       /* Отперто ли хранилище, честно говорит только сама служба секретов:
          спрашиваем её тем же способом, каким пользуются программы. */
