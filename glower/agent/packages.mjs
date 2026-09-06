@@ -354,6 +354,33 @@ export function packages(allowPackages){
         }
       } catch(e){ /* flatpak может быть не установлен — это не ошибка поиска */ }
 
+      /* Что из найденного уже стоит. Без этого поиск предлагал «Установить»
+         то, что установлено, — человек нажимал, работа заканчивалась мгновенно
+         с «Skipping: уже установлено», и выглядело это как сбой. Спрашиваем обе
+         системы: обе отвечают из своих списков на диске, сеть не нужна. */
+      const стоят = new Set();
+      try {
+        const { stdout } = await run('dpkg-query', ['-W', '-f=${Package}\t${Status}\n'],
+          { maxBuffer:16 << 20 });
+        stdout.split('\n').forEach(l => {
+          const [имя, состояние] = l.split('\t');
+          /* Состояние dpkg — три слова, и решает последнее. Проверять его
+             вхождением нельзя: «purge ok not-installed» тоже содержит
+             «installed», и удалённые пакеты выглядели бы установленными. */
+          if (имя && (состояние || '').trim().split(/\s+/).pop() === 'installed')
+            стоят.add('apt:' + имя);
+        });
+      } catch(e){ /* dpkg может не ответить — тогда просто не отметим */ }
+      try {
+        const out = await flatpak(['list', '--app', '--columns=application'], 20000);
+        out.split('\n').map(x => x.trim()).filter(Boolean)
+          .forEach(id => стоят.add('flatpak:' + id));
+      } catch(e){ /* flatpak может отсутствовать — не беда */ }
+
+      const отметь = x => Object.assign(x, { installed:стоят.has(x.source + ':' + x.name) });
+      flathub.forEach(отметь);
+      ubuntu.forEach(отметь);
+
       /* сначала то, что названо ровно как искали: человек ищет «telegram», а не «php-telegram» */
       const точно = x => (x.title || x.name).toLowerCase().includes(q.toLowerCase()) ? 0 : 1;
       const list = [...flathub, ...ubuntu].sort((a, b) => точно(a) - точно(b))

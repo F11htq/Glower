@@ -108,6 +108,21 @@
 .ins-bar{width:100%;height:8px;border-radius:6px;background:rgba(var(--tint),.16);overflow:hidden}
 .ins-bar i{display:block;height:100%;border-radius:6px;transition:width .4s var(--e-out);
   background:linear-gradient(90deg,rgba(var(--accent-rgb, 58,134,255),.7),rgba(var(--accent-rgb, 58,134,255),1))}
+/* Работа без процентов — не поломка: flatpak при первой установке тянет
+   общую основу молча. Застывшая полоса в этот момент читается как зависание,
+   поэтому пускаем её бежать: видно, что дело идёт, и не обещано, сколько
+   осталось. */
+.ins-bar-ждём i{
+  background:linear-gradient(90deg,
+    rgba(var(--accent-rgb, 58,134,255),.15) 0%,
+    rgba(var(--accent-rgb, 58,134,255),.85) 50%,
+    rgba(var(--accent-rgb, 58,134,255),.15) 100%);
+  background-size:220% 100%;
+  animation:ins-бежит 1.4s linear infinite;
+  transition:none}
+@keyframes ins-бежит{from{background-position:120% 0}to{background-position:-120% 0}}
+@media (prefers-reduced-motion:reduce){
+  .ins-bar-ждём i{animation:none;opacity:.5}}
 .ins-step{font-size:13px}
 .ins-log{width:100%;text-align:left;font-size:11.5px;opacity:.7}
 .ins-log pre{max-height:160px;overflow:auto;white-space:pre-wrap;margin:8px 0 0;
