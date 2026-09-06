@@ -583,6 +583,14 @@ async function средаЭкрана(){
     else if (!env.WAYLAND_DISPLAY) env.DISPLAY = ':0';
   }
 
+  /* Firefox от Mozilla, увидев DISPLAY, по умолчанию идёт старым путём через
+     X11 — даже когда рядом есть Wayland, который он умеет. Пока Xwayland не
+     входил в образ, DISPLAY не было, и выбора у него тоже: он работал
+     напрямую. Стоило починить X11 для чужих программ, как Firefox перестал
+     запускаться совсем — на старом железе его путь через X11 не едет.
+     Говорим прямо, и только когда Wayland действительно есть. */
+  if (env.WAYLAND_DISPLAY && !env.MOZ_ENABLE_WAYLAND) env.MOZ_ENABLE_WAYLAND = '1';
+
   return env;
 }
 

@@ -240,7 +240,14 @@ run_labwc(){
   XDG_SESSION_TYPE=wayland
   XDG_CURRENT_DESKTOP=labwc
   QT_QPA_PLATFORM='wayland;xcb'
-  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM
+  # Firefox от Mozilla, увидев DISPLAY, по умолчанию идёт старым путём через
+  # X11 — даже когда рядом есть Wayland, который он прекрасно умеет. Пока
+  # Xwayland в образ не входил, DISPLAY не было, и выбора у него тоже не
+  # было: он работал напрямую и всё шло хорошо. Стоило нам починить X11 для
+  # чужих программ, как Firefox перестал запускаться вовсе — на старой
+  # видеокарте его путь через X11 не едет. Поэтому говорим прямо.
+  MOZ_ENABLE_WAYLAND=1
+  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM MOZ_ENABLE_WAYLAND
 
   mkdir -p "$HOME/.local/share/glower"
   START_SH="$HOME/.local/share/glower/shell.sh"
@@ -324,7 +331,8 @@ run_x(){   # $1 — режим отрисовки
   XDG_SESSION_TYPE=x11
   XDG_CURRENT_DESKTOP=openbox
   QT_QPA_PLATFORM=xcb
-  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM
+  MOZ_ENABLE_WAYLAND=0
+  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM MOZ_ENABLE_WAYLAND
 
   # Старые машины часто не дают ядру управлять видеокартой: узла /dev/dri нет,
   # и Wayland на такой машине не поднимется вовсе. Но X-сервер работает и там —
