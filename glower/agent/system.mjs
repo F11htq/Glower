@@ -36,6 +36,7 @@ const ALLOWED = new Set([
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep', 'fwupdmgr', 'scanimage',
   'rfkill', 'lspci', 'swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock',
+  'grim', 'slurp', 'maim', 'slop', 'wlrctl',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -429,6 +430,11 @@ const ЗНАЧКИ_КОРНИ = [
   join(os.homedir(), '.local/share/flatpak/exports/share/icons'),
   '/var/lib/flatpak/exports/share/icons',
   '/usr/local/share/icons',
+  /* Программы, поставленные своим .deb, часто кладут всё в /opt и значок
+     оставляют там же — по правилам freedesktop его там искать никто не
+     обязан, но тогда у программы в меню не будет лица. Идём сюда раньше
+     общих хранилищ: /opt мал, а у общих обход упирается в предел. */
+  '/opt',
   '/usr/share/icons'
 ];
 const ЗНАЧКИ_ПРОСТЫЕ = ['/usr/share/pixmaps', '/usr/local/share/pixmaps',
@@ -466,8 +472,15 @@ async function собери_значки(){
     if (!ЗНАЧКИ_ТИПЫ[рас]) return;
     const имя = путь.slice(путь.lastIndexOf('/') + 1, точка);
     const в = вес_значка(путь);
-    const было = карта.get(имя);
-    if (!было || в > было.вес) карта.set(имя, { путь, вес:в });
+    const положиПод = ключ => {
+      const было = карта.get(ключ);
+      if (!было || в > было.вес) карта.set(ключ, { путь, вес:в });
+    };
+    положиПод(имя);
+    /* Ещё и в нижнем регистре: ярлык может звать значок «Happ», а файл на
+       диске зваться «happ.png» — или наоборот. Для человека это одно и то
+       же, и разница в одной букве не повод оставить программу без лица. */
+    if (имя.toLowerCase() !== имя) положиПод(имя.toLowerCase());
   };
 
   const обойди = async (dir, глубина) => {
@@ -695,20 +708,32 @@ export function apps(allowLaunch){
 
     /* Значок программы: отдаём готовое изображение, а не имя файла.
        Оболочка живёт в своём движке и до файлов машины сама не дотянется. */
-    async 'sys.icon'({ имя }){
+    async 'sys.icon'({ имя, ярлык }){
       const ключ = String(имя || '').trim();
-      if (!ключ) return { есть:false, почему:'значок не назван' };
-      if (ключ.includes('\0')) return { есть:false, почему:'неверное имя значка' };
-      if (ЗНАЧКИ_ГОТОВЫЕ.has(ключ)) return ЗНАЧКИ_ГОТОВЫЕ.get(ключ);
+      const запас = String(ярлык || '').trim().replace(/\.desktop$/i, '');
+      if (!ключ && !запас) return { есть:false, почему:'значок не назван' };
+      if ((ключ + запас).includes('\0')) return { есть:false, почему:'неверное имя значка' };
+      const памятьКлюч = ключ + '|' + запас;
+      if (ЗНАЧКИ_ГОТОВЫЕ.has(памятьКлюч)) return ЗНАЧКИ_ГОТОВЫЕ.get(памятьКлюч);
 
       let путь = null;
       if (ключ.startsWith('/') && existsSync(ключ)) путь = ключ;
       else {
         const карта = await собери_значки();
-        const найдено = карта.get(ключ)
-          || карта.get(ключ.replace(/\.(png|svg|xpm)$/i, ''))
-          || карта.get(ключ.toLowerCase());
-        if (найдено) путь = найдено.путь;
+        /* Ищем по всему, чем программу могут звать. Строка Icon= — первое,
+           но она бывает и неточной, и вовсе отсутствовать. Тогда пробуем имя
+           ярлыка: у настоящих рабочих столов это обычный запасной путь, и
+           для программ вроде org.telegram.desktop он срабатывает чаще всего,
+           потому что значок называется ровно так же. */
+        const варианты = [ключ, ключ.replace(/\.(png|svg|xpm)$/i, ''), ключ.toLowerCase(),
+                          запас, запас.toLowerCase(),
+                          /* org.telegram.desktop → telegram */
+                          запас.split('.').pop(), запас.split('.').pop().toLowerCase()]
+          .filter(Boolean);
+        for (const в of варианты){
+          const найдено = карта.get(в);
+          if (найдено){ путь = найдено.путь; break; }
+        }
       }
 
       let ответ = { есть:false, почему:'значка с таким именем на машине нет' };
@@ -724,7 +749,7 @@ export function apps(allowLaunch){
         } catch(e){ ответ = { есть:false, почему:'значок не прочитался: ' + e.message }; }
       }
       if (ЗНАЧКИ_ГОТОВЫЕ.size > 400) ЗНАЧКИ_ГОТОВЫЕ.clear();
-      ЗНАЧКИ_ГОТОВЫЕ.set(ключ, ответ);
+      ЗНАЧКИ_ГОТОВЫЕ.set(памятьКлюч, ответ);
       return ответ;
     },
 
@@ -2012,3 +2037,117 @@ export const hardware = {
     return { cameras:cams, sound:cards, bluetooth:bt };
   }
 };
+
+/* ==========================================================================
+   Снимки экрана
+
+   Снять экран под Wayland нельзя «изнутри» страницы: браузерное окно видит
+   только себя. Кадр даёт оконный сервер, и просить его надо снаружи —
+   этим и занимается агент.
+
+   Инструменты разные для разных сеансов и не заменяют друг друга: grim и
+   slurp говорят по протоколу Wayland, maim и slop — по протоколу X. На
+   машине без KMS сеанс идёт под Xorg, и там первые два бесполезны.
+   ========================================================================== */
+export function shots(allowLaunch){
+  const ДОМ = () => process.env.HOME || ('/home/' + (process.env.USER || 'glower'));
+
+  /* Кадр отдаём страницей как data:-строку. Это единственный способ показать
+     его в окне: наружу агент отдаёт только файлы самой оболочки, а снимок
+     живёт во временной папке. Заодно страница получает картинку целиком и
+     может её рисовать, обрезать и подписывать, ничего больше не спрашивая. */
+  const какКартинка = async файл => {
+    const байты = await readFile(файл);
+    return { dataUrl:'data:image/png;base64,' + байты.toString('base64'), байт:байты.length };
+  };
+
+  return {
+    /* Чем эта машина умеет снимать экран. Спрашивается до показа кнопок:
+       предлагать «снять область» там, где нечем, — обман. */
+    async 'sys.shot.чем'(){
+      const среда = await средаЭкрана();
+      const подWayland = !!среда.WAYLAND_DISPLAY;
+      const [grim, slurp, maim, slop] = await Promise.all(
+        ['grim', 'slurp', 'maim', 'slop'].map(п => has(п)));
+      return {
+        'подWayland':подWayland,
+        'экран':подWayland ? grim : maim,
+        'область':подWayland ? (grim && slurp) : (maim && slop),
+        'чем':подWayland ? 'grim' : 'maim',
+        'чегоНет':[['grim', grim], ['slurp', slurp], ['maim', maim], ['slop', slop]]
+          .filter(([, есть]) => !есть).map(([имя]) => имя)
+      };
+    },
+
+    async 'sys.shot'({ режим = 'экран', задержка = 0 } = {}){
+      if (!allowLaunch) throw new Error('снимки экрана выключены: запустите агент с ключом --allow-launch');
+      const среда = await средаЭкрана();
+      const подWayland = !!среда.WAYLAND_DISPLAY;
+
+      const пауза = Math.min(20, Math.max(0, parseInt(задержка, 10) || 0));
+      if (пауза) await new Promise(r => setTimeout(r, пауза * 1000));
+
+      const файл = join(os.tmpdir(), 'glower-снимок-' + process.pid + '-' + Date.now() + '.png');
+
+      try {
+        if (подWayland){
+          if (!await has('grim'))
+            throw new Error('нечем снять экран: в системе нет grim');
+
+          let область = null;
+          if (режим === 'область'){
+            if (!await has('slurp'))
+              throw new Error('нечем выделить область: в системе нет slurp');
+            /* slurp рисует рамку поверх всего и ждёт человека. Пока он ждёт,
+               торопить нечего — но и висеть вечно нельзя: если выделение
+               отменили клавишей, slurp выходит с ошибкой, и это не поломка. */
+            const { stdout } = await run('slurp', [], { timeout:120000, env:среда })
+              .catch(() => ({ stdout:'' }));
+            область = String(stdout).trim();
+            if (!область) return { ok:false, 'отменено':true };
+          }
+
+          await run('grim', область ? ['-g', область, файл] : [файл],
+            { timeout:30000, env:среда });
+        } else {
+          if (!await has('maim'))
+            throw new Error('нечем снять экран: в системе нет maim');
+          const доводы = режим === 'область' ? ['-s', '-u', файл] : [файл];
+          await run('maim', доводы, { timeout:120000, env:среда })
+            .catch(e => { throw new Error(режим === 'область' ? 'выделение отменено' : (e.message || String(e))); });
+        }
+
+        const кадр = await какКартинка(файл);
+        return { ok:true, ...кадр, режим };
+      } finally {
+        await unlink(файл).catch(() => {});
+      }
+    },
+
+    /* Положить снимок в буфер обмена. Отдельным действием, потому что
+       человек хочет то сохранить, то сразу вставить в переписку. */
+    async 'sys.shot.вбуфер'({ dataUrl }){
+      if (!allowLaunch) throw new Error('снимки экрана выключены: запустите агент с ключом --allow-launch');
+      const b64 = String(dataUrl || '').split(',')[1] || '';
+      if (!b64) throw new Error('пустой снимок');
+      const байты = Buffer.from(b64, 'base64');
+
+      const среда = await средаЭкрана();
+      const { spawn } = await import('node:child_process');
+      const прог = среда.WAYLAND_DISPLAY ? 'wl-copy' : 'xclip';
+      if (!await has(прог)) throw new Error('нечем положить в буфер: в системе нет ' + прог);
+
+      return await new Promise((resolve, reject) => {
+        const доводы = прог === 'wl-copy' ? ['--type', 'image/png']
+                                          : ['-selection', 'clipboard', '-t', 'image/png'];
+        const дитя = spawn(прог, доводы, { stdio:['pipe', 'ignore', 'pipe'], detached:true, env:среда });
+        let жалобы = '';
+        дитя.stderr.on('data', d => { жалобы += d; });
+        дитя.on('error', e => reject(new Error('не удалось положить в буфер: ' + e.message)));
+        /* wl-copy держит буфер, пока жив: отпускаем его в свободное плавание. */
+        дитя.on('spawn', () => { дитя.stdin.end(байты); });
+        setTimeout(() => { дитя.unref(); resolve({ ok:true, via:прог }); }, 400);
+      });
+    }
+  };
+}

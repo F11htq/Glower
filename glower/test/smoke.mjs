@@ -1079,6 +1079,75 @@ try {
       } finally { await p3.close(); }
     })());
 
+  /* --- Ножницы --- */
+  /* Снять настоящий экран здесь нечем: браузер в проверке не имеет ни
+     оконного сервера, ни системы. Поэтому проверяем всё, что наше, —
+     разметку поверх готового кадра и сохранение. Сам кадр подсовываем
+     маленькой картинкой, как его отдал бы агент. */
+  const ножницы = await page.evaluate(async () => {
+    WM.open('snip');
+    await new Promise(r => setTimeout(r, 500));
+    const win = WM.wins.find(w => w.appId === 'snip');
+    if (!win) return { есть:false };
+
+    const пустоВидно = getComputedStyle(win.body.querySelector('.snip-empty')).display !== 'none';
+    const холстСпрятан = win.body.querySelector('.snip-canvas').style.display === 'none';
+
+    /* Картинка 2×2, какую вернул бы агент */
+    const кадр = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFUlEQVR42mNk+M9Qz0BFwDiqkL4KAeUlA/1BpFSNAAAAAElFTkSuQmCC';
+    await win.data.новыйКадр(кадр);
+
+    const холст = win.body.querySelector('.snip-canvas');
+    const состояние = win.data.snip;
+    const кадрВидно = холст.style.display !== 'none';
+
+    /* Рисуем так, как рисует человек: мышью по холсту. Класть штрихи прямо
+       в состояние было бы проверкой ни о чём — кнопка отмены при этом
+       остаётся выключенной, и щелчок по ней ничего не делает. */
+    const рисуй = (x1, y1, x2, y2) => {
+      const r = холст.getBoundingClientRect();
+      const точка = (x, y) => ({ clientX:r.left + x, clientY:r.top + y,
+                                 pointerId:1, bubbles:true });
+      холст.dispatchEvent(new PointerEvent('pointerdown', точка(x1, y1)));
+      холст.dispatchEvent(new PointerEvent('pointermove', точка(x2, y2)));
+      холст.dispatchEvent(new PointerEvent('pointerup', точка(x2, y2)));
+    };
+    рисуй(4, 4, 40, 40);
+    рисуй(10, 30, 60, 12);
+    const было = состояние.штрихи.length;
+
+    const отменить = [...win.body.querySelectorAll('.snip-bottom button')]
+      .find(b => b.textContent === '↶');
+    const вернуть = [...win.body.querySelectorAll('.snip-bottom button')]
+      .find(b => b.textContent === '↷');
+    отменить.click();
+    const послеОтмены = состояние.штрихи.length;
+    вернуть.click();
+    const послеВозврата = состояние.штрихи.length;
+
+    /* Сохранение: без системы пишем в свою файловую систему */
+    const сохранить = [...win.body.querySelectorAll('.snip-bottom button')]
+      .find(b => /Сохранить/.test(b.textContent));
+    сохранить.click();
+    await new Promise(r => setTimeout(r, 400));
+    const папка = FS.node(['Изображения', 'Снимки']);
+    const файлов = папка && папка.children ? Object.keys(папка.children).length : 0;
+
+    WM.close(win);
+    return { есть:true, пустоВидно, холстСпрятан, кадрВидно,
+             было, послеОтмены, послеВозврата, файлов };
+  });
+
+  check('Ножницы честно говорят, что снимка ещё нет',
+    ножницы.есть && ножницы.пустоВидно && ножницы.холстСпрятан, JSON.stringify(ножницы));
+  check('полученный кадр показывается',
+    ножницы.кадрВидно === true, JSON.stringify(ножницы));
+  check('разметку можно отменить и вернуть',
+    ножницы.послеОтмены === ножницы.было - 1 && ножницы.послеВозврата === ножницы.было,
+    JSON.stringify(ножницы));
+  check('снимок сохраняется в Изображения → Снимки',
+    ножницы.файлов === 1, JSON.stringify(ножницы));
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

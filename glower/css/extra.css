@@ -572,3 +572,23 @@ html.вход-в-систему #desktop{filter:none}
   stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .вход-кнопка:hover{background:rgba(255,255,255,.18)}
 .вход-кнопка:active{transform:scale(.94)}
+
+/* ---------- Ножницы: снимок экрана и разметка ---------- */
+.snip{display:flex;flex-direction:column;height:100%;gap:0}
+.snip-top{display:flex;gap:8px;align-items:center;padding:10px 12px;
+  border-bottom:1px solid rgba(var(--tint),.14);flex-wrap:wrap}
+.snip-stage{flex:1;min-height:0;overflow:auto;display:grid;place-items:center;
+  padding:12px;background:rgba(var(--tint),.06)}
+/* Снимок бывает больше окна: вписываем целиком, чтобы не гадать по кусочку,
+   что там. Пиксели при этом не додумываем — масштаб только уменьшающий. */
+.snip-canvas{max-width:100%;max-height:100%;border-radius:8px;
+  box-shadow:0 6px 28px rgba(0,0,0,.35);cursor:crosshair;touch-action:none}
+.snip-empty{text-align:center;font-size:14px;line-height:1.7;opacity:.85;padding:24px}
+.snip-bottom{display:flex;gap:10px;align-items:center;padding:10px 12px;flex-wrap:wrap;
+  border-top:1px solid rgba(var(--tint),.14)}
+.snip-tools,.snip-colors{display:flex;gap:4px;align-items:center}
+.snip-color{width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);transition:transform var(--t1)}
+.snip-color:hover{transform:scale(1.15)}
+.snip-color.вбран{box-shadow:0 0 0 2px var(--accent),inset 0 0 0 1px rgba(255,255,255,.5)}
+.snip-width{width:96px}
