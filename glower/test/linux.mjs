@@ -324,6 +324,32 @@ try {
       итог.путь && /неверный идентификатор/.test(итог.путь.error || ''), JSON.stringify(итог.путь));
   }
 
+  /* --- то же самое, но с обычным окружением, где gio есть ---
+     Проверки выше идут с урезанным PATH: так проверяется ручная дорога.
+     Именно поэтому мимо них однажды прошла настоящая поломка — на живой
+     машине gio есть, код уходил в его ветку, а она ни окружения экрана не
+     передавала, ни падения не замечала: gio завершается успешно сразу, как
+     только попросил программу открыться. Человек видел «откроется своим
+     окном» и пустой экран. Повторяем те же проверки как есть. */
+  if (existsSync('/usr/bin/gio')){
+    const обычный = await new Promise(resolve => {
+      const child = spawn(process.execPath, [join(root, 'test/launch-child.mjs')],
+        { stdio:['ignore', 'pipe', 'pipe'],
+          env:{ ...process.env, FLATPAK_LOG:join(WS, 'flatpak2.log'), GLOWER_TEST_DIR:WS } });
+      let out = '';
+      child.stdout.on('data', d => { out += d; });
+      child.on('exit', () => { try { resolve(JSON.parse(out.trim().split('\n').pop())); }
+        catch(e){ resolve({ ошибка:out.slice(0, 300) }); } });
+    });
+
+    check('с gio в системе программа всё равно запускается',
+      обычный.передача && обычный.передача.ok === true && обычный.запущено === true,
+      JSON.stringify(обычный.передача || обычный.ошибка));
+    check('с gio в системе падение программы тоже замечается',
+      обычный.падение && обычный.падение.ok === false,
+      JSON.stringify(обычный.падение || обычный.ошибка));
+  }
+
   /* --- имена программ берутся на языке системы --- */
   {
     const { mkdir, writeFile, rm } = await import('node:fs/promises');
