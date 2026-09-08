@@ -136,20 +136,13 @@ const Platform = {
     return this.rpc('sys.open', { path });
   },
 
-  /* индикатор в трее */
+  /* Значка «настоящий диск» здесь больше нет. Он говорил о том, что и так
+     верно всё время работы системы, и занимал место в трее, которое нужно
+     значкам самих программ. Состояние связи с системой по-прежнему видно в
+     Параметрах, где ему и место — вместе с остальным о машине. */
   badge(){
-    let b = $('#agent-badge');
-    if (this.mode !== 'native'){ if (b) b.remove(); return; }
-    if (!b){
-      b = el('button', 'tray-btn agent-badge');
-      b.id = 'agent-badge';
-      b.innerHTML = `<svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>`;
-      b.onclick = () => WM.open('settings', { section:'system' });
-      const tray = $('#tb-tray');
-      if (tray) tray.insertBefore(b, tray.firstChild);
-    }
-    b.classList.toggle('busy', this.pending > 0);
-    b.dataset.tip = `Настоящий диск · ${this.info.root}` + (this.pending ? ` · запись…` : '');
+    const b = $('#agent-badge');
+    if (b) b.remove();
   },
 
   describe(){

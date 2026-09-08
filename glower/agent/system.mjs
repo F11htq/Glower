@@ -1713,7 +1713,8 @@ export function apps(allowLaunch){
 
     async 'sys.window'({ action, appId, title }){
       if (!allowLaunch) throw new Error('управление окнами выключено: запустите агент с ключом --allow-launch');
-      const можно = { focus:'focus', minimize:'minimize', maximize:'maximize',
+      const можно = { focus:'focus', minimize:'minimize', restore:'restore',
+        maximize:'maximize', unmaximize:'unmaximize',
         fullscreen:'fullscreen', close:'close' };
       const что = можно[action];
       if (!что) throw new Error('неизвестное действие с окном: ' + action);
@@ -1742,13 +1743,35 @@ export function apps(allowLaunch){
         return { ok:true, action:что, appId, через:'x' };
       }
 
+      /* Своя программа впереди wlrctl не из гордости. wlrctl умеет не все
+         действия и на разных сборках ведёт себя по-разному: свернуть окно
+         им удавалось не всегда, и человек нажимал на значок в панели, а
+         ничего не происходило. Наш помощник говорит с протоколом напрямую,
+         и там сворачивание есть прямым вызовом. */
+      const наш = { focus:'включить', minimize:'свернуть', restore:'показать',
+        maximize:'растянуть', unmaximize:'вернуть', fullscreen:'весьэкран', close:'закрыть' }[что];
+
+      if (await has('glower-toplevels')){
+        const доводы = [наш, appId];
+        if (title) доводы.push(String(title).slice(0, 120));
+        const беда = await new Promise(resolve => execFile('glower-toplevels', доводы,
+          { env, timeout:4000 }, (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
+        if (!беда) return { ok:true, action:что, appId, через:'свой' };
+        /* Не вышло — расскажем почему, но сперва попробуем чужой путь:
+           вдруг на этой машине протокол урезан, а wlrctl знает обходной. */
+        if (!await has('wlrctl')) throw new Error(беда);
+      }
+
       if (!await has('wlrctl')) throw new Error('на машине нечем управлять окнами');
-      const доводы = ['toplevel', что, 'app_id:' + appId];
+      const wlrИмя = { focus:'focus', minimize:'minimize', restore:'focus',
+        maximize:'maximize', unmaximize:'maximize',
+        fullscreen:'fullscreen', close:'close' }[что];
+      const доводы = ['toplevel', wlrИмя, 'app_id:' + appId];
       if (title) доводы.push('title:' + String(title).slice(0, 120));
       const беда = await new Promise(resolve => execFile('wlrctl', доводы, { env, timeout:4000 },
         (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
       if (беда) throw new Error(беда);
-      return { ok:true, action:что, appId };
+      return { ok:true, action:что, appId, через:'wlrctl' };
     },
 
     /* Починка: закрытый список действий, каждое выполняется от root

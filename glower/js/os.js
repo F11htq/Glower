@@ -495,8 +495,16 @@ function нарисуйЧужие(){
       + (с.вовесь ? ' (во весь экран)' : с.развёрнуто ? ' (развёрнуто)'
          : с.свёрнуто ? ' (свёрнуто)' : '');
     b.appendChild(значокЧужого(o));
-    b.onclick = () => Platform.rpc('sys.window', { action:'focus', appId:o.appId, title:o.title })
-      .catch(e => Dlg.alert('Не удалось перейти к окну', String(e.message || e), '⚠️'));
+    /* Как в любой панели задач: нажатие на текущее окно его сворачивает, на
+       свёрнутое — достаёт обратно, на чужое — переключает. Раньше здесь
+       всегда был «перейти к окну», и свернуть чужую программу из панели
+       было нельзя вовсе. */
+    b.onclick = () => {
+      const действие = с.свёрнуто ? 'restore' : с.активно ? 'minimize' : 'focus';
+      Platform.rpc('sys.window', { action:действие, appId:o.appId, title:o.title })
+        .then(() => setTimeout(обновиЧужие, 250))
+        .catch(e => Dlg.alert('Не удалось переключить окно', String(e.message || e), '⚠️'));
+    };
     b.oncontextmenu = async e => {
       e.preventDefault();
       if (await Dlg.confirm('Закрыть окно?', o.title || o.appId, { okText:'Закрыть', danger:true }))
