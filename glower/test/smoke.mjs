@@ -1148,6 +1148,52 @@ try {
   check('снимок сохраняется в Изображения → Снимки',
     ножницы.файлов === 1, JSON.stringify(ножницы));
 
+  /* --- значки программ на рабочем столе --- */
+  const наСтоле = await page.evaluate(async () => {
+    S.deskApps = []; Store.save(); Shell.renderIcons();
+    const было = document.querySelectorAll('#desktop-icons .di').length;
+
+    /* Выносим через то же меню, которым пользуется человек */
+    Shell.allApps(true);
+    await new Promise(r => setTimeout(r, 250));
+    const строка = [...document.querySelectorAll('#start-results .all-row')]
+      .find(b => /Калькулятор/.test(b.textContent));
+    if (!строка) return { есть:false };
+    строка.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, clientX:100, clientY:100 }));
+    await new Promise(r => setTimeout(r, 200));
+    const пункт = [...document.querySelectorAll('#ctx button')]
+      .find(n => /Вынести на рабочий стол/.test(n.textContent || ''));
+    if (!пункт) return { есть:true, меню:false };
+    пункт.click();
+    await new Promise(r => setTimeout(r, 250));
+
+    const стало = document.querySelectorAll('#desktop-icons .di').length;
+    const подпись = [...document.querySelectorAll('#desktop-icons .di .lbl')]
+      .some(n => n.textContent === 'Калькулятор');
+    const вПамяти = (S.deskApps || []).includes('calc');
+
+    /* И обратно: значок должен убираться */
+    S.deskApps = []; Store.save(); Shell.renderIcons();
+    const вернулось = document.querySelectorAll('#desktop-icons .di').length;
+    Shell.closePanels();
+    return { есть:true, меню:true, было, стало, подпись, вПамяти, вернулось };
+  });
+
+  check('программу можно вынести на рабочий стол из Пуска',
+    наСтоле.меню === true && наСтоле.стало === наСтоле.было + 1 && наСтоле.подпись === true,
+    JSON.stringify(наСтоле));
+  check('вынесенное запоминается и убирается обратно',
+    наСтоле.вПамяти === true && наСтоле.вернулось === наСтоле.было,
+    JSON.stringify(наСтоле));
+
+  /* --- встречающего файла на столе больше нет --- */
+  check('на рабочем столе нет нашей записки',
+    await page.evaluate(() => !FS.node(['Рабочий стол', 'Начало.txt'])));
+
+  /* --- в настройке не спрашивают пароль от снятого замка --- */
+  check('первоначальная настройка не спрашивает пароль',
+    await page.evaluate(() => !Setup.STEPS.some(ш => /Пароль/.test(ш.title || ''))));
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

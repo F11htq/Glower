@@ -93,7 +93,14 @@ const DEFAULTS = {
   userName:((window.__profiles || []).find(p => p.id === window.__profile) || {}).name || 'Пользователь', city:'Москва',
   snapAssist:true, tapClickSound:false,
   pinned:['settings','notepad','files','browser','calc','term','paint','photos','music','calendar','clock','store'],
-  dockApps:['browser','files','notepad','settings','music','term','paint','calc']
+  dockApps:['browser','files','notepad','settings','music','term','paint','calc'],
+  /* Что человек сам вынес на рабочий стол. Пусто по умолчанию: стол — его
+     место, и раскладывать там за него мы не будем. */
+  deskApps:[],
+  /* Программы машины, вынесенные на стол. Помним имя и значок рядом с
+     ярлыком: список программ читается с диска не сразу, и до его прихода
+     значку на столе всё равно надо чем-то быть. */
+  deskNative:[]
 };
 
 const Store = {

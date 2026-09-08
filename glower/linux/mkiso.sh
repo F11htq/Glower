@@ -212,6 +212,8 @@ install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
 # открыть скачанный файл-установщик: передаёт его оболочке, а та спрашивает
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
+# Посредник для снимков экрана: его зовёт оконный сервер по сочетанию клавиш
+install -m 755 "$SRC/linux/glower-shot" "$ROOTFS/usr/bin/glower-shot"
 # экран входа: та же оболочка, но до всякого рабочего стола
 install -m 755 "$SRC/linux/glower-greeter" "$ROOTFS/usr/bin/glower-greeter"
 # настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё

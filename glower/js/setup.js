@@ -28,10 +28,6 @@ const Setup = {
       'Имя видно в меню Пуск и при смене пользователя.':'The name appears in Start and when switching users.',
       'Имя пользователя':'User name',
       'Без имени дальше нельзя — так система будет к вам обращаться':'A name is required — this is how the system will address you',
-      'Пароль':'Password',
-      'Можно оставить пустым — тогда профиль не будет ничего спрашивать.':'Leave it empty and the profile will not ask for anything.',
-      'Пароль (не обязательно)':'Password (optional)',
-      'Честно о том, что это даёт: этот пароль разделяет профили внутри оболочки. Его хеш хранится на этой машине, сами файлы не шифруются. Запертый экран машины отпирается паролем учётной записи, а не этим.':'Honestly about what this gives you: this password separates profiles inside the shell. Its hash is stored on this machine and the files themselves are not encrypted. A locked screen is unlocked with the account password, not with this one.',
       'Оформление':'Appearance',
       'Тему и цвет тоже можно менять когда угодно.':'Theme and colour can be changed at any time too.',
       'Тёмная':'Dark', 'Светлая':'Light',
@@ -52,7 +48,7 @@ const Setup = {
       'Осталось нажать кнопку.':'One button left.',
       'Язык':'Language', 'Раскладки':'Layouts', 'Город':'City',
       'Пользователь':'User', 'Вход':'Sign-in', 'Тема':'Theme',
-      'по паролю':'password', 'свободный':'free', 'не указан':'not set',
+      'не указан':'not set',
       'включена':'enabled', 'выключена':'disabled',
       'Назад':'Back', 'Далее':'Next', 'Начать работу':'Get started',
       'Русская':'Russian', 'Английская':'English', 'Немецкая':'German',
@@ -70,7 +66,7 @@ const Setup = {
 
   /* собранные ответы */
   data:{ lang:'ru', layouts:['en', 'ru'], city:'Москва', name:'', emoji:'',
-         pass:'', theme:'dark', accent:0, wallpaper:'gora' },
+         theme:'dark', accent:0, wallpaper:'gora' },
 
   /* ---------- каркас ---------- */
   open(){
@@ -217,17 +213,13 @@ const Setup = {
         return false;
       } },
 
-    { title:'Пароль', sub:'Можно оставить пустым — тогда профиль не будет ничего спрашивать.',
-      fill(area){
-        const i = el('input', 'inp setup-input'); i.type = 'password';
-        i.placeholder = this.t('Пароль (не обязательно)'); i.value = this.data.pass;
-        i.oninput = () => this.data.pass = i.value;
-        area.appendChild(i);
-        area.appendChild(el('div', 'setup-note', this.t(
-          'Честно о том, что это даёт: этот пароль разделяет профили внутри оболочки. ' +
-          'Его хеш хранится на этой машине, сами файлы не шифруются. Запертый экран ' +
-          'машины отпирается паролем учётной записи, а не этим.')));
-      } },
+    /* Шага с паролем здесь больше нет. Он появился ради экрана блокировки
+       оболочки, которого мы лишились, и с тех пор спрашивал пароль ни для
+       чего: экран машины отпирается паролем учётной записи, заданным при
+       установке, а профильный нужен лишь тому, кто заведёт второй профиль —
+       и задаётся там же, в Параметрах. Спрашивать при первом запуске пароль,
+       который человеку негде применить, — значит отнимать время и обещать
+       защиту, которой нет. */
 
     { title:'Оформление', sub:'Тему и цвет тоже можно менять когда угодно.',
       fill(area){
@@ -285,7 +277,6 @@ const Setup = {
          ['⌨️', 'Раскладки', L],
          ['🏙', 'Город', this.data.city || this.t('не указан')],
          ['👤', 'Пользователь', this.data.name],
-         ['🔒', 'Вход', this.t(this.data.pass ? 'по паролю' : 'свободный')],
          ['🎨', 'Тема', this.t({ dark:'Тёмная', light:'Светлая' }[this.data.theme] || 'Тёмная')]
         ].forEach(([e, k, v]) => {
           const r = el('div', 'setup-sr');
@@ -321,7 +312,6 @@ const Setup = {
       const l = Profiles.list();
       const p = l.find(x => x.id === me.id);
       if (p){ p.name = d.name.trim(); p.emoji = d.emoji || d.name.trim()[0] || '🙂'; Profiles.save(l); }
-      if (d.pass) await Profiles.setPassword(me.id, d.pass);
     }
     /* имя выбрано только что — кнопка в Пуске должна показать его сразу,
        а не после перезапуска системы */

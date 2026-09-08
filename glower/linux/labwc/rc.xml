@@ -34,6 +34,19 @@
     <keybind key="W-q">
       <action name="Close" />
     </keybind>
+    <!-- Снимок экрана. Сочетания держит оконный сервер, а не оболочка:
+         страница получает клавиши, только пока она в фокусе, и стоило
+         открыть любую программу, как Win+Shift+S уходил ей. -->
+    <keybind key="W-S-s">
+      <action name="Execute" command="glower-shot область" />
+    </keybind>
+    <keybind key="Print">
+      <action name="Execute" command="glower-shot экран" />
+    </keybind>
+    <!-- Привычка из Windows: Print со сдвигом тоже про область -->
+    <keybind key="S-Print">
+      <action name="Execute" command="glower-shot область" />
+    </keybind>
   </keyboard>
 
   <mouse>

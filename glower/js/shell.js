@@ -128,7 +128,13 @@ const Shell = {
       b.onclick = () => { WM.open(id); this.closePanels(); };
       b.oncontextmenu = e => { e.preventDefault(); this.ctx(e.clientX, e.clientY, [
         { i:'📌', t:'Открепить', f:() => { S.pinned = S.pinned.filter(x => x !== id); Store.save(); this.renderStart(); } },
-        { i:'⬇️', t:'Добавить в док', f:() => { if (!S.dockApps.includes(id)){ S.dockApps.push(id); Store.save(); this.renderDock(); } } }
+        { i:'⬇️', t:'Добавить в док', f:() => { if (!S.dockApps.includes(id)){ S.dockApps.push(id); Store.save(); this.renderDock(); } } },
+        { i:'🖥', t:(S.deskApps || []).includes(id) ? 'Убрать с рабочего стола' : 'Вынести на рабочий стол',
+          f:() => {
+            const было = (S.deskApps || []).includes(id);
+            S.deskApps = было ? S.deskApps.filter(x => x !== id) : [...(S.deskApps || []), id];
+            Store.save(); this.renderIcons();
+            this.toast('Рабочий стол', было ? 'Убрано со стола' : 'Вынесено на стол', '🖥'); } }
       ]); };
       g.appendChild(b);
     });
@@ -215,7 +221,13 @@ const Shell = {
               Store.save(); this.renderStart(); this.allApps(true); } },
           { i:'⬇️', t:inDock ? 'Убрать из дока' : 'Добавить в док', f:() => {
               S.dockApps = inDock ? S.dockApps.filter(x => x !== id) : [...S.dockApps, id];
-              Store.save(); this.renderDock(); } }
+              Store.save(); this.renderDock(); } },
+          { i:'🖥', t:(S.deskApps || []).includes(id) ? 'Убрать с рабочего стола' : 'Вынести на рабочий стол',
+            f:() => {
+              const было = (S.deskApps || []).includes(id);
+              S.deskApps = было ? S.deskApps.filter(x => x !== id) : [...(S.deskApps || []), id];
+              Store.save(); this.renderIcons(); this.allApps(true);
+              this.toast('Рабочий стол', было ? 'Убрано со стола' : 'Вынесено на стол', '🖥'); } }
         ]);
       };
       res.appendChild(b);
@@ -464,6 +476,12 @@ const Shell = {
       { g:'💻', n:'Этот компьютер', f:() => WM.open('files', { path:[] }) },
       { g:'🗑️', n:'Корзина', f:() => this.toast('Корзина', 'Корзина пуста', '🗑️') }
     ];
+
+    /* Программы, вынесенные на стол, рисует не эта отрисовка, а та, что в
+       realism.js: она заменяет эту целиком — со своей раскладкой значков,
+       перетаскиванием и памятью мест. Держать здесь вторую копию значит
+       писать код, который никогда не выполнится: я так и сделал, и заметил
+       только по упавшей проверке. */
     const desk = FS.node(['Рабочий стол']);
     Object.values(desk ? desk.children : {}).forEach(f => items.push({
       g: f.type === 'dir' ? '📁' : f.img ? '🖼️' : '📄', n:f.name, node:f,
@@ -474,6 +492,8 @@ const Shell = {
 
     items.forEach(it => {
       const n = el('div', 'di', `<div class="glyph">${it.g}</div><div class="lbl">${esc(it.n)}</div>`);
+      /* У программы машины значок настоящий, её собственный: человек должен
+         узнавать её на столе так же, как в любой другой системе. */
       n.onclick = e => { e.stopPropagation(); $$('.di', box).forEach(x => x.classList.remove('sel')); n.classList.add('sel'); };
       n.ondblclick = it.f;
       n.oncontextmenu = e => {

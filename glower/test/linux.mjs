@@ -448,9 +448,23 @@ try {
         'данные':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
       return было(m, p);
     };
-    await new Promise(r => setTimeout(r, 3600));
-    const кнопка = [...document.querySelectorAll('#dock-running .dock-item')]
+    /* Ждём не по часам, а по делу: значок приходит запросом к системе, и на
+       загруженной машине он может опоздать. Прежнее ожидание в 3,6 секунды
+       иногда не дожидалось — проверка падала на ровном месте и приучала не
+       верить красному. */
+    const дождись = async (что, сколько = 15000) => {
+      const до = Date.now() + сколько;
+      while (Date.now() < до){
+        const r = что();
+        if (r) return r;
+        await new Promise(r2 => setTimeout(r2, 100));
+      }
+      return что();
+    };
+    const найдиКнопку = () => [...document.querySelectorAll('#dock-running .dock-item')]
       .find(b => /Telegram/.test(b.dataset.tip || ''));
+    await дождись(() => { const b = найдиКнопку(); return b && b.querySelector('img'); });
+    const кнопка = найдиКнопку();
     const ответ = {
       картинка:!!(кнопка && кнопка.querySelector('img')),
       вработе:!!(кнопка && кнопка.classList.contains('active')),

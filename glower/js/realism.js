@@ -121,6 +121,22 @@ Shell.renderIcons = function(){
     { g:'💻', n:'Этот компьютер', open:() => WM.open('files', { path:[] }) },
     { g: trashCount() ? '🗑️' : '🗑', n:'Корзина', open:() => WM.open('trash') }
   ];
+
+  /* Программы, вынесенные человеком на стол. Стоят перед файлами: их кладут
+     сюда, чтобы запускать не глядя, и искать их среди документов незачем. */
+  (S.deskApps || []).filter(id => APPS[id]).forEach(id => {
+    const a = APPS[id];
+    items.push({ g:a.glyph, n:a.name, приложение:id, значок:a.значок, ярлык:a.ярлык,
+                 open:() => WM.open(id) });
+  });
+
+  /* Программы самой машины: их запускает системный слой. */
+  (S.deskNative || []).forEach(x => items.push({
+    g:'🐧', n:x.name, машина:x.id, значок:x.значок, ярлык:x.id,
+    open:() => (window.OS && OS.запустиПоЯрлыку) ? OS.запустиПоЯрлыку(x.id)
+             : Shell.toast('Рабочий стол', 'Программы машины доступны только в системе', '🐧')
+  }));
+
   const desk = FS.node(['Рабочий стол']);
   Object.values(desk ? desk.children : {}).forEach(f => items.push({
     g: f.type === 'dir' ? '📁' : f.img ? '🖼️' : '📄', n:f.name, file:f,
@@ -133,6 +149,10 @@ Shell.renderIcons = function(){
     const n = el('div', 'di', `<div class="glyph">${it.g}</div><div class="lbl">${esc(it.n)}</div>`);
     n.tabIndex = 0;
     n.dataset.name = it.n;
+    /* У программы машины значок настоящий, её собственный: человек должен
+       узнавать её на столе так же, как в любой другой системе. */
+    if ((it.приложение || it.машина) && (it.значок || it.ярлык) && typeof поставьЗначок === 'function')
+      поставьЗначок($('.glyph', n), it.значок, it.ярлык);
     const p = pos[it.n] || { x:LEFTPAD + Math.floor(i / rows) * ICONW, y:TOPPAD + (i % rows) * ICONH };
     n.style.left = clamp(p.x, 0, innerWidth - 100) + 'px';
     n.style.top = clamp(p.y, 60, innerHeight - 150) + 'px';
@@ -180,6 +200,12 @@ Shell.renderIcons = function(){
       $$('.di', box).forEach(x => x.classList.remove('sel')); n.classList.add('sel');
       Shell.ctx(e.clientX, e.clientY, [
         { i:'📂', t:'Открыть', f:it.open, k:'Enter' },
+        ...(it.приложение ? [{ i:'🚫', t:'Убрать с рабочего стола', f:() => {
+          S.deskApps = (S.deskApps || []).filter(x => x !== it.приложение);
+          Store.save(); Shell.renderIcons(); } }] : []),
+        ...(it.машина ? [{ i:'🚫', t:'Убрать с рабочего стола', f:() => {
+          S.deskNative = (S.deskNative || []).filter(x => x.id !== it.машина);
+          Store.save(); Shell.renderIcons(); } }] : []),
         ...(it.n === 'Корзина' ? [{ i:'🧹', t:'Очистить корзину', f:() => { KV.set('trash', []); Shell.renderIcons(); Shell.toast('Корзина', 'Очищена', '🗑️'); } }] : []),
         ...(it.file ? [
           { i:'✏️', t:'Переименовать', f:() => renameIcon(it), k:'F2' },
