@@ -23,6 +23,15 @@ const WM = {
     const app = APPS[appId];
     if (!app) return null;
 
+    /* Панель окон не держит: они живут на рабочем столе, под ней. Просим
+       стол открыть у себя — иначе окно нарисовалось бы внутри полосы
+       панели, где ему нет ни места, ни смысла. */
+    if (window.Поверхности && Поверхности.панель()){
+      Поверхности.скажи('открой', { вид:'приложение', id:appId, довод:opts });
+      if (window.Shell && Shell.closePanels) Shell.closePanels();
+      return null;
+    }
+
     if (app.single){
       const ex = this.wins.find(w => w.appId === appId);
       if (ex){ if (ex.minimized) this.restore(ex); this.focus(ex); if (app.onReopen) app.onReopen(ex, opts); return ex; }

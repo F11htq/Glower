@@ -14,6 +14,10 @@
     return;
   }
 
+  /* Кто мы — стол или панель — надо знать до всего остального: от этого
+     зависит, что рисовать, а что прятать. */
+  if (window.Поверхности) Поверхности.начни();
+
   applySettings();
   document.documentElement.style.fontSize = (16 * KV.get('zoom', 1)) + 'px';
   WM.init();
