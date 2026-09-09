@@ -1240,6 +1240,29 @@ try {
       && поверхности.бар.обои === false && поверхности.бар.значки === false
       && поверхности.бар.верхняя === false && поверхности.бар.окна === false,
     JSON.stringify(поверхности.бар));
+  /* Отдельная поверхность панели должна вмещать док целиком. Он висит не
+     вплотную к краю, и эта щель принадлежит ей же: не включив щель в полосу,
+     мы просили поверхность меньше дока — он выглядел подрезанным, а меню
+     Пуск не помещалось вовсе. Проверяем не вид, а число. */
+  const высотаПанели = await (async () => {
+    const p5 = await browser.newPage({ viewport:{ width:1280, height:800 } });
+    try {
+      await p5.goto(URL_APP + (URL_APP.includes('?') ? '&' : '?') + 'surface=панель&раздельно=1');
+      await p5.waitForTimeout(2400);
+      return await p5.evaluate(() => {
+        const п = document.querySelector('.dock-wrap');
+        const r = п.getBoundingClientRect();
+        const своя = window.Поверхности && Поверхности.панель();
+        return { нужно:Math.round(innerHeight - r.top), высота:Math.round(r.height),
+                 щель:Math.round(innerHeight - r.bottom),
+                 сообщит:r.height >= 8 && (своя || innerHeight - r.bottom <= 4) };
+      });
+    } finally { await p5.close(); }
+  })();
+  check('панель сообщает высоту, в которую док помещается целиком',
+    высотаПанели.сообщит === true && высотаПанели.нужно >= высотаПанели.высота + высотаПанели.щель,
+    JSON.stringify(высотаПанели));
+
   check('ни одна из поверхностей не сыплет ошибками',
     !поверхности.один.беды.length && !поверхности.стол.беды.length && !поверхности.бар.беды.length,
     JSON.stringify([поверхности.один.беды, поверхности.стол.беды, поверхности.бар.беды]));
