@@ -62,18 +62,9 @@ const Shell = {
   },
 
   syncDock(){
-    /* Панель — отдельная поверхность, и своих окон у неё нет: они живут на
-       рабочем столе, под ней. Стол рассказывает о них через агента, панель
-       слушает и рисует. Без этого запущенные программы в панели просто
-       пропадали бы — она честно не знала бы о них ничего. */
-    const своиОкна = (window.Поверхности && Поверхности.панель())
-      ? (this.окнаСтола || []).map(о => ({ appId:о.id, title:о.title,
-          minimized:о.свёрнуто, node:{ classList:{ contains:() => !!о.активно } } }))
-      : WM.wins;
-
     const running = {};
-    своиОкна.forEach(w => { running[w.appId] = running[w.appId] || []; running[w.appId].push(w); });
-    const active = своиОкна.find(w => w.node.classList.contains('focus') && !w.minimized);
+    WM.wins.forEach(w => { running[w.appId] = running[w.appId] || []; running[w.appId].push(w); });
+    const active = WM.wins.find(w => w.node.classList.contains('focus') && !w.minimized);
 
     $$('#dock-items .dock-item').forEach(b => {
       const id = b.dataset.app;
@@ -100,17 +91,6 @@ const Shell = {
   },
 
   launch(id, btn){
-    /* Из панели окнами распоряжается не она: они на столе. Просим стол
-       переключить — сам он и решит, свернуть текущее или достать свёрнутое.
-       Иначе нажатие на значок запущенной программы открывало бы второе её
-       окно, чего человек не просил. */
-    if (window.Поверхности && Поверхности.панель()){
-      if (btn){ btn.classList.add('bounce'); setTimeout(() => btn.classList.remove('bounce'), 700); }
-      Поверхности.скажи('открой', { вид:'окно', id });
-      this.closePanels();
-      return;
-    }
-
     const wins = WM.wins.filter(w => w.appId === id && w.desk === WM.desk);
     if (!wins.length){
       if (btn) { btn.classList.add('bounce'); setTimeout(() => btn.classList.remove('bounce'), 700); }
