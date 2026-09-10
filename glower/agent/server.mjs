@@ -108,6 +108,7 @@ if (SYSTEM){
   SYS = {
     ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
     ...m.apps(ALLOW_LAUNCH), ...m.hardware, ...m.wifi(ALLOW_NET), ...m.shots(ALLOW_LAUNCH),
+    ...m.tray(ALLOW_LAUNCH),
     ...(await import('./browser.mjs')).browser(PORT, ALLOW_LAUNCH),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
     ...(await import('./packages.mjs')).packages(ALLOW_PKG),

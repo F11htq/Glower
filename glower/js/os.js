@@ -77,6 +77,7 @@ window.OS = OS;
   wireTaskManager();
   wireNotifications();
   wireDrives();
+  wireTray();
   /* Пароль на входе — системный: спрашиваем у машины, задан ли он */
   if (window.Profiles && Profiles.узнайПроПароль) Profiles.узнайПроПароль();
 })();
@@ -902,3 +903,66 @@ function следиЗаУстановкой(имя){
 /* проверкам нужно звать эту сборку напрямую */
 window.wireRealApps = wireRealApps;
 window.спросиПроУстановку = спросиПроУстановку;
+
+/* ==========================================================================
+   Системный лоток: значки чужих программ
+
+   Программы кладут сюда значки, чтобы сворачиваться и показывать своё меню:
+   мессенджеры, качалки, VPN. До сих пор класть их было некуда — приёмника в
+   системе не было вовсе, и Telegram при закрытии окна уходил совсем.
+
+   Рисуем их слева от наших кнопок: наши — про саму машину и всегда одни и те
+   же, чужие приходят и уходят. Смешивать их в кучу значило бы каждый раз
+   переставлять человеку то, к чему он привык.
+   ========================================================================== */
+function wireTray(){
+  const место = document.getElementById('tb-tray');
+  if (!место) return;
+
+  let было = '';
+  const короб = el('div', 'tray-их');
+  место.insertBefore(короб, место.firstChild);
+
+  const нажать = (з, действие, e) => {
+    Platform.rpc('sys.tray.нажать', { 'служба':з.service, 'путь':з.path,
+      'действие':действие, x:Math.round(e.clientX), y:Math.round(e.clientY) })
+      .catch(err => Shell.toast(з.name || 'Значок',
+        'Программа не ответила: ' + (err.message || err), '⚠️', 6000));
+  };
+
+  const рисуй = значки => {
+    короб.innerHTML = '';
+    значки.forEach(з => {
+      const b = el('button', 'tray-btn tray-чужой');
+      b.dataset.tip = з.tooltip || з.name || '';
+      /* Пока значок не пришёл, показываем первую букву имени: пустой кружок
+         человеку ничего не говорит, а буква уже что-то. */
+      b.textContent = (з.name || '?').trim().charAt(0).toUpperCase();
+      if (з.iconData){
+        const и = el('img'); и.src = з.iconData; и.alt = '';
+        b.textContent = ''; b.appendChild(и);
+      } else if (з.iconName && typeof поставьЗначок === 'function'){
+        поставьЗначок(b, з.iconName, з.iconName);
+      }
+      /* Левая кнопка — «покажись», правая — меню программы. Так же, как
+         в любой другой системе: человеку не нужно учить наши правила. */
+      b.onclick = e => нажать(з, з.itemIsMenu ? 'ContextMenu' : 'Activate', e);
+      b.oncontextmenu = e => { e.preventDefault(); нажать(з, 'ContextMenu', e); };
+      короб.appendChild(b);
+    });
+  };
+
+  const спроси = async () => {
+    if (document.hidden) return;
+    try {
+      const д = await Platform.rpc('sys.tray');
+      const строкой = JSON.stringify(д['значки'] || []);
+      if (строкой === было) return;
+      было = строкой;
+      рисуй(д['значки'] || []);
+    } catch(e){ /* лотка может не быть — это не беда, просто пусто */ }
+  };
+
+  спроси();
+  setInterval(спроси, 2000);
+}

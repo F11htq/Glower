@@ -475,6 +475,60 @@ try {
     document.body.classList.remove('впритык');
     return ответ;
   });
+  /* --- системный лоток --- */
+  /* Настоящую шину сюда не поднять, но всё, что делает оболочка, проверяется
+     и так: рисует ли она пришедшие значки и доходит ли нажатие обратно. */
+  const лоток = await page.evaluate(async () => {
+    const было = Platform.rpc.bind(Platform);
+    const позвали = [];
+    Platform.rpc = (m, p) => {
+      if (m === 'sys.tray') return Promise.resolve({ 'служба':true, 'значки':[
+        { id:'a', service:'org.kde.StatusNotifierItem-1-1', path:'/StatusNotifierItem',
+          name:'Happ', status:'Active', iconName:'', tooltip:'Happ · подключено',
+          iconData:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          menu:'/MenuBar', itemIsMenu:false },
+        { id:'b', service:'org.kde.StatusNotifierItem-2-1', path:'/StatusNotifierItem',
+          name:'Качалка', status:'Active', iconName:'', tooltip:'', iconData:'',
+          menu:'', itemIsMenu:true }] });
+      if (m === 'sys.tray.нажать'){ позвали.push(p); return Promise.resolve({ ok:true }); }
+      return было(m, p);
+    };
+
+    const дождись = async (что, сколько = 8000) => {
+      const до = Date.now() + сколько;
+      while (Date.now() < до){ if (что()) return true; await new Promise(r => setTimeout(r, 100)); }
+      return false;
+    };
+    const появились = await дождись(() =>
+      document.querySelectorAll('.tray-их .tray-чужой').length === 2);
+
+    const кнопки = [...document.querySelectorAll('.tray-их .tray-чужой')];
+    const скартинкой = !!(кнопки[0] && кнопки[0].querySelector('img'));
+    const буквой = кнопки[1] ? кнопки[1].textContent.trim() : '';
+    const подсказка = кнопки[0] ? кнопки[0].dataset.tip : '';
+
+    /* Левая кнопка по обычному значку — «покажись», по значку-меню — меню */
+    if (кнопки[0]) кнопки[0].click();
+    if (кнопки[1]) кнопки[1].click();
+    /* Правая — всегда меню */
+    if (кнопки[0]) кнопки[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 200));
+
+    Platform.rpc = было;
+    return { появились, скартинкой, буквой, подсказка,
+             действия:позвали.map(п => п['действие']) };
+  });
+
+  check('значки программ появляются в лотке',
+    лоток.появились === true, JSON.stringify(лоток));
+  check('значок с картинкой рисуется картинкой, а без неё — буквой',
+    лоток.скартинкой === true && лоток.буквой === 'К', JSON.stringify(лоток));
+  check('подсказка значка — та, что дала программа',
+    лоток.подсказка === 'Happ · подключено', лоток.подсказка);
+  check('нажатия доходят до программы: обычное, меню и правой кнопкой',
+    JSON.stringify(лоток.действия) === JSON.stringify(['Activate', 'ContextMenu', 'ContextMenu']),
+    JSON.stringify(лоток.действия));
+
   check('у чужого окна в панели задач свой значок',
     значкиВПанели.картинка === true, JSON.stringify(значкиВПанели));
   check('панель задач видит, какое чужое окно сейчас в работе',

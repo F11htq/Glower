@@ -36,7 +36,7 @@ const ALLOWED = new Set([
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep', 'fwupdmgr', 'scanimage',
   'rfkill', 'lspci', 'swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock',
-  'grim', 'slurp', 'maim', 'slop', 'wlrctl',
+  'grim', 'slurp', 'maim', 'slop', 'wlrctl', 'gdbus',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
   'sudo'
@@ -2060,6 +2060,59 @@ export const hardware = {
     return { cameras:cams, sound:cards, bluetooth:bt };
   }
 };
+
+/* ==========================================================================
+   Системный лоток
+
+   Значки в лоток кладут не мы: программы объявляют себя по общему уговору
+   поверх шины D-Bus, а служба glower-tray их принимает и складывает список в
+   файл. Здесь мы этот список читаем и передаём нажатия обратно программе.
+
+   Почему нажатия идут через gdbus, а не через ту же службу: позвать чужой
+   метод — это одна команда, и заводить ради неё ещё один канал значило бы
+   усложнить то, что и так просто.
+   ========================================================================== */
+export function tray(allowLaunch){
+  const файлЛотка = () => join(process.env.XDG_RUNTIME_DIR
+    || ('/run/user/' + (process.getuid ? process.getuid() : 1000)), 'glower-tray.json');
+
+  return {
+    async 'sys.tray'(){
+      const ф = файлЛотка();
+      if (!existsSync(ф)) return { 'служба':false, 'значки':[] };
+      try {
+        const д = JSON.parse(await readFile(ф, 'utf8'));
+        return { 'служба':true, 'значки':Array.isArray(д.items) ? д.items : [] };
+      } catch(e){
+        /* Файл могли застать на середине записи — не беда, через миг
+           перечитаем. Врать про пустой лоток при этом не станем. */
+        return { 'служба':true, 'значки':[], 'почему':'список сейчас перезаписывается' };
+      }
+    },
+
+    /* Нажатие по значку. Что именно делать, решает не оболочка, а сама
+       программа: она одна знает, показать ей окно, меню или что-то своё. */
+    async 'sys.tray.нажать'({ служба, путь, действие = 'Activate', x = 0, y = 0 }){
+      if (!allowLaunch) throw new Error('лоток выключен: запустите агент с ключом --allow-launch');
+      const можно = { Activate:1, SecondaryActivate:1, ContextMenu:1 };
+      if (!можно[действие]) throw new Error('неизвестное действие со значком: ' + действие);
+      if (!/^[\w.:-]+$/.test(String(служба || ''))) throw new Error('неверное имя программы');
+      if (!/^\/[\w/.-]*$/.test(String(путь || ''))) throw new Error('неверный путь значка');
+      if (!await has('gdbus')) throw new Error('на машине нет gdbus — позвать программу нечем');
+
+      const среда = await средаЭкрана();
+      const { execFile } = await import('node:child_process');
+      const доводы = ['call', '--session', '--dest', служба, '--object-path', путь,
+        '--method', 'org.kde.StatusNotifierItem.' + действие,
+        String(parseInt(x, 10) || 0), String(parseInt(y, 10) || 0)];
+      const беда = await new Promise(resolve => execFile('gdbus', доводы,
+        { env:среда, timeout:5000 },
+        (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
+      if (беда) throw new Error(беда);
+      return { ok:true, действие };
+    }
+  };
+}
 
 /* ==========================================================================
    Снимки экрана

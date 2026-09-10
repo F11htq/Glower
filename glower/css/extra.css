@@ -589,3 +589,13 @@ html.вход-в-систему #desktop{filter:none}
 .snip-color:hover{transform:scale(1.15)}
 .snip-color.вбран{box-shadow:0 0 0 2px var(--accent),inset 0 0 0 1px rgba(255,255,255,.5)}
 .snip-width{width:96px}
+
+/* ---------- Системный лоток: значки чужих программ ----------
+   Слева от наших кнопок: наши — про саму машину и всегда одни и те же,
+   чужие приходят и уходят. Смешивать значило бы каждый раз переставлять
+   человеку то, к чему он привык. */
+.tray-их{display:flex;align-items:center;gap:2px}
+.tray-их:not(:empty){margin-right:4px;padding-right:6px;
+  border-right:1px solid rgba(var(--tint),.22)}
+.tray-чужой{font-size:12px;font-weight:600}
+.tray-чужой img{width:18px;height:18px;object-fit:contain;display:block}

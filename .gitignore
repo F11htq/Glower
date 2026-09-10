@@ -4,3 +4,7 @@ glower.iso
 glower-os.zip
 windows12.zip
 node_modules/
+
+# Кэш Python: появляется, когда служба лотка запускается для проверки
+__pycache__/
+*.pyc
