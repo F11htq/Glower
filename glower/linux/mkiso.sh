@@ -32,7 +32,10 @@ SUITE="${SUITE:-noble}"
 # Имена здесь латиницей, как и всё в этом файле: он большой, его правят по
 # частям, и один кириллический идентификатор среди латинских — приглашение к
 # ошибке, которая проявится не сразу.
-MIRROR_OUT="${MIRROR:-http://archive.ubuntu.com/ubuntu}"
+# Зеркало сборки и зеркало, которое уедет в образ, — разные вещи, и одним
+# значением их не описать. Когда мы связали их вместе, сборочное зеркало
+# облака попало в готовую систему: людям туда ходить незачем и неблизко.
+MIRROR_OUT="${MIRROR_OUT:-http://archive.ubuntu.com/ubuntu}"
 
 find_mirror(){
   # Ubuntu 24.04 хранит источники по-новому, прежние версии — по-старому.
@@ -78,51 +81,78 @@ step(){ printf '\n=== %s\n' "$1"; }
 
 # --------------------------------------------------------------------------
 step "1/6 базовая система ($SUITE)"
-# Выкачивание основы — сотни запросов к чужому серверу, и рвётся оно чаще
-# всего остального. Но рвётся не всегда: бывает и просто медленно.
+# Основа системы: сперва готовым архивом, и только потом по пакетам.
 #
-# Различать это важно. Однажды я решил, что сборка встала, потому что два
-# раза подряд видел её на одном и том же пакете, — а она шла, только по
-# строке в минуту. Ограничение, поставленное из этой ошибки, убивало бы
-# честную загрузку и начинало заново, снова и снова.
+# debootstrap собирает основу, выкачивая сотню пакетов по одному и дожидаясь
+# каждого. На быстрой сети это минуты, на медленной — часы: наши сборки
+# ползли по строке в минуту и не укладывались в отведённое время дважды.
 #
-# Поэтому так: первой попытке даём немного времени — если зеркало отвечает
-# нормально, она уложится с запасом, а если виснет, мы быстро это поймём и
-# сменим зеркало. Второй попытке времени не ограничиваем вовсе: пусть идёт
-# сколько идёт, её всё равно прикроет общий срок сборки.
+# Ubuntu выкладывает ту же основу одним архивом на тридцать мегабайт. Это одна
+# загрузка вместо сотни, и она не зависит от задержек так, как зависит сотня
+# отдельных обращений.
 #
-# Каждая попытка начинается с чистого места. debootstrap умеет продолжать
-# начатое, но продолжать после обрыва посреди распаковки — способ получить
-# основу, собранную наполовину, и узнать об этом много позже.
+# debootstrap остаётся запасным путём: архива может не оказаться, а собрать
+# образ надо всё равно.
+BASE_DIR="https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release"
+
+fetch_base(){
+  # Какой архив там сейчас лежит, мы не угадываем: спрашиваем.
+  name=$(curl -fsSL --max-time 60 "$BASE_DIR/" 2>/dev/null \
+         | grep -oE 'ubuntu-base-[0-9.]+-base-amd64\.tar\.gz' \
+         | sort -V | tail -1)
+  [ -n "$name" ] || return 1
+  echo "  основа: беру готовый архив $name"
+  curl -fSL --max-time 900 -o "$WORK/base.tar.gz" "$BASE_DIR/$name" || return 1
+  rm -rf "$ROOTFS"; mkdir -p "$ROOTFS"
+  tar -xzf "$WORK/base.tar.gz" -C "$ROOTFS" || return 1
+  rm -f "$WORK/base.tar.gz"
+  # В архиве свои источники, в новом виде. Ниже мы пишем свои, и два набора
+  # сразу — это задвоенные строки и лишние запросы к сети при каждом apt.
+  rm -f "$ROOTFS/etc/apt/sources.list.d/ubuntu.sources"
+  return 0
+}
+
 if [ ! -e "$ROOTFS/.debootstrapped" ]; then
-  DEB_OK=0
-  for try in 1 2; do
-    rm -rf "$ROOTFS"; mkdir -p "$ROOTFS"
-    echo "  основа: попытка $try из 2, зеркало $MIRROR"
-    if [ "$try" = 1 ]; then
-      timeout 2400 debootstrap --variant=minbase \
-        --include=systemd,systemd-sysv,dbus,ca-certificates \
-        "$SUITE" "$ROOTFS" "$MIRROR" && DEB_OK=1
-    else
-      debootstrap --variant=minbase \
-        --include=systemd,systemd-sysv,dbus,ca-certificates \
-        "$SUITE" "$ROOTFS" "$MIRROR" && DEB_OK=1
-    fi
-    [ "$DEB_OK" = 1 ] && break
-    echo "  основа: попытка $try не удалась" >&2
-    # Второй заход — с общедоступного зеркала: если подвело само зеркало,
-    # повтор к нему же упрётся в то же самое.
-    if [ "$MIRROR" != "http://archive.ubuntu.com/ubuntu" ]; then
-      MIRROR="http://archive.ubuntu.com/ubuntu"
-      echo "  основа: перехожу на $MIRROR" >&2
-    fi
-  done
-  [ "$DEB_OK" = 1 ] || { echo "не вышло собрать основу системы ни с одного зеркала" >&2; exit 1; }
+  BASE_OK=0
+  if [ -z "${NO_BASE_TARBALL:-}" ] && fetch_base; then
+    BASE_OK=1
+    echo "  основа: готова из архива"
+  else
+    echo "  основа: архива нет — собираю по пакетам" >&2
+    for try in 1 2; do
+      rm -rf "$ROOTFS"; mkdir -p "$ROOTFS"
+      echo "  основа: попытка $try из 2, зеркало $MIRROR"
+      # Первой попытке даём срок: если зеркало молчит, лучше понять это за
+      # сорок минут и сменить его, чем стоять до обрыва всей сборки. Второй
+      # срока не ставим — пусть идёт сколько идёт, её прикроет общий срок.
+      if [ "$try" = 1 ]; then
+        timeout 2400 debootstrap --variant=minbase \
+          --include=systemd,systemd-sysv,dbus,ca-certificates \
+          "$SUITE" "$ROOTFS" "$MIRROR" && BASE_OK=1
+      else
+        debootstrap --variant=minbase \
+          --include=systemd,systemd-sysv,dbus,ca-certificates \
+          "$SUITE" "$ROOTFS" "$MIRROR" && BASE_OK=1
+      fi
+      [ "$BASE_OK" = 1 ] && break
+      echo "  основа: попытка $try не удалась" >&2
+      if [ "$MIRROR" != "http://archive.ubuntu.com/ubuntu" ]; then
+        MIRROR="http://archive.ubuntu.com/ubuntu"
+        echo "  основа: перехожу на $MIRROR" >&2
+      fi
+    done
+  fi
+  [ "$BASE_OK" = 1 ] || { echo "не вышло собрать основу системы" >&2; exit 1; }
   touch "$ROOTFS/.debootstrapped"
 fi
 
 # --------------------------------------------------------------------------
 step "2/6 ядро, киоск, node"
+# systemd и его спутники стоят первыми не случайно. debootstrap приносил их
+# сам, а готовый архив основы — нет: в нём только apt и dpkg. Без них
+# получилась бы система, которой нечем загрузиться, и узнали бы мы об этом
+# в самом конце сборки.
+#
 # Все четыре раздела Ubuntu. main и universe — свободные программы, и одних
 # их не хватает: закрытые драйверы сетевых карт лежат в restricted, а
 # прошивки, которые нельзя перепаковывать, — в multiverse. Без них часть
@@ -135,11 +165,24 @@ step "2/6 ядро, киоск, node"
 #
 # Внутрь образа пишем общедоступное зеркало, а не то, с которого собирали:
 # машина сборки могла качать из своего облака, и людям туда ходить незачем.
+#
+# Здесь — зеркало сборки: с него мы качаем сотни пакетов, и его близость
+# решает, уложимся мы в отведённое время или нет. Общедоступное зеркало
+# впишется в этот же файл в самом конце, перед сжатием образа.
 cat > "$ROOTFS/etc/apt/sources.list" <<EOF
-deb $MIRROR_OUT $SUITE main universe restricted multiverse
-deb $MIRROR_OUT $SUITE-updates main universe restricted multiverse
-deb $MIRROR_OUT $SUITE-security main universe restricted multiverse
+deb $MIRROR $SUITE main universe restricted multiverse
+deb $MIRROR $SUITE-updates main universe restricted multiverse
+deb $MIRROR $SUITE-security main universe restricted multiverse
 EOF
+
+# Готовый архив основы приходит с пустым resolv.conf: debootstrap приносил
+# имена серверов от машины сборки, архив — нет. Без них apt в chroot не
+# найдёт даже зеркала, и сборка встанет на первом же обращении к сети.
+if [ ! -s "$ROOTFS/etc/resolv.conf" ]; then
+  cp -L /etc/resolv.conf "$ROOTFS/etc/resolv.conf" 2>/dev/null || true
+fi
+grep -q '^nameserver' "$ROOTFS/etc/resolv.conf" 2>/dev/null || \
+  printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$ROOTFS/etc/resolv.conf"
 mount --bind /dev "$ROOTFS/dev" 2>/dev/null || true
 mount -t proc proc "$ROOTFS/proc" 2>/dev/null || true
 mount -t sysfs sys "$ROOTFS/sys" 2>/dev/null || true
@@ -193,6 +236,7 @@ chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
+  systemd systemd-sysv dbus ca-certificates \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   linux-firmware \
   pciutils usbutils \
@@ -828,6 +872,15 @@ chroot "$ROOTFS" systemctl set-default graphical.target >/dev/null 2>&1 || true
 # Это не косметика. GitHub не принимает в релиз файлы больше двух гигабайт,
 # и образ однажды уже упёрся в этот потолок — а всё перечисленное здесь
 # никак не влияет на то, заработает ли Wi-Fi у человека.
+# Собирали с ближнего зеркала, а жить системе с общедоступным: машина
+# сборки стояла в чужом облаке, и её зеркало человеку за компьютером не
+# ближе и не быстрее прочих.
+cat > "$ROOTFS/etc/apt/sources.list" <<EOF
+deb $MIRROR_OUT $SUITE main universe restricted multiverse
+deb $MIRROR_OUT $SUITE-updates main universe restricted multiverse
+deb $MIRROR_OUT $SUITE-security main universe restricted multiverse
+EOF
+
 chroot "$ROOTFS" /bin/sh -c '
   rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/lintian
   rm -rf /usr/share/help /usr/share/gtk-doc /usr/share/devhelp
