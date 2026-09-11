@@ -16,7 +16,42 @@
 set -euo pipefail
 
 SUITE="${SUITE:-noble}"
-MIRROR="${MIRROR:-http://archive.ubuntu.com/ubuntu}"
+
+# Откуда качать при сборке и что записать в образ — это два разных адреса.
+#
+# В образ идёт общедоступное зеркало: система поедет к людям, и указывать ей
+# на зеркало чужого облака неправильно.
+#
+# А качаем при сборке оттуда, где быстро. У машин, на которых собирается
+# образ, обычно есть своё зеркало под боком, и они настроены на него. Мы же
+# ходили на archive.ubuntu.com через полмира: сборка ползла и однажды не
+# уложилась в отведённые полтора часа, остановившись на самом первом шаге —
+# выкачивании базовых пакетов. Поэтому спрашиваем у самой машины, каким
+# зеркалом пользуется она, и берём то же.
+#
+# Имена здесь латиницей, как и всё в этом файле: он большой, его правят по
+# частям, и один кириллический идентификатор среди латинских — приглашение к
+# ошибке, которая проявится не сразу.
+MIRROR_OUT="${MIRROR:-http://archive.ubuntu.com/ubuntu}"
+
+find_mirror(){
+  # Ubuntu 24.04 хранит источники по-новому, прежние версии — по-старому.
+  for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+    [ -r "$f" ] || continue
+    u=$(sed -n 's|^URIs:[[:space:]]*\(http[^[:space:]]*\).*|\1|p; s|^deb[[:space:]]\+\(http[^[:space:]]*\).*|\1|p' "$f" \
+        | grep -v security | head -1)
+    [ -n "$u" ] && { printf '%s' "${u%/}"; return 0; }
+  done
+  return 1
+}
+
+if [ -n "${MIRROR:-}" ]; then
+  :                                   # сказали явно — слушаемся
+elif MIRROR=$(find_mirror); then
+  echo "  зеркало сборки: $MIRROR (взято у этой машины)"
+else
+  MIRROR="http://archive.ubuntu.com/ubuntu"
+fi
 WORK="${WORK:-/var/tmp/glower-build}"
 OUT="glower.iso"
 CHROMIUM=""
@@ -61,10 +96,13 @@ step "2/6 ядро, киоск, node"
 # Отдельной строкой — security. Её здесь не было вовсе, и это значило, что
 # система, которая предлагает человеку кнопку «Обновить», не видела ни
 # одного исправления безопасности: они выходят именно в этом разделе.
+#
+# Внутрь образа пишем общедоступное зеркало, а не то, с которого собирали:
+# машина сборки могла качать из своего облака, и людям туда ходить незачем.
 cat > "$ROOTFS/etc/apt/sources.list" <<EOF
-deb $MIRROR $SUITE main universe restricted multiverse
-deb $MIRROR $SUITE-updates main universe restricted multiverse
-deb $MIRROR $SUITE-security main universe restricted multiverse
+deb $MIRROR_OUT $SUITE main universe restricted multiverse
+deb $MIRROR_OUT $SUITE-updates main universe restricted multiverse
+deb $MIRROR_OUT $SUITE-security main universe restricted multiverse
 EOF
 mount --bind /dev "$ROOTFS/dev" 2>/dev/null || true
 mount -t proc proc "$ROOTFS/proc" 2>/dev/null || true
