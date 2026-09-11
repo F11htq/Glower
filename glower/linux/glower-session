@@ -138,7 +138,7 @@ fi
 # Telegram при закрытии окна уходил у нас совсем.
 if [ -x /usr/bin/glower-tray ]; then
   /usr/bin/glower-tray >>"$LOG" 2>&1 &
-  say "GlowerOS: принимаю значки программ в лоток"
+  say "GlowerOS: glower-tray — принимаю значки программ в лоток"
 fi
 
 # --- агент: мост между оболочкой и машиной ---
