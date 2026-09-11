@@ -33,8 +33,35 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools
 
+      # Зеркало задаём здесь, а не оставляем на усмотрение рецепта.
+      #
+      # Две сборки подряд встали на одном и том же пакете — debianutils — и
+      # дальше не пошли: первую оборвали по времени на девяностой минуте,
+      # вторая простояла тридцать четыре и стояла бы дальше. Качали с
+      # archive.ubuntu.com: машина сборки сама на него настроена, и рецепт,
+      # спросив её, брал тот же адрес. Виснет именно он.
+      #
+      # Машины GitHub стоят в облаке Azure, и у них есть своё зеркало под
+      # боком. Берём его, а общедоступное оставляем запасным — и печатаем
+      # выбор, чтобы в следующий раз не гадать по журналу.
+      - name: Выбрать зеркало
+        run: |
+          for m in http://azure.archive.ubuntu.com/ubuntu \
+                   http://archive.ubuntu.com/ubuntu; do
+            if curl -fsS --max-time 20 -o /dev/null "$m/dists/noble/Release"; then
+              echo "зеркало сборки: $m"
+              echo "MIRROR=$m" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "зеркало $m не отвечает — пробую следующее"
+          done
+          echo "ни одно зеркало не ответило" >&2
+          exit 1
+
       - name: Собрать образ
-        run: sudo bash glower/linux/mkiso.sh --out glower.iso
+        env:
+          MIRROR: ${{ env.MIRROR }}
+        run: sudo -E bash glower/linux/mkiso.sh --out glower.iso
 
       - name: Контрольная сумма
         run: sha256sum glower.iso > glower.iso.sha256
