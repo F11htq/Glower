@@ -27,6 +27,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Проверка дешёвая, а ловит то, чего не ловит ни один разбор:
+      # комментарий внутри склеенной команды и кириллицу в именах
+      # переменных. И то и другое молчит до самого запуска, а тут запуск —
+      # это полуторачасовая сборка образа.
+      - name: Проверить скрипты
+        run: |
+          sh glower/test/склейки.sh \
+            glower/linux/mkiso.sh glower/linux/install.sh \
+            glower/linux/glower-session glower/linux/glower-greeter \
+            glower/test/склейки.sh glower/test/стенд.sh \
+            glower/test/vm.sh
+
       - name: Инструменты сборки
         run: |
           sudo apt-get update -qq
