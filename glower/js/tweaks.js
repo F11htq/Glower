@@ -45,8 +45,13 @@ Shell.updateTaskbar = function(){
 
   document.body.classList.toggle('taskbar', anyMax && S.taskbarFull !== false);
 
-  // трей переезжает в панель, когда верхняя панель скрыта
-  const inDock = busy && S.trayInDock !== false;
+  // Трей переезжал вниз, потому что верхняя панель пряталась при открытом
+  // окне и трей вместе с ней пропадал. С разделёнными поверхностями панель
+  // не прячется вовсе — она над окнами и живёт сама по себе. Переносить
+  // трей теперь незачем, и перенос давал вторую его копию: одну наверху,
+  // другую в доке.
+  const inDock = busy && S.trayInDock !== false
+    && !(window.Поверхности && Поверхности.разделено());
   if (inDock && tray.parentElement !== dock){
     dock.appendChild(tray); tray.classList.add('in-dock');
     dock.insertBefore(tbSearch, $('#dock-items', dock));

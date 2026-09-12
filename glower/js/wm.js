@@ -355,3 +355,7 @@ const WM = {
 
 function rectObj(node){ const r = node.getBoundingClientRect(); return { x:r.left, y:r.top, w:r.width, h:r.height }; }
 function icoStyle(app){ return `background:${app.bg || 'linear-gradient(140deg,#5b8cff,#8b5cf6)'}`; }
+
+/* То же, что и у Shell: const на window не попадает, а проверяющий
+   «window.WM есть?» получает «нет» и тихо ничего не делает. */
+window.WM = WM;
