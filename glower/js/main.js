@@ -71,12 +71,19 @@
       unlock();
       return;
     }
-    if (window.Setup && Setup.needed()){
+    /* Мастер настройки, приветствие и вход — дело рабочего стола. Панель
+       открывает ту же страницу второй раз, и если не остановить её здесь,
+       она запустит у себя второй такой же мастер. Видно это было так: стол
+       уже работал, а в полосе наверху так и стоял сплющенный мастер —
+       своя, отдельная его копия, которую никто не проходил. */
+    const своя = !window.Поверхности || Поверхности.стол();
+
+    if (своя && window.Setup && Setup.needed()){
       setTimeout(() => Setup.open(), 350);
       return;
     }
     /* смена языка в настройке перезагружает страницу — здесь досматриваем приветствие */
-    if (window.Welcome && KV.get('welcome.pending', false)){
+    if (своя && window.Welcome && KV.get('welcome.pending', false)){
       KV.set('welcome.pending', false);
       setTimeout(() => Welcome.play(), 300);
       return;
