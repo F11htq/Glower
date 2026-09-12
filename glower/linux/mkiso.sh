@@ -203,6 +203,12 @@ trap cleanup EXIT
 # libgl1, а libOpenGL.so.0 — совсем в другом пакете, и одно другого не
 # заменяет. Именно на нём спотыкался Happ.
 #
+# Значок в лотке многие программы кладут не сами: они зовут библиотеку
+# appindicator, и без неё молча остаются без значка — ни ошибки, ни строчки
+# в журнале. Наш приёмник значков при этом работает исправно, просто звать
+# его нечем. Поэтому библиотека стоит в образе всегда, а не приходит вместе
+# с какой-нибудь одной программой.
+#
 # libglib2.0-bin даёт gsettings. Им чужие программы прописывают системный
 # прокси — VPN-клиенты в режиме прокси делают именно это. Без него команда
 # просто не находится, программа молча не может настроить систему, и адрес
@@ -273,6 +279,7 @@ apt-get install -y --no-install-recommends \
   libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
   libopengl0 libglx0 libglu1-mesa \
   xwayland qtwayland5 qt6-wayland libxcb-cursor0 \
+  libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 \
   grim slurp maim xclip \
   2>&1 | tail -2
 
