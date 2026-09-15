@@ -1203,19 +1203,29 @@ try {
 
      Поэтому проверяем не список, а то, ради чего он написан: открыли —
      значит список это видит. */
-  for (const что of ['Пуск', 'центр управления', 'виджеты', 'поиск', 'все окна']){
+  for (const что of ['Пуск', 'центр управления', 'виджеты', 'поиск', 'все окна',
+                     'вопрос', 'выключение']){
     const видно = await page.evaluate(([имя]) => {
       const открой = {
         'Пуск':             () => Shell.toggleStart(true),
         'центр управления': () => Shell.panel('#cc'),
         'виджеты':          () => Shell.panel('#widgets'),
         'поиск':            () => Shell.spot(true),
-        'все окна':         () => Shell.taskview(true)
+        'все окна':         () => Shell.taskview(true),
+        /* Диалоги открываются с панели не реже прочего: кнопка питания
+           живёт в Пуске, и вопрос «точно выключить?» — тоже её. */
+        'вопрос':           () => Dlg.confirm('Проверка', 'Текст вопроса'),
+        'выключение':       () => document.querySelector('#power-overlay').classList.add('on')
       }[имя];
-      Shell.closePanels(); Shell.taskview(false);
+      const прибери = () => {
+        Shell.closePanels(); Shell.taskview(false);
+        document.querySelectorAll('.dlg-ov').forEach(н => н.remove());
+        document.querySelector('#power-overlay').classList.remove('on');
+      };
+      прибери();
       открой();
       const есть = !!document.querySelector(Поверхности.ОТКРЫТО);
-      Shell.closePanels(); Shell.taskview(false);
+      прибери();
       return есть;
     }, [что]);
     check('панель знает, что открыт(ы) ' + что, видно);
