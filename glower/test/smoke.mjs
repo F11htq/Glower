@@ -1204,7 +1204,7 @@ try {
      Поэтому проверяем не список, а то, ради чего он написан: открыли —
      значит список это видит. */
   for (const что of ['Пуск', 'центр управления', 'виджеты', 'поиск', 'все окна',
-                     'вопрос', 'выключение']){
+                     'вопрос', 'выключение', 'занавес']){
     const видно = await page.evaluate(([имя]) => {
       const открой = {
         'Пуск':             () => Shell.toggleStart(true),
@@ -1215,11 +1215,14 @@ try {
         /* Диалоги открываются с панели не реже прочего: кнопка питания
            живёт в Пуске, и вопрос «точно выключить?» — тоже её. */
         'вопрос':           () => Dlg.confirm('Проверка', 'Текст вопроса'),
-        'выключение':       () => document.querySelector('#power-overlay').classList.add('on')
+        'выключение':       () => document.querySelector('#power-overlay').classList.add('on'),
+        /* Занавес гасит весь экран при выключении и во сне. Его тоже
+           поднимает панель: кнопка питания в Пуске. */
+        'занавес':          () => document.body.appendChild(el('div', 'shutdown-fade'))
       }[имя];
       const прибери = () => {
         Shell.closePanels(); Shell.taskview(false);
-        document.querySelectorAll('.dlg-ov').forEach(н => н.remove());
+        document.querySelectorAll('.dlg-ov, .shutdown-fade').forEach(н => н.remove());
         document.querySelector('#power-overlay').classList.remove('on');
       };
       прибери();

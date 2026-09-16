@@ -117,7 +117,7 @@ const Поверхности = {
      экране это выглядит так, будто Пуска нет вовсе. Ровно так и было. */
   ОТКРЫТО:['body.start-open', '#cc.on', '#widgets.on', '#taskview.on',
            '#ctx.on', '#spot-overlay.on', '#power-overlay.on',
-           '.dlg-ov.on', '.toasts .toast'].join(', '),
+           '.dlg-ov.on', '.shutdown-fade', '.toasts .toast'].join(', '),
 
   /* Когда панели не должно быть видно вовсе.
 
