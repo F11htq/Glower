@@ -43,10 +43,17 @@ export LIBGL_ALWAYS_SOFTWARE=1
 export WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 if [ ! -S "$RT/wayland-0" ]; then
-  nohup labwc > "$RT/labwc.log" 2>&1 &
+  # С боевыми настройками, а не с чужими умолчаниями. Стенд нужен, чтобы
+  # видеть то же, что увидит человек; сервер с другими настройками — это
+  # уже другая система, и проверка на ней стоит меньше, чем кажется.
+  nohup labwc -C "$SRC/linux/labwc" > "$RT/labwc.log" 2>&1 &
   for i in $(seq 1 40); do [ -S "$RT/wayland-0" ] && break; sleep 0.25; done
 fi
 export WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland
+# Размер экрана берём как у машины, на которой всё это проверяется:
+# на другом разрешении раскладка панели и дока может лечь иначе.
+command -v wlr-randr >/dev/null && \
+  wlr-randr --output HEADLESS-1 --custom-mode "${GLOWER_SIZE:-1366x768}" >/dev/null 2>&1
 [ -S "$RT/wayland-0" ] || { echo "labwc не поднялся"; tail -5 "$RT/labwc.log"; exit 1; }
 
 pkill -f 'linux/glower-shell' >/dev/null 2>&1
