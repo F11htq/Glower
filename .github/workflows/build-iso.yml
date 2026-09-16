@@ -32,12 +32,10 @@ jobs:
       # переменных. И то и другое молчит до самого запуска, а тут запуск —
       # это полуторачасовая сборка образа.
       - name: Проверить скрипты
-        run: |
-          sh glower/test/склейки.sh \
-            glower/linux/mkiso.sh glower/linux/install.sh \
-            glower/linux/glower-session glower/linux/glower-greeter \
-            glower/test/склейки.sh glower/test/стенд.sh \
-            glower/test/vm.sh
+        # Без имён она находит скрипты сама, по первой строке файла. Список
+        # руками вести нельзя — он отстаёт молча: в прежнем не было ни
+        # glower-shot, ни glower-install, ни половины остальных.
+        run: sh glower/test/склейки.sh
 
       - name: Инструменты сборки
         run: |
