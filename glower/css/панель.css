@@ -1,0 +1,131 @@
+/* ==========================================================================
+   Полоса во всю ширину — как в настоящих системах.
+
+   Прежде верх экрана занимали три отдельных островка: погода слева, поиск
+   посередине, лоток справа. Выглядело нарядно, но между ними зияли дыры, и
+   каждая дыра — это место, где видно то, что происходит ниже. Сплошная
+   полоса проще и честнее: она либо есть, либо её нет.
+   ========================================================================== */
+
+:root{
+  --полоса-высота:30px;
+  --полоса-фон:rgba(20, 22, 30, .82);
+  --полоса-текст:rgba(255, 255, 255, .92);
+  --полоса-тень:rgba(255, 255, 255, .10);
+}
+
+*{margin:0; padding:0; box-sizing:border-box}
+
+html, body{
+  background:transparent;
+  color:var(--полоса-текст);
+  font:13px/1.2 system-ui, 'Segoe UI', Inter, sans-serif;
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+  cursor:default;
+  overflow:hidden;
+}
+
+.полоса{
+  position:fixed; top:0; left:0; right:0;
+  height:var(--полоса-высота);
+  display:flex; align-items:stretch;
+  background:var(--полоса-фон);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  box-shadow:inset 0 -1px 0 var(--полоса-тень);
+  z-index:10;
+}
+
+.середина{flex:1; display:flex; align-items:center; justify-content:center}
+.указатели{display:flex; align-items:stretch}
+
+.кнопка{
+  display:flex; align-items:center; gap:6px;
+  padding:0 10px; height:100%;
+  border:0; background:none; color:inherit; font:inherit;
+  cursor:default; white-space:nowrap;
+  transition:background .12s;
+}
+.кнопка:hover{background:rgba(255,255,255,.12)}
+.кнопка.открыта{background:rgba(255,255,255,.18)}
+
+.меню-программ{font-weight:600; padding-left:12px}
+.зн{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.9;
+    stroke-linecap:round; stroke-linejoin:round}
+.зн rect[x]{fill:currentColor; stroke:none}
+.зн .залив{fill:currentColor; stroke:none; opacity:.9}
+
+.часы{gap:8px; font-variant-numeric:tabular-nums}
+.часы .дата{opacity:.6}
+
+.лоток{display:flex; align-items:stretch}
+.лоток:not(:empty){margin-right:2px}
+.лоток .значок{
+  display:flex; align-items:center; justify-content:center;
+  width:28px; height:100%; border:0; background:none; color:inherit;
+  font-size:11px; font-weight:600; cursor:default; transition:background .12s;
+}
+.лоток .значок:hover{background:rgba(255,255,255,.12)}
+.лоток .значок img{width:16px; height:16px; object-fit:contain; display:block}
+
+/* --- то, что панель открывает --- */
+/* Поверхность вырастает во весь экран, и навес ловит щелчок мимо меню.
+   Без него меню нечем закрыть: щёлкать по рабочему столу человек не может —
+   между ним и столом наша же поверхность. */
+.навес{
+  position:fixed; inset:var(--полоса-высота) 0 0 0;
+  display:none;
+}
+body.открыто .навес{display:block}
+
+.окошко{
+  position:fixed; top:calc(var(--полоса-высота) + 6px);
+  background:rgba(28, 30, 38, .96);
+  backdrop-filter:blur(26px) saturate(140%);
+  -webkit-backdrop-filter:blur(26px) saturate(140%);
+  border-radius:10px;
+  box-shadow:0 18px 50px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08);
+  padding:8px;
+  z-index:20;
+  animation:появись .13s ease-out;
+}
+@keyframes появись{from{opacity:0; transform:translateY(-6px)}}
+
+/* меню программ */
+#окно-программ{left:8px; width:min(420px, calc(100vw - 16px)); max-height:min(70vh, 560px);
+               display:flex; flex-direction:column}
+.поиск-программ{
+  width:100%; padding:7px 10px; margin-bottom:6px;
+  border:0; border-radius:7px; outline:0;
+  background:rgba(255,255,255,.08); color:inherit; font:inherit;
+}
+.сетка{display:grid; grid-template-columns:repeat(4, 1fr); gap:4px 2px; overflow:auto}
+.программа{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  padding:10px 4px; border:0; background:none; color:inherit; font:inherit;
+  border-radius:8px; cursor:default; transition:background .12s;
+}
+.программа:hover{background:rgba(255,255,255,.12)}
+.программа .лицо{
+  width:34px; height:34px; border-radius:9px;
+  display:grid; place-content:center; font-size:19px;
+}
+/* Две строки под имя — и ровно две. Без заданной высоты длинные имена
+   вылезают за свою клетку и ложатся на подписи снизу: сетка выглядит так,
+   будто буквы просвечивают друг сквозь друга. */
+.программа .имя{font-size:11px; text-align:center; line-height:1.25;
+                height:calc(2 * 1.25em); overflow:hidden;
+                display:-webkit-box; -webkit-line-clamp:2;
+                -webkit-box-orient:vertical; word-break:break-word}
+.пусто{padding:14px; opacity:.6; text-align:center; font-size:12px}
+
+/* меню питания */
+#окно-питания{right:8px; width:210px}
+.строка{
+  display:flex; align-items:center; gap:9px; width:100%;
+  padding:8px 10px; border:0; background:none; color:inherit; font:inherit;
+  border-radius:7px; cursor:default; text-align:left; transition:background .12s;
+}
+.строка:hover{background:rgba(255,255,255,.12)}
+.строка.опасно:hover{background:rgba(220, 70, 70, .35)}

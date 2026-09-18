@@ -1194,44 +1194,30 @@ try {
   check('первоначальная настройка не спрашивает пароль',
     await page.evaluate(() => !Setup.STEPS.some(ш => /Пароль/.test(ш.title || ''))));
 
-  /* Поверхность панели растягивается во весь экран, пока панель что-то
-     открыла, и определяется это одним списком селекторов. Список легко
-     разъезжается с разметкой, и разъезжается молча: селектор просто ни с
-     чем не совпадает, поверхность не растёт, и открытое обрезается по
-     высоте полосы — то есть пропадает целиком. Меню Пуск так пропадало
-     дважды, и оба раза это выглядело как «Пуска нет вовсе».
-
-     Поэтому проверяем не список, а то, ради чего он написан: открыли —
-     значит список это видит. */
-  for (const что of ['Пуск', 'центр управления', 'виджеты', 'поиск', 'все окна',
-                     'вопрос', 'выключение', 'занавес']){
-    const видно = await page.evaluate(([имя]) => {
-      const открой = {
-        'Пуск':             () => Shell.toggleStart(true),
-        'центр управления': () => Shell.panel('#cc'),
-        'виджеты':          () => Shell.panel('#widgets'),
-        'поиск':            () => Shell.spot(true),
-        'все окна':         () => Shell.taskview(true),
-        /* Диалоги открываются с панели не реже прочего: кнопка питания
-           живёт в Пуске, и вопрос «точно выключить?» — тоже её. */
-        'вопрос':           () => Dlg.confirm('Проверка', 'Текст вопроса'),
-        'выключение':       () => document.querySelector('#power-overlay').classList.add('on'),
-        /* Занавес гасит весь экран при выключении и во сне. Его тоже
-           поднимает панель: кнопка питания в Пуске. */
-        'занавес':          () => document.body.appendChild(el('div', 'shutdown-fade'))
+  /* Проверка «панель видит открытое» здесь больше не нужна: панель ушла
+     на свою страницу и списка того, что её растягивает, у стола не
+     осталось. Вместо неё — то, что у стола осталось: он должен верно
+     говорить панели, занят ли экран им самим. */
+  for (const [что, готовь] of [
+    ['заставке',  () => { const б = el('div'); б.id = 'boot'; document.body.appendChild(б); }],
+    ['мастере',   () => { const б = el('div'); б.id = 'setup'; document.body.appendChild(б); }],
+    ['приветствии', () => { const б = el('div', 'welcome'); document.body.appendChild(б); }],
+    ['входе',     () => { const б = el('div', 'вход'); document.body.appendChild(б); }]
+  ]){
+    const занят = await page.evaluate(([имя]) => {
+      document.querySelectorAll('#boot, #setup, .welcome, .вход').forEach(н => н.remove());
+      const готовь = {
+        'заставке':   () => { const б = document.createElement('div'); б.id = 'boot'; document.body.appendChild(б); },
+        'мастере':    () => { const б = document.createElement('div'); б.id = 'setup'; document.body.appendChild(б); },
+        'приветствии':() => { const б = document.createElement('div'); б.className = 'welcome'; document.body.appendChild(б); },
+        'входе':      () => { const б = document.createElement('div'); б.className = 'вход'; document.body.appendChild(б); }
       }[имя];
-      const прибери = () => {
-        Shell.closePanels(); Shell.taskview(false);
-        document.querySelectorAll('.dlg-ov, .shutdown-fade').forEach(н => н.remove());
-        document.querySelector('#power-overlay').classList.remove('on');
-      };
-      прибери();
-      открой();
-      const есть = !!document.querySelector(Поверхности.ОТКРЫТО);
-      прибери();
+      готовь();
+      const есть = Поверхности.прячемся();
+      document.querySelectorAll('#boot, #setup, .welcome, .вход').forEach(н => н.remove());
       return есть;
     }, [что]);
-    check('панель знает, что открыт(ы) ' + что, видно);
+    check('стол знает, что экран занят при ' + что, занят);
   }
 
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));

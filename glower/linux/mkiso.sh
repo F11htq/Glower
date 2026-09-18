@@ -329,6 +329,9 @@ for d in css js agent assets linux; do
   [ -d "$SRC/$d" ] && cp -r "$SRC/$d" "$ROOTFS/usr/share/glower/ui/"
 done
 cp "$SRC/index.html" "$ROOTFS/usr/share/glower/ui/"
+# Страница панели лежит рядом: она отдельная, и забыть её — значит
+# получить систему без верхней полосы вовсе.
+cp "$SRC/панель.html" "$ROOTFS/usr/share/glower/ui/"
 
 # Версия сборки — в саму систему.
 #
