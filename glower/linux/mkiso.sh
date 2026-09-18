@@ -329,6 +329,23 @@ for d in css js agent assets linux; do
   [ -d "$SRC/$d" ] && cp -r "$SRC/$d" "$ROOTFS/usr/share/glower/ui/"
 done
 cp "$SRC/index.html" "$ROOTFS/usr/share/glower/ui/"
+
+# Версия сборки — в саму систему.
+#
+# До сих пор её там не было вовсе, и на вопрос «какая версия у вас стоит»
+# ответить было нечем: в папке с исходниками одна, на машине могла быть
+# другая — между ними сборка образа и установка. Мы на этом потеряли не один
+# заход: чинили уже починенное и искали давно исправленное.
+#
+# Берём метку из самого дерева. Если git недоступен (собирают из архива),
+# пишем хотя бы день сборки — это лучше, чем ничего.
+RELEASE=$(git -C "$SRC/.." describe --tags --always --dirty 2>/dev/null \
+          || date -u +%Y-%m-%d)
+printf '%s\n' "$RELEASE" > "$ROOTFS/etc/glower-release"
+# Та же строка — в «О системе»: человеку её видно без терминала.
+sed -i "s/build:'[^']*'/build:'$RELEASE'/" \
+  "$ROOTFS/usr/share/glower/ui/js/brand.js" 2>/dev/null || true
+echo "  версия сборки: $RELEASE"
 install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
