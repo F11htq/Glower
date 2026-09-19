@@ -244,7 +244,8 @@ const WM = {
 
   keepInView(win){
     const r = win.node.getBoundingClientRect();
-    if (r.top < 0) win.node.style.top = '0px';
+    const вв = this.занятоСверху();
+    if (r.top < вв) win.node.style.top = вв + 'px';
     if (r.left > innerWidth - 80) win.node.style.left = (innerWidth - 80) + 'px';
     if (r.right < 80) win.node.style.left = (80 - r.width) + 'px';
   },
@@ -253,6 +254,11 @@ const WM = {
      отступов и того, влез ли трей, — поэтому её измеряют, а не вычисляют:
      иначе между развёрнутым окном и панелью остаётся щель. */
   занятоСнизу(запас = 0){
+    /* В раздельном режиме док прячется сам, как только открыто хоть одно
+       окно, и обратно приходит только под курсор. Резервировать под него
+       полосу внизу незачем: человек просил, чтобы окно разворачивалось до
+       самого низа, а вместо этого под ним оставалась лента обоев. */
+    if (document.body.classList.contains('поверхности-разделены')) return 0;
     if (S.dockAutohide || document.body.classList.contains('dock-hidden')) return 0;
     const панель = document.querySelector('.dock-wrap');
     const r = панель && панель.getBoundingClientRect();
@@ -260,10 +266,28 @@ const WM = {
     return h + запас;
   },
 
-  /* область для развёрнутого окна (снизу может стоять панель задач) */
+  /* Сколько места сверху занимает полоса.
+  
+     Полоса живёт не в этой странице, а на своей поверхности, поверх нашей.
+     Наше окно при этом во весь экран — а поверхность во весь экран оконный
+     сервер полосе не подчиняет: она просто рисуется сверху. Значит, отступ
+     обязаны держать мы сами, иначе заголовок развёрнутой программы уходит
+     под полосу и его не ухватить. Именно это и произошло.
+  
+     Высоту говорит сама полоса: считать её здесь по числу из настроек —
+     значит однажды разойтись с ней на пару пикселей. */
+  занятоСверху(){
+    if (!document.body.classList.contains('поверхности-разделены')) return 0;
+    const п = parseInt(getComputedStyle(document.documentElement)
+      .getPropertyValue('--полоса-сверху'), 10);
+    return Number.isFinite(п) ? п : 30;
+  },
+
+  /* область для развёрнутого окна (сверху полоса, снизу может быть панель задач) */
   maxRect(){
     const tb = document.body.classList.contains('taskbar') ? this.занятоСнизу() : 0;
-    return { left:0, top:0, width:innerWidth, height:innerHeight - tb };
+    const вв = this.занятоСверху();
+    return { left:0, top:вв, width:innerWidth, height:innerHeight - вв - tb };
   },
 
   /* ---------- прилипание ---------- */
@@ -276,7 +300,12 @@ const WM = {
     return null;
   },
   zoneRect(z){
-    const pad = 8, top = 82, bot = S.dockAutohide ? 14 : WM.занятоСнизу(12);
+    const pad = 8, bot = S.dockAutohide ? 14 : WM.занятоСнизу(12);
+    /* Восемьдесят два пикселя — это высота панели старого образца, когда она
+       жила прямо в этой странице. С отдельной полосой отступ сверху ровно
+       такой, какой она занимает. */
+    const top = document.body.classList.contains('поверхности-разделены')
+      ? WM.занятоСверху() + pad : 82;
     const W = innerWidth - pad * 2, H = innerHeight - top - bot;
     const R = (x, y, w, h) => ({ left:x, top:y, width:w, height:h });
     switch(z){

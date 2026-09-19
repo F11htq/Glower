@@ -42,6 +42,13 @@ export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman
 export LIBGL_ALWAYS_SOFTWARE=1
 export WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
 
+# Один только файл сокета ничего не значит: он остаётся лежать и после того,
+# как сервер умер. Стенд на это попался — сокет от прошлого раза был на
+# месте, labwc не запускался, а оболочка падала на пустом Gdk.Screen, и со
+# стороны это выглядело как её собственная поломка. Спрашиваем про сервер.
+if ! pgrep -x labwc >/dev/null 2>&1; then
+  rm -f "$RT/wayland-0" "$RT/wayland-0.lock"
+fi
 if [ ! -S "$RT/wayland-0" ]; then
   # С боевыми настройками, а не с чужими умолчаниями. Стенд нужен, чтобы
   # видеть то же, что увидит человек; сервер с другими настройками — это

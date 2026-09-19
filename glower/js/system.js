@@ -178,8 +178,19 @@ window.Notif = Notif;
    ========================================================================== */
 const Session = {
   KEY:'session.windows',
+  /* Пока сеанс не восстановлен, окон на экране нет — и это не значит, что
+     человек их закрыл.
+
+     Сохранение идёт и по таймеру, раз в двадцать секунд, и при закрытии
+     страницы. Если в эту минуту мы ещё не восстановились — например, экран
+     блокировки ждёт нажатия, — пустой список ложился поверх настоящего, и
+     сеанс пропадал навсегда. Отсюда же брался плавающий провал проверки
+     «окна восстанавливаются после перезагрузки»: раз на десяток прогонов
+     таймер успевал сработать раньше восстановления. */
+  восстановлено:false,
   save(){
     if (S.restoreSession === false) return;
+    if (!this.восстановлено && !(window.WM && WM.wins.length)) return;
     const list = WM.wins.map(w => {
       const r = w.node.getBoundingClientRect();
       return { app:w.appId, x:Math.round(r.left), y:Math.round(r.top),
@@ -189,9 +200,12 @@ const Session = {
     KV.set(this.KEY, list);
   },
   restore(){
-    if (S.restoreSession === false) return;
+    if (S.restoreSession === false){ this.восстановлено = true; return; }
     const list = KV.get(this.KEY, []);
-    if (!list.length) return;
+    if (!list.length){ this.восстановлено = true; return; }
+    /* Восстановились — значит, после последнего окна: до него сохранять
+       нечего, а сохранённое затирать нельзя. */
+    setTimeout(() => { this.восстановлено = true; }, 250 + list.length * 160 + 200);
     list.forEach((s, i) => setTimeout(() => {
       if (!APPS[s.app]) return;
       const win = WM.open(s.app, { x:s.x, y:s.y, w:s.w, h:s.h });

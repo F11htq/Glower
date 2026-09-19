@@ -1234,6 +1234,45 @@ try {
     check('стол знает, что экран занят при ' + что, занят);
   }
 
+  /* Развёрнутое окно в раздельном режиме: сверху ровно под полосой, снизу
+     до самого края.
+
+     Обе половины пришли с настоящей машины. Заголовок развёрнутой
+     программы уходил под полосу, и ухватить его было нечем: наша страница
+     во весь экран, а полоса живёт на своей поверхности сверху, и оконный
+     сервер нашу страницу ей не подчиняет — отступ обязаны держать мы сами.
+     Снизу же оставалась лента обоев: место держалось под док, который в
+     этом режиме и так прячется, стоит открыть окно. */
+  {
+    const r = await page.evaluate(async () => {
+      document.body.classList.add('поверхности-разделены');
+      document.documentElement.style.setProperty('--полоса-сверху', '30px');
+      WM.wins.slice().forEach(w => WM.close(w));
+      await new Promise(r2 => setTimeout(r2, 300));
+      const w = WM.open('notepad');
+      if (!w.maximized) WM.toggleMax(w);
+      await new Promise(r2 => setTimeout(r2, 800));
+      /* Док в этот миг и так превращается в панель задач, но проверка не
+         должна зависеть от того, успел ли он: ставим признак сами, иначе
+         нижняя половина проверки ничего не проверяет. */
+      document.body.classList.add('taskbar');
+      const м = WM.maxRect();
+      Object.assign(w.node.style, { top:м.top + 'px', height:м.height + 'px' });
+      await new Promise(r2 => setTimeout(r2, 200));
+      const б = w.node.getBoundingClientRect();
+      return { верх:Math.round(б.top), низ:Math.round(innerHeight - б.bottom),
+               панельЗадач:document.body.classList.contains('taskbar') };
+    });
+    check('развёрнутое окно начинается под полосой', r.верх === 30, JSON.stringify(r));
+    check('и доходит до самого низа', r.низ <= 1, JSON.stringify(r));
+    await page.evaluate(() => {
+      document.body.classList.remove('поверхности-разделены', 'taskbar');
+      document.documentElement.style.removeProperty('--полоса-сверху');
+      WM.wins.slice().forEach(w => WM.close(w));
+    });
+    await page.waitForTimeout(300);
+  }
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){
