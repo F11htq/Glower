@@ -364,6 +364,19 @@ install -m 755 "$SRC/linux/glower-shot" "$ROOTFS/usr/bin/glower-shot"
 install -m 755 "$SRC/linux/glower-tray" "$ROOTFS/usr/bin/glower-tray"
 # экран входа: та же оболочка, но до всякого рабочего стола
 install -m 755 "$SRC/linux/glower-greeter" "$ROOTFS/usr/bin/glower-greeter"
+# «врач» — одно слово вместо простыни из curl и systemd-analyze. Человек
+# диагностику набирает руками, глядя в телефон; длинную команду он не
+# наберёт без опечаток, а короткую наберёт.
+install -m 755 "$SRC/linux/врач" "$ROOTFS/usr/bin/врач"
+# Те же два слова латиницей. Русское слово набирается только в русской
+# раскладке, а она не всегда включена — у нас уже приходили сообщения,
+# набранные русскими словами в латинской раскладке. «dhfx» — это ровно
+# то, что получается, если набрать «врач», забыв переключиться.
+ln -sf врач "$ROOTFS/usr/bin/vrach"
+ln -sf врач "$ROOTFS/usr/bin/dhfx"
+# Настройки терминала: главное там — Ctrl+V вставляет, как везде.
+install -d "$ROOTFS/etc/xdg/foot"
+install -m 644 "$SRC/linux/foot.ini" "$ROOTFS/etc/xdg/foot/foot.ini"
 # настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё
 install -d "$ROOTFS/usr/share/glower/labwc"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
@@ -787,15 +800,42 @@ chroot "$ROOTFS" systemctl enable ufw.service >/dev/null 2>&1 || true
 # «всё в одном»: они показывают себя не по кабелю, а по сети, тем же
 # способом, каким находятся принтеры.
 #
-# Служба прошивок поднимается по требованию, через шину, но обход железа у
-# неё занимает до полуминуты — первый же запрос успевал отвалиться по
-# таймауту. Поднимаем её вместе с системой: полминуты в фоне при загрузке
-# лучше, чем полминуты ожидания перед лицом человека.
+# Чего не поднимаем при загрузке.
+#
+# Замер на живой машине (Lenovo B590): ядро 5,5 с, пользовательская часть
+# 25,5 с. Из них:
+#
+#     9,2 с  fwupd.service                  прошивки
+#     7,1 с  NetworkManager.service         сеть
+#     6,4 с  NetworkManager-wait-online     ждёт, пока сеть поднимется
+#     5,6 с  e2scrub_reap.service           уборка за проверкой разделов LVM
+#     3,8 с  accounts-daemon.service        список учётных записей для GDM
+#
+# Службу прошивок я сам же и поднимал при загрузке — рассудив, что полминуты
+# в фоне лучше, чем полминуты ожидания, когда человек откроет «Обновления».
+# Замер этот размен опроверг: прошивки смотрят раз в полгода, а девять
+# секунд теряются при каждом включении. Возвращаем её на запуск по
+# требованию — она это умеет и без нас, через шину.
+#
+# wait-online держит цель «сеть готова», которой у нас никто не ждёт: ни
+# оболочка, ни агент. Шесть секунд впустую.
+#
+# e2scrub_reap прибирает за проверкой разделов LVM. LVM у нас не бывает —
+# установщик размечает диск просто.
+#
+# accounts-daemon ведёт список учётных записей для чужих экранов входа. У
+# нас свой, и он спрашивает систему напрямую.
+#
+# ModemManager (1,9 с) оставляем: без него USB-свисток так и останется
+# свистком, а это не теория — ради него он и ставится.
 chroot "$ROOTFS" /bin/sh -c '
-  systemctl enable fwupd.service >/dev/null 2>&1 || true
-  mkdir -p /etc/systemd/system/multi-user.target.wants
-  ln -sf /usr/lib/systemd/system/fwupd.service \
-    /etc/systemd/system/multi-user.target.wants/fwupd.service 2>/dev/null || true
+  systemctl disable fwupd.service >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/multi-user.target.wants/fwupd.service 2>/dev/null || true
+  systemctl disable NetworkManager-wait-online.service >/dev/null 2>&1 || true
+  systemctl mask NetworkManager-wait-online.service >/dev/null 2>&1 || true
+  systemctl disable e2scrub_reap.service >/dev/null 2>&1 || true
+  systemctl mask e2scrub_reap.service >/dev/null 2>&1 || true
+  systemctl disable accounts-daemon.service >/dev/null 2>&1 || true
 ' || true
 # Индекс пакетов мы из образа выбрасываем: со списками ISO не влезает в
 # лимит на размер. Цена этого вылезает на установленной системе — apt не

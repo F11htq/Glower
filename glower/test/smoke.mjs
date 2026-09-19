@@ -222,8 +222,22 @@ try {
     }
     return false;
   });
+  /* Эта проверка изредка мигала, и по одной строке «провалено» понять было
+     нечего: то ли стол не открылся, то ли сеанс не сохранился, то ли просто
+     не успел. Пишем в пояснение всё три величины сразу — при следующем
+     мигании догадываться не придётся. */
   check('окна восстанавливаются после перезагрузки', restored,
-    await page.evaluate(() => WM.wins.map(w => w.appId).join(',')));
+    await page.evaluate(() => {
+      let сохранено = '—';
+      try {
+        /* ключ складывается так же, как в KV: «glower.» + имя набора */
+        const сырое = localStorage.getItem('glower.' + (window.__ns || '') + Session.KEY);
+        сохранено = (JSON.parse(сырое || '[]') || []).map(z => z.app).join(',') || '(пусто)';
+      } catch(e){ сохранено = 'нечитаемо'; }
+      return 'открыты: ' + (WM.wins.map(w => w.appId).join(',') || '(нет)')
+        + ' · сохранено: ' + сохранено
+        + ' · стол ' + (document.querySelector('#desktop').classList.contains('on') ? 'открыт' : 'НЕ ОТКРЫТ');
+    }));
   await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); Session.save(); });
   await page.waitForTimeout(400);
 

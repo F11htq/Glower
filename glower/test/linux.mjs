@@ -899,6 +899,21 @@ try {
       !/--allow-(launch|install|open|packages)/.test(строка), строка.trim());
   }
 
+  /* Две вещи, о которых человек попросил прямым текстом: не переписывать
+     руками простыни диагностики и иметь возможность вставить текст в
+     терминал. Обе живут только в образе, поэтому проверяем сборку образа —
+     иначе они тихо выпадут при первой же перестановке строк. */
+  {
+    const образ = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+    check('в образ попадает «врач»', /install .*linux\/врач.*usr\/bin\/врач/.test(образ));
+    check('и он же латиницей', /usr\/bin\/vrach/.test(образ) && /usr\/bin\/dhfx/.test(образ));
+    check('в образ попадают настройки терминала',
+      /etc\/xdg\/foot\/foot\.ini/.test(образ));
+    const настройки = await readFile(join(root, 'linux', 'foot.ini'), 'utf8');
+    const вставка = настройки.split('\n').find(с => /^clipboard-paste=/.test(с)) || '';
+    check('Ctrl+V в терминале вставляет', /Control\+v(\s|$)/.test(вставка), вставка);
+  }
+
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));
 
 } catch(e){
