@@ -1273,6 +1273,38 @@ try {
     await page.waitForTimeout(300);
   }
 
+  /* Док прячется не только от наших окон.
+  
+     Человек сказал прямо: нижняя панель не исчезает, когда открыт Firefox.
+     И верно: Firefox — настоящее окно оконного сервера, в нашем списке окон
+     его нет, и прятаться было не от чего. Признак чужих окон ставит опрос
+     оконного сервера; здесь ставим его руками и проверяем, что док на него
+     смотрит. */
+  {
+    const p2 = await browser.newPage({ viewport:{ width:1280, height:800 } });
+    await p2.addInitScript(() => { try { localStorage.setItem('glower.setup.done', 'true'); } catch(e){} });
+    await p2.goto(URL_APP + '?раздельно=1');
+    await p2.waitForTimeout(2600);
+    await p2.keyboard.press('Enter');
+    await p2.waitForTimeout(1200);
+    const своё = await p2.evaluate(async () => {
+      WM.open('notepad');
+      await new Promise(r => setTimeout(r, 1200));
+      return document.body.classList.contains('док-прячется');
+    });
+    check('док прячется от своего окна', своё);
+    const чужое = await p2.evaluate(async () => {
+      WM.wins.slice().forEach(w => WM.close(w));
+      await new Promise(r => setTimeout(r, 1200));
+      const без = document.body.classList.contains('док-прячется');
+      document.body.classList.add('чужие-окна');
+      await new Promise(r => setTimeout(r, 1200));
+      return { без, с:document.body.classList.contains('док-прячется') };
+    });
+    check('док прячется и от чужого окна', чужое.с && !чужое.без, JSON.stringify(чужое));
+    await p2.close();
+  }
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

@@ -570,14 +570,21 @@ def следи_за_полосой(окно):
                 headers={'Content-Type': 'application/json'})
             ответ = json.loads(urllib.request.urlopen(запрос, timeout=2).read().decode())
             что = (ответ.get('result') or {}).get('что')
-            высота = int(что) if что else None
+            # Ноль — это «ничего не отводи», а не «ничего не сказали».
+            # Проверка на истинность их не различала, и просьба освободить
+            # полосу пропадала молча: чужое развёрнутое окно так и не
+            # доставало до низа экрана.
+            высота = int(что) if что is not None else None
         except Exception:
             высота = None
         if os.environ.get('GLOWER_DEBUG'):
             print('агент сказал про полосу: %r' % (высота,), file=sys.stderr, flush=True)
-        if высота and 20 <= высота <= 200 and высота != состояние['высота']:
+        годится = высота is not None and (высота == 0 or 20 <= высота <= 200)
+        if годится and высота != состояние['высота']:
             состояние['высота'] = высота
-            окно.set_size_request(-1, высота)
+            # Окно нулевой высоты GTK не делает; просим единицу, а место
+            # отнимает не размер окна, а объявленная зона.
+            окно.set_size_request(-1, max(1, высота))
             if ПОД_WAYLAND:
                 GtkLayerShell.set_exclusive_zone(окно, высота)
             else:
