@@ -138,6 +138,37 @@ const Поверхности = {
         else if (что['вид'] === 'окно' && window.Shell) Shell.launch(что.id, null);
       });
 
+      /* Док прячется, когда есть открытое окно, и показывается при подводе
+         курсора к нижнему краю — как в elementary.
+
+         Смысл тот же, что и у панели наверху: экран принадлежит программе,
+         с которой человек работает, а не нашим украшениям. Раньше док висел
+         всегда и отъедал полосу внизу у каждого окна.
+
+         Кнопку Пуска из дока мы при этом убрали: меню программ живёт на
+         панели, и вторая такая же кнопка внизу только путала. */
+      const док = document.querySelector('#dock-wrap');
+      const пуск = document.querySelector('#start-btn');
+      if (пуск) пуск.remove();
+      if (док){
+        let укурсора = false;
+        const обнови = () => {
+          const занято = window.WM && WM.wins
+            ? WM.wins.some(w => !w.minimized && w.desk === WM.desk) : false;
+          document.body.classList.toggle('док-прячется', занято && !укурсора);
+        };
+        addEventListener('mousemove', е => {
+          const рядом = е.clientY > innerHeight - 56;
+          if (рядом === укурсора) return;
+          укурсора = рядом;
+          обнови();
+        });
+        new MutationObserver(обнови).observe(document.querySelector('#windows') || document.body,
+          { childList:true, subtree:true, attributes:true, attributeFilter:['class'] });
+        setInterval(обнови, 800);
+        обнови();
+      }
+
       /* Панель — отдельная маленькая страница: приложений она не знает и
          знать не должна. Список для её меню программ даёт стол, он же их и
          открывает. */
@@ -163,12 +194,25 @@ const Поверхности = {
 
       /* Часы, звук и раскладка пока показывает стол — переносим их на
          панель по одному, а не всё разом. */
+      /* Часы, звук и батарею панель показывает сама — у агента для этого всё
+         есть, и ходить за этим на стол незачем. Осталась раскладка: она
+         хозяйство стола, он говорит о ней оконному серверу.
+
+         Просить стол показать центр управления было прямой ошибкой: в
+         раздельном режиме он сам же их и прячет, и нажатие не делало
+         ничего. */
+      const скажиРаскладку = () => {
+        try {
+          const к = window.KB && KB.def && KB.def();
+          if (к && к.code) this.скажи('раскладка', к.code);
+        } catch(e){}
+      };
       this.слушай(['покажи'], м => {
-        if (м.тема !== 'покажи' || !window.Shell) return;
-        if (м.что === 'виджеты'){ Shell.renderWidgets && Shell.renderWidgets(); Shell.panel('#widgets'); }
-        else if (м.что === 'центр'){ Shell.updateCC && Shell.updateCC(); Shell.panel('#cc'); }
-        else if (м.что === 'раскладка' && window.KB && KB.next) KB.next();
+        if (м.тема !== 'покажи' || м.что !== 'раскладка') return;
+        if (window.KB && KB.next) KB.next();
+        setTimeout(скажиРаскладку, 120);
       });
+      скажиРаскладку();
 
       /* Кнопка Пуска в доке и клавиша Win открывают меню программ панели. */
       if (window.Shell && Shell.toggleStart){

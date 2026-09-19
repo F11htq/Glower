@@ -129,3 +129,56 @@ body.открыто .навес{display:block}
 }
 .строка:hover{background:rgba(255,255,255,.12)}
 .строка.опасно:hover{background:rgba(220, 70, 70, .35)}
+
+/* --- окошки указателей --- */
+#окно-часов{left:50%; transform:translateX(-50%); width:250px}
+.месяц{text-align:center; font-weight:600; padding:4px 0 8px}
+.числа{display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center}
+.числа span{padding:5px 0; border-radius:6px; font-size:12px}
+.день-недели{opacity:.45; font-size:10px; text-transform:uppercase}
+.число.сегодня{background:rgba(120,140,255,.55); font-weight:600}
+
+#окно-звука{right:8px; width:250px}
+.ползунок{display:flex; align-items:center; gap:8px; padding:7px 6px}
+.ползунок .подпись{width:74px; font-size:12px; opacity:.8}
+.ползунок .сколько{width:34px; text-align:right; font-size:11px; opacity:.6;
+                   font-variant-numeric:tabular-nums}
+.ползунок input{flex:1; accent-color:#7b8cff}
+
+#окно-батареи{right:8px; width:190px}
+.заряд{padding:10px; text-align:center}
+.заряд b{display:block; font-size:24px; font-weight:600}
+.заряд span{opacity:.6; font-size:12px}
+
+/* --- вопрос --- */
+/* Своё окно вопроса, а не столово: просьба к столу шла через шину, и ответ
+   приходил с задержкой — человек успевал решить, что нажатие пропало. */
+.вопрос-фон{
+  position:fixed; inset:0; z-index:40;
+  background:rgba(0,0,0,.45);
+  display:grid; place-content:center;
+  animation:появись .12s ease-out;
+}
+.вопрос{
+  width:min(380px, calc(100vw - 32px));
+  background:rgba(30, 32, 40, .98);
+  border-radius:12px; padding:16px 18px;
+  box-shadow:0 22px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.вопрос b{display:block; font-size:15px; margin-bottom:6px}
+.вопрос p{font-size:12.5px; opacity:.75; line-height:1.45; margin-bottom:14px}
+.вопрос-низ{display:flex; justify-content:flex-end; gap:6px}
+.вопрос-низ .строка{width:auto; padding:7px 14px; justify-content:center}
+.вопрос-низ .главная{background:rgba(120,140,255,.5)}
+.вопрос-низ .главная:hover{background:rgba(120,140,255,.72)}
+
+/* --- занавес --- */
+/* Гасит весь экран, когда машина уходит. Поверхность в этот миг растянута,
+   потому что открыт вопрос, — занавес ложится на весь экран, а не в полосу. */
+.занавес{
+  position:fixed; inset:0; z-index:50;
+  background:#05070d; color:rgba(255,255,255,.7);
+  display:grid; place-content:center; font-size:14px;
+  animation:гасни 1.1s ease-out forwards;
+}
+@keyframes гасни{from{opacity:0} to{opacity:1}}
