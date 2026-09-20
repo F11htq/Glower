@@ -138,7 +138,7 @@ body.открыто .навес{display:block}
 .день-недели{opacity:.45; font-size:10px; text-transform:uppercase}
 .число.сегодня{background:rgba(120,140,255,.55); font-weight:600}
 
-#окно-звука{right:8px; width:250px}
+#окно-звука, #окно-меню{right:8px; width:250px}
 .ползунок{display:flex; align-items:center; gap:8px; padding:7px 6px}
 .ползунок .подпись{width:74px; font-size:12px; opacity:.8}
 .ползунок .сколько{width:34px; text-align:right; font-size:11px; opacity:.6;
@@ -182,3 +182,31 @@ body.открыто .навес{display:block}
   animation:гасни 1.1s ease-out forwards;
 }
 @keyframes гасни{from{opacity:0} to{opacity:1}}
+
+/* ==========================================================================
+   Быстрые настройки: одно окошко вместо россыпи кнопок
+   ========================================================================== */
+#окно-меню{ min-width:280px; }
+.меню-верх{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:4px 10px 10px; border-bottom:1px solid rgba(255,255,255,.08);
+  margin-bottom:8px;
+}
+.меню-заряд{ font-size:13px; opacity:.85; }
+.меню-строка{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; padding:9px 10px; border-radius:10px; cursor:pointer;
+  font-size:13.5px;
+}
+.меню-строка:hover{ background:rgba(255,255,255,.08); }
+.меню-строка b{ opacity:.9; }
+.меню-мелко{ padding:0 10px 8px; font-size:11.5px; opacity:.55; line-height:1.35; }
+.меню-кнопки{
+  display:flex; gap:8px; padding-top:8px;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+.меню-действие{
+  flex:1; padding:9px 8px; border:0; border-radius:10px; cursor:pointer;
+  background:rgba(255,255,255,.08); color:inherit; font:inherit; font-size:13px;
+}
+.меню-действие:hover{ background:rgba(255,255,255,.14); }

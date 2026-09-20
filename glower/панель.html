@@ -37,8 +37,10 @@
   <div class="указатели" id="указатели">
     <div class="лоток" id="лоток"></div>
     <button class="кнопка" id="язык" data-подсказка="Раскладка">ENG</button>
-    <button class="кнопка" id="звук" data-подсказка="Звук и яркость">
-      <svg viewBox="0 0 24 24" class="зн"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>
+    <!-- Одна кнопка вместо россыпи, как в ChromeOS: за ней и звук, и
+         яркость, и заряд, и быстрые действия. -->
+    <button class="кнопка" id="меню" data-подсказка="Быстрые настройки">
+      <svg viewBox="0 0 24 24" class="зн"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></svg>
     </button>
     <button class="кнопка" id="батарея" data-подсказка="Батарея">
       <svg viewBox="0 0 24 24" class="зн"><rect x="2" y="7" width="17" height="10" rx="2.5"/><path d="M21.5 11v2"/><rect class="залив" x="4.5" y="9.5" width="10" height="5" rx="1"/></svg>
