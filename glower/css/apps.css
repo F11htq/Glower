@@ -219,13 +219,19 @@ select.inp option{background:#1a1e28;color:#fff}
 
 /* ---------- Магазин ----------
 
-   Строение то же, что у «Параметров»: слева разделы, справа содержимое, и
-   поиск закреплён сверху. Так человек находит нужное одним движением, а не
-   вспоминает, в какой вкладке живёт поиск.
+   Вид собран по двум образцам: витрина и плитки разделов — из Microsoft
+   Store, страница программы с крупным значком и одной кнопкой — из GNOME
+   Software. Общее у них одно: человеку показывают программу, а не список
+   строк, и на каждом экране понятно, что нажимать.
 
-   Карточка приложения читается слева направо: значок, имя, описание,
-   кнопка. Раньше всё было по центру и в три строки — из четырёх слов
-   описания получался столбик, а кнопки стояли вразнобой. */
+   Движение здесь не украшение. Карточки появляются по очереди — глаз
+   успевает понять, что их много и они разные; смена экрана идёт со
+   сдвигом — видно, что это новая страница, а не переписанная старая; на
+   месте ещё не пришедших ответов лежат серые заготовки — пустой экран
+   читается как поломка, заготовка как ожидание.
+
+   Всё движение стоит дёшево: одна анимация на слой, никаких теней в
+   движении и никакого размытия — на машине без ускорения это заметно. */
 .st-app{display:flex;height:100%}
 .st-side{width:196px;flex:0 0 196px}
 .st-main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -234,15 +240,73 @@ select.inp option{background:#1a1e28;color:#fff}
 .st-job{padding:0 14px}
 .st-job .st-work{padding:14px;margin:6px 0 2px}
 
+/* появление содержимого при смене экрана */
+@keyframes стЭкран{from{opacity:0;transform:translateY(8px)}}
+.st-вошло{animation:стЭкран .22s var(--e-out) both}
+/* карточки выходят по очереди — по 35 мс друг за другом */
+@keyframes стКарта{from{opacity:0;transform:translateY(10px) scale(.98)}}
+
+.st-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.st-back{margin-bottom:10px}
+
+/* витрина */
+.st-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  width:100%;text-align:left;border:0;cursor:pointer;color:#fff;
+  border-radius:18px;padding:22px 24px;margin-bottom:6px;
+  transition:transform var(--t2) var(--e-spring),filter var(--t1)}
+.st-hero:hover{transform:translateY(-2px);filter:brightness(1.06)}
+.st-hero h2{margin:0 0 4px;font-size:22px}
+.st-hero-l{display:flex;align-items:center;gap:16px;min-width:0}
+.st-hero-z{width:58px;height:58px;flex:none;border-radius:16px;display:grid;place-items:center;
+  font-size:30px;background:rgba(255,255,255,.18)}
+.st-hero-p{opacity:.9;font-size:13px;line-height:1.4}
+.st-hero-b{flex:none;font-size:13px;opacity:.9;padding:8px 12px;border-radius:10px;
+  background:rgba(255,255,255,.16)}
+
+/* плитки разделов */
+.st-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.st-tile{border:0;cursor:pointer;color:#fff;text-align:left;border-radius:14px;padding:14px;
+  display:flex;flex-direction:column;gap:4px;font-size:13.5px;font-weight:600;
+  animation:стКарта .3s var(--e-out) both;animation-delay:calc(var(--i,0) * 35ms);
+  transition:transform var(--t2) var(--e-spring),filter var(--t1)}
+.st-tile:hover{transform:translateY(-3px);filter:brightness(1.08)}
+.st-tile-z{font-size:24px}
+.st-tile-big{min-height:104px;justify-content:flex-end}
+
+/* карточка программы */
 .st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-.st-card{border-radius:14px;padding:12px;background:rgba(var(--tint),.1);
-  display:grid;grid-template-columns:52px 1fr;grid-template-areas:'ico text' 'ico act';
-  gap:4px 12px;align-items:center;text-align:left;
+.st-card{border:0;cursor:pointer;text-align:left;color:inherit;font:inherit;
+  border-radius:14px;padding:12px;background:rgba(var(--tint),.1);
+  display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;
+  animation:стКарта .3s var(--e-out) both;animation-delay:calc(var(--i,0) * 35ms);
   transition:background var(--t1),transform var(--t2) var(--e-spring)}
-.st-card:hover{transform:translateY(-2px);background:rgba(var(--tint),.16)}
-.st-card .app-ico{grid-area:ico;width:52px;height:52px;font-size:26px;align-self:start}
-.st-card > div:nth-child(2){grid-area:text;min-width:0}
-.st-card .row{grid-area:act;justify-content:flex-start;gap:6px}
+.st-card:hover{transform:translateY(-2px);background:rgba(var(--tint),.18)}
+.st-card-t{min-width:0;display:grid;gap:3px}
+.st-card-t b{font-size:13.5px}
+.st-card-t span{line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.st-ico{width:52px;height:52px;font-size:26px;border-radius:14px;display:grid;place-items:center}
+
+/* страница программы */
+.st-page{display:flex;align-items:center;gap:18px;padding:6px 0 16px}
+.st-page .st-ico{width:76px;height:76px;font-size:38px;border-radius:20px}
+.st-page-t{flex:1;min-width:0}
+.st-page-t h2{margin:0 0 4px;font-size:22px}
+.st-page-b{display:grid;gap:6px;justify-items:end}
+.st-big-btn{padding:10px 18px;font-size:14px}
+.st-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.st-fact{background:rgba(var(--tint),.08);border-radius:12px;padding:10px 12px;display:grid;gap:2px}
+.st-about{line-height:1.5;font-size:13.5px;opacity:.9;white-space:pre-wrap}
+
+/* обновление самой системы */
+.st-upd{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;margin-bottom:10px}
+.st-upd-l{display:flex;align-items:center;gap:14px;min-width:0}
+
+/* заготовки на месте ещё не пришедшего */
+@keyframes стМерцание{50%{opacity:.35}}
+.st-skel{height:76px;border-radius:14px;background:rgba(var(--tint),.1);
+  animation:стМерцание 1.4s ease-in-out infinite;animation-delay:calc(var(--i,0) * 90ms)}
+.st-skel-l{height:16px;margin:8px 0;max-width:520px}
+.st-skel-b{height:38px;width:150px}
 
 /* ---------- Задачи (To-Do) ---------- */
 .td-item{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:12px;background:rgba(var(--tint),.08);margin-bottom:7px;

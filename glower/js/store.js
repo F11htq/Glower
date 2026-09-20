@@ -5,225 +5,6 @@
 'use strict';
 
 /* ==========================================================================
-   Каталог: полноценные приложения, которых нет в системе по умолчанию
-   ========================================================================== */
-const CATALOG = [
-
-/* ---------- Помидор ---------- */
-{ id:'pomodoro', name:'Помидор', glyph:'🍅', bg:'linear-gradient(140deg,#fb7185,#dc2626)',
-  w:380, h:480, author:Brand.name, desc:'Таймер концентрации 25/5 с циклами и звонком',
-  render(win){
-    const wrap = el('div', 'app col'); wrap.style.cssText = 'align-items:center;justify-content:center;gap:18px;padding:24px';
-    win.body.appendChild(wrap);
-    let mode = 'work', left = 25 * 60, run = false, iv = null, done = KV.get('pomo.done', 0);
-    const LEN = { work:25 * 60, brk:5 * 60, long:15 * 60 };
-    const ring = el('div', 'pomo-ring', '<span></span>');
-    const label = el('div', 'tiny muted');
-    const btns = el('div', 'row');
-    const start = el('button', 'btn pri', '▶ Старт');
-    const reset = el('button', 'btn', '↻');
-    const stat = el('div', 'tiny muted');
-    btns.append(start, reset);
-    wrap.append(ring, label, btns, stat);
-
-    const paint = () => {
-      $('span', ring).textContent = `${Math.floor(left / 60)}:${pad2(left % 60)}`;
-      ring.style.setProperty('--p', (1 - left / LEN[mode]) * 100 + '%');
-      label.textContent = mode === 'work' ? 'Работа' : mode === 'brk' ? 'Короткий перерыв' : 'Длинный перерыв';
-      stat.textContent = `Помидоров сегодня: ${done}`;
-      win.setSub(label.textContent + ' · ' + $('span', ring).textContent);
-    };
-    const next = () => {
-      if (mode === 'work'){ done++; KV.set('pomo.done', done);
-        mode = done % 4 === 0 ? 'long' : 'brk';
-        Shell.toast('Помидор', 'Время перерыва', '🍅');
-      } else { mode = 'work'; Shell.toast('Помидор', 'За работу', '🍅'); }
-      left = LEN[mode]; Snd.note(); paint();
-    };
-    start.onclick = () => {
-      run = !run; start.textContent = run ? '⏸ Пауза' : '▶ Старт';
-      clearInterval(iv);
-      if (run) iv = setInterval(() => { if (--left <= 0) next(); paint(); }, 1000);
-    };
-    reset.onclick = () => { left = LEN[mode]; paint(); };
-    win.onClose = () => clearInterval(iv);
-    paint();
-  }
-},
-
-/* ---------- 2048 ---------- */
-{ id:'g2048', name:'2048', glyph:'🎲', bg:'linear-gradient(140deg,#fbbf24,#f97316)',
-  w:460, h:560, author:Brand.name, desc:'Классическая головоломка со счётом и рекордом',
-  render(win){
-    const wrap = el('div', 'app col'); wrap.style.cssText = 'padding:16px;gap:12px';
-    win.body.appendChild(wrap);
-    const head = el('div', 'row');
-    const score = el('div', 'g-score', 'Счёт<b>0</b>');
-    const best = el('div', 'g-score', 'Рекорд<b>' + KV.get('g2048.best', 0) + '</b>');
-    const again = el('button', 'btn', 'Заново');
-    head.append(score, best, el('div', 'grow'), again);
-    const board = el('div', 'g-board');
-    const hint = el('div', 'tiny muted', 'Стрелки или WASD · свайп на сенсорном экране');
-    wrap.append(head, board, hint);
-
-    let g, sc;
-    const rnd = () => {
-      const free = [];
-      g.forEach((r, y) => r.forEach((v, x) => { if (!v) free.push([x, y]); }));
-      if (!free.length) return;
-      const [x, y] = free[Math.floor(Math.random() * free.length)];
-      g[y][x] = Math.random() < .9 ? 2 : 4;
-    };
-    const start = () => { g = [0,1,2,3].map(() => [0,0,0,0]); sc = 0; rnd(); rnd(); paint(); };
-    const paint = () => {
-      board.innerHTML = '';
-      g.forEach(r => r.forEach(v => {
-        const c = el('div', 'g-cell' + (v ? ' v' + Math.min(v, 2048) : ''), v || '');
-        board.appendChild(c);
-      }));
-      $('b', score).textContent = sc;
-      const b = Math.max(sc, KV.get('g2048.best', 0));
-      KV.set('g2048.best', b); $('b', best).textContent = b;
-    };
-    const slide = row => {
-      const a = row.filter(Boolean);
-      for (let i = 0; i < a.length - 1; i++)
-        if (a[i] === a[i + 1]){ a[i] *= 2; sc += a[i]; a.splice(i + 1, 1); }
-      while (a.length < 4) a.push(0);
-      return a;
-    };
-    const move = dir => {
-      const before = JSON.stringify(g);
-      const rot = n => { for (let k = 0; k < n; k++) g = g[0].map((_, i) => g.map(r => r[i]).reverse()); };
-      const back = { left:0, up:3, right:2, down:1 }[dir];
-      rot({ left:0, up:1, right:2, down:3 }[dir]);
-      g = g.map(slide);
-      rot(back);
-      if (JSON.stringify(g) !== before){ rnd(); paint(); check(); }
-    };
-    const check = () => {
-      const full = g.every(r => r.every(Boolean));
-      const stuck = full && g.every((r, y) => r.every((v, x) =>
-        (x < 3 && v === g[y][x + 1]) === false && (y < 3 && v === g[y + 1][x]) === false));
-      if (stuck) setTimeout(() => Shell.toast('2048', 'Игра окончена · счёт ' + sc, '🎲'), 200);
-    };
-    again.onclick = start;
-    win.node.tabIndex = 0;
-    win.node.addEventListener('keydown', e => {
-      const m = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
-                  a:'left', d:'right', w:'up', s:'down', ф:'left', в:'right', ц:'up', ы:'down' };
-      const d = m[e.key] || m[e.key.toLowerCase()];
-      if (d){ e.preventDefault(); move(d); }
-    });
-    let tx = 0, ty = 0;
-    board.addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive:true });
-    board.addEventListener('touchend', e => {
-      const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
-      move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
-    });
-    setTimeout(() => win.node.focus(), 100);
-    start();
-  }
-},
-
-/* ---------- Конвертер величин ---------- */
-{ id:'convert', name:'Конвертер', glyph:'📐', bg:'linear-gradient(140deg,#67e8f9,#0891b2)',
-  w:520, h:480, author:Brand.name, desc:'Длина, масса, температура, данные и время',
-  render(win){
-    const U = {
-      'Длина':{ м:1, км:1000, см:0.01, мм:0.001, миля:1609.34, фут:0.3048, дюйм:0.0254, ярд:0.9144 },
-      'Масса':{ кг:1, г:0.001, т:1000, фунт:0.453592, унция:0.0283495 },
-      'Данные':{ 'КБ':1, 'МБ':1024, 'ГБ':1048576, 'ТБ':1073741824, 'байт':1 / 1024 },
-      'Время':{ с:1, мин:60, ч:3600, сут:86400, нед:604800 },
-      'Скорость':{ 'км/ч':1, 'м/с':3.6, 'миль/ч':1.60934, узел:1.852 }
-    };
-    const wrap = el('div', 'app col'); wrap.style.cssText = 'padding:18px;gap:14px';
-    win.body.appendChild(wrap);
-    let cat = 'Длина';
-    const tabs = el('div', 'row'); tabs.style.flexWrap = 'wrap';
-    const body = el('div', 'col'); body.style.gap = '10px';
-    wrap.append(tabs, body);
-
-    Object.keys(U).concat('Температура').forEach(k => {
-      const b = el('button', 'btn' + (k === cat ? ' pri' : ''), k);
-      b.onclick = () => { cat = k; $$('.btn', tabs).forEach(x => x.classList.remove('pri')); b.classList.add('pri'); draw(); };
-      tabs.appendChild(b);
-    });
-
-    function draw(){
-      body.innerHTML = '';
-      const inp = el('input', 'inp'); inp.type = 'number'; inp.value = 1; inp.style.width = '100%';
-      body.appendChild(inp);
-      const out = el('div', 'col'); out.style.gap = '6px';
-      body.appendChild(out);
-      const calc = () => {
-        const v = parseFloat(inp.value) || 0;
-        out.innerHTML = '';
-        if (cat === 'Температура'){
-          [['°C', v], ['°F', v * 9 / 5 + 32], ['K', v + 273.15]].forEach(([n, r]) =>
-            out.appendChild(el('div', 'conv-row', `<span>${n}</span><b>${(+r.toFixed(4))}</b>`)));
-          return;
-        }
-        const units = Object.entries(U[cat]);
-        const base = units[0][1];
-        units.forEach(([n, k]) =>
-          out.appendChild(el('div', 'conv-row', `<span>${n}</span><b>${+(v * base / k).toFixed(6)}</b>`)));
-      };
-      inp.oninput = calc; calc();
-      const first = cat === 'Температура' ? '°C' : Object.keys(U[cat])[0];
-      win.setSub(cat + ' · из ' + first);
-    }
-    draw();
-  }
-},
-
-/* ---------- Палитра ---------- */
-{ id:'palette', name:'Палитра', glyph:'🎨', bg:'linear-gradient(140deg,#c084fc,#7c3aed)',
-  w:560, h:440, author:Brand.name, desc:'Генератор цветовых схем, клик — копирует HEX',
-  render(win){
-    const wrap = el('div', 'app col'); wrap.style.cssText = 'padding:0;gap:0';
-    win.body.appendChild(wrap);
-    const bar = el('div', 'toolbar');
-    const grid = el('div', 'pal-grid');
-    wrap.append(bar, grid);
-    const gen = el('button', 'btn pri', '🎲 Сгенерировать');
-    const acc = el('button', 'btn', '🎯 В акцент системы');
-    bar.append(gen, acc, el('div', 'grow'), el('span', 'tiny muted', 'Клик по цвету — копировать'));
-    let colors = [];
-    const make = () => {
-      const h = Math.random() * 360, s = 55 + Math.random() * 30;
-      colors = [0, 30, 60, 180, 210].map((d, i) =>
-        `hsl(${(h + d) % 360} ${s}% ${28 + i * 12}%)`);
-      draw();
-    };
-    const hex = c => {
-      const d = document.createElement('div'); d.style.color = c; document.body.appendChild(d);
-      const m = getComputedStyle(d).color.match(/\d+/g); d.remove();
-      return '#' + m.slice(0, 3).map(x => (+x).toString(16).padStart(2, '0')).join('');
-    };
-    const draw = () => {
-      grid.innerHTML = '';
-      colors.forEach(c => {
-        const n = el('div', 'pal'); n.style.background = c;
-        const h = hex(c);
-        n.appendChild(el('span', '', h));
-        n.onclick = () => {
-          if (navigator.clipboard) navigator.clipboard.writeText(h).catch(() => {});
-          Shell.toast('Палитра', h + ' скопирован', '🎨', 1800);
-        };
-        grid.appendChild(n);
-      });
-    };
-    gen.onclick = make;
-    acc.onclick = () => { S.accentCustom = hex(colors[3]); Store.save(); applySettings();
-      Shell.toast('Палитра', 'Акцент системы обновлён', '🎯'); };
-    make();
-  }
-}
-];
-
-/* ==========================================================================
    Установка и удаление
    ========================================================================== */
 const AppStore = {
@@ -235,10 +16,12 @@ const AppStore = {
 
   /* регистрация всего установленного при запуске */
   boot(){
-    this.installedIds().forEach(id => {
-      const a = CATALOG.find(x => x.id === id);
-      if (a) APPS[id] = a;
-    });
+    /* Раньше здесь поднимались ещё и приложения из нашего каталога —
+       помидорный таймер, 2048, конвертер и палитра. Каталога больше нет:
+       Магазин занят настоящими программами Linux, а не нашими игрушками.
+       Те, кто успел их поставить, найдут их на месте только до обновления —
+       и это правильно: держать в системе четыре примера ради примеров
+       значит выдавать их за то, чем система полезна. */
     this.custom().forEach(p => this.register(p));
   },
 
@@ -260,17 +43,6 @@ const AppStore = {
       Shell.toast('Магазин', 'Пакет содержит ошибку: ' + e.message, '⚠️');
       return false;
     }
-  },
-
-  install(id){
-    const a = CATALOG.find(x => x.id === id); if (!a) return false;
-    const list = this.installedIds();
-    if (!list.includes(id)){ list.push(id); KV.set(this.installedKey, list); }
-    APPS[id] = a;
-    if (!S.pinned.includes(id)){ S.pinned.push(id); Store.save(); }
-    Shell.renderStart();
-    Shell.toast('Магазин', a.name + ' установлено', a.glyph);
-    return true;
   },
 
   installPkg(pkg){
@@ -329,92 +101,42 @@ AppStore.boot();
 /* ==========================================================================
    Витрина магазина
    ========================================================================== */
+/* ==========================================================================
+   МАГАЗИН
+
+   Переделан целиком. Раньше первую половину занимал наш собственный
+   каталог: помидорный таймер, 2048, конвертер единиц и палитра. Четыре
+   примера, написанные, чтобы показать, что приложения бывают, — и они же
+   занимали место настоящих программ, ради которых Магазин и открывают.
+   Каталога больше нет.
+
+   Вид взят у тех, кто делает это хорошо: витрина и плитки разделов — как
+   в Microsoft Store, страница программы с крупным значком и одной
+   понятной кнопкой — как в GNOME Software (её видно в Fedora). Оттуда же
+   привычка не заставлять человека ждать молча: пока система ходит в
+   репозитории, на месте будущих карточек лежат серые заготовки, а не
+   пустота.
+
+   Что здесь честно, а что нет. Подборки по разделам — наши, составлены
+   руками: у apt нет ни витрин, ни «выбора редакции». Зато всё остальное
+   настоящее: описания, размеры, версии и сама установка идут от машины, и
+   если программы в репозиториях нет, Магазин так и скажет.
+   ========================================================================== */
 APPS.store = {
-  name:'Магазин', glyph:'🛍️', bg:'linear-gradient(140deg,#c4b5fd,#7c3aed)', w:880, h:640, single:true,
+  name:'Магазин', glyph:'🛍️', bg:'linear-gradient(140deg,#c4b5fd,#7c3aed)',
+  w:980, h:680, single:true,
+
   render(win, opts){
-    /* Строение — как в «Параметрах»: слева разделы, справа содержимое.
-    
-       Раньше разделы были кнопками в строку над содержимым, а поиск жил
-       только внутри вкладки программ Linux. Выходило, что главное — найти
-       нужную программу — было спрятано глубже всего, а первую половину
-       окна занимал синий баннер с рассказом о том, что приложения
-       устанавливаются по-настоящему.
-    
-       Теперь поиск один и всегда на виду, разделы сбоку, а ход установки
-       виден из любого раздела: человек, поставивший программу, может уйти
-       смотреть каталог и всё равно видеть полосу. */
     const wrap = el('div', 'app st-app'); win.body.appendChild(wrap);
-    const side = el('div', 'sidebar st-side');   /* тот же список, что в «Параметрах» */
+    const side = el('div', 'sidebar st-side');
     const main = el('div', 'st-main');
     const top = el('div', 'st-top');
     const работаМесто = el('div', 'st-job');
-    const body = el('div', 'scroll pad');
+    const body = el('div', 'scroll pad st-body');
     main.append(top, работаМесто, body);
     wrap.append(side, main);
 
-    /* Магазин открывают не только с порога. Когда человек ставит программу
-       Linux, мы открываем его, чтобы показать ход работы, — и он открывался
-       на каталоге наших приложений, где никакого хода не видно. Вкладку
-       говорит тот, кто открывает. */
-    let tab = (opts && opts['вкладка']) || 'catalog';
-
-    const РАЗДЕЛЫ = [
-      ['catalog', '🛍', 'Обзор'],
-      ['mine',    '📦', 'Установленные'],
-      ['linux',   '🐧', 'Программы Linux'],
-      ['dev',     '🧑‍💻', 'Своё приложение']
-    ];
-    const рисуйРазделы = () => {
-      side.innerHTML = '';
-      РАЗДЕЛЫ.forEach(([k, з, н]) => {
-        const б = el('button', 'sb-item' + (k === tab ? ' on' : ''),
-          `<span class="e">${з}</span><span>${esc(н)}</span>`);
-        б.onclick = () => { tab = k; рисуйРазделы(); draw(); };
-        side.appendChild(б);
-      });
-    };
-    рисуйРазделы();
-
-    /* Поиск один на весь Магазин: наши приложения находятся сразу, по мере
-       набора, а за программами машины система идёт по Enter — apt отвечает
-       не мгновенно, и дёргать его на каждую букву значило бы превратить
-       поиск в ожидание. */
-    const поле = el('input', 'inp st-find');
-    поле.placeholder = '🔎 Найти программу: gimp, telegram, помидор…';
-    top.appendChild(поле);
-
-    function cardFor(a, installed, custom){
-      const c = el('div', 'st-card');
-      const ico = el('div', 'app-ico', a.glyph); ico.style.background = a.bg;
-      ico.style.width = ico.style.height = '54px'; ico.style.fontSize = '26px';
-      c.appendChild(ico);
-      c.appendChild(el('div', '', `<b style="font-size:13px">${esc(a.name)}</b>
-        <div class="tiny muted" style="margin-top:3px;line-height:1.35">${esc(a.desc || (custom ? 'Своё приложение' : 'Системное приложение'))}</div>
-        <div class="tiny muted" style="margin-top:4px;opacity:.5">${esc(a.author || 'вы')}</div>`));
-      const row2 = el('div', 'row');
-      if (installed){
-        const open = el('button', 'btn pri', 'Открыть');
-        open.onclick = () => WM.open(a.id);
-        row2.appendChild(open);
-        if (a.removable !== false){
-          const del = el('button', 'btn', '🗑');
-          del.onclick = async () => {
-            if (!await Dlg.confirm('Удалить приложение', `«${a.name}» будет удалено из системы.`,
-                { icon:'🗑️', okText:'Удалить', danger:true })) return;
-            AppStore.uninstall(a.id); draw();
-          };
-          row2.appendChild(del);
-        }
-      } else {
-        const ins = el('button', 'btn pri', '⬇ Установить');
-        ins.onclick = () => { AppStore.install(a.id); draw(); };
-        row2.appendChild(ins);
-      }
-      c.appendChild(row2);
-      return c;
-    }
-
-    /* ---------- программы машины: настоящие пакеты из репозиториев ---------- */
+    /* ---------- разговор с системой ---------- */
     const Pkg = {
       state(){ return Platform.rpc('pkg.state'); },
       search(query){ return Platform.rpc('pkg.search', { query }); },
@@ -425,60 +147,138 @@ APPS.store = {
       update(source){ return Platform.rpc('pkg.update', { source }); },
       flathub(){ return Platform.rpc('pkg.flathub'); },
       job(){ return Platform.rpc('pkg.job'); },
-      cancel(){ return Platform.rpc('pkg.cancel'); }
+      cancel(){ return Platform.rpc('pkg.cancel'); },
+      обновления(){ return Platform.rpc('pkg.upgrade.check'); },
+      обновить(){ return Platform.rpc('pkg.upgrade.run', {}); }
     };
     const размер = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ'
                                               : Math.round(b / 1024) + ' КБ';
-    /* Подборка для «Обзора»: то, что ставят первым делом на любую машину.
-       Имена — те, под которыми программы лежат в репозиториях, чтобы поиск
-       по ним находил с первого раза. */
-    const ПОДБОРКА = [
-      ['Firefox',     '🦊', 'Браузер, который уже есть в системе'],
-      ['Telegram',    '✈️', 'Мессенджер — живёт на Flathub'],
-      ['GIMP',        '🎨', 'Редактор изображений'],
-      ['VLC',         '🎬', 'Проигрыватель видео и музыки'],
-      ['LibreOffice', '📄', 'Документы, таблицы, презентации'],
-      ['Chromium',    '🌐', 'Второй браузер, на движке Chrome']
+
+    /* ---------- что показываем ---------- */
+    const РАЗДЕЛЫ = [
+      { id:'сеть',    имя:'Интернет',     знак:'🌐', фон:'linear-gradient(140deg,#60a5fa,#1d4ed8)' },
+      { id:'работа',  имя:'Работа',       знак:'📄', фон:'linear-gradient(140deg,#fbbf24,#b45309)' },
+      { id:'медиа',   имя:'Музыка и кино',знак:'🎬', фон:'linear-gradient(140deg,#f472b6,#be185d)' },
+      { id:'графика', имя:'Графика',      знак:'🎨', фон:'linear-gradient(140deg,#34d399,#047857)' },
+      { id:'игры',    имя:'Игры',         знак:'🎮', фон:'linear-gradient(140deg,#a78bfa,#6d28d9)' },
+      { id:'система', имя:'Инструменты',  знак:'🛠', фон:'linear-gradient(140deg,#94a3b8,#334155)' }
     ];
 
-    let поискСтрока = '', поискСписок = null, работа = null;
-    /* Что набрано в общем поиске. Отдельно от «поискСтрока»: та хранит
-       запрос, по которому система уже сходила в репозитории, а эта —
-       то, что человек набирает прямо сейчас. */
-    let набрано = '';
-    поле.oninput = () => { набрано = поле.value.trim(); draw(); };
-    поле.onkeydown = е => {
-      if (е.key !== 'Enter') return;
-      набрано = поле.value.trim();
-      if (набрано.length >= 2) найтиВРепозиториях(набрано);
-      else draw();
+    /* Подборки составлены руками: в репозиториях нет ни витрин, ни
+       разделов в человеческом смысле. Имя пакета пишем такое, под каким
+       программа лежит в Ubuntu, иначе поиск по ней ничего не найдёт. */
+    const ПОДБОРКИ = {
+      'сеть':[
+        /* Firefox здесь нет намеренно: он и так стоит в системе, а пакет
+           «firefox» в Ubuntu — пустая заглушка, которая тянет snap, и snap
+           у нас не работает. Предлагать его значило бы обещать установку,
+           которая кончится ничем. */
+        ['chromium', 'Chromium', 'Браузер на движке Chrome', '🌐'],
+        ['telegram-desktop', 'Telegram', 'Мессенджер', '✈️'],
+        ['thunderbird', 'Thunderbird', 'Почта', '📬'],
+        ['transmission-gtk', 'Transmission', 'Торренты', '⬇️'],
+        ['filezilla', 'FileZilla', 'Файлы по FTP и SFTP', '📡']
+      ],
+      'работа':[
+        ['libreoffice', 'LibreOffice', 'Документы, таблицы, презентации', '📄'],
+        ['obsidian', 'Obsidian', 'Заметки связанными страницами', '🗒'],
+        ['calibre', 'Calibre', 'Библиотека книг и читалка', '📚'],
+        ['keepassxc', 'KeePassXC', 'Хранилище паролей', '🔐'],
+        ['scribus', 'Scribus', 'Вёрстка печатных изданий', '📰'],
+        ['gnucash', 'GnuCash', 'Домашняя бухгалтерия', '💰']
+      ],
+      'медиа':[
+        ['vlc', 'VLC', 'Проигрыватель, который играет всё', '🎬'],
+        ['audacity', 'Audacity', 'Запись и правка звука', '🎙'],
+        ['obs-studio', 'OBS Studio', 'Запись экрана и трансляции', '🎥'],
+        ['kdenlive', 'Kdenlive', 'Монтаж видео', '🎞'],
+        ['rhythmbox', 'Rhythmbox', 'Музыкальный проигрыватель', '🎵'],
+        ['handbrake', 'HandBrake', 'Перегон видео между форматами', '🔄']
+      ],
+      'графика':[
+        ['gimp', 'GIMP', 'Редактор изображений', '🎨'],
+        ['inkscape', 'Inkscape', 'Векторная графика', '✒️'],
+        ['krita', 'Krita', 'Рисование и живопись', '🖌'],
+        ['blender', 'Blender', 'Трёхмерная графика и анимация', '🧊'],
+        ['darktable', 'darktable', 'Проявка фотографий из RAW', '📷'],
+        ['shotwell', 'Shotwell', 'Разбор домашнего фотоархива', '🖼']
+      ],
+      'игры':[
+        ['steam', 'Steam', 'Магазин и запуск игр', '🎮'],
+        ['0ad', '0 A.D.', 'Историческая стратегия', '🏛'],
+        ['supertuxkart', 'SuperTuxKart', 'Гонки с пингвином', '🏎'],
+        ['minetest', 'Minetest', 'Кубический мир и строительство', '⛏'],
+        ['gnome-mines', 'Сапёр', 'Та самая игра', '💣'],
+        ['aisleriot', 'Пасьянсы', 'Косынка и ещё восемьдесят', '🃏']
+      ],
+      'система':[
+        ['htop', 'htop', 'Диспетчер задач в терминале', '📊'],
+        ['gparted', 'GParted', 'Разметка дисков', '💽'],
+        ['timeshift', 'Timeshift', 'Снимки системы для отката', '⏪'],
+        ['synaptic', 'Synaptic', 'Подробный список всех пакетов', '📦'],
+        ['gnome-disk-utility', 'Диски', 'Состояние и проверка дисков', '🩺'],
+        ['neofetch', 'neofetch', 'Красивая справка о машине', '💬']
+      ]
     };
-    /* Когда началась текущая работа. Держим отдельно: сама работа приходит
-       от системы новым объектом при каждом опросе, и отметка времени внутри
-       неё сбрасывалась бы каждую секунду. */
-    let началоРаботы = 0;
 
-    /* Работа могла начаться не здесь. Человек щёлкает по скачанному .deb —
-       установка идёт, а Магазин в это время закрыт. Открыв его, он вправе
-       увидеть ход дела, а не пустое окно: подхватываем начатое. */
-    setTimeout(() => {
-      Pkg.job().then(j => {
-        if (j && j.running){ работа = j; началоРаботы = началоРаботы || Date.now(); draw(); следиЗаРаботой(() => draw()); }
-      }).catch(() => {});
-    }, 0);
+    /* Витрина: то, с чего начинают на новой машине. */
+    const ВИТРИНА = [
+      { имя:'Telegram', пакет:'telegram-desktop', знак:'✈️',
+        строка:'Мессенджер, который открывается быстрее, чем успеваешь передумать',
+        фон:'linear-gradient(120deg,#38bdf8,#1d4ed8)' },
+      { имя:'GIMP', пакет:'gimp', знак:'🎨',
+        строка:'Всё, что делают с изображениями, — и бесплатно',
+        фон:'linear-gradient(120deg,#34d399,#065f46)' },
+      { имя:'VLC', пакет:'vlc', знак:'🎬',
+        строка:'Играет любое видео. Правда любое',
+        фон:'linear-gradient(120deg,#fb923c,#c2410c)' }
+    ];
 
-    /* Что умеет машина (apt, flatpak, списки, место) — спрашиваем один раз
-       на всё окно, а не при каждой отрисовке вкладки: ответ не меняется от
-       того, в какой раздел человек смотрит. */
+    /* ---------- состояние окна ---------- */
+    let экран = (opts && opts['вкладка']) === 'linux' ? 'обзор'
+              : (opts && opts['вкладка']) || 'обзор';
+    let раздел = null;            // какой раздел открыт
+    let программа = null;         // чья страница открыта
+    let набрано = '', поискСтрока = '', поискСписок = null;
+    let работа = null, началоРаботы = 0;
     let состояние = null;
+
     const узнайСостояние = async () => {
       if (состояние) return состояние;
       состояние = await Pkg.state().catch(e => ({ reason:String(e.message || e) }));
       return состояние;
     };
 
-    /* Ожидание чужой работы: apt не умеет двух дел сразу, и поиск поверх
-       обновления списков отвечает по пустым спискам. */
+    /* ---------- боковой список ---------- */
+    const ПУНКТЫ = [
+      ['обзор',          '🏠', 'Обзор'],
+      ['разделы',        '🗂', 'Разделы'],
+      ['установленные',  '📦', 'Установленные'],
+      ['обновления',     '⬆️', 'Обновления'],
+      ['своё',           '🧑‍💻', 'Своё приложение']
+    ];
+    const рисуйБок = () => {
+      side.innerHTML = '';
+      ПУНКТЫ.forEach(([id, зн, имя]) => {
+        const б = el('button', 'sb-item' + (экран === id ? ' on' : ''),
+          `<span class="e">${зн}</span><span>${esc(имя)}</span>`);
+        б.onclick = () => { экран = id; раздел = null; программа = null;
+                            набрано = ''; поле.value = ''; draw(); };
+        side.appendChild(б);
+      });
+    };
+
+    /* ---------- поиск ---------- */
+    const поле = el('input', 'inp st-find');
+    поле.placeholder = '🔎 Найти программу: gimp, telegram, htop…';
+    top.appendChild(поле);
+    поле.oninput = () => { набрано = поле.value.trim(); draw(); };
+    поле.onkeydown = е => {
+      if (е.key !== 'Enter') return;
+      набрано = поле.value.trim();
+      if (набрано.length >= 2) найтиВРепозиториях(набрано); else draw();
+    };
+
     const дождисьРаботы = async () => {
       for (let i = 0; i < 900; i++){
         const j = await Pkg.job().catch(() => ({ running:false }));
@@ -490,53 +290,46 @@ APPS.store = {
       return { running:false, ok:false };
     };
 
-    /* Поиск по репозиториям машины. Живёт здесь, а не внутри вкладки:
-       строка поиска теперь одна на весь Магазин, и звать её должны все. */
     async function найтиВРепозиториях(строка){
       const st = await узнайСостояние();
       поискСтрока = строка;
-      if (поискСтрока.length < 2) return draw();
+      if (строка.length < 2) return draw();
       if (!st || st.reason || !st.allowed){ поискСписок = null; return draw(); }
 
       if (работа && работа.action === 'update'){
-        поискСписок = 'обновляю'; draw();
+        поискСписок = 'ждём'; draw();
         const j = await дождисьРаботы();
         st.lists = st.lists || !!j.ok;
       }
-
       /* В свежей системе списки пакетов пусты — их вычищают при сборке
-         образа. Обновляем сами: человек не должен догадываться, что перед
-         первым поиском надо нажать отдельную кнопку. */
-      if (!st.lists && st.allowed && !работа){
-        поискСписок = 'обновляю'; draw();
-        try {
-          await Pkg.update();
-          const j = await дождисьРаботы();
-          st.lists = !!j.ok;
-        } catch(e){ поискСписок = { ошибка:String(e.message || e) }; return draw(); }
+         образа. Читаем сами: человек не обязан знать, что перед первым
+         поиском надо нажать отдельную кнопку. */
+      if (!st.lists && !работа){
+        поискСписок = 'ждём'; draw();
+        try { await Pkg.update(); const j = await дождисьРаботы(); st.lists = !!j.ok; }
+        catch(e){ поискСписок = { ошибка:String(e.message || e) }; return draw(); }
       }
 
       поискСписок = 'ищу'; draw();
       try {
-        const r = await Pkg.search(поискСтрока);
-        const list = r.list.slice(0, 24);
-        /* подробности берём только для показанных: иначе это сотни запросов */
-        поискСписок = await Promise.all(list.map(async x => {
+        const r = await Pkg.search(строка);
+        const список = r.list.slice(0, 24);
+        поискСписок = await Promise.all(список.map(async x => {
           try { return Object.assign(x, await Pkg.info(x.name, x.source)); } catch(e){ return x; }
         }));
       } catch(e){ поискСписок = { ошибка:String(e.message || e) }; }
       draw();
     }
 
-    async function следиЗаРаботой(перерисовать){
+    async function следиЗаРаботой(){
       for (let i = 0; i < 900; i++){
         let j;
         try { j = await Pkg.job(); } catch(e){ break; }
         работа = j.running ? j : null;
         if (работа && !началоРаботы) началоРаботы = Date.now();
-        перерисовать(j);
+        draw();
         if (!j.running){
-          Shell.toast('Программы машины',
+          Shell.toast('Магазин',
             j.ok ? (j.action === 'install' ? 'Установлено: ' + j.name + ' — ищите в Пуске'
                   : j.action === 'remove' ? 'Удалено: ' + j.name : 'Списки обновлены')
                  : 'Не вышло: ' + (j.error || 'неизвестная причина'),
@@ -545,69 +338,117 @@ APPS.store = {
         }
         await new Promise(r => setTimeout(r, 1200));
       }
-      работа = null;
-      началоРаботы = 0;
+      работа = null; началоРаботы = 0;
+      if (программа) сведенияОПрограмме(программа.пакет, true);
       draw();
     }
 
-    /* Ход работы виден из любого раздела.
-    
-       Раньше полоса жила внутри вкладки программ Linux: человек нажимал
-       «Установить», уходил смотреть каталог — и оставался без единого
-       признака, что что-то происходит. Теперь она закреплена над
-       содержимым и рисуется при каждой отрисовке, куда бы он ни смотрел. */
-    /* Строка найденной программы машины. Одна на два места: результаты
-       общего поиска и вкладку программ Linux — иначе они разъехались бы
-       при первой же правке. */
-    function строкаПакета(x){
-      const b2 = el('button', 'btn' + (x.installed ? '' : ' pri'),
-        x.installed ? 'Удалить' : '⬇ Установить');
-      b2.disabled = !!работа;
-      b2.onclick = async () => {
-        try {
-          if (x.installed){
-            if (!await Dlg.confirm('Удалить ' + x.name + '?',
-                'Программа будет удалена из системы вместе с ненужными зависимостями.',
-                { icon:'🗑️', okText:'Удалить', danger:true })) return;
-            await Pkg.remove(x.name, x.source);
-          } else await Pkg.install(x.name, x.source);
-          /* Обработчик перерисовки был пустым: слежение шло, состояние
-             работы обновлялось, а экран не перерисовывался ни разу до
-             самого конца. Человек всю установку смотрел на «Начинаю» и
-             неподвижную полосу — и справедливо считал, что всё встало. */
-          следиЗаРаботой(() => draw());
-          draw();
-        } catch(e){ Dlg.alert('Программы машины', String(e.message || e), '⚠️'); }
-      };
-      if (x.snap){
-        b2.disabled = true;
-        b2.textContent = 'через Snap';
+    /* Работа могла начаться не здесь: человек щёлкнул по скачанному .deb,
+       установка идёт, а Магазин закрыт. Открыв его, он вправе увидеть ход
+       дела, а не пустое окно. */
+    setTimeout(() => {
+      Pkg.job().then(j => {
+        if (j && j.running){ работа = j; началоРаботы = Date.now(); следиЗаРаботой(); }
+      }).catch(() => {});
+    }, 0);
+
+    /* ---------- мелкие кирпичи ---------- */
+    /* Пока система ходит в репозитории, на месте будущих карточек лежат
+       серые заготовки. Так делают все хорошие магазины: пустой экран
+       читается как поломка, а заготовка — как ожидание. */
+    const заготовки = (сколько, класс) => {
+      const г = el('div', класс || 'st-grid');
+      for (let i = 0; i < сколько; i++){
+        const з = el('div', 'st-skel');
+        з.style.setProperty('--i', i);
+        г.appendChild(з);
       }
-      const источник = x.source === 'flatpak' ? 'Flathub' : 'Ubuntu';
-      const сведения = [источник,
-                        x.installed ? 'установлена ' + x.installed : x.candidate || '',
-                        размер(x.size) ? (x.source === 'flatpak' ? 'скачает ' : 'займёт ') + размер(x.size) : '',
-                        x.snap ? 'это заглушка: ставится через Snap, а он в системе не работает' : '']
-                        .filter(Boolean).join(' · ');
-      return row(x.source === 'flatpak' ? '🫙' : '📦',
-        (x.title && x.title !== x.name ? x.title + ' · ' + x.name : x.name),
-        (x.about || '') + (сведения ? ' · ' + сведения : ''), b2);
+      return г;
+    };
+
+    const значок = (зн, фон) => {
+      const и = el('div', 'app-ico st-ico', зн);
+      и.style.background = фон || 'rgba(var(--tint),.14)';
+      return и;
+    };
+
+    /* Карточка программы: значок, имя, строка про неё. Нажатие открывает
+       страницу — как в Microsoft Store, где карточка это вход, а не
+       кнопка установки. */
+    const карточка = (п, i) => {
+      const к = el('button', 'st-card');
+      к.style.setProperty('--i', i || 0);
+      к.appendChild(значок(п.знак || '📦', п.фон));
+      к.appendChild(el('div', 'st-card-t',
+        `<b>${esc(п.имя)}</b><span class="tiny muted">${esc(п.про || '')}</span>`));
+      к.onclick = () => откройПрограмму(п);
+      return к;
+    };
+
+    const заголовок = (текст, ещё) => {
+      const з = el('div', 'st-head');
+      з.appendChild(el('div', 'card-t', текст));
+      if (ещё) з.appendChild(ещё);
+      return з;
+    };
+
+    /* ---------- страница программы ---------- */
+    /* Сведения о программе приходят от машины: описание, размер, версия,
+       стоит она уже или нет. Подборка знает только имя пакета и одну
+       строку от нас — всё остальное спрашиваем. */
+    const сведения = new Map();
+    async function сведенияОПрограмме(пакет, заново){
+      if (!заново && сведения.has(пакет)) return сведения.get(пакет);
+      const st = await узнайСостояние();
+      if (!st || st.reason || !st.allowed){
+        const пусто = { нет:true, почему:(st && st.reason) || 'система не управляет машиной' };
+        сведения.set(пакет, пусто);
+        return пусто;
+      }
+      if (!st.lists){
+        try { await Pkg.update(); const j = await дождисьРаботы(); st.lists = !!j.ok; } catch(e){}
+      }
+      let о = null;
+      try { о = await Pkg.info(пакет); } catch(e){ о = null; }
+      if (!о || (!о.candidate && !о.installed)){
+        /* Под тем именем, что у нас записано, программы может не быть:
+           в разных выпусках Ubuntu пакеты зовутся по-разному, а часть
+           живёт только на Flathub. Тогда ищем по имени и берём похожее. */
+        try {
+          const r = await Pkg.search(пакет);
+          const точное = (r.list || []).find(x => x.name === пакет) || (r.list || [])[0];
+          if (точное) о = Object.assign(точное, await Pkg.info(точное.name, точное.source).catch(() => ({})));
+        } catch(e){}
+      }
+      const итог = о && (о.candidate || о.installed) ? о : { нет:true, почему:'в репозиториях такого нет' };
+      сведения.set(пакет, итог);
+      return итог;
     }
 
+    function откройПрограмму(п){
+      программа = п;
+      экран = 'программа';
+      рисуйБок();
+      draw();
+      сведенияОПрограмме(п.пакет).then(() => { if (программа === п) draw(); });
+    }
+
+    /* ---------- ход установки ---------- */
+    /* Виден из любого раздела: человек нажал «Установить», ушёл смотреть
+       другое — и всё равно видит, что работа идёт. */
     function рисуйРаботу(){
       работаМесто.innerHTML = '';
       if (!работа) return;
       const box = el('div', 'card st-work');
       const молчит = работа.молчит || 0;
-      /* Не всякая работа печатает проценты: flatpak при первой установке
-         тянет общую основу молча, и полоса стоит на месте честно, а не от
-         поломки. Чтобы это не читалось как зависание, показываем, сколько
-         уже идёт, и рисуем бегущую полосу вместо застывшей. */
       const сек = Math.round((Date.now() - (началоРаботы || Date.now())) / 1000);
       const время = сек < 60 ? сек + ' с' : Math.floor(сек / 60) + ' мин ' + (сек % 60) + ' с';
+      /* Не всякая работа печатает проценты: flatpak при первой установке
+         тянет общую основу молча. Чтобы неподвижная полоса не читалась как
+         зависание, она в этом случае бежит, а рядом написано, сколько идёт. */
       const естьПроценты = (работа.percent || 0) > 2;
-      box.innerHTML = `<b>${esc(работа.action === 'remove' ? 'Удаление' : работа.action === 'update' ? 'Обновление списков' : 'Установка')}
-        ${esc(работа.name || '')}</b>
+      box.innerHTML = `<b>${esc(работа.action === 'remove' ? 'Удаление'
+                            : работа.action === 'update' ? 'Обновление списков' : 'Установка')} ${esc(работа.name || '')}</b>
         <div class="ins-bar${естьПроценты ? '' : ' ins-bar-ждём'}" style="margin-top:10px"><i style="width:${
           естьПроценты ? работа.percent : 100}%"></i></div>
         <div class="muted tiny" style="margin-top:6px">${esc(работа.step || '')} · идёт ${время}${
@@ -616,267 +457,373 @@ APPS.store = {
       stop.style.marginTop = '10px';
       stop.onclick = async () => {
         if (!await Dlg.confirm('Остановить работу?',
-            'apt будет прерван, а система приведена в порядок.', { icon:'✕', okText:'Остановить', danger:true })) return;
+            'apt будет прерван, а система приведена в порядок.',
+            { icon:'✕', okText:'Остановить', danger:true })) return;
         try { await Pkg.cancel(); работа = null; draw(); }
-        catch(e){ Dlg.alert('Программы Linux', String(e.message || e), '⚠️'); }
+        catch(e){ Dlg.alert('Магазин', String(e.message || e), '⚠️'); }
       };
       box.appendChild(stop);
       работаМесто.appendChild(box);
     }
 
-    async function drawLinux(){
-      const st = await узнайСостояние();
-      body.innerHTML = '';
-      /* Раньше здесь стоял баннер в треть экрана с рассказом о том, как всё
-         устроено. Рассказ верный, но читают его один раз, а место он
-         занимает всегда. Оставили одну строку. */
-      body.appendChild(el('div', 'set-note',
-        'Ubuntu и Flathub — два источника. В Flathub живут Telegram, Spotify и прочее, '
-        + 'чего в Ubuntu нет. Поставленное появляется в Пуске и в доке.'
-        + (st && st.flatpak === false ? ' Flathub на этой машине недоступен.' : '')));
+    /* ---------- установка и удаление ---------- */
+    async function поставь(имя, источник){
+      try { await Pkg.install(имя, источник); следиЗаРаботой(); draw(); }
+      catch(e){ Dlg.alert('Не вышло начать установку', String(e.message || e), '⚠️'); }
+    }
+    async function убери(имя, источник){
+      if (!await Dlg.confirm('Удалить ' + имя + '?',
+          'Программа будет удалена вместе с ненужными зависимостями.',
+          { icon:'🗑️', okText:'Удалить', danger:true })) return;
+      try { await Pkg.remove(имя, источник); следиЗаРаботой(); draw(); }
+      catch(e){ Dlg.alert('Не вышло удалить', String(e.message || e), '⚠️'); }
+    }
 
-      if (!st || st.reason){
-        body.appendChild(el('div', 'set-note', esc((st && st.reason) ||
-          'Установка программ доступна, только когда система управляет машиной')));
-        win.setSub('недоступно');
+    /* ---------- экраны ---------- */
+    function экранОбзор(){
+      /* Витрина меняется каждый день: не ради оживления, а чтобы человек,
+         открывающий Магазин не в первый раз, видел не одно и то же. */
+      const в = ВИТРИНА[new Date().getDate() % ВИТРИНА.length];
+      const витрина = el('button', 'st-hero');
+      витрина.style.background = в.фон;
+      витрина.innerHTML = `<div class="st-hero-l">
+          <div class="st-hero-z">${в.знак}</div>
+          <div><h2>${esc(в.имя)}</h2><div class="st-hero-p">${esc(в.строка)}</div></div>
+        </div><span class="st-hero-b">Подробнее ›</span>`;
+      витрина.onclick = () => откройПрограмму({ имя:в.имя, пакет:в.пакет, знак:в.знак, про:в.строка, фон:в.фон });
+      body.appendChild(витрина);
+
+      body.appendChild(заголовок('Разделы'));
+      const плитки = el('div', 'st-tiles');
+      РАЗДЕЛЫ.forEach((р, i) => {
+        const т = el('button', 'st-tile');
+        т.style.setProperty('--i', i);
+        т.style.background = р.фон;
+        т.innerHTML = `<span class="st-tile-z">${р.знак}</span><span>${esc(р.имя)}</span>`;
+        т.onclick = () => { экран = 'раздел'; раздел = р.id; рисуйБок(); draw(); };
+        плитки.appendChild(т);
+      });
+      body.appendChild(плитки);
+
+      body.appendChild(заголовок('Стоит поставить первым делом'));
+      const г = el('div', 'st-grid');
+      ['сеть', 'медиа', 'графика'].forEach((кто, i) => {
+        const [пакет, имя, про, знак] = ПОДБОРКИ[кто][0];
+        г.appendChild(карточка({ пакет, имя, про, знак }, i));
+      });
+      ['работа', 'система', 'игры'].forEach((кто, i) => {
+        const [пакет, имя, про, знак] = ПОДБОРКИ[кто][0];
+        г.appendChild(карточка({ пакет, имя, про, знак }, i + 3));
+      });
+      body.appendChild(г);
+      win.setSub('обзор');
+    }
+
+    function экранРазделы(){
+      body.appendChild(заголовок('Разделы'));
+      const плитки = el('div', 'st-tiles');
+      РАЗДЕЛЫ.forEach((р, i) => {
+        const т = el('button', 'st-tile st-tile-big');
+        т.style.setProperty('--i', i);
+        т.style.background = р.фон;
+        т.innerHTML = `<span class="st-tile-z">${р.знак}</span><span>${esc(р.имя)}</span>
+          <span class="tiny" style="opacity:.8">${ПОДБОРКИ[р.id].length} программ</span>`;
+        т.onclick = () => { экран = 'раздел'; раздел = р.id; рисуйБок(); draw(); };
+        плитки.appendChild(т);
+      });
+      body.appendChild(плитки);
+      win.setSub('разделы');
+    }
+
+    function экранРаздел(){
+      const р = РАЗДЕЛЫ.find(x => x.id === раздел) || РАЗДЕЛЫ[0];
+      const назад = el('button', 'btn st-back', '‹ Разделы');
+      назад.onclick = () => { экран = 'разделы'; раздел = null; рисуйБок(); draw(); };
+      body.appendChild(назад);
+      body.appendChild(заголовок(р.знак + ' ' + р.имя));
+      const г = el('div', 'st-grid');
+      ПОДБОРКИ[р.id].forEach(([пакет, имя, про, знак], i) =>
+        г.appendChild(карточка({ пакет, имя, про, знак }, i)));
+      body.appendChild(г);
+      win.setSub(р.имя.toLowerCase());
+    }
+
+    function экранПрограмма(){
+      const п = программа;
+      const назад = el('button', 'btn st-back', '‹ Назад');
+      назад.onclick = () => {
+        программа = null;
+        экран = раздел ? 'раздел' : набрано ? 'обзор' : 'обзор';
+        рисуйБок(); draw();
+      };
+      body.appendChild(назад);
+
+      const шапка = el('div', 'st-page');
+      шапка.appendChild(значок(п.знак || '📦', п.фон));
+      const текст = el('div', 'st-page-t');
+      текст.innerHTML = `<h2>${esc(п.имя)}</h2><div class="muted">${esc(п.про || '')}</div>`;
+      шапка.appendChild(текст);
+      const место = el('div', 'st-page-b');
+      шапка.appendChild(место);
+      body.appendChild(шапка);
+
+      const о = сведения.get(п.пакет);
+      if (!о){
+        место.appendChild(el('div', 'st-skel st-skel-b'));
+        body.appendChild(el('div', 'st-skel st-skel-l'));
+        body.appendChild(el('div', 'st-skel st-skel-l'));
+        win.setSub(п.имя.toLowerCase());
+        return;
+      }
+      if (о.нет){
+        место.appendChild(el('div', 'set-note', esc(о.почему)));
+        body.appendChild(el('div', 'set-note',
+          'Возможно, у программы другое имя в этом выпуске Ubuntu — попробуйте поиск сверху.'));
+        win.setSub(п.имя.toLowerCase());
         return;
       }
 
-      /* Живая система держит всё в памяти: об этом честнее сказать заранее,
-         чем показать падение dpkg после получаса скачивания. */
-      if (st.live){
-        const гб = b => b ? (b / 1073741824).toFixed(1) + ' ГБ' : '?';
-        body.appendChild(el('div', 'set-note',
-          'Система сейчас работает из памяти: всё поставленное занимает оперативку и исчезнет ' +
-          'при выключении. Свободно ' + гб(st.free) + '. Для больших программ сначала установите ' +
-          'систему на диск — там места столько же, сколько на диске.'));
+      const стоит = !!о.installed;
+      const кн = el('button', 'btn pri st-big-btn', стоит ? '🗑 Удалить' : '⬇ Установить');
+      кн.disabled = !!работа;
+      кн.onclick = () => стоит ? убери(о.name || п.пакет, о.source) : поставь(о.name || п.пакет, о.source);
+      /* Часть пакетов в Ubuntu — пустые заглушки: сам пакет весит сто
+         килобайт и тянет snap, а snap в системе не работает. Кнопка,
+         которая начинает установку, кончающуюся ничем, хуже отсутствующей:
+         человек ждёт, а потом ищет, что он сделал не так. */
+      if (о.snap && !стоит){
+        кн.disabled = true;
+        кн.textContent = 'Недоступно';
       }
+      место.appendChild(кн);
+      if (стоит) место.appendChild(el('div', 'tiny muted', 'Уже в системе'));
 
-      /* Flathub подключается отдельно: у него свои списки, и без них поиск по
-         нему честно ничего не находит. Показываем это прямо, а не молчим. */
-      if (st.flatpak && !st.flathubData){
-        const box = el('div', 'card', '');
-        box.style.padding = '14px';
-        box.innerHTML = `<b>Flathub ещё не подключён</b>
-          <div class="muted tiny" style="margin-top:6px;line-height:1.45">
-            Telegram, Spotify, Firefox и прочее живёт там. Списки Flathub качаются
-            отдельно — это около 30 МБ и одна-две минуты, зато потом поиск находит всё.</div>`;
-        const b3 = el('button', 'btn pri', '🫙 Подключить Flathub');
-        b3.style.marginTop = '10px';
-        b3.disabled = !!работа;
-        b3.onclick = async () => {
-          try {
-            await Pkg.flathub(); draw();
-            const j = await дождисьРаботы();
-            if (j.ok){ st.flathubData = true; st.flathub = true; }
-            Shell.toast('Программы Linux', j.ok ? 'Flathub подключён' :
-              'Не вышло подключить Flathub: ' + (j.error || ''), j.ok ? '✅' : '⚠️', 7000);
-            if (j.ok && набрано.length >= 2) найтиВРепозиториях(набрано); else draw();
-          } catch(e){ Dlg.alert('Flathub', String(e.message || e), '⚠️'); }
-        };
-        box.appendChild(b3);
-        body.appendChild(box);
-      }
-
-      const upd = el('button', 'btn', '🔄 Обновить списки');
-      body.appendChild(row('🗂', 'Списки программ',
-        st.lists ? 'Система знает, что есть в репозиториях'
-                 : 'Ещё не читались — система прочтёт их при первом поиске', upd));
-
-      upd.onclick = async () => {
-        try {
-          await Pkg.update(); draw();
-          let j = await дождисьРаботы();
-          st.lists = st.lists || !!j.ok;
-          /* второй источник обновляем следом: у Flathub свои списки */
-          if (st.flatpak){
-            try { await Pkg.update('flatpak'); draw(); j = await дождисьРаботы(); } catch(e){}
-          }
-          Shell.toast('Программы Linux', j.ok ? 'Списки обновлены' : 'Обновить списки не вышло',
-            j.ok ? '✅' : '⚠️', 5000);
-          if (набрано.length >= 2) найтиВРепозиториях(набрано); else draw();
-        } catch(e){ Dlg.alert('Обновление списков', String(e.message || e), '⚠️'); }
+      const свед = el('div', 'st-facts');
+      const факт = (имя, что) => {
+        if (!что) return;
+        const ф = el('div', 'st-fact');
+        ф.innerHTML = `<span class="tiny muted">${esc(имя)}</span><b>${esc(что)}</b>`;
+        свед.appendChild(ф);
       };
+      факт('Источник', о.source === 'flatpak' ? 'Flathub' : 'Ubuntu');
+      факт('Версия', о.installed || о.candidate || '');
+      факт('Размер', размер(о.size) ? (о.source === 'flatpak' ? 'скачает ' : 'займёт ') + размер(о.size) : '');
+      факт('Пакет', о.name || п.пакет);
+      body.appendChild(свед);
 
-      if (поискСписок === 'обновляю'){
-        body.appendChild(el('div', 'empty', 'Обновляю списки пакетов — это делается один раз…'));
-      } else if (поискСписок === 'ищу'){
-        body.appendChild(el('div', 'empty', 'Ищу в репозиториях…'));
-      } else if (поискСписок && поискСписок.ошибка){
-        body.appendChild(el('div', 'set-note', esc(поискСписок.ошибка)));
-      } else if (Array.isArray(поискСписок)){
-        body.appendChild(el('div', 'card-t', 'Найдено'));
-        if (!поискСписок.length)
-          body.appendChild(el('div', 'empty', !st.lists
-            ? 'Списки пакетов ещё не загружены — нажмите «Обновить списки»'
-            : (st.flatpak && !st.flathubData)
-              ? 'В репозиториях Ubuntu такого нет. Telegram, Spotify и подобное живут на Flathub — ' +
-                'подключите его кнопкой выше, и поиск найдёт их'
-              : 'Ничего не найдено. У программ бывают свои имена — попробуйте другое написание'));
-        поискСписок.forEach(x => body.appendChild(строкаПакета(x)));
-      } else {
-        body.appendChild(el('div', 'set-note',
-          'Введите название программы. В самой системе программ нет — они берутся из ' +
-          'репозиториев Ubuntu, тех же, что у обычного линукса, поэтому нужен интернет. ' +
-          (st.lists ? '' : 'Списки пакетов ещё не загружены — система обновит их при первом поиске.')));
+      if (о.about) body.appendChild(el('div', 'st-about', esc(о.about)));
+      if (о.snap) body.appendChild(el('div', 'set-note',
+        'Это заглушка: программа ставится через Snap, а он в системе не работает.'));
+      win.setSub(п.имя.toLowerCase());
+    }
+
+    async function экранУстановленные(){
+      body.appendChild(заголовок('Программы машины'));
+      const место = el('div', 'st-grid');
+      body.appendChild(место);
+      место.replaceWith(заготовки(6));
+      const свои = AppStore.custom();
+      if (свои.length){
+        body.appendChild(заголовок('Свои приложения'));
+        const г = el('div', 'st-grid');
+        свои.forEach((п, i) => {
+          const к = карточка({ имя:п.name, про:'Своё приложение', знак:п.glyph || '📦', пакет:null }, i);
+          к.onclick = () => WM.open(п.id);
+          к.oncontextmenu = е => {
+            е.preventDefault();
+            Shell.ctx(е.clientX, е.clientY, [{ i:'🗑', t:'Удалить', f:() => { AppStore.uninstall(п.id); draw(); } }]);
+          };
+          г.appendChild(к);
+        });
+        body.appendChild(г);
       }
-      win.setSub('программы Linux');
+      win.setSub('установленные');
+
+      /* Список программ машины спрашиваем у системы: это те же ярлыки, что
+         видит Пуск. Заготовки на их месте лежат, пока идёт ответ. */
+      let список = [];
+      try { список = ((await Platform.rpc('sys.apps')) || {}).list || []; } catch(e){ список = []; }
+      if (экран !== 'установленные') return;
+      const г = el('div', 'st-grid');
+      список.slice(0, 60).forEach((a, i) => {
+        const к = карточка({ имя:a.name || a.id, про:a.comment || 'Программа машины',
+                             знак:a.flatpak ? '🫙' : '🐧', пакет:null }, i);
+        /* Значок берём настоящий, её собственный: человек узнаёт программу
+           по нему, а не по нашему пингвину. */
+        if (OS.значокПрограммы){
+          const свой = OS.значокПрограммы({ значок:a.icon || '', id:a.id, flatpak:a.flatpak }, 'app-ico st-ico');
+          к.replaceChild(свой, к.firstChild);
+        }
+        к.onclick = () => { OS.запустиПоЯрлыку ? OS.запустиПоЯрлыку(a.id) : null; };
+        г.appendChild(к);
+      });
+      if (!список.length) г.appendChild(el('div', 'empty', 'Система не назвала ни одной программы'));
+      const прежние = body.querySelector('.st-grid');
+      if (прежние) прежние.replaceWith(г);
     }
 
-    /* Поиск по нашим приложениям — сразу, без похода куда бы то ни было:
-       их десяток, и они уже здесь. */
-    function нашиПоиском(строка){
-      const что = строка.toLowerCase();
-      const свои = CATALOG.filter(a => (a.name + ' ' + (a.desc || '')).toLowerCase().includes(что));
-      const системные = Object.entries(APPS)
-        .filter(([id, a]) => !a.custom && !CATALOG.some(c => c.id === id)
-                && (a.name || '').toLowerCase().includes(что))
-        .map(([id, a]) => ({ ...a, id, removable:false, installed:true }));
-      return { свои, системные };
+    async function экранОбновления(){
+      body.appendChild(заголовок('Обновления'));
+      const место = el('div', '');
+      body.appendChild(место);
+      место.appendChild(el('div', 'st-skel st-skel-l'));
+      win.setSub('обновления');
+
+      let д = null, беда = '';
+      try { д = await Pkg.обновления(); } catch(e){ беда = String(e.message || e); }
+      if (экран !== 'обновления') return;
+      место.innerHTML = '';
+      if (!д){
+        место.appendChild(el('div', 'set-note', 'Система не ответила про обновления: ' + esc(беда)));
+        return;
+      }
+      const наш = (д.list || []).find(x => x.name === 'glower');
+      if (наш){
+        const к = el('div', 'card st-upd');
+        к.innerHTML = `<div class="st-upd-l"><div class="st-hero-z">✨</div>
+          <div><b>GlowerOS ${esc(наш['станет'])}</b>
+          <div class="tiny muted">Сама система: оболочка, панель и внутренности · сейчас ${esc(наш['было'])}</div></div></div>`;
+        const б = el('button', 'btn pri', '⬇ Обновить');
+        б.disabled = !!работа;
+        б.onclick = async () => {
+          try { await Pkg.обновить(); следиЗаРаботой(); draw(); }
+          catch(e){ Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'); }
+        };
+        к.appendChild(б);
+        место.appendChild(к);
+      }
+      const прочие = (д.list || []).filter(x => x.name !== 'glower');
+      if (!д.list || !д.list.length){
+        место.appendChild(el('div', 'empty', 'Всё обновлено'));
+      } else if (прочие.length){
+        /* Кнопка — в заголовке, а не под списком из сорока строк. Раньше
+           до неё надо было прокрутить весь список, чтобы понять, что она
+           вообще есть. */
+        const все = el('button', 'btn pri', '⬆ Обновить всё');
+        все.disabled = !!работа;
+        все.onclick = async () => {
+          if (!await Dlg.confirm('Обновить систему?',
+              'Будет обновлено программ: ' + (д.list || []).length + '. Это займёт время и потребует сети.',
+              { okText:'Обновить', icon:'⬆️' })) return;
+          try { await Pkg.обновить(); следиЗаРаботой(); draw(); }
+          catch(e){ Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'); }
+        };
+        место.appendChild(заголовок('Программы Ubuntu · ' + прочие.length, все));
+        прочие.slice(0, 40).forEach(x =>
+          место.appendChild(row('📦', x.name, x['было'] + ' → ' + x['станет'], el('span'))));
+        if (прочие.length > 40)
+          место.appendChild(el('div', 'set-note',
+            'И ещё ' + (прочие.length - 40) + ' — система покажет весь список при установке.'));
+      }
+      const держим = д['удержано'] || [];
+      if (держим.length)
+        место.appendChild(row('⏸', 'Отложено системой: ' + держим.join(', '),
+          'Этим обновлениям нужны пакеты, которых на машине ещё нет', el('span')));
     }
 
+    function экранСвоё(){
+      body.appendChild(заголовок('Своё приложение'));
+      const c = card('');
+      c.appendChild(row('📄', 'Что такое пакет',
+        'Обычный .json-файл: идентификатор, имя, значок, размеры окна и код на JavaScript в поле code. ' +
+        'Код получает объект окна и набор функций системы.', el('span')));
+
+      const tpl = el('button', 'btn pri', '✨ Создать заготовку');
+      tpl.onclick = () => {
+        const p = AppStore.template();
+        const name = p.id + '.app.json';
+        FS.write(['Документы'], name, JSON.stringify(p, null, 2));
+        WM.open('notepad', { file:{ name, path:['Документы'], body:JSON.stringify(p, null, 2) } });
+        Shell.toast('Магазин', 'Заготовка в Документы/' + name, '✨');
+      };
+      c.appendChild(row('🧩', 'Заготовка в Блокноте', 'Создаст рабочий пример и откроет его для правки', tpl));
+
+      const fromFs = el('button', 'btn', '📂 Из файлов');
+      fromFs.onclick = () => WM.open('files', { path:['Документы'], pick:f => {
+        try { AppStore.installPkg(JSON.parse(f.body)); экран = 'установленные'; рисуйБок(); draw(); WM.focus(win); }
+        catch(e){ Shell.toast('Магазин', 'Не разобрать JSON: ' + e.message, '⚠️'); }
+      }});
+      c.appendChild(row('💾', 'Установить из системы', 'Выберите .json-пакет в Проводнике', fromFs));
+
+      const fromDisk = el('button', 'btn', '⬆️ С компьютера');
+      fromDisk.onclick = () => {
+        const f = el('input'); f.type = 'file'; f.accept = '.json,application/json';
+        f.onchange = () => {
+          const r = new FileReader();
+          r.onload = () => { try { AppStore.installPkg(JSON.parse(r.result)); экран = 'установленные'; рисуйБок(); draw(); }
+            catch(e){ Shell.toast('Магазин', 'Не разобрать JSON: ' + e.message, '⚠️'); } };
+          r.readAsText(f.files[0]);
+        };
+        f.click();
+      };
+      c.appendChild(row('🖥', 'Установить с диска', 'Настоящий файл с вашего компьютера', fromDisk));
+      body.appendChild(c);
+
+      const w = card('Как это работает');
+      w.appendChild(row('⚙️', 'Код выполняется в системе',
+        'Пакет исполняется как обычное приложение оболочки: у него есть доступ к окну, файловой системе и уведомлениям. ' +
+        'Ставьте только те пакеты, содержимое которых вы видели.', el('span')));
+      w.appendChild(el('pre', 'pkg-code', esc(JSON.stringify(AppStore.template(), null, 2)).slice(0, 900)));
+      body.appendChild(w);
+      win.setSub('своё приложение');
+    }
+
+    function экранПоиск(){
+      body.appendChild(заголовок('Найдено по запросу «' + набрано + '»'));
+      if (поискСписок === 'ждём'){
+        body.appendChild(el('div', 'set-note', 'Читаю списки пакетов — это делается один раз…'));
+        body.appendChild(заготовки(4, 'st-grid'));
+        return;
+      }
+      if (поискСписок === 'ищу'){ body.appendChild(заготовки(4, 'st-grid')); return; }
+      if (поискСписок && поискСписок.ошибка){
+        body.appendChild(el('div', 'set-note', esc(поискСписок.ошибка)));
+        return;
+      }
+      if (!Array.isArray(поискСписок) || поискСтрока !== набрано){
+        body.appendChild(el('div', 'set-note', набрано.length < 2
+          ? 'Наберите хотя бы две буквы и нажмите Enter'
+          : 'Нажмите Enter, чтобы поискать это в репозиториях Ubuntu и Flathub'));
+        return;
+      }
+      if (!поискСписок.length){
+        body.appendChild(el('div', 'empty',
+          'Ничего не нашлось. У программ бывают свои имена — попробуйте другое написание'));
+        return;
+      }
+      const г = el('div', 'st-grid');
+      поискСписок.forEach((x, i) => {
+        const про = [x.about || '', x.source === 'flatpak' ? 'Flathub' : 'Ubuntu',
+                     x.installed ? 'уже стоит' : '', размер(x.size)].filter(Boolean).join(' · ');
+        сведения.set(x.name, x);
+        г.appendChild(карточка({ имя:x.title && x.title !== x.name ? x.title : x.name,
+                                 пакет:x.name, про, знак:x.source === 'flatpak' ? '🫙' : '📦' }, i));
+      });
+      body.appendChild(г);
+    }
+
+    /* ---------- отрисовка ---------- */
     function draw(){
       рисуйРаботу();
-
-      /* Набрано в поиске — показываем найденное, в каком бы разделе человек
-         ни стоял. Раньше поиск жил только во вкладке программ Linux, и
-         найти своё приложение было нельзя вовсе. */
-      if (набрано.length >= 1){
-        body.innerHTML = '';
-        const { свои, системные } = нашиПоиском(набрано);
-        if (свои.length || системные.length){
-          body.appendChild(el('div', 'card-t', 'Приложения системы'));
-          const g = el('div', 'st-grid');
-          свои.forEach(a => g.appendChild(cardFor(a, AppStore.isInstalled(a.id))));
-          системные.forEach(a => g.appendChild(cardFor(a, true)));
-          body.appendChild(g);
-        }
-        body.appendChild(el('div', 'card-t', 'Программы Linux'));
-        if (поискСписок === 'обновляю')
-          body.appendChild(el('div', 'empty', 'Обновляю списки пакетов — это делается один раз…'));
-        else if (поискСписок === 'ищу')
-          body.appendChild(el('div', 'empty', 'Ищу в репозиториях…'));
-        else if (поискСписок && поискСписок.ошибка)
-          body.appendChild(el('div', 'set-note', esc(поискСписок.ошибка)));
-        else if (Array.isArray(поискСписок) && поискСтрока === набрано)
-          поискСписок.length ? поискСписок.forEach(x => body.appendChild(строкаПакета(x)))
-                             : body.appendChild(el('div', 'empty',
-                                 'Ничего не нашлось. У программ бывают свои имена — попробуйте другое написание'));
-        else
-          body.appendChild(el('div', 'set-note',
-            набрано.length < 2 ? 'Наберите хотя бы две буквы и нажмите Enter'
-                               : 'Нажмите Enter, чтобы поискать это в репозиториях Ubuntu и Flathub'));
-        win.setSub('поиск · ' + набрано);
-        return;
-      }
-
-      if (tab === 'linux'){ drawLinux(); return; }
       body.innerHTML = '';
-      if (tab === 'catalog'){
-        body.appendChild(el('div', 'card-t', 'Приложения системы'));
-        const g = el('div', 'st-grid');
-        CATALOG.forEach(a => g.appendChild(cardFor(a, AppStore.isInstalled(a.id))));
-        body.appendChild(g);
+      /* Смена экрана — с движением: так видно, что это новая страница, а
+         не переписанная старая. Анимация одна на всё содержимое, поэтому
+         стоит она дёшево даже на слабой машине. */
+      body.classList.remove('st-вошло');
+      void body.offsetWidth;
+      body.classList.add('st-вошло');
 
-        /* Под каталогом из четырёх наших приложений оставалось пол-окна
-           пустоты, а главное — настоящие программы Linux — пряталось во
-           вкладке. Кладём сюда подборку: это не обещание, что они уже
-           здесь, а короткий путь к поиску по ним. */
-        body.appendChild(el('div', 'card-t', 'Популярное в Linux'));
-        const п = el('div', 'st-grid');
-        ПОДБОРКА.forEach(([имя, знак, про]) => {
-          const к = el('div', 'st-card');
-          const ико = el('div', 'app-ico', знак);
-          ико.style.background = 'rgba(var(--tint),.14)';
-          к.appendChild(ико);
-          к.appendChild(el('div', '', `<b style="font-size:13px">${esc(имя)}</b>
-            <div class="tiny muted" style="margin-top:3px;line-height:1.35">${esc(про)}</div>`));
-          const ряд = el('div', 'row');
-          const б = el('button', 'btn', 'Найти');
-          б.onclick = () => {
-            поле.value = имя.toLowerCase();
-            набрано = поле.value;
-            найтиВРепозиториях(набрано);
-          };
-          ряд.appendChild(б);
-          к.appendChild(ряд);
-          п.appendChild(к);
-        });
-        body.appendChild(п);
-        win.setSub('обзор');
-      }
-      else if (tab === 'mine'){
-        const custom = AppStore.custom();
-        const installed = AppStore.installedIds().map(id => CATALOG.find(x => x.id === id)).filter(Boolean);
-        body.appendChild(el('div', 'card-t', 'Установлено из каталога'));
-        const g1 = el('div', 'st-grid');
-        installed.forEach(a => g1.appendChild(cardFor(a, true)));
-        if (!installed.length) g1.appendChild(el('div', 'empty', 'Пока ничего не установлено'));
-        body.appendChild(g1);
-
-        body.appendChild(el('div', 'card-t', 'Свои приложения'));
-        const g2 = el('div', 'st-grid');
-        custom.forEach(p => g2.appendChild(cardFor(
-          { id:p.id, name:p.name, glyph:p.glyph || '📦', bg:p.bg || 'linear-gradient(140deg,#94a3b8,#475569)',
-            desc:'Установлено из пакета', author:'вы' }, true, true)));
-        if (!custom.length) g2.appendChild(el('div', 'empty', 'Своих приложений нет'));
-        body.appendChild(g2);
-
-        body.appendChild(el('div', 'card-t', 'Системные (удалить нельзя)'));
-        const g3 = el('div', 'st-grid');
-        Object.entries(APPS).filter(([id, a]) => !a.custom && !CATALOG.some(c => c.id === id))
-          .forEach(([id, a]) => g3.appendChild(cardFor({ ...a, id, removable:false }, true)));
-        body.appendChild(g3);
-        win.setSub('установлено · ' + (installed.length + custom.length));
-      }
-      else {
-        body.appendChild(el('div', 'card-t', 'Своё приложение'));
-        const c = card('');
-        c.appendChild(row('📄', 'Что такое пакет',
-          'Обычный .json-файл: идентификатор, имя, значок, размеры окна и код на JavaScript в поле code. ' +
-          'Код получает объект окна и набор функций системы.', el('span')));
-
-        const tpl = el('button', 'btn pri', '✨ Создать заготовку');
-        tpl.onclick = () => {
-          const p = AppStore.template();
-          const name = p.id + '.app.json';
-          FS.write(['Документы'], name, JSON.stringify(p, null, 2));
-          WM.open('notepad', { file:{ name, path:['Документы'], body:JSON.stringify(p, null, 2) } });
-          Shell.toast('Магазин', 'Заготовка в Документы/' + name, '✨');
-        };
-        c.appendChild(row('🧩', 'Заготовка в Блокноте', 'Создаст рабочий пример и откроет его для правки', tpl));
-
-        const fromFs = el('button', 'btn', '📂 Из файлов');
-        fromFs.onclick = () => WM.open('files', { path:['Документы'], pick:f => {
-          try { AppStore.installPkg(JSON.parse(f.body)); tab = 'mine'; draw(); WM.focus(win); }
-          catch(e){ Shell.toast('Магазин', 'Не разобрать JSON: ' + e.message, '⚠️'); }
-        }});
-        c.appendChild(row('💾', 'Установить из системы', 'Выберите .json-пакет в Проводнике', fromFs));
-
-        const fromDisk = el('button', 'btn', '⬆️ С компьютера');
-        fromDisk.onclick = () => {
-          const f = el('input'); f.type = 'file'; f.accept = '.json,application/json';
-          f.onchange = () => {
-            const r = new FileReader();
-            r.onload = () => { try { AppStore.installPkg(JSON.parse(r.result)); tab = 'mine'; draw(); }
-              catch(e){ Shell.toast('Магазин', 'Не разобрать JSON: ' + e.message, '⚠️'); } };
-            r.readAsText(f.files[0]);
-          };
-          f.click();
-        };
-        c.appendChild(row('🖥', 'Установить с диска', 'Настоящий файл с вашего компьютера', fromDisk));
-        body.appendChild(c);
-
-        const w = card('Как это работает');
-        w.appendChild(row('⚙️', 'Код выполняется в системе',
-          'Пакет исполняется как обычное приложение прототипа: у него есть доступ к окну, файловой системе и уведомлениям. ' +
-          'Ставьте только те пакеты, содержимое которых вы видели — это ваш код в вашем браузере.', el('span')));
-        const ex = el('pre', 'pkg-code', esc(JSON.stringify(AppStore.template(), null, 2)).slice(0, 900));
-        w.appendChild(ex);
-        body.appendChild(w);
-        win.setSub('разработка');
-      }
+      if (набрано.length >= 1){ экранПоиск(); win.setSub('поиск'); return; }
+      if (экран === 'программа' && программа){ экранПрограмма(); return; }
+      if (экран === 'разделы'){ экранРазделы(); return; }
+      if (экран === 'раздел'){ экранРаздел(); return; }
+      if (экран === 'установленные'){ экранУстановленные(); return; }
+      if (экран === 'обновления'){ экранОбновления(); return; }
+      if (экран === 'своё'){ экранСвоё(); return; }
+      экранОбзор();
     }
+
+    рисуйБок();
     draw();
   }
 };

@@ -35,7 +35,7 @@ const I18N = {
     'Блокнот':'Notepad', 'Проводник':'File Explorer', 'Параметры':'Settings', 'Браузер':'Browser',
     'Калькулятор':'Calculator', 'Терминал':'Terminal', 'Фотографии':'Photos', 'Календарь':'Calendar',
     'Часы':'Clock', 'Магазин':'Store', 'Задачи':'Tasks', 'Диспетчер задач':'Task Manager',
-    'Свойства':'Properties', 'Помидор':'Pomodoro', 'Конвертер':'Converter', 'Палитра':'Palette',
+    'Свойства':'Properties',
     /* общие действия */
     'Открыть':'Open', 'Открыть с помощью':'Open with', 'Закрыть':'Close', 'Свернуть':'Minimise',
     'Развернуть':'Maximise', 'Восстановить':'Restore', 'Удалить':'Delete', 'Переименовать':'Rename',

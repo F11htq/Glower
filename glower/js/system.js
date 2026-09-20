@@ -191,6 +191,22 @@ const Session = {
   save(){
     if (S.restoreSession === false) return;
     if (!this.восстановлено && !(window.WM && WM.wins.length)) return;
+    /* Пустой список пишем только тогда, когда рабочий стол на экране.
+    
+       Пока идёт заставка, экран блокировки или мастер настройки, окон нет
+       — но это не значит, что человек их закрыл. Сохранение идёт и по
+       таймеру, раз в двадцать секунд, и при закрытии страницы: на
+       медленной машине заставка живёт дольше этого срока, и пустой список
+       ложился поверх настоящего. Сеанс пропадал, а выглядело это как
+       «система забыла окна».
+    
+       Проверка по столу, а не по времени: она верна и через минуту, и
+       через час. */
+    const столВидно = (() => {
+      const с = document.querySelector('#desktop');
+      return !!с && с.classList.contains('on');
+    })();
+    if (!(window.WM && WM.wins.length) && !столВидно) return;
     const list = WM.wins.map(w => {
       const r = w.node.getBoundingClientRect();
       return { app:w.appId, x:Math.round(r.left), y:Math.round(r.top),

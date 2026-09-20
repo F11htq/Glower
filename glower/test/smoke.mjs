@@ -149,15 +149,16 @@ try {
   check('файл создаётся, удаляется и попадает в корзину', fsOk);
 
   /* --- магазин --- */
+  /* Каталог наших приложений из Магазина убран целиком, и установки «из
+     каталога» больше нет: ставить оттуда нечего. Свои пакеты — остались,
+     это единственное, что Магазин ставит сам, без помощи машины. */
   const store = await page.evaluate(() => {
-    AppStore.install('g2048');
-    const installed = !!APPS.g2048 && S.pinned.includes('g2048');
     AppStore.installPkg({ id:'smoke-app', name:'Смоук', glyph:'🧪',
       code:"win.body.appendChild(api.el('div','pad','ok'));" });
-    return { installed, custom:!!APPS['smoke-app'] };
+    return { custom:!!APPS['smoke-app'], каталога:typeof AppStore.install };
   });
-  check('приложение из каталога устанавливается', store.installed);
   check('свой пакет устанавливается', store.custom);
+  check('установки из каталога больше нет', store.каталога === 'undefined', store.каталога);
   await page.evaluate(() => AppStore.uninstall('smoke-app'));
   await page.waitForTimeout(500);
   check('приложение удаляется', await page.evaluate(() => !APPS['smoke-app']));
@@ -236,7 +237,10 @@ try {
       } catch(e){ сохранено = 'нечитаемо'; }
       return 'открыты: ' + (WM.wins.map(w => w.appId).join(',') || '(нет)')
         + ' · сохранено: ' + сохранено
-        + ' · стол ' + (document.querySelector('#desktop').classList.contains('on') ? 'открыт' : 'НЕ ОТКРЫТ');
+        + ' · стол ' + (document.querySelector('#desktop').classList.contains('on') ? 'открыт' : 'НЕ ОТКРЫТ')
+        + ' · помнить сеанс: ' + S.restoreSession
+        + ' · восстановлено: ' + (window.Session && Session.восстановлено)
+        + ' · есть APPS: ' + ['calc','clock'].filter(a => APPS[a]).join(',');
     }));
   await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); Session.save(); });
   await page.waitForTimeout(400);
@@ -1384,31 +1388,36 @@ try {
     await p3.close();
   }
 
-  /* Магазин: разделы сбоку, поиск сверху и один на всё.
+  /* Магазин занят настоящими программами Linux.
   
-     Раньше поиск жил только внутри вкладки программ Linux — найти через
-     него своё приложение было нельзя вовсе, а главное в Магазине
-     оказывалось спрятано глубже всего. */
+     Половину его занимал наш собственный каталог: помидорный таймер, 2048,
+     конвертер и палитра. Четыре примера, написанные, чтобы показать, что
+     приложения бывают, — и они же занимали место того, ради чего Магазин
+     открывают. Каталога больше нет, и вернуться он не должен. */
   {
     const r = await page.evaluate(async () => {
       WM.wins.slice().forEach(w => WM.close(w));
       const w = WM.open('store');
       await new Promise(r2 => setTimeout(r2, 900));
-      const разделов = w.node.querySelectorAll('.sb-item').length;
-      const поле = w.node.querySelector('.st-find');
-      поле.value = 'пом';
-      поле.dispatchEvent(new Event('input'));
+      const т = w.node.textContent;
+      const к = п => w.node.querySelectorAll(п).length;
+      const был = ['pomodoro', '2048', 'conv', 'palette'].filter(id => APPS[id]);
+      /* Считаем до перехода: после него на экране уже страница программы,
+         и витрины с плитками там, разумеется, нет. Первая копия этой
+         проверки считала после — и падала, ничего не поймав. */
+      const было = { разделов:к('.sb-item'), витрина:к('.st-hero'),
+                     плиток:к('.st-tile'), карточек:к('.st-card') };
+      /* переход на страницу программы: карточка — это вход, а не кнопка */
+      w.node.querySelector('.st-card').click();
       await new Promise(r2 => setTimeout(r2, 500));
-      const нашлось = /Помидор/.test(w.node.textContent);
-      поле.value = '';
-      поле.dispatchEvent(new Event('input'));
-      await new Promise(r2 => setTimeout(r2, 400));
-      const обзор = /Популярное в Linux/.test(w.node.textContent);
-      return { разделов, нашлось, обзор };
+      const страница = !!w.node.querySelector('.st-page');
+      return { ...было, был, страница, игрушки:/Помидор|Палитра|Конвертер/.test(т) };
     });
-    check('в Магазине разделы сбоку', r.разделов === 4, JSON.stringify(r));
-    check('и поиск находит наши приложения', r.нашлось, JSON.stringify(r));
-    check('а на обзоре есть подборка программ Linux', r.обзор, JSON.stringify(r));
+    check('в Магазине пять разделов', r.разделов === 5, JSON.stringify(r));
+    check('на обзоре есть витрина и плитки', r.витрина === 1 && r.плиток >= 6, JSON.stringify(r));
+    check('карточка открывает страницу программы', r.страница, JSON.stringify(r));
+    check('наших игрушек в системе больше нет',
+      !r.игрушки && !r.был.length, JSON.stringify(r));
   }
 
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
