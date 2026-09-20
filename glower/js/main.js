@@ -56,6 +56,11 @@
     : new Promise(r => addEventListener('load', r, { once:true }));
 
   setTimeout(async () => {
+    /* Панель наверху — часть той же картины. Пока она не готова, держим
+       заставку: показать стол без панели и добавить её через секунду хуже,
+       чем подождать эту секунду за заставкой. Ждём не дольше срока. */
+    if (window.Поверхности && Поверхности.ждиПанель)
+      await Поверхности.ждиПанель(2500);
     boot.classList.add('gone');
     document.body.classList.add('blurred');
     setTimeout(() => boot.remove(), 700);

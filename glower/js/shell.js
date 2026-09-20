@@ -669,7 +669,12 @@ const Shell = {
     const tt = $('#tray-time'), td = $('#tray-date');
     if (tt) tt.textContent = time;
     if (td) td.textContent = date;
-    const dw = $('#dw-clock'); if (dw) dw.textContent = `${pad2(n.getHours())}:${pad2(n.getMinutes())}`;
+    /* Виджет часов на столе рисуется с классом, а искали его по
+       идентификатору — и он не тикал вовсе: показывал минуту, в которую его
+       нарисовали, и замирал. Обновляем оба написания. */
+    const цифры = `${pad2(n.getHours())}:${pad2(n.getMinutes())}`;
+    const dw = $('#dw-clock'); if (dw) dw.textContent = цифры;
+    $$('.dw-clock').forEach(э => { э.textContent = цифры; });
     const tb = $('#tbw-temp'); if (tb){ const w = this.weather(); tb.textContent = (w.t > 0 ? '+' : '') + w.t + '°'; $('#tb-weather .tbw-icon').textContent = w.ico; }
   },
 

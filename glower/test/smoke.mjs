@@ -1305,6 +1305,55 @@ try {
     await p2.close();
   }
 
+  /* Часовой пояс должен доходить до всего, что показывает время. Виджет
+     часов на столе его не знал — и, хуже того, вообще не шёл: обновление
+     искало его по идентификатору, а рисовался он с классом, да ещё второй
+     таймер писал туда время машины. */
+  {
+    const r = await page.evaluate(async () => {
+      Store.set('tz', 'Asia/Tokyo');
+      await new Promise(r2 => setTimeout(r2, 1400));
+      const узел = document.querySelector('.dw-clock') || document.querySelector('#dw-clock');
+      const здесь = new Date();
+      const там = new Date(здесь.toLocaleString('en-US', { timeZone:'Asia/Tokyo' }));
+      const надо = String(там.getHours()).padStart(2, '0') + ':' + String(там.getMinutes()).padStart(2, '0');
+      const было = узел ? узел.textContent.trim() : '(нет виджета)';
+      Store.set('tz', '');
+      /* Минута может смениться между чтением узла и вычислением ожидаемого
+         времени — тогда проверка падала бы на ровном месте. Сравниваем с
+         допуском в минуту: нас интересуют часы, а не секундомер. */
+      const вмин = т => { const [ч, м] = т.split(':').map(Number);
+        return Number.isFinite(ч) ? ч * 60 + м : null; };
+      const a2 = вмин(было), b2 = вмин(надо);
+      return { было, надо, разный:там.getHours() !== здесь.getHours(),
+               сошлось:a2 !== null && Math.abs(a2 - b2) <= 1 };
+    });
+    check('виджет часов показывает выбранный часовой пояс',
+      !r.разный || r.сошлось, JSON.stringify(r));
+  }
+
+  /* «Экономия ресурсов» обещала отключать размытие и не отключала ничего,
+     кроме скорости анимаций. На слабой машине размытие — самое дорогое,
+     что есть на экране. */
+  {
+    const r = await page.evaluate(async () => {
+      KV.set('ecoMode', true); applySettings();
+      await new Promise(r2 => setTimeout(r2, 300));
+      const окно = document.querySelector('.glass') || document.body;
+      const из = getComputedStyle(окно);
+      const скорость = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--speed'));
+      /* Фон должен остаться плотным: без размытия сквозь полупрозрачное
+         меню читается окно под ним — я это уже сделал и откатил. */
+      const фон = из.backgroundColor;
+      const альфа = (фон.match(/rgba?\([^)]*,\s*([\d.]+)\s*\)/) || [])[1];
+      KV.set('ecoMode', false); applySettings();
+      return { размытие:из.backdropFilter, скорость, альфа:альфа === undefined ? 1 : +альфа };
+    });
+    check('щадящий режим убирает размытие', /none/.test(r.размытие || 'none'), JSON.stringify(r));
+    check('и ускоряет переходы', r.скорость <= 0.6, JSON.stringify(r));
+    check('а панели остаются непрозрачными', r.альфа >= 0.9, JSON.stringify(r));
+  }
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

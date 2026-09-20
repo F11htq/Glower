@@ -191,13 +191,16 @@ WM.toggleMax = w => { maxOrig(w); setTimeout(() => Shell.updateTaskbar(), 30); }
    2. Виджеты рабочего стола: свои, перемещаемые, удаляемые
    ========================================================================== */
 const WIDGETS = {
-  clock:{ n:'Часы', e:'🕐', h(){ const d = new Date();
+  /* zoned() — тот же момент, сдвинутый в выбранный часовой пояс. Здесь
+     стояло голое new Date(), и виджет показывал время машины, что бы
+     человек ни выбрал в настройках. */
+  clock:{ n:'Часы', e:'🕐', h(){ const d = zoned();
     return `<div class="w-t">Часы</div><div class="w-big dw-clock">${pad2(d.getHours())}:${pad2(d.getMinutes())}</div>
       <div class="tiny muted">${d.toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long' })}</div>`; } },
   weather:{ n:'Погода', e:'🌤', h(){ const w = Shell.weather();
     return `<div class="w-t">Погода · ${esc(S.city)}${w.real ? '' : ' · демо'}</div><div class="row"><div style="font-size:30px">${w.ico}</div>
       <div><div class="w-big">${w.t > 0 ? '+' : ''}${w.t}°</div><div class="tiny muted">${w.desc}</div></div></div>`; } },
-  calendar:{ n:'Календарь', e:'📅', h(){ const d = new Date();
+  calendar:{ n:'Календарь', e:'📅', h(){ const d = zoned();
     const ev = Object.entries(KV.get('cal.events', {})).slice(0, 2);
     return `<div class="w-t">Календарь</div><div class="w-big">${d.getDate()}</div>
       <div class="tiny muted">${d.toLocaleDateString('ru-RU', { weekday:'long', month:'long' })}</div>
@@ -291,11 +294,11 @@ $('#desktop').addEventListener('contextmenu', e => {
   }, 0);
 });
 
-/* часы в виджете идут */
-setInterval(() => {
-  const c = $('.dw-clock');
-  if (c){ const d = new Date(); c.textContent = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
-}, 1000);
+/* Часы в виджете идут — но не отсюда.
+   Здесь стоял второй таймер, писавший в тот же узел время машины, без
+   оглядки на выбранный часовой пояс. Два таймера спорили каждую секунду, и
+   побеждал неверный: дата в виджете была уже токийская, а часы — ещё
+   здешние. Ход часов делает Shell.clock(), он же знает про пояс. */
 
 /* ==========================================================================
    3. Терминал: полноценный набор команд

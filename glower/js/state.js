@@ -132,7 +132,15 @@ function applySettings(){
   r.setProperty('--accent-rgb', hexToRgb(ac.a));
   r.setProperty('--radius', S.radius + 'px');
   r.setProperty('--radius-win', S.winRadius + 'px');
-  r.setProperty('--speed', S.reduceMotion ? 0.01 : S.speed);
+  /* Щадящий режим: переключатель «Экономия ресурсов» наконец что-то делает.
+     Раньше он лишь менял скорость анимаций, хотя обещал отключить размытие;
+     на слабой машине именно размытие и стоит дороже всего.
+     Скорость задаём здесь же: правило в стилях перебить нельзя — свойство
+     ставится прямо на корневой узел, а это сильнее любого файла стилей. */
+  const эконом = !!KV.get('ecoMode', false);
+  document.body.classList.toggle('эконом', эконом);
+  r.setProperty('--speed', S.reduceMotion ? 0.01
+    : эконом ? Math.min(S.speed, 0.6) : S.speed);
   r.setProperty('--dock-size', (window.Shell && Shell.размерДока ? Shell.размерДока() : S.dockSize) + 'px');
   r.setProperty('--font', S.font);
   document.body.classList.toggle('reduced', S.reduceMotion);
@@ -148,6 +156,23 @@ function applySettings(){
     wp.style.filter = `brightness(${S.brightness / 100 * dim}) ${S.theme === 'dark' ? 'saturate(.8)' : ''} ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
   }
   document.body.style.filter = S.nightLight ? 'sepia(.14) saturate(1.06)' : '';
+
+  /* Настройка, которую человек только что выбрал, должна быть видна сразу.
+  
+     Виджеты стола рисуются один раз и живут, пока их не перерисуют. Выбрав
+     другой часовой пояс или другой город, человек видел прежние — и делал
+     единственный разумный вывод: настройка не работает. Перерисовываем их
+     здесь же; это десяток узлов, а не пересборка системы. */
+  if (window.Shell && Shell.renderDeskWidgets){
+    try { Shell.renderDeskWidgets(); } catch(e){}
+    if (Shell.clock) try { Shell.clock(); } catch(e){}
+  }
+  /* Сменился город — прогноз для прежнего больше не годится. Запрашиваем
+     новый, а до ответа остаётся показанное: пусто хуже, чем устаревшее. */
+  if (S.city !== applySettings._город){
+    applySettings._город = S.city;
+    if (window.Weather && Weather.load) Weather.load(true);
+  }
 }
 function hexToRgb(h){
   const m = h.replace('#','');

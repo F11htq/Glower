@@ -1084,10 +1084,11 @@ APPS.settings = {
       }).catch(e => { bl.innerHTML = ''; });
       p.appendChild(row('⚡', 'Экономия ресурсов', 'Уменьшает нагрузку на видеокарту: отключает размытие и ускоряет анимации',
         toggle(() => KV.get('ecoMode', false), v => {
+          /* Скорость анимаций больше не подменяем исподтишка: человек её
+             выбрал сам, и возвращать её «как было» из отдельной памяти —
+             способ однажды вернуть не то. Режим живёт в своём стиле. */
           KV.set('ecoMode', v);
-          if (v){ KV.set('ecoPrev', { speed:S.speed }); S.speed = .6; }
-          else { S.speed = KV.get('ecoPrev', { speed:1 }).speed; }
-          Store.save(); applySettings();
+          applySettings();
         })));
       main.appendChild(p);
     }
