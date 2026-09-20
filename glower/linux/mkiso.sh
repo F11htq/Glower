@@ -1020,25 +1020,50 @@ set default=0
 # меню загрузки, хочет установщик, а не то, что стоит на диске. Мешать ему
 # незачем: чтобы загрузиться с диска, достаточно вынуть флешку.
 
+# Живая система грузится ради одного — показать установщик. Всё, что не
+# ведёт к этому, здесь только отнимает время.
+#
+# Считали так: ядро около пяти секунд, службы около двадцати пяти, дальше
+# сеанс с оконным сервером и нашей страницей. До первого нажатия выходило
+# под сорок пять секунд — при том, что сама установка есть распаковка
+# образа на раздел и запись загрузчика, а это чистый ввод-вывод.
+#
+# Ни одна из перечисленных служб установщику не нужна: сети он не просит
+# (ставится то, что лежит на самой флешке), печатать некуда, модемов нет,
+# стену незачем поднимать в системе, которая живёт двадцать минут и
+# исчезает. По измерению на живой машине NetworkManager занимал семь
+# секунд, ожидание сети — шесть, проверка файловых систем — почти шесть.
+#
+# Это не выключение навсегда: маска действует только на этот запуск с
+# флешки. В установленной системе всё поднимется как обычно — у неё своё
+# меню загрузки.
+# Имя переменной латиницей. GRUB раскрывает только [A-Za-z0-9_]; с
+# кириллическим именем он молча подставил бы пустоту, и все эти маски
+# просто не доехали бы до ядра — а на вид всё было бы в порядке.
+set fast="systemd.mask=NetworkManager.service systemd.mask=NetworkManager-wait-online.service systemd.mask=systemd-networkd-wait-online.service systemd.mask=ufw.service systemd.mask=cups.service systemd.mask=cups-browsed.service systemd.mask=avahi-daemon.service systemd.mask=ModemManager.service systemd.mask=packagekit.service systemd.mask=unattended-upgrades.service systemd.mask=e2scrub_reap.service systemd.mask=apt-daily.timer systemd.mask=apt-daily-upgrade.timer systemd.mask=man-db.timer systemd.mask=snapd.service systemd.mask=snapd.seeded.service"
+
 menuentry "Установка GlowerOS" {
-  linux /live/vmlinuz boot=live components quiet splash glower.install=1
+  linux /live/vmlinuz boot=live components quiet splash glower.install=1 $fast
   initrd /live/initrd
 }
 menuentry "Установка GlowerOS · безопасная графика (для старых машин)" {
   # Ядро не берёт на себя управление видеокартой: изображение идёт простым
   # способом, который понимает почти любое железо. Медленнее, зато видно.
   linux /live/vmlinuz boot=live components glower.install=1 nomodeset \
-        modprobe.blacklist=bochs,vmwgfx,virtio_gpu,qxl,vboxvideo
+        modprobe.blacklist=bochs,vmwgfx,virtio_gpu,qxl,vboxvideo $fast
   initrd /live/initrd
 }
 menuentry "Установка GlowerOS · с сообщениями системы" {
   # Ничего не скрываем: если загрузка встанет, на экране будет видно, где.
+  # И ничего не отключаем: этот пункт — запасной путь на случай, если
+  # быстрая загрузка на какой-то машине не заладится. Система поднимается
+  # целиком, со всеми службами, как раньше.
   linux /live/vmlinuz boot=live components glower.install=1
   initrd /live/initrd
 }
 menuentry "Восстановление установленной системы" {
   # Системные файлы кладутся заново, личные остаются на месте.
-  linux /live/vmlinuz boot=live components quiet splash glower.install=1 glower.repair=1
+  linux /live/vmlinuz boot=live components quiet splash glower.install=1 glower.repair=1 $fast
   initrd /live/initrd
 }
 GRUB

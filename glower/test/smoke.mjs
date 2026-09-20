@@ -1354,6 +1354,29 @@ try {
     check('а панели остаются непрозрачными', r.альфа >= 0.9, JSON.stringify(r));
   }
 
+  /* Установочная среда никогда не показывает пустой экран.
+  
+     Там намеренно нет рабочего стола — только мастер. Но пока мастер
+     решает, можно ли ставить (а он переспрашивает машину до пяти минут),
+     на экране не было ничего: чёрный прямоугольник и курсор. Если же
+     опознание не удавалось, чёрным оно оставалось навсегда — человек сидит
+     перед машиной и не знает, ждать или перезагружаться. */
+  {
+    const p3 = await browser.newPage({ viewport:{ width:1024, height:700 } });
+    await p3.goto(URL_APP + '?install=1');
+    await p3.waitForTimeout(3000);
+    const r = await p3.evaluate(() => {
+      const ж = document.querySelector('#уст-ждём');
+      const окно = document.querySelector('.win');
+      const видно = н => n2(н) && н.textContent.trim().length > 3;
+      function n2(н){ return н && н.getBoundingClientRect().width > 200; }
+      return { ждём:видно(ж), мастер:n2(окно),
+               текст:ж ? ж.textContent.replace(/\s+/g, ' ').trim().slice(0, 40) : '' };
+    });
+    check('установочная среда не оставляет пустой экран', r.ждём || r.мастер, JSON.stringify(r));
+    await p3.close();
+  }
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

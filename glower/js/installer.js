@@ -308,22 +308,62 @@ async function отметка(текст){
   try { await Platform.rpc('fs.write', { path:'установка.log', body:журнал }); } catch(e){}
 }
 
+/* Пока установщик решает, можно ли ставить, показываем это словами.
+   
+   В установочной среде рабочего стола нет — его прячут намеренно, там
+   должен быть один мастер. Но пока мастер не открылся, на экране не было
+   ничего: чёрный прямоугольник и курсор. А если опознание не удавалось
+   вовсе, чёрным оно и оставалось — навсегда, без единого слова о том, что
+   произошло. Человек в этот миг сидит перед машиной, на которую собрался
+   ставить систему, и не знает, ждать ему или перезагружаться. */
+function экранОжидания(){
+  const н = document.createElement('div');
+  н.id = 'уст-ждём';
+  н.style.cssText = 'position:fixed;inset:0;z-index:9;display:flex;' +
+    'align-items:center;justify-content:center;flex-direction:column;gap:14px;' +
+    'background:#12141b;color:#e6e8ef;font-size:15px;text-align:center;padding:24px';
+  н.innerHTML = '<div style="font-size:34px">💽</div>' +
+    '<div id="уст-ждём-текст">Готовлю установку…</div>' +
+    '<div class="tiny" style="opacity:.6">Это занимает несколько секунд</div>';
+  document.body.appendChild(н);
+  return {
+    убрать(){ н.remove(); },
+    беда(текст){
+      н.querySelector('#уст-ждём-текст').textContent = текст;
+      н.querySelector('.tiny').textContent =
+        'Можно перезагрузить машину и выбрать в меню пункт «с сообщениями системы».';
+    }
+  };
+}
+
 (async function offer(){
+  const вСреде = /[?&]install=1/.test(location.search);
+  const ждём = вСреде ? экранОжидания() : null;
+
   /* Слабая машина отвечает медленно и не с первого раза: пока система
      раскачивается, запрос к агенту может не пройти. Одной попытки поэтому
-     мало — переспрашиваем, но не дольше пяти минут. */
+     мало — переспрашиваем, но не дольше пяти минут.
+     
+     Первые попытки идут часто: обычно всё готово почти сразу, и ждать три
+     секунды на ровном месте значит добавить их к каждой установке. */
   const пауза = ms => new Promise(r => setTimeout(r, ms));
   let can = null;
-  for (let i = 0; i < 100; i++){
+  for (let i = 0; i < 110; i++){
     if (window.OS && OS.on()){
       can = await Install.can();
       if (can.allowed && !can.reason) break;
-      if (can.reason && /живой системы/.test(can.reason)) return;   // уже установлена
+      if (can.reason && /живой системы/.test(can.reason)){
+        ждём && ждём.беда('Система уже установлена на этой машине.');
+        return;   // уже установлена
+      }
     }
-    await пауза(3000);
+    await пауза(i < 15 ? 300 : 3000);
     can = null;
   }
-  if (!can) return;
+  if (!can){
+    ждём && ждём.беда('Не удалось подготовить установку.');
+    return;
+  }
 
   APPS.installer = INSTALLER_APP;
   try { if (window.Shell && Shell.renderShell) Shell.renderShell(); }
@@ -342,8 +382,12 @@ async function отметка(текст){
       try {
         const w = WM.open('installer');
         if (w && !w.maximized) WM.toggleMax(w);
-      } catch(e){ отметка('открыть мастер не вышло: ' + e.message); }
-    }, 1200);
+        ждём && ждём.убрать();
+      } catch(e){
+        отметка('открыть мастер не вышло: ' + e.message);
+        ждём && ждём.беда('Мастер установки не открылся: ' + e.message);
+      }
+    }, 400);
     return;
   }
 
