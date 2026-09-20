@@ -138,7 +138,8 @@ body.открыто .навес{display:block}
 .день-недели{opacity:.45; font-size:10px; text-transform:uppercase}
 .число.сегодня{background:rgba(120,140,255,.55); font-weight:600}
 
-#окно-звука, #окно-меню{right:8px; width:250px}
+#окно-звука{right:8px; width:250px}
+#окно-меню{right:8px; width:300px}
 .ползунок{display:flex; align-items:center; gap:8px; padding:7px 6px}
 .ползунок .подпись{width:74px; font-size:12px; opacity:.8}
 .ползунок .сколько{width:34px; text-align:right; font-size:11px; opacity:.6;
@@ -186,7 +187,7 @@ body.открыто .навес{display:block}
 /* ==========================================================================
    Быстрые настройки: одно окошко вместо россыпи кнопок
    ========================================================================== */
-#окно-меню{ min-width:280px; }
+
 .меню-верх{
   display:flex; align-items:center; justify-content:space-between;
   padding:4px 10px 10px; border-bottom:1px solid rgba(255,255,255,.08);
@@ -210,3 +211,33 @@ body.открыто .навес{display:block}
   background:rgba(255,255,255,.08); color:inherit; font:inherit; font-size:13px;
 }
 .меню-действие:hover{ background:rgba(255,255,255,.14); }
+
+/* Плитки быстрых настроек — как в ChromeOS: два столбца, крупная цель,
+   состояние видно по цвету и по подписи под именем. */
+.плитки{
+  display:grid; grid-template-columns:1fr 1fr; gap:6px;
+  padding:2px 2px 8px;
+}
+.плитка{
+  position:relative; text-align:left; border:0; cursor:pointer;
+  padding:9px 10px; border-radius:12px; color:inherit; font:inherit;
+  background:rgba(255,255,255,.07);
+  display:flex; flex-direction:column; gap:2px; min-height:52px;
+}
+.плитка:hover{ background:rgba(255,255,255,.12); }
+.плитка.горит{ background:rgba(120,140,255,.55); }
+.плитка.горит:hover{ background:rgba(120,140,255,.65); }
+.плитка.нет{ opacity:.45; cursor:default; }
+.плитка-имя{ font-size:13px; font-weight:600; }
+.плитка-под{ font-size:11px; opacity:.75; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.плитка-стрелка{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  font-size:18px; opacity:.7; padding:0 4px;
+}
+.меню-строка.тихо{ cursor:default; }
+.меню-строка.тихо:hover{ background:none; }
+.назад{
+  border:0; background:none; color:inherit; font:inherit; cursor:pointer;
+  padding:2px 4px; opacity:.85; font-size:13px;
+}
+.назад:hover{ opacity:1; }

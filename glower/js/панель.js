@@ -411,64 +411,178 @@ async function ползунок(узел, подпись, взять, поста
 }
 
 /* ---------- быстрые настройки ---------- */
-/* Одно окошко вместо россыпи кнопок — так сделано в ChromeOS, и так
-   заметно спокойнее: человек нажимает в одно место и видит всё, что можно
-   быстро подкрутить. Отдельная кнопка звука отсюда и убрана: громкость
-   живёт внутри. */
-$('#меню').onclick = () => открой($('#меню'), 'окно-меню', async узел => {
-  узел.innerHTML = '';
+/* Одно окошко вместо россыпи кнопок — как в ChromeOS: сверху плитки того,
+   что включают и выключают чаще всего, под ними ползунки, внизу заряд,
+   язык и быстрые действия.
+   
+   Показываем только то, чем машина действительно управляет. Плитка,
+   которая красиво щёлкает и ничего не делает, хуже её отсутствия: человек
+   один раз поверит ей и будет искать неисправность не там. Поэтому Wi-Fi
+   и Bluetooth спрашиваем у самой машины и, если их нет, честно пишем об
+   этом на плитке. */
 
-  const заряд = document.createElement('div');
-  заряд.className = 'меню-верх';
-  заряд.innerHTML = '<span class="меню-заряд">…</span>';
-  узел.appendChild(заряд);
+/* Наши переключатели живут в памяти стола — панель знает о них с его слов. */
+const Наши = { 'dnd':false, 'nightLight':false, 'эконом':false };
+Шина.следи('настройки', что => {
+  if (!что) return;
+  Object.assign(Наши, что);
+  const о = document.querySelector('#окно-меню');
+  if (о && о.дорисуй) о.дорисуй();
+});
+
+function плитка(ряд, { имя, под, вкл, недоступно, нажать, стрелка }){
+  const п = document.createElement('button');
+  п.className = 'плитка' + (вкл ? ' горит' : '') + (недоступно ? ' нет' : '');
+  п.innerHTML = '<span class="плитка-имя"></span><span class="плитка-под"></span>'
+              + (стрелка ? '<span class="плитка-стрелка">›</span>' : '');
+  п.querySelector('.плитка-имя').textContent = имя;
+  п.querySelector('.плитка-под').textContent = под;
+  if (недоступно) п.disabled = true;
+  else п.onclick = е => нажать(е);
+  ряд.appendChild(п);
+  return п;
+}
+
+async function состояниеWiFi(){
   try {
-    const б = await Агент.зов('sys.battery');
-    const есть = б && б.есть !== false && б.present !== false;
-    if (есть){
-      const процент = Math.round(б.процент ?? б.percent ?? 0);
-      const заряжается = б.заряжается ?? б.charging;
-      заряд.querySelector('.меню-заряд').textContent =
-        процент + '% · ' + (заряжается ? 'заряжается' : 'от батареи');
-    } else заряд.querySelector('.меню-заряд').textContent = 'Питание от сети';
-  } catch(е){ заряд.querySelector('.меню-заряд').textContent = 'Питание'; }
+    const с = await Агент.зов('sys.wifi.state');
+    if (!с || с.supported === false) return { нет:true, под:с && с.reason ? 'нет' : 'нет' };
+    const сеть = (с.active || []).find(a => /wifi|wireless/i.test(a.type || a.тип || '')) || (с.active || [])[0];
+    return { радио:!!с.radio,
+             под:с.radio ? (сеть ? (сеть.name || сеть.имя || 'подключено') : 'включён') : 'выключен' };
+  } catch(е){ return { нет:true, под:'нет' }; }
+}
 
-  await ползунок(узел, 'Громкость',
-    async () => (await Агент.зов('sys.volume.get')).громкость ?? (await Агент.зов('sys.volume.get')).value ?? 0,
-    з => Агент.зов('sys.volume.set', { 'громкость':з, value:з }));
-  await ползунок(узел, 'Яркость',
-    async () => (await Агент.зов('sys.brightness.get')).яркость ?? (await Агент.зов('sys.brightness.get')).value ?? 0,
-    з => Агент.зов('sys.brightness.set', { 'яркость':з, value:з }));
+async function состояниеBT(){
+  try {
+    const б = await Агент.зов('sys.bt');
+    if (!б || б['есть'] === false) return { нет:true, под:'нет' };
+    return { вкл:!!б['включён'], под:б['включён'] ? 'включён' : 'выключен' };
+  } catch(е){ return { нет:true, под:'нет' }; }
+}
 
-  /* Раскладка здесь же, и с честной оговоркой.
-  
-     Кнопка языка переключает раскладку наших программ. Программам Linux —
-     Firefox, терминалу — язык задаёт оконный сервер, и клиент его сменить
-     не может: такого протокола попросту нет. Им Alt+Shift. Человек нажимал
-     на язык, в браузере ничего не менялось, и он справедливо решил, что
-     переключение не работает вовсе. Пусть будет написано. */
-  const язык = document.createElement('div');
-  язык.className = 'меню-строка';
-  язык.innerHTML = '<span>Язык</span><b>' + ($('#язык').textContent || 'ENG') + '</b>';
-  узел.appendChild(язык);
-  язык.onclick = () => { Шина.скажи('покажи', 'раскладка'); закрой(); };
-  const оговорка = document.createElement('div');
-  оговорка.className = 'меню-мелко';
-  оговорка.textContent = 'В программах Linux язык переключается Alt+Shift';
-  узел.appendChild(оговорка);
+/* Список сетей — отдельным видом внутри того же окошка, как в ChromeOS:
+   нажал на стрелку, окошко сменило содержимое, из него можно вернуться. */
+async function сетиWiFi(узел){
+  узел.innerHTML = '<div class="меню-верх"><button class="назад">‹ Wi-Fi</button></div>'
+                 + '<div class="пусто">Ищу сети…</div>';
+  узел.querySelector('.назад').onclick = () => узел.дорисуй();
+  let сети = [];
+  try { сети = (await Агент.зов('sys.wifi.scan'))['список'] || (await Агент.зов('sys.wifi.scan')).list || []; }
+  catch(е){ сети = []; }
+  const список = document.createElement('div');
+  if (!сети.length) список.innerHTML = '<div class="пусто">Сетей не видно</div>';
+  сети.slice(0, 8).forEach(с => {
+    const имя = с.ssid || с.имя || с.name;
+    if (!имя) return;
+    const б = document.createElement('div');
+    б.className = 'меню-строка';
+    б.innerHTML = '<span></span><b></b>';
+    б.querySelector('span').textContent = имя;
+    б.querySelector('b').textContent = (с.signal ?? с.сигнал ?? '') + (с.signal || с.сигнал ? '%' : '');
+    б.onclick = async () => {
+      /* Пароль спрашивать здесь негде и незачем: за этим есть «Параметры»,
+         где сеть заводят целиком. Уже известную сеть просто поднимаем. */
+      try { await Агент.зов('sys.wifi.connect', { ssid:имя }); узел.дорисуй(); }
+      catch(е){ Шина.скажи('открой', { 'вид':'приложение', id:'settings' }); закрой(); }
+    };
+    список.appendChild(б);
+  });
+  узел.querySelector('.пусто').replaceWith(список);
+}
 
-  const ряд = document.createElement('div');
-  ряд.className = 'меню-кнопки';
-  const кнопка = (имя, дело) => {
-    const б = document.createElement('button');
-    б.className = 'меню-действие';
-    б.textContent = имя;
-    б.onclick = () => { дело(); закрой(); };
-    ряд.appendChild(б);
+$('#меню').onclick = () => открой($('#меню'), 'окно-меню', async узел => {
+  узел.дорисуй = async () => {
+    узел.innerHTML = '';
+
+    const плитки = document.createElement('div');
+    плитки.className = 'плитки';
+    узел.appendChild(плитки);
+
+    const [wifi, bt] = await Promise.all([состояниеWiFi(), состояниеBT()]);
+
+    плитка(плитки, { имя:'Wi-Fi', под:wifi.нет ? 'нет на машине' : wifi.под,
+      вкл:!!wifi.радио, недоступно:!!wifi.нет, стрелка:!wifi.нет && !!wifi.радио,
+      нажать: async е => {
+        if (е.target.classList.contains('плитка-стрелка')) return сетиWiFi(узел);
+        await Агент.зов('sys.wifi.radio', { on:!wifi.радио, 'включить':!wifi.радио }).catch(() => {});
+        setTimeout(() => узел.дорисуй(), 700);
+      } });
+
+    плитка(плитки, { имя:'Bluetooth', под:bt.нет ? 'нет на машине' : bt.под,
+      вкл:!!bt.вкл, недоступно:!!bt.нет,
+      нажать: async () => {
+        await Агент.зов('sys.bt.power', { 'включить':!bt.вкл, on:!bt.вкл }).catch(() => {});
+        setTimeout(() => узел.дорисуй(), 700);
+      } });
+
+    плитка(плитки, { имя:'Не беспокоить', под:Наши['dnd'] ? 'включено' : 'выключено',
+      вкл:!!Наши['dnd'],
+      нажать: () => { Наши['dnd'] = !Наши['dnd'];
+        Шина.скажи('настройка', { 'ключ':'dnd', 'что':Наши['dnd'] }); узел.дорисуй(); } });
+
+    плитка(плитки, { имя:'Ночной свет', под:Наши['nightLight'] ? 'тёплые тона' : 'выключен',
+      вкл:!!Наши['nightLight'],
+      нажать: () => { Наши['nightLight'] = !Наши['nightLight'];
+        Шина.скажи('настройка', { 'ключ':'nightLight', 'что':Наши['nightLight'] }); узел.дорисуй(); } });
+
+    плитка(плитки, { имя:'Экономия', под:Наши['эконом'] ? 'без размытия' : 'обычный вид',
+      вкл:!!Наши['эконом'],
+      нажать: () => { Наши['эконом'] = !Наши['эконом'];
+        Шина.скажи('настройка', { 'ключ':'эконом', 'что':Наши['эконом'] }); узел.дорисуй(); } });
+
+    await ползунок(узел, 'Громкость',
+      async () => (await Агент.зов('sys.volume.get')).громкость ?? (await Агент.зов('sys.volume.get')).value ?? 0,
+      з => Агент.зов('sys.volume.set', { 'громкость':з, value:з }));
+    await ползунок(узел, 'Яркость',
+      async () => (await Агент.зов('sys.brightness.get')).яркость ?? (await Агент.зов('sys.brightness.get')).value ?? 0,
+      з => Агент.зов('sys.brightness.set', { 'яркость':з, value:з }));
+
+    /* Заряд — строкой, как всё остальное: отдельная кнопка для одного числа
+       была лишней. */
+    const заряд = document.createElement('div');
+    заряд.className = 'меню-строка тихо';
+    заряд.innerHTML = '<span>Питание</span><b>…</b>';
+    узел.appendChild(заряд);
+    try {
+      const б = await Агент.зов('sys.battery');
+      const есть = б && б['есть'] !== false && б.present !== false;
+      заряд.querySelector('b').textContent = есть
+        ? Math.round(б['процент'] ?? б.percent ?? 0) + '% · '
+          + ((б['заряжается'] ?? б.charging) ? 'заряжается' : 'от батареи')
+        : 'от сети';
+    } catch(е){ заряд.querySelector('b').textContent = '—'; }
+
+    /* Раскладка здесь же, и с честной оговоркой.
+    
+       Кнопка языка переключает раскладку наших программ. Программам Linux —
+       Firefox, терминалу — язык задаёт оконный сервер, и клиент его сменить
+       не может: такого протокола попросту нет. Им Alt+Shift. */
+    const язык = document.createElement('div');
+    язык.className = 'меню-строка';
+    язык.innerHTML = '<span>Язык</span><b></b>';
+    язык.querySelector('b').textContent = $('#язык').textContent || 'ENG';
+    узел.appendChild(язык);
+    язык.onclick = () => { Шина.скажи('покажи', 'раскладка'); закрой(); };
+    const оговорка = document.createElement('div');
+    оговорка.className = 'меню-мелко';
+    оговорка.textContent = 'В программах Linux язык переключается Alt+Shift';
+    узел.appendChild(оговорка);
+
+    const ряд = document.createElement('div');
+    ряд.className = 'меню-кнопки';
+    const кнопка = (имя, дело) => {
+      const б = document.createElement('button');
+      б.className = 'меню-действие';
+      б.textContent = имя;
+      б.onclick = () => { дело(); закрой(); };
+      ряд.appendChild(б);
+    };
+    кнопка('Параметры', () => Шина.скажи('открой', { 'вид':'приложение', id:'settings' }));
+    кнопка('Заблокировать', () => Агент.зов('sys.power', { action:'lock' }).catch(() => {}));
+    узел.appendChild(ряд);
   };
-  кнопка('Параметры', () => Шина.скажи('открой', { 'вид':'приложение', id:'settings' }));
-  кнопка('Заблокировать', () => Агент.зов('sys.power', { action:'lock' }).catch(() => {}));
-  узел.appendChild(ряд);
+  await узел.дорисуй();
 });
 
 /* ---------- батарея ---------- */
