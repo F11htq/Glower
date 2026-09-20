@@ -29,6 +29,20 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/n
   exec dbus-run-session -- "$0" "$@"
 fi
 
+# Настоящая раскладка клавиатуры — для чужих программ.
+#
+# Наша оболочка переключает язык сама, внутри своих страниц. Firefox и
+# терминал живут снаружи, и для них язык задаёт оконный сервер: какую
+# раскладку он получил при запуске, такая и будет до конца сеанса. Пока
+# здесь ничего не стояло, в браузере нельзя было набрать ни одной русской
+# буквы — и починить это изнутри системы человек не мог никак.
+#
+# Две раскладки и переключение по Alt+Shift — то же сочетание, по которому
+# переключается наша собственная. Нажатие видят обе, и они не расходятся.
+XKB_DEFAULT_LAYOUT="${GLOWER_KB_LAYOUT:-us,ru}"
+XKB_DEFAULT_OPTIONS="${GLOWER_KB_OPTIONS:-grp:alt_shift_toggle}"
+export XKB_DEFAULT_LAYOUT XKB_DEFAULT_OPTIONS
+
 ROOT="${GLOWER_ROOT:-$HOME/GlowerOS}"
 PORT="${GLOWER_PORT:-8123}"
 UI="${GLOWER_UI:-/usr/share/glower/ui}"
@@ -353,6 +367,9 @@ run_x(){   # $1 — режим отрисовки
     # заголовков, ни перетаскивания, а окна валятся друг на друга.
     cat > "$HOME/.xinitrc" <<XRC
 if command -v openbox >/dev/null; then openbox --sm-disable & fi
+# X-сервер переменных XKB_DEFAULT_* не знает: там раскладку ставят командой.
+command -v setxkbmap >/dev/null && \
+  setxkbmap -layout "$XKB_DEFAULT_LAYOUT" -option "$XKB_DEFAULT_OPTIONS" 2>/dev/null
 # без него запросы прав проваливаются молча
 [ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
 GDK_BACKEND=x11 \
