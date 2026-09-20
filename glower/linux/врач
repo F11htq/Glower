@@ -100,6 +100,19 @@ case "$area" in
 esac
 
 echo
+echo "=== Bluetooth ==="
+bt=$(curl -s --max-time 4 -X POST "http://localhost:$PORT/rpc" \
+      -H 'Content-Type: application/json' \
+      -d '{"method":"sys.bt.почему","params":{}}' 2>/dev/null)
+case "$bt" in
+  *'"словами"'*) echo "  $(echo "$bt" | sed 's/.*"словами":"//; s/".*//')" ;;
+  *)             echo '  агент не ответил' ;;
+esac
+case "$bt" in
+  *'"железо":"'*) echo "  железо: $(echo "$bt" | sed 's/.*"железо":"//; s/".*//' | cut -c1-70)" ;;
+esac
+
+echo
 echo "=== последние жалобы в журнале ==="
 if [ -r "$LOG" ]; then
   grep -iE 'ошиб|error|упал|не удалось|traceback' "$LOG" 2>/dev/null \

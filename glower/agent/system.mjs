@@ -35,7 +35,7 @@ const ALLOWED = new Set([
   'useradd', 'usermod', 'userdel', 'wmctrl', 'xprop', 'xdotool',
   'getcap', 'id', 'ls', 'wl-copy', 'wl-paste', 'setxkbmap', 'localectl', 'free', 'uptime',
   'ufw', 'secret-tool', 'gnome-keyring-daemon', 'pgrep', 'fwupdmgr', 'scanimage',
-  'rfkill', 'lspci', 'swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock',
+  'rfkill', 'lspci', 'lsusb', 'swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock',
   'grim', 'slurp', 'maim', 'slop', 'wlrctl', 'gdbus',
   /* sudo нужен для выключения: обычный пользователь без polkit не имеет права
      остановить машину. Аргументы к нему собираются здесь же, из этого списка. */
@@ -630,6 +630,55 @@ async function попытка(программа, части, via){
       ответ({ ok:true, via, команда:программа });
     }, 1500);
   });
+}
+
+/* Почему Bluetooth не работает — вопрос, на который «адаптера нет»
+   отвечает хуже, чем молчание.
+
+   Причин ровно три, и они требуют разных действий от человека.
+   Адаптер может быть выключен рубильником на корпусе или сочетанием
+   клавиш — тогда чинить нечего, надо его включить. Железка может быть
+   в машине, но ядро не дало ей хода: нет прошивки. И, наконец, её
+   может не быть вовсе.
+
+   Различить это можно, только спросив саму машину, — иначе человек
+   ищет драйверы к тому, что просто выключено кнопкой. */
+async function почемуНетBT(){
+  const о = { блокировка:null, железо:null, журнал:[] };
+  if (await has('rfkill')){
+    const rf = await call('rfkill', ['list']).catch(() => '');
+    const кусок = String(rf).split(/\n(?=\d)/).find(к => /bluetooth/i.test(к)) || '';
+    if (кусок){
+      о.блокировка = {
+        рубильником:/Hard blocked:\s*yes/i.test(кусок),
+        программно:/Soft blocked:\s*yes/i.test(кусок)
+      };
+    }
+  }
+  if (await has('lsusb')){
+    const usb = await call('lsusb').catch(() => '');
+    const строка = String(usb).split('\n').find(л => /bluetooth/i.test(л));
+    if (строка) о.железо = строка.replace(/^Bus.*?ID\s+/, '').trim().slice(0, 120);
+  }
+  if (!о.железо && await has('lspci')){
+    const pci = await call('lspci').catch(() => '');
+    const строка = String(pci).split('\n').find(л => /bluetooth/i.test(л));
+    if (строка) о.железо = строка.replace(/^\S+\s+/, '').trim().slice(0, 120);
+  }
+  if (await has('journalctl')){
+    const лог = await call('journalctl', ['-k', '-b', '--no-pager']).catch(() => '');
+    о.журнал = String(лог).split('\n')
+      .filter(л => /bluetooth|hci\d|btusb/i.test(л) && /fail|error|firmware|not found|отказ/i.test(л))
+      .slice(-4).map(л => л.slice(-110));
+  }
+  о.словами = о.блокировка && о.блокировка.рубильником
+    ? 'Bluetooth выключен переключателем на корпусе или клавишей на клавиатуре'
+    : о.блокировка && о.блокировка.программно
+      ? 'Bluetooth выключен программно — его можно включить'
+      : о.железо
+        ? 'Адаптер в машине есть, но ядро не дало ему хода — похоже, не хватает прошивки'
+        : 'Bluetooth-адаптера на этой машине не видно';
+  return о;
 }
 
 export function apps(allowLaunch){
@@ -1253,13 +1302,17 @@ export function apps(allowLaunch){
     /* ---------- Bluetooth ----------
        Наушники, мышь, клавиатура. Всё делает bluetoothctl — та же программа,
        которой пользуются в любом Linux. Нет адаптера — так и скажем. */
+    async 'sys.bt.почему'(){ return почемуНетBT(); },
+
     async 'sys.bt'(){
       if (!await has('bluetoothctl'))
         return { есть:false, почему:'на машине нет bluetoothctl — Bluetooth не настроен', list:[] };
 
       const список = await call('bluetoothctl', ['list']).catch(() => '');
-      if (!String(список).trim())
-        return { есть:false, почему:'Bluetooth-адаптера на этой машине нет', list:[] };
+      if (!String(список).trim()){
+        const п = await почемуНетBT();
+        return { есть:false, почему:п.словами, подробно:п, list:[] };
+      }
 
       const сведения = await call('bluetoothctl', ['show']).catch(() => '');
       const поле = к => (String(сведения).match(new RegExp('^\\s*' + к + ':\\s*(.*)$', 'm')) || [])[1] || '';

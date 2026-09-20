@@ -331,12 +331,16 @@ AppStore.boot();
    ========================================================================== */
 APPS.store = {
   name:'Магазин', glyph:'🛍️', bg:'linear-gradient(140deg,#c4b5fd,#7c3aed)', w:880, h:640, single:true,
-  render(win){
+  render(win, opts){
     const wrap = el('div', 'app col'); win.body.appendChild(wrap);
     const bar = el('div', 'toolbar');
     const body = el('div', 'scroll pad');
     wrap.append(bar, body);
-    let tab = 'catalog';
+    /* Магазин открывают не только с порога. Когда человек ставит программу
+       Linux, мы открываем его, чтобы показать ход работы, — и он открывался
+       на каталоге наших приложений, где никакого хода не видно. Вкладку
+       говорит тот, кто открывает. */
+    let tab = (opts && opts['вкладка']) || 'catalog';
 
     [['catalog','🛍 Каталог'],['mine','📦 Установленные'],
      ['linux','🐧 Программы Linux'],['dev','🧑‍💻 Своё приложение']].forEach(([k, n]) => {
@@ -735,4 +739,16 @@ APPS.store = {
     }
     draw();
   }
+};
+
+/* Повторное открытие Магазина с нужной вкладкой.
+
+   Окно у Магазина одно на всю систему (single), и второй раз WM его не
+   создаёт, а поднимает существующее. Без этого человек, поставивший
+   программу при уже открытом Магазине, видел ту вкладку, на которой он
+   его оставил, — а ход установки идёт на другой. */
+APPS.store.onReopen = function(win, opts){
+  if (!opts || !opts['вкладка']) return;
+  win.body.replaceChildren();
+  APPS.store.render(win, opts);
 };

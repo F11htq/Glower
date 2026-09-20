@@ -657,7 +657,12 @@ apt-get install -y --no-install-recommends linux-headers-generic dkms || true
 # нельзя распространять: пакет выкачивает её у производителя и режет на
 # части сам. Здесь, при сборке, сеть есть — значит, прошивка ляжет в образ,
 # и на машине человека она уже будет.
-for drv in bcmwl-kernel-source \
+# Bluetooth. Прошивки к части адаптеров лежат отдельно от linux-firmware —
+# без них железка видна ядру, но хода ей нет, и человек читает «адаптера
+# нет», глядя на живую машину. Пакет маленький, ставится всегда.
+# lsusb для опознания адаптера у нас уже есть — usbutils стоит выше.
+for drv in bluez-firmware \
+               bcmwl-kernel-source \
                rtl8821ce-dkms \
                rtl8812au-dkms \
                rtl88x2bu-dkms \
