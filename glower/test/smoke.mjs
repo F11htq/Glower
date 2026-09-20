@@ -1384,6 +1384,33 @@ try {
     await p3.close();
   }
 
+  /* Магазин: разделы сбоку, поиск сверху и один на всё.
+  
+     Раньше поиск жил только внутри вкладки программ Linux — найти через
+     него своё приложение было нельзя вовсе, а главное в Магазине
+     оказывалось спрятано глубже всего. */
+  {
+    const r = await page.evaluate(async () => {
+      WM.wins.slice().forEach(w => WM.close(w));
+      const w = WM.open('store');
+      await new Promise(r2 => setTimeout(r2, 900));
+      const разделов = w.node.querySelectorAll('.sb-item').length;
+      const поле = w.node.querySelector('.st-find');
+      поле.value = 'пом';
+      поле.dispatchEvent(new Event('input'));
+      await new Promise(r2 => setTimeout(r2, 500));
+      const нашлось = /Помидор/.test(w.node.textContent);
+      поле.value = '';
+      поле.dispatchEvent(new Event('input'));
+      await new Promise(r2 => setTimeout(r2, 400));
+      const обзор = /Популярное в Linux/.test(w.node.textContent);
+      return { разделов, нашлось, обзор };
+    });
+    check('в Магазине разделы сбоку', r.разделов === 4, JSON.stringify(r));
+    check('и поиск находит наши приложения', r.нашлось, JSON.stringify(r));
+    check('а на обзоре есть подборка программ Linux', r.обзор, JSON.stringify(r));
+  }
+
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
 } catch (e){

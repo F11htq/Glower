@@ -332,22 +332,56 @@ AppStore.boot();
 APPS.store = {
   name:'Магазин', glyph:'🛍️', bg:'linear-gradient(140deg,#c4b5fd,#7c3aed)', w:880, h:640, single:true,
   render(win, opts){
-    const wrap = el('div', 'app col'); win.body.appendChild(wrap);
-    const bar = el('div', 'toolbar');
+    /* Строение — как в «Параметрах»: слева разделы, справа содержимое.
+    
+       Раньше разделы были кнопками в строку над содержимым, а поиск жил
+       только внутри вкладки программ Linux. Выходило, что главное — найти
+       нужную программу — было спрятано глубже всего, а первую половину
+       окна занимал синий баннер с рассказом о том, что приложения
+       устанавливаются по-настоящему.
+    
+       Теперь поиск один и всегда на виду, разделы сбоку, а ход установки
+       виден из любого раздела: человек, поставивший программу, может уйти
+       смотреть каталог и всё равно видеть полосу. */
+    const wrap = el('div', 'app st-app'); win.body.appendChild(wrap);
+    const side = el('div', 'sidebar st-side');   /* тот же список, что в «Параметрах» */
+    const main = el('div', 'st-main');
+    const top = el('div', 'st-top');
+    const работаМесто = el('div', 'st-job');
     const body = el('div', 'scroll pad');
-    wrap.append(bar, body);
+    main.append(top, работаМесто, body);
+    wrap.append(side, main);
+
     /* Магазин открывают не только с порога. Когда человек ставит программу
        Linux, мы открываем его, чтобы показать ход работы, — и он открывался
        на каталоге наших приложений, где никакого хода не видно. Вкладку
        говорит тот, кто открывает. */
     let tab = (opts && opts['вкладка']) || 'catalog';
 
-    [['catalog','🛍 Каталог'],['mine','📦 Установленные'],
-     ['linux','🐧 Программы Linux'],['dev','🧑‍💻 Своё приложение']].forEach(([k, n]) => {
-      const b = el('button', 'btn' + (k === tab ? ' pri' : ''), n);
-      b.onclick = () => { tab = k; $$('.btn', bar).forEach(x => x.classList.remove('pri')); b.classList.add('pri'); draw(); };
-      bar.appendChild(b);
-    });
+    const РАЗДЕЛЫ = [
+      ['catalog', '🛍', 'Обзор'],
+      ['mine',    '📦', 'Установленные'],
+      ['linux',   '🐧', 'Программы Linux'],
+      ['dev',     '🧑‍💻', 'Своё приложение']
+    ];
+    const рисуйРазделы = () => {
+      side.innerHTML = '';
+      РАЗДЕЛЫ.forEach(([k, з, н]) => {
+        const б = el('button', 'sb-item' + (k === tab ? ' on' : ''),
+          `<span class="e">${з}</span><span>${esc(н)}</span>`);
+        б.onclick = () => { tab = k; рисуйРазделы(); draw(); };
+        side.appendChild(б);
+      });
+    };
+    рисуйРазделы();
+
+    /* Поиск один на весь Магазин: наши приложения находятся сразу, по мере
+       набора, а за программами машины система идёт по Enter — apt отвечает
+       не мгновенно, и дёргать его на каждую букву значило бы превратить
+       поиск в ожидание. */
+    const поле = el('input', 'inp st-find');
+    поле.placeholder = '🔎 Найти программу: gimp, telegram, помидор…';
+    top.appendChild(поле);
 
     function cardFor(a, installed, custom){
       const c = el('div', 'st-card');
@@ -395,7 +429,30 @@ APPS.store = {
     };
     const размер = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ'
                                               : Math.round(b / 1024) + ' КБ';
+    /* Подборка для «Обзора»: то, что ставят первым делом на любую машину.
+       Имена — те, под которыми программы лежат в репозиториях, чтобы поиск
+       по ним находил с первого раза. */
+    const ПОДБОРКА = [
+      ['Firefox',     '🦊', 'Браузер, который уже есть в системе'],
+      ['Telegram',    '✈️', 'Мессенджер — живёт на Flathub'],
+      ['GIMP',        '🎨', 'Редактор изображений'],
+      ['VLC',         '🎬', 'Проигрыватель видео и музыки'],
+      ['LibreOffice', '📄', 'Документы, таблицы, презентации'],
+      ['Chromium',    '🌐', 'Второй браузер, на движке Chrome']
+    ];
+
     let поискСтрока = '', поискСписок = null, работа = null;
+    /* Что набрано в общем поиске. Отдельно от «поискСтрока»: та хранит
+       запрос, по которому система уже сходила в репозитории, а эта —
+       то, что человек набирает прямо сейчас. */
+    let набрано = '';
+    поле.oninput = () => { набрано = поле.value.trim(); draw(); };
+    поле.onkeydown = е => {
+      if (е.key !== 'Enter') return;
+      набрано = поле.value.trim();
+      if (набрано.length >= 2) найтиВРепозиториях(набрано);
+      else draw();
+    };
     /* Когда началась текущая работа. Держим отдельно: сама работа приходит
        от системы новым объектом при каждом опросе, и отметка времени внутри
        неё сбрасывалась бы каждую секунду. */
@@ -409,6 +466,67 @@ APPS.store = {
         if (j && j.running){ работа = j; началоРаботы = началоРаботы || Date.now(); draw(); следиЗаРаботой(() => draw()); }
       }).catch(() => {});
     }, 0);
+
+    /* Что умеет машина (apt, flatpak, списки, место) — спрашиваем один раз
+       на всё окно, а не при каждой отрисовке вкладки: ответ не меняется от
+       того, в какой раздел человек смотрит. */
+    let состояние = null;
+    const узнайСостояние = async () => {
+      if (состояние) return состояние;
+      состояние = await Pkg.state().catch(e => ({ reason:String(e.message || e) }));
+      return состояние;
+    };
+
+    /* Ожидание чужой работы: apt не умеет двух дел сразу, и поиск поверх
+       обновления списков отвечает по пустым спискам. */
+    const дождисьРаботы = async () => {
+      for (let i = 0; i < 900; i++){
+        const j = await Pkg.job().catch(() => ({ running:false }));
+        работа = j.running ? j : null;
+        if (!j.running) return j;
+        draw();
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      return { running:false, ok:false };
+    };
+
+    /* Поиск по репозиториям машины. Живёт здесь, а не внутри вкладки:
+       строка поиска теперь одна на весь Магазин, и звать её должны все. */
+    async function найтиВРепозиториях(строка){
+      const st = await узнайСостояние();
+      поискСтрока = строка;
+      if (поискСтрока.length < 2) return draw();
+      if (!st || st.reason || !st.allowed){ поискСписок = null; return draw(); }
+
+      if (работа && работа.action === 'update'){
+        поискСписок = 'обновляю'; draw();
+        const j = await дождисьРаботы();
+        st.lists = st.lists || !!j.ok;
+      }
+
+      /* В свежей системе списки пакетов пусты — их вычищают при сборке
+         образа. Обновляем сами: человек не должен догадываться, что перед
+         первым поиском надо нажать отдельную кнопку. */
+      if (!st.lists && st.allowed && !работа){
+        поискСписок = 'обновляю'; draw();
+        try {
+          await Pkg.update();
+          const j = await дождисьРаботы();
+          st.lists = !!j.ok;
+        } catch(e){ поискСписок = { ошибка:String(e.message || e) }; return draw(); }
+      }
+
+      поискСписок = 'ищу'; draw();
+      try {
+        const r = await Pkg.search(поискСтрока);
+        const list = r.list.slice(0, 24);
+        /* подробности берём только для показанных: иначе это сотни запросов */
+        поискСписок = await Promise.all(list.map(async x => {
+          try { return Object.assign(x, await Pkg.info(x.name, x.source)); } catch(e){ return x; }
+        }));
+      } catch(e){ поискСписок = { ошибка:String(e.message || e) }; }
+      draw();
+    }
 
     async function следиЗаРаботой(перерисовать){
       for (let i = 0; i < 900; i++){
@@ -432,14 +550,90 @@ APPS.store = {
       draw();
     }
 
+    /* Ход работы виден из любого раздела.
+    
+       Раньше полоса жила внутри вкладки программ Linux: человек нажимал
+       «Установить», уходил смотреть каталог — и оставался без единого
+       признака, что что-то происходит. Теперь она закреплена над
+       содержимым и рисуется при каждой отрисовке, куда бы он ни смотрел. */
+    /* Строка найденной программы машины. Одна на два места: результаты
+       общего поиска и вкладку программ Linux — иначе они разъехались бы
+       при первой же правке. */
+    function строкаПакета(x){
+      const b2 = el('button', 'btn' + (x.installed ? '' : ' pri'),
+        x.installed ? 'Удалить' : '⬇ Установить');
+      b2.disabled = !!работа;
+      b2.onclick = async () => {
+        try {
+          if (x.installed){
+            if (!await Dlg.confirm('Удалить ' + x.name + '?',
+                'Программа будет удалена из системы вместе с ненужными зависимостями.',
+                { icon:'🗑️', okText:'Удалить', danger:true })) return;
+            await Pkg.remove(x.name, x.source);
+          } else await Pkg.install(x.name, x.source);
+          /* Обработчик перерисовки был пустым: слежение шло, состояние
+             работы обновлялось, а экран не перерисовывался ни разу до
+             самого конца. Человек всю установку смотрел на «Начинаю» и
+             неподвижную полосу — и справедливо считал, что всё встало. */
+          следиЗаРаботой(() => draw());
+          draw();
+        } catch(e){ Dlg.alert('Программы машины', String(e.message || e), '⚠️'); }
+      };
+      if (x.snap){
+        b2.disabled = true;
+        b2.textContent = 'через Snap';
+      }
+      const источник = x.source === 'flatpak' ? 'Flathub' : 'Ubuntu';
+      const сведения = [источник,
+                        x.installed ? 'установлена ' + x.installed : x.candidate || '',
+                        размер(x.size) ? (x.source === 'flatpak' ? 'скачает ' : 'займёт ') + размер(x.size) : '',
+                        x.snap ? 'это заглушка: ставится через Snap, а он в системе не работает' : '']
+                        .filter(Boolean).join(' · ');
+      return row(x.source === 'flatpak' ? '🫙' : '📦',
+        (x.title && x.title !== x.name ? x.title + ' · ' + x.name : x.name),
+        (x.about || '') + (сведения ? ' · ' + сведения : ''), b2);
+    }
+
+    function рисуйРаботу(){
+      работаМесто.innerHTML = '';
+      if (!работа) return;
+      const box = el('div', 'card st-work');
+      const молчит = работа.молчит || 0;
+      /* Не всякая работа печатает проценты: flatpak при первой установке
+         тянет общую основу молча, и полоса стоит на месте честно, а не от
+         поломки. Чтобы это не читалось как зависание, показываем, сколько
+         уже идёт, и рисуем бегущую полосу вместо застывшей. */
+      const сек = Math.round((Date.now() - (началоРаботы || Date.now())) / 1000);
+      const время = сек < 60 ? сек + ' с' : Math.floor(сек / 60) + ' мин ' + (сек % 60) + ' с';
+      const естьПроценты = (работа.percent || 0) > 2;
+      box.innerHTML = `<b>${esc(работа.action === 'remove' ? 'Удаление' : работа.action === 'update' ? 'Обновление списков' : 'Установка')}
+        ${esc(работа.name || '')}</b>
+        <div class="ins-bar${естьПроценты ? '' : ' ins-bar-ждём'}" style="margin-top:10px"><i style="width:${
+          естьПроценты ? работа.percent : 100}%"></i></div>
+        <div class="muted tiny" style="margin-top:6px">${esc(работа.step || '')} · идёт ${время}${
+          молчит > 60 ? ' · молчит ' + Math.round(молчит / 60) + ' мин — возможно, ждёт сеть' : ''}</div>`;
+      const stop = el('button', 'btn', '✕ Остановить');
+      stop.style.marginTop = '10px';
+      stop.onclick = async () => {
+        if (!await Dlg.confirm('Остановить работу?',
+            'apt будет прерван, а система приведена в порядок.', { icon:'✕', okText:'Остановить', danger:true })) return;
+        try { await Pkg.cancel(); работа = null; draw(); }
+        catch(e){ Dlg.alert('Программы Linux', String(e.message || e), '⚠️'); }
+      };
+      box.appendChild(stop);
+      работаМесто.appendChild(box);
+    }
+
     async function drawLinux(){
-      const st = await Pkg.state().catch(e => ({ reason:String(e.message || e) }));
+      const st = await узнайСостояние();
       body.innerHTML = '';
-      body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Программы Linux</h2>
-        <div style="opacity:.85">Поиск идёт по двум источникам: репозитории Ubuntu и Flathub —
-        там живут Telegram, Firefox, Spotify и прочее, чего в Ubuntu уже нет. Поставленное
-        появляется в «Программах машины» и запускается как обычная программа.${
-          st && st.flatpak === false ? ' <b>Flathub на этой машине недоступен</b>.' : ''}</div>`));
+      /* Раньше здесь стоял баннер в треть экрана с рассказом о том, как всё
+         устроено. Рассказ верный, но читают его один раз, а место он
+         занимает всегда. Оставили одну строку. */
+      body.appendChild(el('div', 'set-note',
+        'Ubuntu и Flathub — два источника. В Flathub живут Telegram, Spotify и прочее, '
+        + 'чего в Ubuntu нет. Поставленное появляется в Пуске и в доке.'
+        + (st && st.flatpak === false ? ' Flathub на этой машине недоступен.' : '')));
 
       if (!st || st.reason){
         body.appendChild(el('div', 'set-note', esc((st && st.reason) ||
@@ -477,79 +671,18 @@ APPS.store = {
             if (j.ok){ st.flathubData = true; st.flathub = true; }
             Shell.toast('Программы Linux', j.ok ? 'Flathub подключён' :
               'Не вышло подключить Flathub: ' + (j.error || ''), j.ok ? '✅' : '⚠️', 7000);
-            if (j.ok && поискСтрока.length >= 2) найти(); else draw();
+            if (j.ok && набрано.length >= 2) найтиВРепозиториях(набрано); else draw();
           } catch(e){ Dlg.alert('Flathub', String(e.message || e), '⚠️'); }
         };
         box.appendChild(b3);
         body.appendChild(box);
       }
 
-      const bar2 = el('div', 'row');
-      const inp = el('input', 'inp grow');
-      inp.placeholder = '🔎 Название программы: gimp, vlc, telegram…';
-      inp.value = поискСтрока;
-      const go = el('button', 'btn pri', 'Найти');
       const upd = el('button', 'btn', '🔄 Обновить списки');
-      bar2.append(inp, go, upd);
-      body.appendChild(bar2);
+      body.appendChild(row('🗂', 'Списки программ',
+        st.lists ? 'Система знает, что есть в репозиториях'
+                 : 'Ещё не читались — система прочтёт их при первом поиске', upd));
 
-      /* Обновление списков идёт минуту-другую. Если поиск запустить поверх него,
-         apt ответит по пустым спискам — и человек увидит «ничего не найдено»
-         под бегущей полосой обновления. Поэтому ждём. */
-      const дождисьРаботы = async () => {
-        for (let i = 0; i < 900; i++){
-          const j = await Pkg.job().catch(() => ({ running:false }));
-          работа = j.running ? j : null;
-          if (!j.running) return j;
-          draw();
-          await new Promise(r => setTimeout(r, 1200));
-        }
-        return { running:false, ok:false };
-      };
-
-      const найти = async () => {
-        поискСтрока = inp.value.trim();
-        if (поискСтрока.length < 2) return;
-
-        if (работа && работа.action === 'update'){
-          поискСписок = 'обновляю';
-          draw();
-          const j = await дождисьРаботы();
-          st.lists = st.lists || !!j.ok;
-        }
-
-        /* В свежей системе списки пакетов пусты — их вычищают при сборке
-           образа. Обновляем сами: человек не должен догадываться, что перед
-           первым поиском надо нажать отдельную кнопку. */
-        if (!st.lists && st.allowed && !работа){
-          поискСписок = 'обновляю';
-          draw();
-          try {
-            await Pkg.update();
-            await new Promise(готово => {
-              const жду = setInterval(async () => {
-                const j = await Pkg.job().catch(() => ({ running:false }));
-                работа = j.running ? j : null;
-                if (!j.running){ clearInterval(жду); st.lists = !!j.ok; готово(); }
-              }, 1200);
-            });
-          } catch(e){ поискСписок = { ошибка:String(e.message || e) }; return draw(); }
-        }
-
-        поискСписок = 'ищу';
-        draw();
-        try {
-          const r = await Pkg.search(поискСтрока);
-          const list = r.list.slice(0, 24);
-          /* подробности берём только для показанных: иначе это сотни запросов */
-          поискСписок = await Promise.all(list.map(async x => {
-            try { return Object.assign(x, await Pkg.info(x.name, x.source)); } catch(e){ return x; }
-          }));
-        } catch(e){ поискСписок = { ошибка:String(e.message || e) }; }
-        draw();
-      };
-      go.onclick = найти;
-      inp.onkeydown = e => { if (e.key === 'Enter') найти(); };
       upd.onclick = async () => {
         try {
           await Pkg.update(); draw();
@@ -561,38 +694,9 @@ APPS.store = {
           }
           Shell.toast('Программы Linux', j.ok ? 'Списки обновлены' : 'Обновить списки не вышло',
             j.ok ? '✅' : '⚠️', 5000);
-          if (поискСтрока.length >= 2) найти(); else draw();
+          if (набрано.length >= 2) найтиВРепозиториях(набрано); else draw();
         } catch(e){ Dlg.alert('Обновление списков', String(e.message || e), '⚠️'); }
       };
-
-      if (работа){
-        const box = el('div', 'card', '');
-        box.style.padding = '14px';
-        const молчит = работа.молчит || 0;
-        /* Не всякая работа печатает проценты: flatpak при первой установке
-           тянет общую основу молча, и полоса стоит на месте честно, а не от
-           поломки. Чтобы это не читалось как зависание, показываем, сколько
-           уже идёт, и рисуем бегущую полосу вместо застывшей. */
-        const сек = Math.round((Date.now() - (началоРаботы || Date.now())) / 1000);
-        const время = сек < 60 ? сек + ' с' : Math.floor(сек / 60) + ' мин ' + (сек % 60) + ' с';
-        const естьПроценты = (работа.percent || 0) > 2;
-        box.innerHTML = `<b>${esc(работа.action === 'remove' ? 'Удаление' : работа.action === 'update' ? 'Обновление списков' : 'Установка')}
-          ${esc(работа.name || '')}</b>
-          <div class="ins-bar${естьПроценты ? '' : ' ins-bar-ждём'}" style="margin-top:10px"><i style="width:${
-            естьПроценты ? работа.percent : 100}%"></i></div>
-          <div class="muted tiny" style="margin-top:6px">${esc(работа.step || '')} · идёт ${время}${
-            молчит > 60 ? ' · молчит ' + Math.round(молчит / 60) + ' мин — возможно, ждёт сеть' : ''}</div>`;
-        const stop = el('button', 'btn', '✕ Остановить');
-        stop.style.marginTop = '10px';
-        stop.onclick = async () => {
-          if (!await Dlg.confirm('Остановить работу?',
-              'apt будет прерван, а система приведена в порядок.', { icon:'✕', okText:'Остановить', danger:true })) return;
-          try { await Pkg.cancel(); работа = null; draw(); }
-          catch(e){ Dlg.alert('Программы Linux', String(e.message || e), '⚠️'); }
-        };
-        box.appendChild(stop);
-        body.appendChild(box);
-      }
 
       if (поискСписок === 'обновляю'){
         body.appendChild(el('div', 'empty', 'Обновляю списки пакетов — это делается один раз…'));
@@ -609,40 +713,7 @@ APPS.store = {
               ? 'В репозиториях Ubuntu такого нет. Telegram, Spotify и подобное живут на Flathub — ' +
                 'подключите его кнопкой выше, и поиск найдёт их'
               : 'Ничего не найдено. У программ бывают свои имена — попробуйте другое написание'));
-        поискСписок.forEach(x => {
-          const b2 = el('button', 'btn' + (x.installed ? '' : ' pri'),
-            x.installed ? 'Удалить' : '⬇ Установить');
-          b2.disabled = !!работа;
-          b2.onclick = async () => {
-            try {
-              if (x.installed){
-                if (!await Dlg.confirm('Удалить ' + x.name + '?',
-                    'Программа будет удалена из системы вместе с ненужными зависимостями.',
-                    { icon:'🗑️', okText:'Удалить', danger:true })) return;
-                await Pkg.remove(x.name, x.source);
-              } else await Pkg.install(x.name, x.source);
-              /* Обработчик перерисовки был пустым: слежение шло, состояние
-                 работы обновлялось, а экран не перерисовывался ни разу до
-                 самого конца. Человек всю установку смотрел на «Начинаю» и
-                 неподвижную полосу — и справедливо считал, что всё встало. */
-              следиЗаРаботой(() => draw());
-              draw();
-            } catch(e){ Dlg.alert('Программы машины', String(e.message || e), '⚠️'); }
-          };
-          if (x.snap){
-            b2.disabled = true;
-            b2.textContent = 'через Snap';
-          }
-          const источник = x.source === 'flatpak' ? 'Flathub' : 'Ubuntu';
-          const сведения = [источник,
-                            x.installed ? 'установлена ' + x.installed : x.candidate || '',
-                            размер(x.size) ? (x.source === 'flatpak' ? 'скачает ' : 'займёт ') + размер(x.size) : '',
-                            x.snap ? 'это заглушка: ставится через Snap, а он в системе не работает' : '']
-                            .filter(Boolean).join(' · ');
-          body.appendChild(row(x.source === 'flatpak' ? '🫙' : '📦',
-            (x.title && x.title !== x.name ? x.title + ' · ' + x.name : x.name),
-            (x.about || '') + (сведения ? ' · ' + сведения : ''), b2));
-        });
+        поискСписок.forEach(x => body.appendChild(строкаПакета(x)));
       } else {
         body.appendChild(el('div', 'set-note',
           'Введите название программы. В самой системе программ нет — они берутся из ' +
@@ -652,18 +723,87 @@ APPS.store = {
       win.setSub('программы Linux');
     }
 
+    /* Поиск по нашим приложениям — сразу, без похода куда бы то ни было:
+       их десяток, и они уже здесь. */
+    function нашиПоиском(строка){
+      const что = строка.toLowerCase();
+      const свои = CATALOG.filter(a => (a.name + ' ' + (a.desc || '')).toLowerCase().includes(что));
+      const системные = Object.entries(APPS)
+        .filter(([id, a]) => !a.custom && !CATALOG.some(c => c.id === id)
+                && (a.name || '').toLowerCase().includes(что))
+        .map(([id, a]) => ({ ...a, id, removable:false, installed:true }));
+      return { свои, системные };
+    }
+
     function draw(){
+      рисуйРаботу();
+
+      /* Набрано в поиске — показываем найденное, в каком бы разделе человек
+         ни стоял. Раньше поиск жил только во вкладке программ Linux, и
+         найти своё приложение было нельзя вовсе. */
+      if (набрано.length >= 1){
+        body.innerHTML = '';
+        const { свои, системные } = нашиПоиском(набрано);
+        if (свои.length || системные.length){
+          body.appendChild(el('div', 'card-t', 'Приложения системы'));
+          const g = el('div', 'st-grid');
+          свои.forEach(a => g.appendChild(cardFor(a, AppStore.isInstalled(a.id))));
+          системные.forEach(a => g.appendChild(cardFor(a, true)));
+          body.appendChild(g);
+        }
+        body.appendChild(el('div', 'card-t', 'Программы Linux'));
+        if (поискСписок === 'обновляю')
+          body.appendChild(el('div', 'empty', 'Обновляю списки пакетов — это делается один раз…'));
+        else if (поискСписок === 'ищу')
+          body.appendChild(el('div', 'empty', 'Ищу в репозиториях…'));
+        else if (поискСписок && поискСписок.ошибка)
+          body.appendChild(el('div', 'set-note', esc(поискСписок.ошибка)));
+        else if (Array.isArray(поискСписок) && поискСтрока === набрано)
+          поискСписок.length ? поискСписок.forEach(x => body.appendChild(строкаПакета(x)))
+                             : body.appendChild(el('div', 'empty',
+                                 'Ничего не нашлось. У программ бывают свои имена — попробуйте другое написание'));
+        else
+          body.appendChild(el('div', 'set-note',
+            набрано.length < 2 ? 'Наберите хотя бы две буквы и нажмите Enter'
+                               : 'Нажмите Enter, чтобы поискать это в репозиториях Ubuntu и Flathub'));
+        win.setSub('поиск · ' + набрано);
+        return;
+      }
+
       if (tab === 'linux'){ drawLinux(); return; }
       body.innerHTML = '';
       if (tab === 'catalog'){
-        body.appendChild(el('div', 'st-hero', `<h2 style="margin:0 0 6px">Магазин ${Brand.name}</h2>
-          <div style="opacity:.85">Приложения устанавливаются по-настоящему: появляются в Пуске,
-          запускаются как системные и удаляются вместе с данными</div>`));
-        body.appendChild(el('div', 'card-t', 'Доступно к установке'));
+        body.appendChild(el('div', 'card-t', 'Приложения системы'));
         const g = el('div', 'st-grid');
         CATALOG.forEach(a => g.appendChild(cardFor(a, AppStore.isInstalled(a.id))));
         body.appendChild(g);
-        win.setSub('каталог · ' + CATALOG.length);
+
+        /* Под каталогом из четырёх наших приложений оставалось пол-окна
+           пустоты, а главное — настоящие программы Linux — пряталось во
+           вкладке. Кладём сюда подборку: это не обещание, что они уже
+           здесь, а короткий путь к поиску по ним. */
+        body.appendChild(el('div', 'card-t', 'Популярное в Linux'));
+        const п = el('div', 'st-grid');
+        ПОДБОРКА.forEach(([имя, знак, про]) => {
+          const к = el('div', 'st-card');
+          const ико = el('div', 'app-ico', знак);
+          ико.style.background = 'rgba(var(--tint),.14)';
+          к.appendChild(ико);
+          к.appendChild(el('div', '', `<b style="font-size:13px">${esc(имя)}</b>
+            <div class="tiny muted" style="margin-top:3px;line-height:1.35">${esc(про)}</div>`));
+          const ряд = el('div', 'row');
+          const б = el('button', 'btn', 'Найти');
+          б.onclick = () => {
+            поле.value = имя.toLowerCase();
+            набрано = поле.value;
+            найтиВРепозиториях(набрано);
+          };
+          ряд.appendChild(б);
+          к.appendChild(ряд);
+          п.appendChild(к);
+        });
+        body.appendChild(п);
+        win.setSub('обзор');
       }
       else if (tab === 'mine'){
         const custom = AppStore.custom();

@@ -217,13 +217,32 @@ select.inp option{background:#1a1e28;color:#fff}
 .br-tile:hover{transform:translateY(-3px);background:rgba(var(--tint),.2)}
 .br-tile .e{font-size:26px;display:block;margin-bottom:6px}
 
-/* ---------- Магазин ---------- */
-.st-hero{border-radius:18px;padding:30px;margin-bottom:16px;background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff}
-.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
-.st-card{border-radius:14px;padding:14px;background:rgba(var(--tint),.1);display:grid;gap:8px;justify-items:center;text-align:center;
-  transition:transform var(--t2) var(--e-spring)}
-.st-card:hover{transform:translateY(-4px)}
-.st-card .app-ico{width:52px;height:52px;font-size:26px}
+/* ---------- Магазин ----------
+
+   Строение то же, что у «Параметров»: слева разделы, справа содержимое, и
+   поиск закреплён сверху. Так человек находит нужное одним движением, а не
+   вспоминает, в какой вкладке живёт поиск.
+
+   Карточка приложения читается слева направо: значок, имя, описание,
+   кнопка. Раньше всё было по центру и в три строки — из четырёх слов
+   описания получался столбик, а кнопки стояли вразнобой. */
+.st-app{display:flex;height:100%}
+.st-side{width:196px;flex:0 0 196px}
+.st-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.st-top{padding:12px 14px 6px}
+.st-find{width:100%}
+.st-job{padding:0 14px}
+.st-job .st-work{padding:14px;margin:6px 0 2px}
+
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.st-card{border-radius:14px;padding:12px;background:rgba(var(--tint),.1);
+  display:grid;grid-template-columns:52px 1fr;grid-template-areas:'ico text' 'ico act';
+  gap:4px 12px;align-items:center;text-align:left;
+  transition:background var(--t1),transform var(--t2) var(--e-spring)}
+.st-card:hover{transform:translateY(-2px);background:rgba(var(--tint),.16)}
+.st-card .app-ico{grid-area:ico;width:52px;height:52px;font-size:26px;align-self:start}
+.st-card > div:nth-child(2){grid-area:text;min-width:0}
+.st-card .row{grid-area:act;justify-content:flex-start;gap:6px}
 
 /* ---------- Задачи (To-Do) ---------- */
 .td-item{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:12px;background:rgba(var(--tint),.08);margin-bottom:7px;
