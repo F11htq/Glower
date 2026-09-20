@@ -394,7 +394,15 @@ export const procs = {
         const cpu = (прошло > 0.2 && typeof было === 'number')
           ? Math.max(0, Math.min(100, ((такты - было) / tick) / прошло * 100))
           : (life > 0 ? ((такты) / tick) / life * 100 : 0);
-        out.push({ pid:+pid, name, cpu:+cpu.toFixed(1), mem: rss, lifetime: Math.round(life) });
+        /* Строка запуска нужна, чтобы отличить программу человека от
+           нашей собственной кухни: короткого имени для этого мало —
+           WebKit, node и python выглядят одинаково у всех. */
+        let cmd = '';
+        try {
+          cmd = (await readFile(`/proc/${pid}/cmdline`, 'utf8'))
+            .replace(/\0+$/, '').split('\0').join(' ').slice(0, 160);
+        } catch(e){}
+        out.push({ pid:+pid, name, cmd, cpu:+cpu.toFixed(1), mem: rss, lifetime: Math.round(life) });
       } catch(e){}                        // процесс мог закончиться — обычное дело
     }
     ПРОШЛЫЕ_ТАКТЫ = стало;
@@ -2163,6 +2171,34 @@ export function tray(allowLaunch){
         (e, out, err) => resolve(e ? (String(err || '').trim() || e.message) : null)));
       if (беда) throw new Error(беда);
       return { ok:true, действие };
+    },
+
+    /* Закрыть программу, которой принадлежит значок.
+    
+       За полным закрытием мессенджера человеку приходилось идти в
+       диспетчер задач и искать его среди системных процессов — при том,
+       что значок в лотке и есть эта программа. Узнаём, чей это разговор
+       на шине, и просим этот процесс закончить работу. Просим, а не
+       убиваем: TERM даёт программе сохранить своё и закрыться по-людски. */
+    async 'sys.tray.закрыть'({ служба }){
+      if (!allowLaunch) throw new Error('лоток выключен: запустите агент с ключом --allow-launch');
+      if (!/^[\w.:-]+$/.test(String(служба || ''))) throw new Error('неверное имя программы');
+      if (!await has('gdbus')) throw new Error('на машине нет gdbus — спросить некого');
+
+      const среда = await средаЭкрана();
+      const { execFile } = await import('node:child_process');
+      const доводы = ['call', '--session', '--dest', 'org.freedesktop.DBus',
+        '--object-path', '/org/freedesktop/DBus',
+        '--method', 'org.freedesktop.DBus.GetConnectionUnixProcessID', служба];
+      const ответ = await new Promise(resolve => execFile('gdbus', доводы,
+        { env:среда, timeout:5000 }, (e, out) => resolve(e ? '' : String(out))));
+      const pid = +((ответ.match(/\d+/) || [])[0]);
+      if (!pid || pid <= 1) throw new Error('не удалось узнать, чья это программа');
+      /* Себя и первый процесс машины не трогаем ни при каких условиях. */
+      if (pid === process.pid) throw new Error('это сама оболочка');
+      try { process.kill(pid, 'SIGTERM'); }
+      catch(e){ throw new Error('программа не закрылась: ' + e.message); }
+      return { ok:true, pid };
     }
   };
 }

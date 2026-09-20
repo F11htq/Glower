@@ -496,7 +496,42 @@ function wireTaskManager(){
           <div class="ctl">${d.load.map(x => x.toFixed(2)).join(' · ')}</div></div>`;
 
       список.innerHTML = '<div class="tm-row head"><div>Процесс</div><div>ЦП</div><div>Память</div><div></div></div>';
-      d.list.forEach(п => {
+
+      /* Программы человека и внутренности системы — врозь.
+      
+         Человек шёл сюда закрыть зависшую программу, а видел список, в
+         котором его программа тонет среди WebKitWebProcess, systemd, dbus
+         и наших собственных частей. Найти в нём нужное — задача, которой он
+         не просил.
+      
+         Отличаем по строке запуска, а не по короткому имени: WebKit, node и
+         python выглядят одинаково у всех, и только полная строка говорит,
+         чьи они. */
+      const СИСТЕМНОЕ = [
+        /glower-/, /server\.mjs/, /labwc/, /WebKit/i, /Xwayland/, /greetd/,
+        /systemd/, /dbus/, /polkit/, /udisks/, /upower/, /NetworkManager/,
+        /wpa_supplicant/, /ModemManager/, /pipewire/, /wireplumber/, /avahi/,
+        /bluetoothd/, /cups/, /rsyslog/, /cron/, /agetty/, /plymouth/,
+        /accounts-daemon/, /gvfs/, /at-spi/, /xdg-desktop-portal/
+      ];
+      const системный = п => {
+        /* Потоки ядра идут в квадратных скобках и строки запуска не имеют
+           вовсе — их человеку показывать точно незачем. */
+        if (!п.cmd) return true;
+        const где = п.cmd + ' ' + п.name;
+        return СИСТЕМНОЕ.some(в => в.test(где));
+      };
+      const свои = d.list.filter(п => !системный(п));
+      const наши = d.list.filter(системный);
+
+      const заголовок = (текст, число) => {
+        const н = el('div', 'tm-row head');
+        н.style.opacity = '.75';
+        н.innerHTML = `<div>${текст} <small class="muted">${число}</small></div><div></div><div></div><div></div>`;
+        return н;
+      };
+
+      const строка = п => {
         const r = el('div', 'tm-row');
         r.innerHTML = `<div>${esc(п.name)} <small class="muted">${п.pid}</small>
             <div class="bar"><i style="width:${Math.min(100, п.cpu)}%"></i></div></div>
@@ -512,8 +547,24 @@ function wireTaskManager(){
           } catch(e){ Dlg.alert('Не вышло снять задачу', String(e.message || e), '⚠️'); }
           setTimeout(нарисуй, 700);
         };
-        список.appendChild(r);
-      });
+        return r;
+      };
+
+      if (свои.length) список.appendChild(заголовок('Программы', свои.length));
+      свои.forEach(п => список.appendChild(строка(п)));
+      if (!свои.length)
+        список.appendChild(el('div', 'empty', 'Ни одной программы человека не запущено'));
+
+      /* Системное показываем по просьбе: оно нужно редко, а места занимает
+         больше всего. Выбор запоминаем — кто открыл раз, обычно откроет и
+         впредь. */
+      const открыто = KV.get('диспетчер.система', false);
+      const кнопка = el('button', 'btn');
+      кнопка.style.margin = '10px 0 4px';
+      кнопка.textContent = (открыто ? '▾ ' : '▸ ') + 'Система и оболочка · ' + наши.length;
+      кнопка.onclick = () => { KV.set('диспетчер.система', !открыто); нарисуй(); };
+      список.appendChild(кнопка);
+      if (открыто) наши.forEach(п => список.appendChild(строка(п)));
 
       win.setSub(`${d.total} процессов · ${гб(d.mem.total - d.mem.free)} памяти занято`);
     };

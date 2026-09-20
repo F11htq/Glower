@@ -998,7 +998,12 @@ try {
   /* --- часовой пояс --- */
   check('часовой пояс переключается и двигает часы',
     await page.evaluate(async () => {
-      const before = document.querySelector('#tray-time').textContent;
+      /* Сравнивать «стало как было» по строке нельзя: между двумя
+         замерами может смениться минута, и проверка падает на ровном
+         месте, ничего не поймав. Сверяем с часами машины, с допуском в
+         минуту. */
+      const минуты = т => { const [ч, м] = т.split(':').map(Number);
+        return Number.isFinite(ч) ? ч * 60 + м : null; };
       Store.set('tz', 'Asia/Kamchatka');
       Shell.clock();
       const kam = document.querySelector('#tray-time').textContent;
@@ -1007,8 +1012,10 @@ try {
       const lon = document.querySelector('#tray-time').textContent;
       Store.set('tz', '');
       Shell.clock();
-      const back = document.querySelector('#tray-time').textContent;
-      return kam !== lon && back === before;
+      const back = минуты(document.querySelector('#tray-time').textContent);
+      const здесь = new Date();
+      const надо = здесь.getHours() * 60 + здесь.getMinutes();
+      return kam !== lon && back !== null && Math.abs(back - надо) <= 1;
     }));
 
   check('в настройках есть список часовых поясов',

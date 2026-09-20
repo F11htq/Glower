@@ -241,3 +241,14 @@ body.открыто .навес{display:block}
   padding:2px 4px; opacity:.85; font-size:13px;
 }
 .назад:hover{ opacity:1; }
+
+/* Заряжается — молния поверх значка; мало заряда — значок тревожного цвета. */
+#батарея{ position:relative; }
+#батарея.заряжается::after{
+  content:'⚡'; position:absolute; right:1px; bottom:1px;
+  font-size:9px; line-height:1; text-shadow:0 0 3px rgba(0,0,0,.8);
+}
+#батарея.мало .зн{ color:#ff8b73; }
+
+#окно-значка{ right:8px; min-width:190px; }
+.меню-строка.опасно{ color:#ff9b86; }
