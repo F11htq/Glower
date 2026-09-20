@@ -1054,6 +1054,67 @@ try {
       r !== 'прошло' && !/нет такого метода/.test(r), r);
   }
 
+  /* Обновление системы — обычным пакетом из обычного репозитория.
+  
+     До этого единственным способом получить новую версию была полная
+     переустановка. Теперь наши файлы едут пакетом, и проверять надо три
+     вещи: что пакет собирается и в нём лежит наше; что образ его ставит,
+     а значит dpkg знает версию и apt будет с чем сравнивать; и что в
+     образе прописан источник, откуда придут следующие.
+     
+     Пакет собираем по-настоящему, из поддельного корня: сборщик — это
+     тот самый код, который отработает при выпуске версии. */
+  {
+    const { execFile } = await import('node:child_process');
+    const { mkdtemp: мк, writeFile: пиши, mkdir: катал } = await import('node:fs/promises');
+    const корень = await мк(join(tmpdir(), 'glower-корень-'));
+    const выход = await мк(join(tmpdir(), 'glower-пакет-'));
+    await катал(join(корень, 'usr/share/glower/ui'), { recursive:true });
+    await катал(join(корень, 'usr/bin'), { recursive:true });
+    await пиши(join(корень, 'usr/share/glower/ui/index.html'), '<html>');
+    await пиши(join(корень, 'usr/bin/glower-shell'), '#!/usr/bin/python3\n');
+    await пиши(join(корень, 'etc/glower-release'), 'v9.9\n').catch(async () => {
+      await катал(join(корень, 'etc'), { recursive:true });
+      await пиши(join(корень, 'etc/glower-release'), 'v9.9\n');
+    });
+
+    const собран = await new Promise(готово => execFile('bash',
+      [join(root, 'linux', 'собери-пакет.sh'), корень, 'v9.9-2-gabcdef', выход],
+      { timeout:30000 }, (e, out) => готово(e ? '' : String(out).trim())));
+    check('пакет с нашими файлами собирается', /glower_9\.9\+2\.gabcdef_all\.deb$/.test(собран), собран);
+
+    if (собран){
+      const внутри = await new Promise(готово => execFile('dpkg-deb', ['-c', собран],
+        { timeout:15000 }, (e, out) => готово(e ? '' : String(out))));
+      check('в пакете лежит оболочка и страницы', /usr\/bin\/glower-shell/.test(внутри)
+        && /usr\/share\/glower\/ui\/index\.html/.test(внутри), внутри.slice(0, 80));
+      /* Чужих файлов в пакете быть не должно: dpkg откажется ставить
+         пакет, который лезет на территорию другого. Именно поэтому наши
+         настройки терминала переехали из /etc/xdg/foot к нам. */
+      check('и ничего чужого', !/etc\/xdg\/foot/.test(внутри));
+    }
+  }
+
+  /* Придержанные обновления apt называет отдельной строкой, и система
+     обязана её прочитать: иначе человек видит «система обновлена» при том,
+     что новая версия есть и не ставится. */
+  {
+    const есть = await page.evaluate(async () =>
+      'удержано' in (await Platform.rpc('pkg.upgrade.check').catch(() => ({}))));
+    check('система читает и придержанные обновления', есть);
+  }
+
+  {
+    const образ = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+    check('образ собирает и ставит наш пакет',
+      /собери-пакет\.sh/.test(образ) && /dpkg -i \/tmp\/glower\.deb/.test(образ));
+    check('и прописывает, откуда брать обновления',
+      /sources\.list\.d\/glower\.list/.test(образ) && /raw\.githubusercontent\.com/.test(образ));
+    const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+    check('настройки терминала лежат у нас, а не в чужом пакете',
+      /XDG_CONFIG_DIRS="\/usr\/share\/glower\/xdg/.test(сеанс));
+  }
+
   /* Живая система грузится ради установщика, и всё, что не ведёт к нему,
      только отнимает время. Службы отключены прямо в пунктах меню загрузки:
      проверить это иначе можно лишь записав флешку и загрузившись, поэтому
@@ -1081,7 +1142,7 @@ try {
     check('в образ попадает «врач»', /install .*linux\/врач.*usr\/bin\/врач/.test(образ));
     check('и он же латиницей', /usr\/bin\/vrach/.test(образ) && /usr\/bin\/dhfx/.test(образ));
     check('в образ попадают настройки терминала',
-      /etc\/xdg\/foot\/foot\.ini/.test(образ));
+      /usr\/share\/glower\/xdg\/foot\/foot\.ini/.test(образ));
     const настройки = await readFile(join(root, 'linux', 'foot.ini'), 'utf8');
     const вставка = настройки.split('\n').find(с => /^clipboard-paste=/.test(с)) || '';
     check('Ctrl+V в терминале вставляет', /Control\+v(\s|$)/.test(вставка), вставка);

@@ -39,6 +39,13 @@ fi
 #
 # Две раскладки и переключение по Alt+Shift — то же сочетание, по которому
 # переключается наша собственная. Нажатие видят обе, и они не расходятся.
+# Свои настройки чужим программам — своим каталогом, а не подменой их
+# файлов. Первым в списке идёт наш: foot берёт из него foot.ini, и при этом
+# ничей файл не тронут. Подменять чужое нельзя не из вежливости, а потому
+# что файлом владеет его пакет: наш пакет не смог бы такой файл поставить.
+XDG_CONFIG_DIRS="/usr/share/glower/xdg:${XDG_CONFIG_DIRS:-/etc/xdg}"
+export XDG_CONFIG_DIRS
+
 XKB_DEFAULT_LAYOUT="${GLOWER_KB_LAYOUT:-us,ru}"
 XKB_DEFAULT_OPTIONS="${GLOWER_KB_OPTIONS:-grp:alt_shift_toggle}"
 export XKB_DEFAULT_LAYOUT XKB_DEFAULT_OPTIONS

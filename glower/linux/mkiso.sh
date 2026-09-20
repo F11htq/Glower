@@ -375,8 +375,14 @@ install -m 755 "$SRC/linux/врач" "$ROOTFS/usr/bin/врач"
 ln -sf врач "$ROOTFS/usr/bin/vrach"
 ln -sf врач "$ROOTFS/usr/bin/dhfx"
 # Настройки терминала: главное там — Ctrl+V вставляет, как везде.
-install -d "$ROOTFS/etc/xdg/foot"
-install -m 644 "$SRC/linux/foot.ini" "$ROOTFS/etc/xdg/foot/foot.ini"
+#
+# Кладём к себе, а не в /etc/xdg/foot: этот путь занят пакетом foot, и файл
+# в нём принадлежит ему. Наш пакет не может владеть чужим файлом — dpkg
+# откажется его ставить, и обновление системы встанет на ровном месте.
+# Свой каталог сеанс подставляет первым в XDG_CONFIG_DIRS, и foot берёт
+# наши настройки, не трогая чужих.
+install -d "$ROOTFS/usr/share/glower/xdg/foot"
+install -m 644 "$SRC/linux/foot.ini" "$ROOTFS/usr/share/glower/xdg/foot/foot.ini"
 # настройки оконного сервера: оболочка внизу стопки, чужие окна — поверх неё
 install -d "$ROOTFS/usr/share/glower/labwc"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$ROOTFS/usr/share/glower/labwc/rc.xml"
@@ -952,6 +958,46 @@ deb $MIRROR_OUT $SUITE main universe restricted multiverse
 deb $MIRROR_OUT $SUITE-updates main universe restricted multiverse
 deb $MIRROR_OUT $SUITE-security main universe restricted multiverse
 EOF
+
+# --------------------------------------------------------------------------
+# Наши файлы — обычным пакетом, и репозиторий, откуда придут следующие.
+#
+# До этого единственным способом получить новую версию была полная
+# переустановка: записать флешку, загрузиться, поставить систему заново.
+# А меняется в ней почти всегда одно и то же — наши файлы, несколько
+# мегабайт. Теперь они лежат в пакете, пакет в репозитории, и система
+# обновляется тем же apt, которым ставится всё остальное.
+#
+# Пакет собираем из готового корня — ровно из того, что уедет человеку, —
+# и тут же ставим в этот корень: так dpkg становится хозяином наших файлов
+# и знает их версию. Без этого apt не с чем было бы сравнивать новую.
+PKGDIR="$(cd "$(dirname "$OUT")" && pwd)"
+if command -v dpkg-deb >/dev/null; then
+  PKG=$(bash "$SRC/linux/собери-пакет.sh" "$ROOTFS" "$RELEASE" "$PKGDIR")
+  echo "  пакет: $(basename "$PKG")"
+  cp "$PKG" "$ROOTFS/tmp/glower.deb"
+  chroot "$ROOTFS" dpkg -i /tmp/glower.deb >/dev/null 2>&1 \
+    || echo "  пакет не встал в образ — система будет работать, но не обновится"
+  rm -f "$ROOTFS/tmp/glower.deb"
+else
+  echo "  нет dpkg-deb — пакет не собран, обновляться системе будет нечем"
+fi
+
+# Репозиторий: обычный каталог на GitHub, по обычному https.
+#
+# Подписи ключом у него нет, и это осознанный размен. Ключ нужно где-то
+# хранить и кому-то доверять; мы и так целиком доверяем GitHub — оттуда
+# приходит и сам образ. Канал защищён https, а подмена содержимого на
+# стороне GitHub означала бы, что скомпрометирован сам источник системы, и
+# подпись тем же ключом из тех же секретов ничего бы не спасла.
+# Поэтому честнее написать trusted=yes прямо здесь, чем изображать
+# защиту, которой нет.
+install -d "$ROOTFS/etc/apt/sources.list.d"
+cat > "$ROOTFS/etc/apt/sources.list.d/glower.list" <<'СПИСОК'
+# Откуда GlowerOS берёт свои обновления. Обычный apt-репозиторий: его
+# видит и «Магазин», и команда apt в терминале.
+deb [trusted=yes] https://raw.githubusercontent.com/F11htq/Glower/apt/ ./
+СПИСОК
 
 chroot "$ROOTFS" /bin/sh -c '
   rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/lintian
