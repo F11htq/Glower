@@ -401,3 +401,12 @@ body.эконом .st-skel{animation:none}
 .tm-row.head{font-weight:600;opacity:.6;font-size:11px;position:sticky;top:0;background:rgba(var(--tint),.1);backdrop-filter:blur(10px)}
 .tm-row .bar{height:4px;border-radius:3px;background:rgba(var(--tint),.16);overflow:hidden;margin-top:4px}
 .tm-row .bar i{display:block;height:100%;background:var(--accent)}
+
+/* Настоящий значок вместо нашего знака: вписываем в ту же клетку и даём
+   ему проявиться, чтобы подмена не выглядела рывком. */
+.st-лицо{width:100%;height:100%;object-fit:contain;border-radius:inherit;
+  animation:стЛицо .25s var(--e-out) both}
+@keyframes стЛицо{from{opacity:0;transform:scale(.85)}}
+/* В витрине значок — это картинка, а не плитка: ни фона, ни рамки. */
+.ms-hero-art .st-ico{width:110px;height:110px;background:none!important;font-size:inherit}
+.ms-hero-card:not(.ms-hero-big) .ms-hero-art .st-ico{width:64px;height:64px}

@@ -173,77 +173,77 @@ APPS.store = {
            «firefox» в Ubuntu — пустая заглушка, которая тянет snap, и snap
            у нас не работает. Предлагать его значило бы обещать установку,
            которая кончится ничем. */
-        ['chromium', 'Chromium', 'Браузер на движке Chrome', '🌐'],
-        ['telegram-desktop', 'Telegram', 'Мессенджер', '✈️'],
-        ['thunderbird', 'Thunderbird', 'Почта', '📬'],
-        ['transmission-gtk', 'Transmission', 'Торренты', '⬇️'],
-        ['filezilla', 'FileZilla', 'Файлы по FTP и SFTP', '📡']
+        ['chromium', 'Chromium', 'Браузер на движке Chrome', '🌐', 'org.chromium.Chromium'],
+        ['telegram-desktop', 'Telegram', 'Мессенджер', '✈️', 'org.telegram.desktop'],
+        ['thunderbird', 'Thunderbird', 'Почта', '📬', 'org.mozilla.Thunderbird'],
+        ['transmission-gtk', 'Transmission', 'Торренты', '⬇️', 'com.transmissionbt.Transmission'],
+        ['filezilla', 'FileZilla', 'Файлы по FTP и SFTP', '📡', 'org.filezillaproject.Filezilla']
       ],
       'работа':[
-        ['libreoffice', 'LibreOffice', 'Документы, таблицы, презентации', '📄'],
-        ['obsidian', 'Obsidian', 'Заметки связанными страницами', '🗒'],
-        ['calibre', 'Calibre', 'Библиотека книг и читалка', '📚'],
-        ['keepassxc', 'KeePassXC', 'Хранилище паролей', '🔐'],
-        ['scribus', 'Scribus', 'Вёрстка печатных изданий', '📰'],
-        ['gnucash', 'GnuCash', 'Домашняя бухгалтерия', '💰']
+        ['libreoffice', 'LibreOffice', 'Документы, таблицы, презентации', '📄', 'org.libreoffice.LibreOffice'],
+        ['obsidian', 'Obsidian', 'Заметки связанными страницами', '🗒', 'md.obsidian.Obsidian'],
+        ['calibre', 'Calibre', 'Библиотека книг и читалка', '📚', 'com.calibre_ebook.calibre'],
+        ['keepassxc', 'KeePassXC', 'Хранилище паролей', '🔐', 'org.keepassxc.KeePassXC'],
+        ['scribus', 'Scribus', 'Вёрстка печатных изданий', '📰', 'net.scribus.Scribus'],
+        ['gnucash', 'GnuCash', 'Домашняя бухгалтерия', '💰', 'org.gnucash.GnuCash']
       ],
       'медиа':[
-        ['vlc', 'VLC', 'Проигрыватель, который играет всё', '🎬'],
-        ['audacity', 'Audacity', 'Запись и правка звука', '🎙'],
-        ['obs-studio', 'OBS Studio', 'Запись экрана и трансляции', '🎥'],
-        ['kdenlive', 'Kdenlive', 'Монтаж видео', '🎞'],
-        ['rhythmbox', 'Rhythmbox', 'Музыкальный проигрыватель', '🎵'],
-        ['handbrake', 'HandBrake', 'Перегон видео между форматами', '🔄']
+        ['vlc', 'VLC', 'Проигрыватель, который играет всё', '🎬', 'org.videolan.VLC'],
+        ['audacity', 'Audacity', 'Запись и правка звука', '🎙', 'org.audacityteam.Audacity'],
+        ['obs-studio', 'OBS Studio', 'Запись экрана и трансляции', '🎥', 'com.obsproject.Studio'],
+        ['kdenlive', 'Kdenlive', 'Монтаж видео', '🎞', 'org.kde.kdenlive'],
+        ['rhythmbox', 'Rhythmbox', 'Музыкальный проигрыватель', '🎵', 'org.gnome.Rhythmbox3'],
+        ['handbrake', 'HandBrake', 'Перегон видео между форматами', '🔄', 'fr.handbrake.ghb']
       ],
       'графика':[
-        ['gimp', 'GIMP', 'Редактор изображений', '🎨'],
-        ['inkscape', 'Inkscape', 'Векторная графика', '✒️'],
-        ['krita', 'Krita', 'Рисование и живопись', '🖌'],
-        ['blender', 'Blender', 'Трёхмерная графика и анимация', '🧊'],
-        ['darktable', 'darktable', 'Проявка фотографий из RAW', '📷'],
-        ['shotwell', 'Shotwell', 'Разбор домашнего фотоархива', '🖼']
+        ['gimp', 'GIMP', 'Редактор изображений', '🎨', 'org.gimp.GIMP'],
+        ['inkscape', 'Inkscape', 'Векторная графика', '✒️', 'org.inkscape.Inkscape'],
+        ['krita', 'Krita', 'Рисование и живопись', '🖌', 'org.kde.krita'],
+        ['blender', 'Blender', 'Трёхмерная графика и анимация', '🧊', 'org.blender.Blender'],
+        ['darktable', 'darktable', 'Проявка фотографий из RAW', '📷', 'org.darktable.Darktable'],
+        ['shotwell', 'Shotwell', 'Разбор домашнего фотоархива', '🖼', 'org.gnome.Shotwell']
       ],
       'игры':[
-        ['steam', 'Steam', 'Магазин и запуск игр', '🎮'],
-        ['0ad', '0 A.D.', 'Историческая стратегия', '🏛'],
-        ['supertuxkart', 'SuperTuxKart', 'Гонки с пингвином', '🏎'],
-        ['minetest', 'Minetest', 'Кубический мир и строительство', '⛏'],
-        ['gnome-mines', 'Сапёр', 'Та самая игра', '💣'],
-        ['aisleriot', 'Пасьянсы', 'Косынка и ещё восемьдесят', '🃏']
+        ['steam', 'Steam', 'Магазин и запуск игр', '🎮', 'com.valvesoftware.Steam'],
+        ['0ad', '0 A.D.', 'Историческая стратегия', '🏛', 'com.play0ad.zeroad'],
+        ['supertuxkart', 'SuperTuxKart', 'Гонки с пингвином', '🏎', 'net.supertuxkart.SuperTuxKart'],
+        ['minetest', 'Minetest', 'Кубический мир и строительство', '⛏', 'net.minetest.Minetest'],
+        ['gnome-mines', 'Сапёр', 'Та самая игра', '💣', 'org.gnome.Mines'],
+        ['aisleriot', 'Пасьянсы', 'Косынка и ещё восемьдесят', '🃏', 'org.gnome.Aisleriot']
       ],
       'система':[
         ['htop', 'htop', 'Диспетчер задач в терминале', '📊'],
         ['gparted', 'GParted', 'Разметка дисков', '💽'],
         ['timeshift', 'Timeshift', 'Снимки системы для отката', '⏪'],
         ['synaptic', 'Synaptic', 'Подробный список всех пакетов', '📦'],
-        ['gnome-disk-utility', 'Диски', 'Состояние и проверка дисков', '🩺'],
+        ['gnome-disk-utility', 'Диски', 'Состояние и проверка дисков', '🩺', 'org.gnome.DiskUtility'],
         ['neofetch', 'neofetch', 'Красивая справка о машине', '💬']
       ]
     };
 
     /* Правый столбик витрины: одна карточка покрупнее и две поменьше. */
     const ВТОРОЙ_РЯД = [
-      { имя:'LibreOffice', пакет:'libreoffice', знак:'📄', ярлык:'Бесплатно',
+      { имя:'LibreOffice', пакет:'libreoffice', флатхаб:'org.libreoffice.LibreOffice', знак:'📄', ярлык:'Бесплатно',
         строка:'Документы, таблицы и презентации — вместо привычного офиса',
         фон:'linear-gradient(140deg,#1d4ed8,#0f172a)' },
-      { имя:'Krita', пакет:'krita', знак:'🖌', строка:'Рисование',
+      { имя:'Krita', пакет:'krita', флатхаб:'org.kde.krita', знак:'🖌', строка:'Рисование',
         фон:'linear-gradient(140deg,#7c3aed,#312e81)' },
-      { имя:'OBS Studio', пакет:'obs-studio', знак:'🎥', строка:'Запись экрана',
+      { имя:'OBS Studio', пакет:'obs-studio', флатхаб:'com.obsproject.Studio', знак:'🎥', строка:'Запись экрана',
         фон:'linear-gradient(140deg,#0f766e,#052e2b)' }
     ];
 
     /* Витрина: то, с чего начинают на новой машине. */
     const ВИТРИНА = [
-      { имя:'Telegram', пакет:'telegram-desktop', знак:'✈️', ярлык:'Бесплатно',
+      { имя:'Telegram', пакет:'telegram-desktop', флатхаб:'org.telegram.desktop', знак:'✈️', ярлык:'Бесплатно',
         строка:'Мессенджер, который открывается быстрее, чем успеваешь передумать',
         фон:'linear-gradient(120deg,#38bdf8,#1d4ed8)' },
-      { имя:'GIMP', пакет:'gimp', знак:'🎨', ярлык:'Редактор изображений',
+      { имя:'GIMP', пакет:'gimp', флатхаб:'org.gimp.GIMP', знак:'🎨', ярлык:'Редактор изображений',
         строка:'Всё, что делают с изображениями, — и бесплатно',
         фон:'linear-gradient(120deg,#34d399,#065f46)' },
-      { имя:'VLC', пакет:'vlc', знак:'🎬', ярлык:'Проигрыватель',
+      { имя:'VLC', пакет:'vlc', флатхаб:'org.videolan.VLC', знак:'🎬', ярлык:'Проигрыватель',
         строка:'Играет любое видео. Правда любое',
         фон:'linear-gradient(120deg,#fb923c,#c2410c)' },
-      { имя:'Blender', пакет:'blender', знак:'🧊', ярлык:'Трёхмерная графика',
+      { имя:'Blender', пакет:'blender', флатхаб:'org.blender.Blender', знак:'🧊', ярлык:'Трёхмерная графика',
         строка:'Целая студия трёхмерной графики — и вся бесплатно',
         фон:'linear-gradient(120deg,#f59e0b,#7c2d12)' }
     ];
@@ -395,9 +395,94 @@ APPS.store = {
       return г;
     };
 
-    const значок = (зн, фон) => {
+    /* ---------- лицо программы ----------
+
+       Наш рисунок — последнее, что мы показываем, а не первое.
+
+       Сперва спрашиваем машину: у поставленных программ значок лежит на
+       диске, а к списку пакетов apt скачивает ещё и каталог значков для
+       магазинов — тот самый, из которого берёт лица GNOME Software. Это
+       настоящие значки, без единого похода в сеть.
+
+       Если на машине ничего нет, пробуем Flathub: у него значки лежат по
+       предсказуемому адресу, и для программ вроде Telegram или Krita это
+       единственное место, где они есть до установки. Нет сети — картинка
+       просто не загрузится, и останется наш знак. Ради значка никто не
+       должен ждать.
+
+       Важно: адрес Flathub я проверить не мог — из моей песочницы туда
+       не пускают. Если лица не появятся, виноват он, а не машина: скажите,
+       и я поменяю адрес. */
+    const ФЛАТХАБ_ПРЯМО = 'https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/';
+
+    /* Адрес значка на Flathub бывает двух видов. Старый — простой и
+       предсказуемый, его и пробуем первым. Новый лежит под меткой
+       содержимого, которую самому не составить: её приходится спрашивать
+       у Flathub, зато ответ потом хранится у нас и второй раз не
+       спрашивается. */
+    const адресаЗначка = new Map(JSON.parse(KV.get('магазин.лица', '[]') || '[]'));
+    /* Что ответила машина про значок — держим до закрытия окна. */
+    const лицаМашины = new Map();
+    async function адресСFlathub(ид){
+      if (адресаЗначка.has(ид)) return адресаЗначка.get(ид);
+      try {
+        const о = await fetch('https://flathub.org/api/v2/appstream/' + encodeURIComponent(ид),
+          { cache:'force-cache' }).then(r => r.ok ? r.json() : null);
+        const адрес = о && (о.icon || (Array.isArray(о.icons) && о.icons.length
+          ? (о.icons.find(x => x.height === 128) || о.icons[0]).url : ''));
+        if (адрес){
+          адресаЗначка.set(ид, адрес);
+          /* Храним у себя: значок не меняется, а лишний поход в сеть —
+             это ожидание на слабом канале. */
+          KV.set('магазин.лица', JSON.stringify([...адресаЗначка].slice(-300)));
+        }
+        return адрес || '';
+      } catch(e){ return ''; }
+    }
+
+    const значок = (зн, фон, о) => {
       const и = el('div', 'app-ico st-ico', зн);
       и.style.background = фон || 'rgba(var(--tint),.14)';
+      if (!о || (!о.пакет && !о.флатхаб)) return и;
+
+      const покажи = адрес => new Promise(готово => {
+        if (!адрес) return готово(false);
+        const карт = new Image();
+        карт.className = 'st-лицо';
+        карт.alt = '';
+        карт.onload = () => {
+          и.textContent = '';
+          if (!фон) и.style.background = 'rgba(var(--tint),.10)';
+          и.appendChild(карт);
+          готово(true);
+        };
+        карт.onerror = () => готово(false);
+        карт.src = адрес;
+      });
+
+      (async () => {
+        /* 1. Машина. У поставленной программы значок лежит на диске, а к
+              спискам пакетов apt скачивает ещё и каталог значков для
+              магазинов — если он есть, лица берутся оттуда, без сети.
+        
+              Ответ запоминаем: витрина перерисовывается раз в семь секунд,
+              и спрашивать машину об одном и том же значке заново — работа
+              на ровном месте, а машина у нас слабая. */
+        if (о.пакет && window.Platform && Platform.mode === 'native'){
+          try {
+            if (!лицаМашины.has(о.пакет))
+              лицаМашины.set(о.пакет, Platform.rpc('sys.icon',
+                { 'имя':о.пакет, 'ярлык':о.флатхаб || о.пакет }).catch(() => null));
+            const о2 = await лицаМашины.get(о.пакет);
+            if (о2 && о2['есть'] && о2['данные'] && await покажи(о2['данные'])) return;
+          } catch(e){}
+        }
+        if (!о.флатхаб) return;
+        /* 2. Flathub, простой адрес. */
+        if (await покажи(ФЛАТХАБ_ПРЯМО + о.флатхаб + '.png')) return;
+        /* 3. Flathub, адрес по его же ответу. */
+        await покажи(await адресСFlathub(о.флатхаб));
+      })();
       return и;
     };
 
@@ -407,7 +492,7 @@ APPS.store = {
     const карточка = (п, i) => {
       const к = el('button', 'st-card');
       к.style.setProperty('--i', i || 0);
-      к.appendChild(значок(п.знак || '📦', п.фон));
+      к.appendChild(значок(п.знак || '📦', п.фон, п));
       к.appendChild(el('div', 'st-card-t',
         `<b>${esc(п.имя)}</b><span class="tiny muted">${esc(п.про || '')}</span>`));
       к.onclick = () => откройПрограмму(п);
@@ -529,9 +614,11 @@ APPS.store = {
           <div class="ms-hero-p">${esc(в.строка || '')}</div>
           ${большая ? '<span class="btn pri ms-hero-btn">Подробнее</span>' : ''}
         </div>
-        <div class="ms-hero-art">${в.знак}</div>`;
+        <div class="ms-hero-art"></div>`;
+      к.querySelector('.ms-hero-art').appendChild(
+        значок(в.знак, '', { пакет:в.пакет, флатхаб:в.флатхаб }));
       к.onclick = () => откройПрограмму({ имя:в.имя, пакет:в.пакет, знак:в.знак,
-                                          про:в.строка, фон:в.фон });
+                                          про:в.строка, фон:в.фон, флатхаб:в.флатхаб });
       return к;
     }
 
@@ -608,8 +695,8 @@ APPS.store = {
       ш.innerHTML = `<b>${esc(имя)}</b><span class="ms-col-more">›</span>`;
       ш.onclick = () => { экран = 'раздел'; раздел = какой; рисуйБок(); draw(); };
       с.appendChild(ш);
-      ПОДБОРКИ[какой].slice(0, 4).forEach(([пакет, имя2, про, знак], i) =>
-        с.appendChild(строкаПрограммы({ пакет, имя:имя2, про, знак }, i)));
+      ПОДБОРКИ[какой].slice(0, 4).forEach(([пакет, имя2, про, знак, флатхаб], i) =>
+        с.appendChild(строкаПрограммы({ пакет, имя:имя2, про, знак, флатхаб }, i)));
       return с;
     }
 
@@ -619,7 +706,7 @@ APPS.store = {
     function строкаПрограммы(п, i){
       const р = el('div', 'ms-row');
       р.style.setProperty('--i', i || 0);
-      р.appendChild(значок(п.знак || '📦', п.фон));
+      р.appendChild(значок(п.знак || '📦', п.фон, п));
       const т = el('div', 'ms-row-t');
       т.innerHTML = `<b>${esc(п.имя)}</b><span class="tiny muted">${esc(п.про || '')}</span>`;
       р.appendChild(т);
@@ -674,8 +761,8 @@ APPS.store = {
       body.appendChild(назад);
       body.appendChild(заголовок(р.знак + ' ' + р.имя));
       const г = el('div', 'st-grid');
-      ПОДБОРКИ[р.id].forEach(([пакет, имя, про, знак], i) =>
-        г.appendChild(карточка({ пакет, имя, про, знак }, i)));
+      ПОДБОРКИ[р.id].forEach(([пакет, имя, про, знак, флатхаб], i) =>
+        г.appendChild(карточка({ пакет, имя, про, знак, флатхаб }, i)));
       body.appendChild(г);
       win.setSub(р.имя.toLowerCase());
     }
@@ -691,7 +778,7 @@ APPS.store = {
       body.appendChild(назад);
 
       const шапка = el('div', 'st-page');
-      шапка.appendChild(значок(п.знак || '📦', п.фон));
+      шапка.appendChild(значок(п.знак || '📦', п.фон, п));
       const текст = el('div', 'st-page-t');
       текст.innerHTML = `<h2>${esc(п.имя)}</h2><div class="muted">${esc(п.про || '')}</div>`;
       шапка.appendChild(текст);
@@ -929,7 +1016,10 @@ APPS.store = {
                      x.installed ? 'уже стоит' : '', размер(x.size)].filter(Boolean).join(' · ');
         сведения.set(x.name, x);
         г.appendChild(карточка({ имя:x.title && x.title !== x.name ? x.title : x.name,
-                                 пакет:x.name, про, знак:x.source === 'flatpak' ? '🫙' : '📦' }, i));
+                                 пакет:x.name, про, знак:x.source === 'flatpak' ? '🫙' : '📦',
+                                 /* у программы с Flathub имя пакета и есть её
+                                    имя в мире значков — берём его же */
+                                 флатхаб:x.source === 'flatpak' ? x.name : '' }, i));
       });
       body.appendChild(г);
     }
