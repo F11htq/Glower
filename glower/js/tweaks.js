@@ -43,7 +43,11 @@ Shell.updateTaskbar = function(){
   const anyMax = mine.some(w => w.maximized);
   const busy = mine.length > 0;
 
-  document.body.classList.toggle('taskbar', anyMax && S.taskbarFull !== false);
+  /* В раздельном режиме полоса внизу — всегда полоса: стол просит об этом
+     отдельным признаком. В остальных случаях, как и прежде, она
+     появляется под развёрнутым окном. */
+  const всегда = document.body.classList.contains('док-полосой');
+  document.body.classList.toggle('taskbar', (всегда || anyMax) && S.taskbarFull !== false);
 
   // Трей переезжал вниз, потому что верхняя панель пряталась при открытом
   // окне и трей вместе с ней пропадал. С разделёнными поверхностями панель
