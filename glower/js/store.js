@@ -885,7 +885,15 @@ APPS.store = {
       body.appendChild(заголовок('Обновления'));
       const место = el('div', '');
       body.appendChild(место);
-      место.appendChild(el('div', 'st-skel st-skel-l'));
+      /* Пока apt считает, что можно обновить, показываем заготовку списка,
+         а не одну полоску: спрашивает он неторопливо — на слабой машине
+         полминуты, — и одинокая черта всё это время читается как поломка. */
+      место.appendChild(el('div', 'set-note', 'Спрашиваю систему, что нового…'));
+      for (let i = 0; i < 4; i++){
+        const з = el('div', 'st-skel st-skel-r');
+        з.style.setProperty('--i', i);
+        место.appendChild(з);
+      }
       win.setSub('обновления');
 
       let д = null, беда = '';
