@@ -240,7 +240,9 @@ try {
         + ' · стол ' + (document.querySelector('#desktop').classList.contains('on') ? 'открыт' : 'НЕ ОТКРЫТ')
         + ' · помнить сеанс: ' + S.restoreSession
         + ' · восстановлено: ' + (window.Session && Session.восстановлено)
-        + ' · есть APPS: ' + ['calc','clock'].filter(a => APPS[a]).join(',');
+        + ' · есть APPS: ' + ['calc','clock'].filter(a => APPS[a]).join(',')
+        + ' · журнал: ' + (KV.get('session.журнал', []) || [])
+            .map(з => з.п + '=' + з.с).join(' ');
     }));
   await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); Session.save(); });
   await page.waitForTimeout(400);
