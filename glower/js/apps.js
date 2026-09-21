@@ -1345,8 +1345,13 @@ APPS.settings = {
       d.appendChild(row('📍', 'Активные углы', 'Правый верхний угол — просмотр задач', toggle(() => S.hotcorners, v => set('hotcorners', v))));
       d.appendChild(row('⬆️', 'Скрывать верхнюю панель', 'Панель и виджеты уходят, когда открыто окно',
         toggle(() => S.topbarAutohide !== false, v => { set('topbarAutohide', v); Shell.updateChrome(); })));
-      d.appendChild(row('🪟', 'Панель задач во всю ширину', 'При развёрнутом окне док растягивается на всю ширину',
-        toggle(() => S.taskbarFull !== false, v => { set('taskbarFull', v); Shell.updateTaskbar(); })));
+      /* В раздельном режиме док — островок и только островок, форму на ходу
+         он не меняет. Переключателю там нечем управлять, и висеть он не
+         должен: выключатель, который ничего не выключает, хуже, чем его
+         отсутствие. */
+      if (!(window.Поверхности && Поверхности.разделено && Поверхности.разделено()))
+        d.appendChild(row('🪟', 'Панель задач во всю ширину', 'При развёрнутом окне док растягивается на всю ширину',
+          toggle(() => S.taskbarFull !== false, v => { set('taskbarFull', v); Shell.updateTaskbar(); })));
       d.appendChild(row('🕒', 'Часы и трей в панели', 'Когда верхняя панель скрыта, часы переезжают вниз',
         toggle(() => S.trayInDock !== false, v => { set('trayInDock', v); Shell.updateTaskbar(); })));
       main.appendChild(d);
