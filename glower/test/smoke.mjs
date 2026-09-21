@@ -1235,8 +1235,12 @@ try {
       document.querySelectorAll('#boot, #setup, .welcome, .вход').forEach(н => н.remove());
       const готовь = {
         'заставке':   () => { const б = document.createElement('div'); б.id = 'boot'; document.body.appendChild(б); },
-        'мастере':    () => { const б = document.createElement('div'); б.id = 'setup'; document.body.appendChild(б); },
-        'приветствии':() => { const б = document.createElement('div'); б.className = 'welcome'; document.body.appendChild(б); },
+        /* С теми же признаками, с какими они живут на самом деле: и мастер,
+           и приветствие до «on» прозрачны, а прозрачное экран не
+           закрывает — стол это теперь различает. */
+        'мастере':    () => { const б = document.createElement('div'); б.id = 'setup';
+                              б.className = 'setup on'; document.body.appendChild(б); },
+        'приветствии':() => { const б = document.createElement('div'); б.className = 'welcome on'; document.body.appendChild(б); },
         'входе':      () => { const б = document.createElement('div'); б.className = 'вход'; document.body.appendChild(б); }
       }[имя];
       готовь();
@@ -1246,6 +1250,23 @@ try {
     }, [что]);
     check('стол знает, что экран занят при ' + что, занят);
   }
+
+  /* Обратная сторона того же: невидимый остаток экран не закрывает.
+
+     У человека панель пропала целиком и навсегда, а стол при этом работал.
+     Виноват был остаток в разметке: прозрачный, никому не видный — и стол
+     до конца сеанса докладывал «занято». Панель честно пряталась и ждала
+     слова, которого уже никто не скажет. */
+  const остаток = await page.evaluate(() => {
+    document.querySelectorAll('#boot, #setup, .welcome, .вход').forEach(н => н.remove());
+    const б = document.createElement('div'); б.className = 'welcome';  // без «on» — прозрачный
+    document.body.appendChild(б);
+    document.querySelector('#desktop').classList.add('on');
+    const есть = Поверхности.прячемся();
+    б.remove();
+    return есть;
+  });
+  check('невидимый остаток не прячет панель', остаток === false, 'стол сказал: ' + остаток);
 
   /* Развёрнутое окно в раздельном режиме: сверху ровно под полосой, снизу
      до самого края.
