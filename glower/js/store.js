@@ -161,63 +161,125 @@ APPS.store = {
       { id:'медиа',   имя:'Музыка и кино',знак:'🎬', фон:'linear-gradient(140deg,#f472b6,#be185d)' },
       { id:'графика', имя:'Графика',      знак:'🎨', фон:'linear-gradient(140deg,#34d399,#047857)' },
       { id:'игры',    имя:'Игры',         знак:'🎮', фон:'linear-gradient(140deg,#a78bfa,#6d28d9)' },
-      { id:'система', имя:'Инструменты',  знак:'🛠', фон:'linear-gradient(140deg,#94a3b8,#334155)' }
+      { id:'система', имя:'Инструменты',  знак:'🛠', фон:'linear-gradient(140deg,#94a3b8,#334155)' },
+      { id:'разработка', имя:'Разработка', знак:'🧑‍💻', фон:'linear-gradient(140deg,#38bdf8,#0c4a6e)' }
     ];
 
     /* Подборки составлены руками: в репозиториях нет ни витрин, ни
        разделов в человеческом смысле. Имя пакета пишем такое, под каким
        программа лежит в Ubuntu, иначе поиск по ней ничего не найдёт. */
+    /* Подборки. Имена пакетов проверены по спискам Ubuntu 24.04 — тем
+       самым, из которых система и ставит. Половина прежнего списка там не
+       существовала вовсе: telegram-desktop из Ubuntu убрали, thunderbird и
+       chromium остались пустыми заглушками, тянущими snap, а его в системе
+       нет. Человек нажимал «Установить» и читал «такого в репозиториях
+       нет» — и был прав.
+
+       Чего в Ubuntu нет, берём с Flathub: у записи тогда стоит «и:'flatpak'»,
+       и ставится она оттуда. Так Telegram, Steam и Visual Studio Code
+       снова оказываются в Магазине — по-настоящему, а не в списке. */
     const ПОДБОРКИ = {
       'сеть':[
-        /* Firefox здесь нет намеренно: он и так стоит в системе, а пакет
-           «firefox» в Ubuntu — пустая заглушка, которая тянет snap, и snap
-           у нас не работает. Предлагать его значило бы обещать установку,
-           которая кончится ничем. */
-        ['chromium', 'Chromium', 'Браузер на движке Chrome', '🌐', 'org.chromium.Chromium'],
-        ['telegram-desktop', 'Telegram', 'Мессенджер', '✈️', 'org.telegram.desktop'],
-        ['thunderbird', 'Thunderbird', 'Почта', '📬', 'org.mozilla.Thunderbird'],
-        ['transmission-gtk', 'Transmission', 'Торренты', '⬇️', 'com.transmissionbt.Transmission'],
-        ['filezilla', 'FileZilla', 'Файлы по FTP и SFTP', '📡', 'org.filezillaproject.Filezilla']
+        { п:'org.telegram.desktop', и:'flatpak', имя:'Telegram', про:'Мессенджер', зн:'✈️', ф:'org.telegram.desktop' },
+        { п:'org.chromium.Chromium', и:'flatpak', имя:'Chromium', про:'Браузер на движке Chrome', зн:'🌐', ф:'org.chromium.Chromium' },
+        { п:'org.mozilla.Thunderbird', и:'flatpak', имя:'Thunderbird', про:'Почта', зн:'📬', ф:'org.mozilla.Thunderbird' },
+        { п:'qbittorrent', имя:'qBittorrent', про:'Торренты', зн:'⬇️', ф:'org.qbittorrent.qBittorrent' },
+        { п:'transmission-gtk', имя:'Transmission', про:'Торренты попроще', зн:'📥', ф:'com.transmissionbt.Transmission' },
+        { п:'filezilla', имя:'FileZilla', про:'Файлы по FTP и SFTP', зн:'📡', ф:'org.filezillaproject.Filezilla' },
+        { п:'remmina', имя:'Remmina', про:'Удалённый рабочий стол', зн:'🖥', ф:'org.remmina.Remmina' },
+        { п:'evolution', имя:'Evolution', про:'Почта, календарь и контакты', зн:'📆', ф:'org.gnome.Evolution' },
+        { п:'geary', имя:'Geary', про:'Лёгкая почта', зн:'✉️', ф:'org.gnome.Geary' },
+        { п:'hexchat', имя:'HexChat', про:'IRC', зн:'💬', ф:'io.github.Hexchat' },
+        { п:'dino-im', имя:'Dino', про:'Чат по XMPP', зн:'🗨', ф:'im.dino.Dino' },
+        { п:'epiphany-browser', имя:'GNOME Web', про:'Простой браузер', зн:'🧭', ф:'org.gnome.Epiphany' },
+        { п:'falkon', имя:'Falkon', про:'Браузер KDE', зн:'🦅', ф:'org.kde.falkon' }
       ],
       'работа':[
-        ['libreoffice', 'LibreOffice', 'Документы, таблицы, презентации', '📄', 'org.libreoffice.LibreOffice'],
-        ['obsidian', 'Obsidian', 'Заметки связанными страницами', '🗒', 'md.obsidian.Obsidian'],
-        ['calibre', 'Calibre', 'Библиотека книг и читалка', '📚', 'com.calibre_ebook.calibre'],
-        ['keepassxc', 'KeePassXC', 'Хранилище паролей', '🔐', 'org.keepassxc.KeePassXC'],
-        ['scribus', 'Scribus', 'Вёрстка печатных изданий', '📰', 'net.scribus.Scribus'],
-        ['gnucash', 'GnuCash', 'Домашняя бухгалтерия', '💰', 'org.gnucash.GnuCash']
+        { п:'libreoffice', имя:'LibreOffice', про:'Документы, таблицы, презентации', зн:'📄', ф:'org.libreoffice.LibreOffice' },
+        { п:'onlyoffice-desktopeditors', и:'flatpak', имя:'ONLYOFFICE', про:'Офис, похожий на привычный', зн:'📝', ф:'org.onlyoffice.desktopeditors' },
+        { п:'calibre', имя:'Calibre', про:'Библиотека книг и читалка', зн:'📚', ф:'com.calibre_ebook.calibre' },
+        { п:'keepassxc', имя:'KeePassXC', про:'Хранилище паролей', зн:'🔐', ф:'org.keepassxc.KeePassXC' },
+        { п:'gnucash', имя:'GnuCash', про:'Домашняя бухгалтерия', зн:'💰', ф:'org.gnucash.GnuCash' },
+        { п:'homebank', имя:'HomeBank', про:'Учёт денег попроще', зн:'🏦', ф:'fr.free.HomeBank' },
+        { п:'scribus', имя:'Scribus', про:'Вёрстка печатных изданий', зн:'📰', ф:'net.scribus.Scribus' },
+        { п:'abiword', имя:'AbiWord', про:'Лёгкий текстовый редактор', зн:'🗒', ф:'com.abisource.AbiWord' },
+        { п:'gnumeric', имя:'Gnumeric', про:'Лёгкие таблицы', зн:'📊', ф:'org.gnumeric.Gnumeric' },
+        { п:'focuswriter', имя:'FocusWriter', про:'Письмо без отвлечений', зн:'✍️', ф:'io.github.gottcode.FocusWriter' },
+        { п:'xournalpp', имя:'Xournal++', про:'Заметки от руки и правка PDF', зн:'🖊', ф:'com.github.xournalpp.xournalpp' },
+        { п:'pdfarranger', имя:'PDF Arranger', про:'Склеить и переставить страницы', зн:'📑', ф:'com.github.jeromerobert.pdfarranger' },
+        { п:'okular', имя:'Okular', про:'Просмотр документов', зн:'📖', ф:'org.kde.okular' }
       ],
       'медиа':[
-        ['vlc', 'VLC', 'Проигрыватель, который играет всё', '🎬', 'org.videolan.VLC'],
-        ['audacity', 'Audacity', 'Запись и правка звука', '🎙', 'org.audacityteam.Audacity'],
-        ['obs-studio', 'OBS Studio', 'Запись экрана и трансляции', '🎥', 'com.obsproject.Studio'],
-        ['kdenlive', 'Kdenlive', 'Монтаж видео', '🎞', 'org.kde.kdenlive'],
-        ['rhythmbox', 'Rhythmbox', 'Музыкальный проигрыватель', '🎵', 'org.gnome.Rhythmbox3'],
-        ['handbrake', 'HandBrake', 'Перегон видео между форматами', '🔄', 'fr.handbrake.ghb']
+        { п:'vlc', имя:'VLC', про:'Проигрыватель, который играет всё', зн:'🎬', ф:'org.videolan.VLC' },
+        { п:'mpv', имя:'mpv', про:'Быстрый и лёгкий проигрыватель', зн:'▶️', ф:'io.mpv.Mpv' },
+        { п:'obs-studio', имя:'OBS Studio', про:'Запись экрана и трансляции', зн:'🎥', ф:'com.obsproject.Studio' },
+        { п:'audacity', имя:'Audacity', про:'Запись и правка звука', зн:'🎙', ф:'org.audacityteam.Audacity' },
+        { п:'kdenlive', имя:'Kdenlive', про:'Монтаж видео', зн:'🎞', ф:'org.kde.kdenlive' },
+        { п:'shotcut', имя:'Shotcut', про:'Монтаж видео попроще', зн:'✂️', ф:'org.shotcut.Shotcut' },
+        { п:'handbrake', имя:'HandBrake', про:'Перегон видео между форматами', зн:'🔄', ф:'fr.handbrake.ghb' },
+        { п:'strawberry', имя:'Strawberry', про:'Музыкальная коллекция', зн:'🍓', ф:'org.strawberrymusicplayer.strawberry' },
+        { п:'clementine', имя:'Clementine', про:'Музыкальный проигрыватель', зн:'🍊', ф:'org.clementine_player.Clementine' },
+        { п:'lollypop', имя:'Lollypop', про:'Музыка в духе GNOME', зн:'🍭', ф:'org.gnome.Lollypop' },
+        { п:'rhythmbox', имя:'Rhythmbox', про:'Классический проигрыватель', зн:'🎵', ф:'org.gnome.Rhythmbox3' },
+        { п:'easytag', имя:'EasyTAG', про:'Порядок в тегах музыки', зн:'🏷', ф:'org.gnome.EasyTAG' },
+        { п:'soundconverter', имя:'SoundConverter', про:'Перегон музыки в другой формат', зн:'🔊', ф:'org.soundconverter.SoundConverter' }
       ],
       'графика':[
-        ['gimp', 'GIMP', 'Редактор изображений', '🎨', 'org.gimp.GIMP'],
-        ['inkscape', 'Inkscape', 'Векторная графика', '✒️', 'org.inkscape.Inkscape'],
-        ['krita', 'Krita', 'Рисование и живопись', '🖌', 'org.kde.krita'],
-        ['blender', 'Blender', 'Трёхмерная графика и анимация', '🧊', 'org.blender.Blender'],
-        ['darktable', 'darktable', 'Проявка фотографий из RAW', '📷', 'org.darktable.Darktable'],
-        ['shotwell', 'Shotwell', 'Разбор домашнего фотоархива', '🖼', 'org.gnome.Shotwell']
+        { п:'gimp', имя:'GIMP', про:'Редактор изображений', зн:'🎨', ф:'org.gimp.GIMP' },
+        { п:'inkscape', имя:'Inkscape', про:'Векторная графика', зн:'✒️', ф:'org.inkscape.Inkscape' },
+        { п:'krita', имя:'Krita', про:'Рисование и живопись', зн:'🖌', ф:'org.kde.krita' },
+        { п:'blender', имя:'Blender', про:'Трёхмерная графика и анимация', зн:'🧊', ф:'org.blender.Blender' },
+        { п:'darktable', имя:'darktable', про:'Проявка фотографий из RAW', зн:'📷', ф:'org.darktable.Darktable' },
+        { п:'rawtherapee', имя:'RawTherapee', про:'Ещё одна проявка RAW', зн:'🌗', ф:'com.rawtherapee.RawTherapee' },
+        { п:'digikam', имя:'digiKam', про:'Разбор большого фотоархива', зн:'🗂', ф:'org.kde.digikam' },
+        { п:'shotwell', имя:'Shotwell', про:'Домашние фотографии', зн:'🖼', ф:'org.gnome.Shotwell' },
+        { п:'mypaint', имя:'MyPaint', про:'Рисование кистями', зн:'🖍', ф:'org.mypaint.MyPaint' },
+        { п:'drawing', имя:'Drawing', про:'Простой рисовалка, как Paint', зн:'🎨', ф:'com.github.maoschanz.drawing' },
+        { п:'simple-scan', имя:'Сканирование', про:'Работа со сканером', зн:'🖨', ф:'org.gnome.SimpleScan' },
+        { п:'cheese', имя:'Cheese', про:'Снимки с камеры', зн:'📸', ф:'org.gnome.Cheese' }
       ],
       'игры':[
-        ['steam', 'Steam', 'Магазин и запуск игр', '🎮', 'com.valvesoftware.Steam'],
-        ['0ad', '0 A.D.', 'Историческая стратегия', '🏛', 'com.play0ad.zeroad'],
-        ['supertuxkart', 'SuperTuxKart', 'Гонки с пингвином', '🏎', 'net.supertuxkart.SuperTuxKart'],
-        ['minetest', 'Minetest', 'Кубический мир и строительство', '⛏', 'net.minetest.Minetest'],
-        ['gnome-mines', 'Сапёр', 'Та самая игра', '💣', 'org.gnome.Mines'],
-        ['aisleriot', 'Пасьянсы', 'Косынка и ещё восемьдесят', '🃏', 'org.gnome.Aisleriot']
+        { п:'com.valvesoftware.Steam', и:'flatpak', имя:'Steam', про:'Магазин и запуск игр', зн:'🎮', ф:'com.valvesoftware.Steam' },
+        { п:'lutris', имя:'Lutris', про:'Запуск игр, в том числе windows-овых', зн:'🕹', ф:'net.lutris.Lutris' },
+        { п:'0ad', имя:'0 A.D.', про:'Историческая стратегия', зн:'🏛', ф:'com.play0ad.zeroad' },
+        { п:'supertuxkart', имя:'SuperTuxKart', про:'Гонки с пингвином', зн:'🏎', ф:'net.supertuxkart.SuperTuxKart' },
+        { п:'minetest', имя:'Minetest', про:'Кубический мир и строительство', зн:'⛏', ф:'net.minetest.Minetest' },
+        { п:'wesnoth', имя:'Wesnoth', про:'Пошаговая стратегия', зн:'⚔️', ф:'org.wesnoth.Wesnoth' },
+        { п:'freeciv', имя:'Freeciv', про:'Цивилизация с открытым кодом', зн:'🌍', ф:'org.freeciv.Freeciv' },
+        { п:'hedgewars', имя:'Hedgewars', про:'Ежи вместо червяков', зн:'🦔', ф:'org.hedgewars.Hedgewars' },
+        { п:'frozen-bubble', имя:'Frozen Bubble', про:'Стреляем шариками', зн:'🫧', ф:'' },
+        { п:'extremetuxracer', имя:'Extreme Tux Racer', про:'Пингвин с горы', зн:'⛷', ф:'' },
+        { п:'neverball', имя:'Neverball', про:'Шарик по лабиринту', зн:'🎱', ф:'' },
+        { п:'gnome-mines', имя:'Сапёр', про:'Та самая игра', зн:'💣', ф:'org.gnome.Mines' },
+        { п:'gnome-sudoku', имя:'Судоку', про:'Числовая головоломка', зн:'🔢', ф:'org.gnome.Sudoku' },
+        { п:'aisleriot', имя:'Пасьянсы', про:'Косынка и ещё восемьдесят', зн:'🃏', ф:'org.gnome.Aisleriot' }
       ],
       'система':[
-        ['htop', 'htop', 'Диспетчер задач в терминале', '📊'],
-        ['gparted', 'GParted', 'Разметка дисков', '💽'],
-        ['timeshift', 'Timeshift', 'Снимки системы для отката', '⏪'],
-        ['synaptic', 'Synaptic', 'Подробный список всех пакетов', '📦'],
-        ['gnome-disk-utility', 'Диски', 'Состояние и проверка дисков', '🩺', 'org.gnome.DiskUtility'],
-        ['neofetch', 'neofetch', 'Красивая справка о машине', '💬']
+        { п:'gnome-system-monitor', имя:'Системный монитор', про:'Процессы и нагрузка', зн:'📊', ф:'org.gnome.SystemMonitor' },
+        { п:'htop', имя:'htop', про:'Диспетчер задач в терминале', зн:'📈', ф:'' },
+        { п:'gparted', имя:'GParted', про:'Разметка дисков', зн:'💽', ф:'org.gnome.GParted' },
+        { п:'gnome-disk-utility', имя:'Диски', про:'Состояние и проверка дисков', зн:'🩺', ф:'org.gnome.DiskUtility' },
+        { п:'timeshift', имя:'Timeshift', про:'Снимки системы для отката', зн:'⏪', ф:'' },
+        { п:'deja-dup', имя:'Резервные копии', про:'Копии личных файлов', зн:'🗄', ф:'org.gnome.DejaDup' },
+        { п:'baobab', имя:'Анализатор диска', про:'Куда делось место', зн:'🥧', ф:'org.gnome.baobab' },
+        { п:'filelight', имя:'Filelight', про:'То же, но кругами', зн:'🌈', ф:'org.kde.filelight' },
+        { п:'bleachbit', имя:'BleachBit', про:'Уборка мусора', зн:'🧹', ф:'' },
+        { п:'synaptic', имя:'Synaptic', про:'Подробный список всех пакетов', зн:'📦', ф:'' },
+        { п:'virt-manager', имя:'Менеджер машин', про:'Виртуальные машины', зн:'🖧', ф:'' },
+        { п:'gnome-boxes', имя:'Boxes', про:'Виртуальные машины попроще', зн:'📦', ф:'org.gnome.Boxes' },
+        { п:'putty', имя:'PuTTY', про:'Подключение по SSH', зн:'🔌', ф:'' }
+      ],
+      'разработка':[
+        { п:'com.visualstudio.code', и:'flatpak', имя:'Visual Studio Code', про:'Редактор кода Microsoft', зн:'🧑‍💻', ф:'com.visualstudio.code' },
+        { п:'geany', имя:'Geany', про:'Лёгкая среда разработки', зн:'⚡', ф:'org.geany.Geany' },
+        { п:'kate', имя:'Kate', про:'Редактор KDE', зн:'📝', ф:'org.kde.kate' },
+        { п:'gedit', имя:'Text Editor', про:'Простой редактор GNOME', зн:'📄', ф:'org.gnome.gedit' },
+        { п:'emacs', имя:'Emacs', про:'Тот самый', зн:'🦬', ф:'' },
+        { п:'vim-gtk3', имя:'Vim', про:'Тот самый, в окне', зн:'🟩', ф:'' },
+        { п:'meld', имя:'Meld', про:'Сравнение файлов и папок', зн:'🔀', ф:'org.gnome.meld' },
+        { п:'git-cola', имя:'git-cola', про:'Git в окошке', зн:'🌿', ф:'' },
+        { п:'sqlitebrowser', имя:'DB Browser', про:'Просмотр баз SQLite', зн:'🗃', ф:'org.sqlitebrowser.sqlitebrowser' },
+        { п:'virtualbox', имя:'VirtualBox', про:'Виртуальные машины', зн:'📦', ф:'' }
       ]
     };
 
@@ -368,7 +430,7 @@ APPS.store = {
         await new Promise(r => setTimeout(r, 1200));
       }
       работа = null; началоРаботы = 0;
-      if (программа) сведенияОПрограмме(программа.пакет, true);
+      if (программа) сведенияОПрограмме(программа.пакет, true, программа.источник);
       draw();
     }
 
@@ -394,6 +456,13 @@ APPS.store = {
       }
       return г;
     };
+
+    /* Запись подборки — короткая: п (пакет), имя, про, зн (знак), ф
+       (имя на Flathub) и необязательное и:'flatpak', если в Ubuntu такой
+       программы нет вовсе. Разворачиваем её в то, чем пользуется
+       остальной код. */
+    const изЗаписи = з => ({ пакет:з.п, имя:з.имя, про:з.про, знак:з.зн,
+                             флатхаб:з.ф || '', источник:з.и || '' });
 
     /* ---------- лицо программы ----------
 
@@ -511,13 +580,32 @@ APPS.store = {
        стоит она уже или нет. Подборка знает только имя пакета и одну
        строку от нас — всё остальное спрашиваем. */
     const сведения = new Map();
-    async function сведенияОПрограмме(пакет, заново){
+    async function сведенияОПрограмме(пакет, заново, источник){
       if (!заново && сведения.has(пакет)) return сведения.get(пакет);
       const st = await узнайСостояние();
       if (!st || st.reason || !st.allowed){
         const пусто = { нет:true, почему:(st && st.reason) || 'система не управляет машиной' };
         сведения.set(пакет, пусто);
         return пусто;
+      }
+      /* Программа только с Flathub — значит, и спрашивать надо его. Если он
+         ещё не подключён, сведений не будет, и это честный ответ: подключим
+         при установке, а пока так и скажем. */
+      if (источник === 'flatpak'){
+        if (!st.flatpak){
+          const нет = { нет:true, почему:'на этой машине нет flatpak — программу отсюда не поставить' };
+          сведения.set(пакет, нет);
+          return нет;
+        }
+        let ф = null;
+        try { ф = await Pkg.info(пакет, 'flatpak'); } catch(e){ ф = null; }
+        const итогФ = ф && (ф.candidate || ф.installed)
+          ? Object.assign({ source:'flatpak', name:пакет }, ф)
+          : { нет:true, источник:'flatpak',
+              почему:st.flathubData ? 'на Flathub такого нет'
+                                    : 'Flathub ещё не подключён — подключим при установке' };
+        сведения.set(пакет, итогФ);
+        return итогФ;
       }
       if (!st.lists){
         try { await Pkg.update(); const j = await дождисьРаботы(); st.lists = !!j.ok; } catch(e){}
@@ -544,7 +632,7 @@ APPS.store = {
       экран = 'программа';
       рисуйБок();
       draw();
-      сведенияОПрограмме(п.пакет).then(() => { if (программа === п) draw(); });
+      сведенияОПрограмме(п.пакет, false, п.источник).then(() => { if (программа === п) draw(); });
     }
 
     /* ---------- ход установки ---------- */
@@ -582,7 +670,34 @@ APPS.store = {
 
     /* ---------- установка и удаление ---------- */
     async function поставь(имя, источник){
-      try { await Pkg.install(имя, источник); следиЗаРаботой(); draw(); }
+      try {
+        /* Flathub подключается отдельно: у него свои списки, и без них
+           установка честно ничего не найдёт. Делаем это сами — человек
+           пришёл поставить программу, а не разбираться, что такое
+           удалённый репозиторий. Спрашиваем один раз: качать там около
+           тридцати мегабайт. */
+        if (источник === 'flatpak'){
+          const st = await узнайСостояние();
+          if (!st || !st.flatpak)
+            return Dlg.alert('Не выйдет',
+              'На этой машине нет flatpak, а эта программа живёт только там.', '⚠️');
+          if (!st.flathubData){
+            if (!await Dlg.confirm('Подключить Flathub?',
+                'Эта программа живёт на Flathub. Чтобы её поставить, система сперва '
+                + 'прочитает его списки — это около тридцати мегабайт и одна-две минуты. '
+                + 'Дальше всё оттуда ставится сразу.',
+                { okText:'Подключить', icon:'🫙' })) return;
+            await Pkg.flathub();
+            const j = await дождисьРаботы();
+            if (!j.ok) return Dlg.alert('Flathub не подключился',
+              String(j.error || 'система не сказала, что пошло не так'), '⚠️');
+            st.flathubData = true;
+            сведения.clear();
+          }
+        }
+        await Pkg.install(имя, источник);
+        следиЗаРаботой(); draw();
+      }
       catch(e){ Dlg.alert('Не вышло начать установку', String(e.message || e), '⚠️'); }
     }
     async function убери(имя, источник){
@@ -695,8 +810,7 @@ APPS.store = {
       ш.innerHTML = `<b>${esc(имя)}</b><span class="ms-col-more">›</span>`;
       ш.onclick = () => { экран = 'раздел'; раздел = какой; рисуйБок(); draw(); };
       с.appendChild(ш);
-      ПОДБОРКИ[какой].slice(0, 4).forEach(([пакет, имя2, про, знак, флатхаб], i) =>
-        с.appendChild(строкаПрограммы({ пакет, имя:имя2, про, знак, флатхаб }, i)));
+      ПОДБОРКИ[какой].slice(0, 5).forEach((з, i) => с.appendChild(строкаПрограммы(изЗаписи(з), i)));
       return с;
     }
 
@@ -718,7 +832,7 @@ APPS.store = {
       /* Состояние узнаём у машины, но не все разом: шесть строк — это
          шесть запросов к apt, и на слабой машине они встанут в очередь.
          Спрашиваем по мере появления, а до ответа кнопка молчит. */
-      сведенияОПрограмме(п.пакет).then(о => {
+      сведенияОПрограмме(п.пакет, false, п.источник).then(о => {
         if (!р.isConnected) return;
         /* Когда системы под оболочкой нет вовсе — а так бывает, если
            открыть её в обычном браузере, — кнопке здесь делать нечего:
@@ -761,8 +875,7 @@ APPS.store = {
       body.appendChild(назад);
       body.appendChild(заголовок(р.знак + ' ' + р.имя));
       const г = el('div', 'st-grid');
-      ПОДБОРКИ[р.id].forEach(([пакет, имя, про, знак, флатхаб], i) =>
-        г.appendChild(карточка({ пакет, имя, про, знак, флатхаб }, i)));
+      ПОДБОРКИ[р.id].forEach((з, i) => г.appendChild(карточка(изЗаписи(з), i)));
       body.appendChild(г);
       win.setSub(р.имя.toLowerCase());
     }
