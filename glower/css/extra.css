@@ -718,7 +718,26 @@ body.поверхности-разделены.taskbar .dock{min-width:0}
    необъяснимой. */
 .об-фон{position:absolute;inset:-60px;z-index:-1;background-size:cover;
   background-position:center;pointer-events:none;
+  transform:scale(1.12);
   filter:blur(30px) saturate(1.1) brightness(.4)}
+
+/* Стекло поверх размытых обоев.
+
+   Обои у нас — гладкий градиент, и размыть его незаметно: размытие видно
+   только там, где есть что размывать. Человек смотрел на обзор и говорил,
+   что размытия нет, — и был прав, хотя фильтр честно работал.
+
+   Поэтому у стекла есть своя поверхность: блик сверху, затемнение по
+   низу и мельчайшее зерно. Это то, из чего складывается вид матового
+   стекла в любой системе, и всё это — картинки, нарисованные один раз. */
+.об-стекло{position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(150% 110% at 50% -12%,rgba(255,255,255,.14),rgba(255,255,255,0) 55%),
+    radial-gradient(120% 80% at 50% 118%,rgba(0,0,0,.38),rgba(0,0,0,0) 62%),
+    radial-gradient(90% 70% at 50% 50%,rgba(0,0,0,0) 40%,rgba(0,0,0,.22) 100%)}
+.об-стекло::after{content:'';position:absolute;inset:0;opacity:.055;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='з'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23з)'/></svg>");
+  background-size:140px 140px}
 
 /* Рабочие столы наверху — те же, что в просмотре задач, только меньше и
    с числом окон: человек выбирает не картинку, а место, где он работал. */
@@ -794,10 +813,13 @@ body.эконом .об-прог{animation:none}
 body.обзор-открыт #desktop-icons,
 body.обзор-открыт #desk-widgets{filter:blur(14px) saturate(.9);opacity:.5;pointer-events:none;
   transition:opacity var(--t2) linear,filter var(--t2) linear}
-/* В щадящем режиме размывать нечего: там и так всё считается впритык. */
+/* В щадящем режиме размытие остаётся, только слабее. Считается он один
+   раз, пока обзор открыт, и стоит не дороже картинки; убирать его тут было
+   ошибкой — именно на слабой машине человек и увидел обзор без размытия,
+   потому что щадящий режим включается на ней сам. */
 body.эконом.обзор-открыт #desktop-icons,
 body.эконом.обзор-открыт #desk-widgets,
-body.эконом.обзор-открыт #windows{filter:none;opacity:0}
+body.эконом.обзор-открыт #windows{filter:blur(9px);opacity:.4;transition:none}
 .обзор{padding-bottom:calc(var(--dock-size) + 42px)}
 /* Окна на время обзора тоже уходят — как в GNOME, где обзор заменяет
    рабочий стол, а не ложится на него. Возвращают их строчкой над сеткой:
