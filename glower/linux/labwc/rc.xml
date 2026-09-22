@@ -23,21 +23,36 @@
 
   <keyboard>
     <default />
+    <!-- Одна клавиша Win — меню программ, как в любой другой системе.
+         Ловит её оконный сервер: страница получает клавиши только пока
+         она в фокусе, и стоило открыть браузер, как Win уходил ему.
+
+         Эта сборка оконного сервера умеет ловить клавишу только на
+         нажатии, а Win приходит первой и в Win+Shift+S, и в Win+D. Чтобы
+         меню не выскакивало перед каждым сочетанием, сочетания оставляют
+         отметку вторым действием, а меню её ждёт — четверть секунды. -->
+    <keybind key="Super_L">
+      <action name="Execute" command="glower-menu" />
+    </keybind>
     <!-- Super и D возвращают на рабочий стол из любой программы -->
     <keybind key="W-d">
+      <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="wlrctl toplevel focus app_id:glowershell" />
     </keybind>
     <!-- Тем, кто знает, зачем он нужен: настоящий терминал -->
     <keybind key="W-Return">
+      <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="foot" />
     </keybind>
     <keybind key="W-q">
+      <action name="Execute" command="glower-menu отмени" />
       <action name="Close" />
     </keybind>
     <!-- Снимок экрана. Сочетания держит оконный сервер, а не оболочка:
          страница получает клавиши, только пока она в фокусе, и стоило
          открыть любую программу, как Win+Shift+S уходил ей. -->
     <keybind key="W-S-s">
+      <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="glower-shot область" />
     </keybind>
     <keybind key="Print">

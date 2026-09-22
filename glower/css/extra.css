@@ -684,3 +684,123 @@ body.эконом .dock{ box-shadow:0 2px 10px rgba(0,0,0,.35) !important; }
    места, — до края экрана. */
 body.поверхности-разделены .dock{min-width:min(560px, calc(100vw - 32px)); justify-content:center}
 body.поверхности-разделены.taskbar .dock{min-width:0}
+
+/* ---------- Обзор: меню программ во весь экран ----------
+   Просьба была про GNOME: не окошко в углу, а весь экран, сквозь который
+   видны обои, и рабочие столы наверху. Так и сделано — и это не только
+   красиво: на маленьком экране окошко Пуска показывало полтора десятка
+   значков из сорока, а здесь видно всё сразу.
+
+   Стоит обзор поверх рабочего стола, но под верхней полосой: полоса
+   остаётся на месте, как в GNOME остаётся его собственная. */
+.обзор{position:fixed;inset:var(--полоса-сверху,0) 0 0 0;z-index:760;
+  display:flex;flex-direction:column;gap:18px;padding:26px 34px 34px;
+  background:rgba(8,10,18,.5);backdrop-filter:blur(26px) saturate(1.2);
+  opacity:0;visibility:hidden;transform:scale(1.02);
+  transition:opacity var(--t2) var(--e-out),transform var(--t3) var(--e-out),visibility var(--t2)}
+.обзор.on{opacity:1;visibility:visible;transform:none}
+
+/* Размытие — своим слоем, а не только backdrop-filter.
+   Размывать то, что под поверхностью, движок умеет лишь когда у него есть
+   ускорение: на машине без видеокарты WebKit рисует программно, и
+   backdrop-filter там не делает ничего — обзор выходил плоским тёмным
+   стеклом. Поэтому под ним лежат собственные обои, размытые по-настоящему
+   фильтром: это одна картинка, нарисованная один раз, и она ничего не
+   стоит на каждом кадре.
+   Края слоя выведены за экран: размытие у самой границы иначе светлеет. */
+/* Слой непрозрачен и ложится поверх тёмной заливки обзора, поэтому
+   притемняет он сам: иначе размытые обои выходят светлее, чем стол под
+   ними, и подписи программ на них теряются. */
+   Слою нужен z-index:-1. Без него он положился поверх содержимого — не
+   всего, а того, что не создаёт своего слоя: поиск остался без заливки, а
+   строка открытых окон исчезла целиком, хотя окна были. Рабочие столы и
+   значки программ при этом рисовались как надо, и поломка выглядела
+   необъяснимой. */
+.об-фон{position:absolute;inset:-60px;z-index:-1;background-size:cover;
+  background-position:center;pointer-events:none;
+  filter:blur(30px) saturate(1.1) brightness(.4)}
+
+/* Рабочие столы наверху — те же, что в просмотре задач, только меньше и
+   с числом окон: человек выбирает не картинку, а место, где он работал. */
+.об-столы{display:flex;gap:14px;justify-content:center;flex:none}
+.об-стол{width:164px;height:96px;border-radius:14px;overflow:hidden;cursor:pointer;
+  position:relative;background:rgba(var(--tint),.1);border:1px solid rgba(var(--tint),.14);
+  transition:transform var(--t2) var(--e-out),box-shadow var(--t2) var(--e-out)}
+.об-стол:hover{transform:translateY(-4px) scale(1.03)}
+.об-стол.on{box-shadow:inset 0 0 0 2px var(--accent),0 10px 28px rgba(0,0,0,.35)}
+.об-стол .номер{position:absolute;inset:auto 0 0 0;padding:4px 8px;font-size:11.5px;
+  background:linear-gradient(transparent,rgba(0,0,0,.55));text-align:center}
+
+.об-строка{flex:none;align-self:center;display:flex;align-items:center;gap:10px;
+  width:min(520px,86vw);padding:10px 16px;border-radius:14px;
+  /* Заливка своя, тёмная, а не тонированная: строка поиска стоит на
+     размытых обоях, и тонкая подцветка на них просто не видна. */
+  background:rgba(10,12,20,.5);box-shadow:inset 0 0 0 1px rgba(var(--tint),.2)}
+.об-строка .ic{width:17px;height:17px;flex:none;opacity:.7;fill:none;
+  stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.об-строка input{flex:1;min-width:0;background:none;border:0;outline:0;
+  color:var(--fg);font-size:14.5px;font-family:inherit}
+
+/* Открытые окна — строкой, между поиском и программами: это то, к чему
+   человек возвращается чаще, чем открывает новое. */
+.об-окна{flex:none;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.об-окна:empty{display:none}
+.об-окно{display:flex;align-items:center;gap:9px;padding:8px 14px 8px 10px;
+  border-radius:12px;cursor:pointer;background:rgba(var(--tint),.12);
+  box-shadow:inset 0 0 0 1px rgba(var(--tint),.14);font-size:13px;
+  transition:background var(--t1),transform var(--t2) var(--e-out)}
+.об-окно:hover{background:rgba(var(--tint),.22);transform:translateY(-2px)}
+.об-окно .app-ico{width:26px;height:26px;border-radius:8px;font-size:15px}
+
+/* Сетка программ. Значков сорок, и все они должны быть видны без
+   прокрутки, пока хватает места; дальше — обычная прокрутка. */
+.об-сетка{flex:1;min-height:0;overflow:auto;padding:6px 4px 10px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));
+  gap:10px;align-content:flex-start;justify-items:center}
+.об-прог{width:100%;max-width:126px;padding:14px 8px 11px;border:0;background:none;
+  color:var(--fg);font:inherit;font-size:12.5px;border-radius:16px;cursor:pointer;
+  display:grid;justify-items:center;gap:8px;text-align:center;
+  animation:обВыход .26s var(--e-out) both;animation-delay:calc(var(--i,0) * 12ms);
+  transition:background var(--t1),transform var(--t2) var(--e-out)}
+.об-прог:hover{background:rgba(var(--tint),.16);transform:translateY(-3px)}
+.об-прог .app-ico{width:56px;height:56px;border-radius:16px;font-size:30px}
+.об-прог .имя{line-height:1.25;max-height:2.5em;overflow:hidden;overflow-wrap:anywhere}
+@keyframes обВыход{from{opacity:0;transform:translateY(10px)}}
+.об-пусто{grid-column:1/-1;text-align:center;padding:40px 0;color:var(--fg-dim)}
+
+/* В щадящем режиме — без размытия и без выездов: на слабой машине именно
+   они превращают открытие меню в ожидание. */
+/* В щадящем режиме размытие остаётся: оно нарисовано один раз и лежит
+   картинкой. Убираем только то, что стоит на каждом кадре, — размытие
+   живого фона и выезды значков. */
+body.эконом .обзор{backdrop-filter:none;background:rgba(8,10,18,.5);transition:none}
+body.эконом .об-фон{filter:blur(22px) brightness(.4)}
+body.эконом .об-прог{animation:none}
+
+/* Пока обзор открыт, стол уходит с дороги: значки и виджеты сквозь него
+   просвечивали и налезали на подписи программ — читать было нечего.
+   Размытие фона тут не спасает: на этой машине его нет вовсе (WebKit
+   рисует программно), и сквозь полупрозрачный обзор всё видно резко.
+
+   Док остаётся: в GNOME он тоже остаётся, и это правильно — из обзора
+   чаще всего открывают то, что и так под рукой. Оставляем и место под
+   него, чтобы сетка не уезжала под значки. */
+/* Стол под обзором не убирается, а размывается — как в GNOME, где сквозь
+   обзор виден размытый рабочий стол, а не пустота.
+   Размытие здесь именно фильтром, а не backdrop-filter: размывать то, что
+   лежит под поверхностью, движок умеет только с ускорением, а на машине
+   без видеокарты WebKit рисует программно, и backdrop-filter не делает
+   ровно ничего. Фильтр же считается один раз, пока обзор открыт. */
+body.обзор-открыт #desktop-icons,
+body.обзор-открыт #desk-widgets{filter:blur(14px) saturate(.9);opacity:.5;pointer-events:none;
+  transition:opacity var(--t2) linear,filter var(--t2) linear}
+/* В щадящем режиме размывать нечего: там и так всё считается впритык. */
+body.эконом.обзор-открыт #desktop-icons,
+body.эконом.обзор-открыт #desk-widgets,
+body.эконом.обзор-открыт #windows{filter:none;opacity:0}
+.обзор{padding-bottom:calc(var(--dock-size) + 42px)}
+/* Окна на время обзора тоже уходят — как в GNOME, где обзор заменяет
+   рабочий стол, а не ложится на него. Возвращают их строчкой над сеткой:
+   там они названы и по ним же попадаешь обратно. */
+body.обзор-открыт #windows{filter:blur(14px) saturate(.9);opacity:.42;pointer-events:none;
+  transition:opacity var(--t2) linear,filter var(--t2) linear}

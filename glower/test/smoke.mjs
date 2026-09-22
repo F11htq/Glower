@@ -1268,6 +1268,48 @@ try {
   });
   check('невидимый остаток не прячет панель', остаток === false, 'стол сказал: ' + остаток);
 
+  /* --- обзор: меню программ во весь экран --- */
+  const обзор = await page.evaluate(async () => {
+    /* Сперва дать прежним окнам закрыться до конца: закрытие с
+       анимацией, и открытая заново одинокая программа вернула бы то же
+       окно, которое в этот миг ещё уезжает. */
+    WM.wins.slice().forEach(w => WM.close(w));
+    await new Promise(r => setTimeout(r, 500));
+    WM.open('calc');
+    await new Promise(r => setTimeout(r, 300));
+    Shell.обзор(true);
+    await new Promise(r => setTimeout(r, 200));
+    const узел = document.querySelector('#обзор');
+    const было = {
+      открыт: узел.classList.contains('on'),
+      столы:  узел.querySelectorAll('.об-стол').length,
+      окна:   узел.querySelectorAll('.об-окно').length,
+      всего:  узел.querySelectorAll('.об-прог').length
+    };
+    /* Поиск: пишем в поле так же, как человек, и смотрим, что осталось. */
+    const поле = document.querySelector('#об-искать');
+    поле.value = 'калькул';
+    поле.dispatchEvent(new Event('input'));
+    await new Promise(r => setTimeout(r, 150));
+    было.нашлось = [...узел.querySelectorAll('.об-прог .имя')].map(н => н.textContent);
+    Shell.обзор(false);
+    await new Promise(r => setTimeout(r, 150));
+    было.закрылся = !узел.classList.contains('on');
+    WM.wins.slice().forEach(w => WM.close(w));
+    return было;
+  });
+  check('обзор открывается во весь экран', обзор.открыт === true);
+  check('в обзоре наверху все рабочие столы',
+    обзор.столы === await page.evaluate(() => WM.desks), 'столов: ' + обзор.столы);
+  check('в обзоре видно открытое окно', обзор.окна === 1, 'окон: ' + обзор.окна);
+  check('в обзоре все программы сразу',
+    обзор.всего >= Object.keys(await page.evaluate(() => APPS)).length - 2,
+    'в сетке: ' + обзор.всего);
+  check('поиск в обзоре отбирает по имени',
+    обзор.нашлось.length === 1 && /Калькулятор/.test(обзор.нашлось[0]),
+    JSON.stringify(обзор.нашлось));
+  check('обзор закрывается', обзор.закрылся === true);
+
   /* Развёрнутое окно в раздельном режиме: сверху ровно под полосой, снизу
      до самого края.
 

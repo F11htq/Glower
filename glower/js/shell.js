@@ -13,6 +13,7 @@ const Shell = {
     this.bindTray();
     this.bindStart();
     this.bindSpot();
+    this.привяжиОбзор();
     this.bindDesktop();
     this.bindKeys();
     this.clock();
@@ -538,6 +539,118 @@ const Shell = {
       grid.appendChild(n);
     });
   },
+  /* ================= ОБЗОР =================
+     Меню программ во весь экран, как в GNOME: наверху рабочие столы, ниже
+     поиск, открытые окна и все программы разом.
+
+     Почему здесь, у стола, а не в панели, где меню было раньше: обои
+     сквозь обзор видны только тому, кто на них и нарисован. Панель —
+     отдельная поверхность, и «прозрачный фон» у неё означал бы серую
+     пустоту. Заодно здесь под рукой всё нужное: и наши программы, и
+     программы машины, и окна, и рабочие столы. */
+  рисуйОбзор(){
+    const столы = $('#об-столы'), окна = $('#об-окна'), сетка = $('#об-сетка');
+    if (!столы) return;
+
+    /* Размытые обои под обзором — те же самые, что на столе, включая
+       выбранную человеком картинку: иначе за стеклом оказались бы чужие
+       обои, и подмена была бы видна сразу. */
+    const фон = $('#об-фон');
+    if (фон){
+      const о = WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0];
+      фон.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
+        ? `url(${window.__customWall})` : о.css;
+    }
+
+    столы.innerHTML = '';
+    for (let i = 0; i < WM.desks; i++){
+      const сколько = WM.wins.filter(w => w.desk === i).length;
+      const д = el('div', 'об-стол' + (i === WM.desk ? ' on' : ''));
+      д.style.backgroundImage = (WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0]).css;
+      д.appendChild(el('div', 'номер', (i + 1) + (сколько ? ' · ' + сколько : '')));
+      д.onclick = () => { WM.gotoDesk(i); this.рисуйОбзор(); };
+      столы.appendChild(д);
+    }
+
+    окна.innerHTML = '';
+    WM.wins.filter(w => w.desk === WM.desk).forEach(w => {
+      const к = el('div', 'об-окно');
+      к.appendChild(appIcon(w.app));
+      к.appendChild(el('span', '', w.titleEl ? w.titleEl.textContent : w.app.name));
+      к.onclick = () => { this.обзор(false); if (w.minimized) WM.restore(w); else WM.focus(w); };
+      окна.appendChild(к);
+    });
+
+    const что = ($('#об-искать') && $('#об-искать').value || '').trim().toLowerCase();
+    /* Список — тот же, что уходит панели: наши программы и настоящие
+       программы машины вместе, настоящая главнее одноимённой нарисованной. */
+    const все = (window.Поверхности && Поверхности.программы)
+      ? Поверхности.программы()
+      : Object.keys(APPS).map(id => ({ id, 'имя':APPS[id].name || id, 'вид':'приложение' }));
+    const видно = все.filter(п => !что || (п['имя'] || '').toLowerCase().includes(что));
+
+    сетка.innerHTML = '';
+    if (!видно.length){
+      сетка.appendChild(el('div', 'об-пусто', 'Ничего не нашлось'));
+      return;
+    }
+    видно.forEach((п, i) => {
+      const б = el('button', 'об-прог');
+      б.style.setProperty('--i', i);
+      if (п['вид'] === 'машина' && window.OS && OS.значокПрограммы)
+        б.appendChild(OS.значокПрограммы({ id:п.id, name:п['имя'], значок:п['значок'] || '',
+                                           flatpak:п.flatpak }, 'app-ico'));
+      else if (APPS[п.id]) б.appendChild(appIcon(APPS[п.id]));
+      else {
+        const з = el('div', 'app-ico', п['знак'] || '▢');
+        з.style.background = п['фон'] || 'rgba(255,255,255,.12)';
+        б.appendChild(з);
+      }
+      б.appendChild(el('span', 'имя', п['имя'] || п.id));
+      б.onclick = () => {
+        this.обзор(false);
+        if (п['вид'] === 'машина' && window.OS && OS.запустиПоЯрлыку) OS.запустиПоЯрлыку(п.id);
+        else this.launch(п.id);
+      };
+      сетка.appendChild(б);
+    });
+  },
+
+  привяжиОбзор(){
+    const узел = $('#обзор'), поле = $('#об-искать');
+    if (!узел || !поле) return;
+    /* Щелчок по пустому месту закрывает — как в GNOME. По значку или по
+       рабочему столу наверху не закрывает: там у человека дело. */
+    узел.onclick = e => { if (e.target === узел) this.обзор(false); };
+    поле.addEventListener('input', () => this.рисуйОбзор());
+    поле.addEventListener('keydown', e => {
+      if (e.key === 'Escape'){ this.обзор(false); return; }
+      /* Ввод открывает первое найденное: искать и тянуться к мыши — работа
+         на два движения там, где хватает одного. */
+      if (e.key === 'Enter'){
+        const первый = узел.querySelector('.об-прог');
+        if (первый) первый.click();
+      }
+    });
+  },
+
+  обзор(on){
+    const узел = $('#обзор');
+    if (!узел) return;
+    const v = on != null ? on : !узел.classList.contains('on');
+    if (v){
+      this.closePanels(true);
+      const поле = $('#об-искать');
+      if (поле) поле.value = '';
+      this.рисуйОбзор();
+    }
+    узел.classList.toggle('on', v);
+    document.body.classList.toggle('обзор-открыт', v);
+    /* Клавиатуру забираем только когда открыто: пустая строка поиска,
+       молча съедающая нажатия, — худшее, что может делать меню. */
+    if (v){ const поле = $('#об-искать'); if (поле) setTimeout(() => поле.focus(), 80); }
+  },
+
   taskview(on){
     const v = on != null ? on : !$('#taskview').classList.contains('on');
     if (v) this.renderTaskview();
@@ -729,6 +842,7 @@ const Shell = {
         }
       }
       if (e.key === 'Escape'){
+        if ($('#обзор') && $('#обзор').classList.contains('on')) { this.обзор(false); return; }
         if ($('#taskview').classList.contains('on')) { this.taskview(false); return; }
         if ($('#power-overlay').classList.contains('on')) { $('#power-overlay').classList.remove('on'); return; }
         this.closePanels();

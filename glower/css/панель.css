@@ -92,32 +92,8 @@ body.открыто .навес{display:block}
 }
 @keyframes появись{from{opacity:0; transform:translateY(-6px)}}
 
-/* меню программ */
-#окно-программ{left:8px; width:min(420px, calc(100vw - 16px)); max-height:min(70vh, 560px);
-               display:flex; flex-direction:column}
-.поиск-программ{
-  width:100%; padding:7px 10px; margin-bottom:6px;
-  border:0; border-radius:7px; outline:0;
-  background:rgba(255,255,255,.08); color:inherit; font:inherit;
-}
-.сетка{display:grid; grid-template-columns:repeat(4, 1fr); gap:4px 2px; overflow:auto}
-.программа{
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  padding:10px 4px; border:0; background:none; color:inherit; font:inherit;
-  border-radius:8px; cursor:default; transition:background .12s;
-}
-.программа:hover{background:rgba(255,255,255,.12)}
-.программа .лицо{
-  width:34px; height:34px; border-radius:9px;
-  display:grid; place-content:center; font-size:19px;
-}
-/* Две строки под имя — и ровно две. Без заданной высоты длинные имена
-   вылезают за свою клетку и ложатся на подписи снизу: сетка выглядит так,
-   будто буквы просвечивают друг сквозь друга. */
-.программа .имя{font-size:11px; text-align:center; line-height:1.25;
-                height:calc(2 * 1.25em); overflow:hidden;
-                display:-webkit-box; -webkit-line-clamp:2;
-                -webkit-box-orient:vertical; word-break:break-word}
+/* Меню программ здесь больше не рисуется: оно у стола, во весь экран.
+   Осталось «пусто» — его показывают и другие меню панели. */
 .пусто{padding:14px; opacity:.6; text-align:center; font-size:12px}
 
 /* меню питания */

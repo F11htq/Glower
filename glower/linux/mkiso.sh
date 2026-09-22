@@ -359,6 +359,9 @@ install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
 # Посредник для снимков экрана: его зовёт оконный сервер по сочетанию клавиш
 install -m 755 "$SRC/linux/glower-shot" "$ROOTFS/usr/bin/glower-shot"
+# Такой же посредник для клавиши Win: она открывает меню программ. Клавиши
+# достаются окну в фокусе, поэтому Win держит оконный сервер, а не страница
+install -m 755 "$SRC/linux/glower-menu" "$ROOTFS/usr/bin/glower-menu"
 # Приёмник значков лотка. Разговор с шиной разобран в нём руками, поэтому
 # ничего, кроме самого Python, ему не нужно — ни python3-dbus, ни python3-gi.
 install -m 755 "$SRC/linux/glower-tray" "$ROOTFS/usr/bin/glower-tray"
