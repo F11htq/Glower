@@ -96,6 +96,14 @@ export function power(allowPower){
            swaylock просто не запустится. Порядок выбираем по тому, какой
            сеанс на самом деле идёт. */
         const ключи = { swaylock:['-f'], waylock:[], gtklock:['-d'], i3lock:['-c', '101828'], xsecurelock:[] };
+        /* Если замок уже висит, второй не нужен. Просьб может прийти две:
+           человек запер экран сам, а потом машина уснула и проснулась — и
+           оболочка попросила запереть после сна. Второй замок в этот миг
+           спорит с первым за экран, и кто победит, заранее неизвестно. */
+        for (const прог of Object.keys(ключи)){
+          try { await run('pgrep', ['-x', прог]); return { ok:true, via:прог, 'уже':true }; }
+          catch(e){ /* не запущен — и хорошо */ }
+        }
         const порядок = среда.WAYLAND_DISPLAY
           ? ['swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock']
           : ['i3lock', 'xsecurelock', 'gtklock', 'swaylock'];

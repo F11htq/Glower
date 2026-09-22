@@ -23,7 +23,7 @@ const Platform = {
     return list;
   },
 
-  async rpc(method, params, base){
+  async rpc(method, params, base, срок){
     /* Без агента адреса нет, и склеивать «null/rpc» бессмысленно: браузер
        всё равно откажет, зато в консоли останется пугающая ошибка CORS
        вместо понятной причины. Отвечаем сразу и по-человечески — все, кто
@@ -31,10 +31,22 @@ const Platform = {
     const корень = base || this.url;
     if (!корень) throw new Error('система недоступна: оболочка работает без агента');
     const url = корень + '/rpc';
-    const r = await fetch(url, {
-      method:'POST', headers:{ 'Content-Type':'application/json' },
-      body:JSON.stringify({ method, params })
-    });
+    /* Срок нужен не всем, а тем, кто ждёт долго. Шина держит связь
+       открытой до двадцати пяти секунд, и после сна машины эта связь
+       остаётся открытой в пустоту: сокет с той стороны уже мёртв, а
+       браузер об этом узнает через минуты — столько живут повторы TCP.
+       Всё это время панель не слышит стол. Поэтому у долгого ожидания
+       есть предел, после которого связь обрывается и открывается заново. */
+    const стоп = срок ? new AbortController() : null;
+    const часы = стоп ? setTimeout(() => стоп.abort(), срок) : null;
+    let r;
+    try {
+      r = await fetch(url, {
+        method:'POST', headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ method, params }),
+        signal:стоп ? стоп.signal : undefined
+      });
+    } finally { if (часы) clearTimeout(часы); }
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'ошибка агента');
     return j.result;

@@ -18,12 +18,23 @@ const $ = с => document.querySelector(с);
    оболочки, а нам — один POST на localhost. */
 const Агент = {
   адрес:location.origin,
-  async зов(метод, доводы){
-    const о = await fetch(this.адрес + '/rpc', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body:JSON.stringify({ method:метод, params:доводы || {} })
-    });
+  /* «срок» — для долгого ожидания. Шина держит связь открытой до двадцати
+     пяти секунд, и после сна машины эта связь остаётся открытой в пустоту:
+     сокет с той стороны мёртв, а браузер узнает об этом через минуты —
+     столько живут повторы TCP. Всё это время панель не слышит стол, и
+     выглядит это как «после пробуждения панель ожила не сразу». */
+  async зов(метод, доводы, срок){
+    const стоп = срок ? new AbortController() : null;
+    const часы = стоп ? setTimeout(() => стоп.abort(), срок) : null;
+    let о;
+    try {
+      о = await fetch(this.адрес + '/rpc', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ method:метод, params:доводы || {} }),
+        signal:стоп ? стоп.signal : undefined
+      });
+    } finally { if (часы) clearTimeout(часы); }
     const д = await о.json();
     if (!д.ok) throw new Error(д.error || 'агент отказал');
     return д.result;
@@ -137,7 +148,7 @@ const Шина = {
         this._подписки.forEach(список => список.forEach(п => { с = Math.min(с, п.с); }));
         if (!темы.length || с === Infinity){ await new Promise(r => setTimeout(r, 500)); continue; }
         try {
-          const д = await Агент.зов('ui.hear', { с, темы });
+          const д = await Агент.зов('ui.hear', { с, темы }, 40000);
           (д['список'] || []).forEach(м => {
             (this._подписки.get(м.тема) || []).forEach(п => {
               if (м.n > п.с) п.дело(м);

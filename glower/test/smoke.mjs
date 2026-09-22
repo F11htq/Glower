@@ -1282,7 +1282,8 @@ try {
     const узел = document.querySelector('#обзор');
     const было = {
       открыт: узел.classList.contains('on'),
-      столы:  узел.querySelectorAll('.об-стол').length,
+      столы:  узел.querySelectorAll('.об-стол:not(.об-стол-плюс)').length,
+      плюс:   !!узел.querySelector('.об-стол-плюс'),
       окна:   узел.querySelectorAll('.об-окно').length,
       всего:  узел.querySelectorAll('.об-прог').length
     };
@@ -1309,6 +1310,44 @@ try {
     обзор.нашлось.length === 1 && /Калькулятор/.test(обзор.нашлось[0]),
     JSON.stringify(обзор.нашлось));
   check('обзор закрывается', обзор.закрылся === true);
+  check('в обзоре есть кнопка нового рабочего стола', обзор.плюс === true);
+
+  /* --- новый рабочий стол и перетаскивание программы на него --- */
+  const столы = await page.evaluate(async () => {
+    WM.wins.slice().forEach(w => WM.close(w));
+    await new Promise(r => setTimeout(r, 500));
+    const было = WM.desks;
+    Shell.обзор(true);
+    await new Promise(r => setTimeout(r, 200));
+    document.querySelector('.об-стол-плюс').click();
+    await new Promise(r => setTimeout(r, 200));
+    const стало = WM.desks;
+    const врядy = document.querySelectorAll('.об-стол:not(.об-стол-плюс)').length;
+
+    /* Бросок программы на последний стол. Событие собираем руками: настоящее
+       перетаскивание мышью браузеру в проверке не изобразить, а обработчик
+       тот самый, что зовёт и оно. */
+    const цель = document.querySelectorAll('.об-стол:not(.об-стол-плюс)')[стало - 1];
+    цель.ondrop({ preventDefault(){}, dataTransfer:{
+      getData: () => JSON.stringify({ id:'calc', 'вид':'приложение' }) } });
+    await new Promise(r => setTimeout(r, 400));
+    const окно = WM.wins.find(w => w.appId === 'calc');
+    const итог = { было, стало, врядy, куда:окно ? окно.desk : null,
+                   видно:окно ? окно.node.style.opacity : null, где:WM.desk };
+    /* Убираем за собой: заведённый стол и открытое окно. */
+    WM.wins.slice().forEach(w => WM.close(w));
+    await new Promise(r => setTimeout(r, 400));
+    while (WM.desks > было) WM.убериСтол(WM.desks - 1);
+    Shell.обзор(false);
+    return итог;
+  });
+  check('кнопка заводит новый рабочий стол',
+    столы.стало === столы.было + 1 && столы.врядy === столы.стало,
+    JSON.stringify(столы));
+  check('брошенная на стол программа открывается именно там',
+    столы.куда === столы.стало - 1, JSON.stringify(столы));
+  check('окно на чужом столе не мешает своему',
+    столы.куда !== столы.где && столы.видно === '0', JSON.stringify(столы));
 
   /* Развёрнутое окно в раздельном режиме: сверху ровно под полосой, снизу
      до самого края.

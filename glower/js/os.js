@@ -917,7 +917,8 @@ function wireNotifications(){
   const слушай = async () => {
     while (работаем){
       try {
-        const d = await Platform.rpc('ui.hear', { с, темы:['уведомление', 'файл-установщик', 'снимок'] });
+        const d = await Platform.rpc('ui.hear',
+          { с, темы:['уведомление', 'файл-установщик', 'снимок'] }, null, 40000);
         с = d.n || с;
         (d.список || []).forEach(м => {
           if (м.тема === 'файл-установщик') спросиПроУстановку(м.что);

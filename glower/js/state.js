@@ -85,6 +85,9 @@ const DEFAULTS = {
   dockSize:52, dockSizeСвой:false, dockAutohide:false, dockPos:'bottom',
   wctl:'win',                 // win | mac
   showDesktopIcons:true, showDeskWidgets:true, taskbarFull:true, trayInDock:true,
+  /* Пароль после пробуждения — как в любой другой системе. Спрашивается
+     только у тех, у кого пароль вообще задан. */
+  lockOnWake:true,
   deskWidgets:[{t:'clock'},{t:'weather'}], autostart:[],
   font:"'Segoe UI Variable','Segoe UI',system-ui,sans-serif",
   clock24:true, showSeconds:false, tz:'',   /* пусто — часовой пояс машины */

@@ -569,7 +569,72 @@ const Shell = {
       д.style.backgroundImage = (WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0]).css;
       д.appendChild(el('div', 'номер', (i + 1) + (сколько ? ' · ' + сколько : '')));
       д.onclick = () => { WM.gotoDesk(i); this.рисуйОбзор(); };
+
+      /* Пустой стол можно убрать — иначе заведённые столы только копятся:
+         кнопка есть, а обратного пути нет. Со столом, на котором лежат
+         окна, так нельзя: он унёс бы их с собой в никуда. */
+      if (!сколько && WM.desks > 1){
+        const х = el('button', 'об-стол-убрать', '×');
+        х.title = 'Убрать этот рабочий стол';
+        х.onclick = e => { e.stopPropagation(); if (WM.убериСтол(i)) this.рисуйОбзор(); };
+        д.appendChild(х);
+      }
+
+      /* Перетаскивание программы на стол: она там и откроется.
+      
+         Так это работает в GNOME, и так это единственный способ открыть
+         программу не там, где стоишь: иначе надо сперва уйти на нужный
+         стол, открыть, и вернуться — три действия вместо одного. */
+      д.ondragover = e => { e.preventDefault(); д.classList.add('примет'); };
+      д.ondragleave = () => д.classList.remove('примет');
+      д.ondrop = e => {
+        e.preventDefault();
+        д.classList.remove('примет');
+        let груз = {};
+        try { груз = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch(err){}
+        if (груз.окно != null){
+          const w = WM.wins.find(x => x.node && x.node.id === груз.окно);
+          if (w) WM.наСтол(w, i);
+          this.рисуйОбзор();
+          return;
+        }
+        if (!груз.id) return;
+        this.обзор(false);
+        if (груз['вид'] === 'машина'){
+          /* Программа машины открывается своим окном, и оконный сервер
+             про наши столы ничего не знает: положить её на соседний стол
+             нам нечем. Честно уходим туда сами и открываем там. */
+          if (i !== WM.desk) WM.gotoDesk(i);
+          if (window.OS && OS.запустиПоЯрлыку) OS.запустиПоЯрлыку(груз.id);
+          return;
+        }
+        /* Открываем сами, а не через launch: тот умеет ещё и свёртывать
+           уже открытое — для щелчка по значку это верно, а для броска на
+           стол означало бы, что программа то откроется, то спрячется. */
+        const окно = WM.open(груз.id);
+        if (окно && i !== WM.desk) WM.наСтол(окно, i);
+      };
       столы.appendChild(д);
+    }
+
+    /* Кнопка нового стола — последней в ряду, как в GNOME. */
+    if (WM.desks < 8){
+      const плюс = el('button', 'об-стол об-стол-плюс', '+');
+      плюс.title = 'Новый рабочий стол';
+      плюс.onclick = () => { WM.добавьСтол(); this.рисуйОбзор(); };
+      /* На неё тоже можно бросить программу: стол заведётся и программа
+         откроется сразу на нём. */
+      плюс.ondragover = e => { e.preventDefault(); плюс.classList.add('примет'); };
+      плюс.ondragleave = () => плюс.classList.remove('примет');
+      плюс.ondrop = e => {
+        e.preventDefault();
+        плюс.classList.remove('примет');
+        const куда = WM.добавьСтол();
+        this.рисуйОбзор();
+        const стол = столы.children[куда];
+        if (стол && стол.ondrop) стол.ondrop(e);
+      };
+      столы.appendChild(плюс);
     }
 
     окна.innerHTML = '';
@@ -578,6 +643,11 @@ const Shell = {
       к.appendChild(appIcon(w.app));
       к.appendChild(el('span', '', w.titleEl ? w.titleEl.textContent : w.app.name));
       к.onclick = () => { this.обзор(false); if (w.minimized) WM.restore(w); else WM.focus(w); };
+      /* Открытое окно тоже перетаскивается на другой стол — переехать
+         должно уметь и то, что уже открыто, а не только новое. */
+      к.draggable = true;
+      к.ondragstart = e => e.dataTransfer.setData('text/plain',
+        JSON.stringify({ 'окно':w.node.id }));
       окна.appendChild(к);
     });
 
@@ -607,6 +677,9 @@ const Shell = {
         б.appendChild(з);
       }
       б.appendChild(el('span', 'имя', п['имя'] || п.id));
+      б.draggable = true;
+      б.ondragstart = e => e.dataTransfer.setData('text/plain',
+        JSON.stringify({ id:п.id, 'вид':п['вид'] || 'приложение' }));
       б.onclick = () => {
         this.обзор(false);
         if (п['вид'] === 'машина' && window.OS && OS.запустиПоЯрлыку) OS.запустиПоЯрлыку(п.id);

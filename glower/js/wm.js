@@ -16,6 +16,48 @@ const WM = {
   init(){
     this.layer = $('#windows');
     this.ghost = $('#snap-ghost');
+    /* Сколько у человека рабочих столов — его дело, и оно должно
+       переживать перезагрузку: заводил четыре, значит четыре и будет. */
+    this.desks = clamp(KV.get('столов', 2), 1, 8);
+  },
+
+  /* ---------- рабочие столы ---------- */
+  /* Новый стол заводят из обзора, кнопкой с плюсом. Предел — восемь: это
+     не техническое ограничение, а граница, за которой полоска с их
+     картинками перестаёт помещаться на экран и толку от неё нет. */
+  добавьСтол(){
+    if (this.desks >= 8) return this.desks - 1;
+    this.desks++;
+    KV.set('столов', this.desks);
+    return this.desks - 1;
+  },
+
+  /* Убрать можно только пустой стол и только если он не последний: стол,
+     на котором лежат окна, унёс бы их с собой в никуда. */
+  убериСтол(i){
+    if (this.desks <= 1) return false;
+    if (this.wins.some(w => w.desk === i)) return false;
+    this.wins.forEach(w => { if (w.desk > i) w.desk--; });
+    this.desks--;
+    KV.set('столов', this.desks);
+    if (this.desk >= this.desks) this.gotoDesk(this.desks - 1);
+    else if (this.desk > i) this.desk--;
+    return true;
+  },
+
+  /* Перенести окно на другой стол, не уходя туда самому: так программу
+     кладут на соседний стол из обзора, перетаскиванием. */
+  наСтол(win, i){
+    if (!win || i === win.desk || i < 0 || i >= this.desks) return;
+    win.desk = i;
+    const своё = i === this.desk;
+    win.node.style.transition = 'opacity .3s var(--e-io)';
+    win.node.style.opacity = своё ? '1' : '0';
+    win.node.style.pointerEvents = своё ? '' : 'none';
+    if (!своё) win.node.style.transform = 'scale(.96)';
+    else if (!win.minimized) win.node.style.transform = '';
+    setTimeout(() => { win.node.style.transition = ''; }, 360);
+    Shell.syncDock();
   },
 
   /* ---------- создание окна ---------- */
@@ -349,7 +391,8 @@ const WM = {
       else if (!w.minimized) w.node.style.transform = '';
       setTimeout(() => { w.node.style.transition = ''; }, 400);
     });
-    Shell.toast('Рабочий стол ' + (i + 1), 'Переключение', '🖥️');
+    /* Уведомления о переключении здесь больше нет: человек сам только что
+       выбрал стол и видит, что тот сменился. */
     Shell.syncDock();
   },
 
