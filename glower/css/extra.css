@@ -844,3 +844,6 @@ body.обзор-открыт #windows{filter:blur(14px) saturate(.9);opacity:.42
 .об-стол.примет{box-shadow:inset 0 0 0 2px var(--accent),0 12px 30px rgba(0,0,0,.4);
   transform:translateY(-5px) scale(1.04)}
 .об-прог[draggable="true"]:active{cursor:grabbing}
+
+/* Кнопки «доставить набор обоев» — под сеткой системных обоев. */
+.wall-низ{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}

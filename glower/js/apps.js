@@ -1120,6 +1120,95 @@ APPS.settings = {
       w.appendChild(row('📤', 'Своё изображение', S.wallpaper === 'custom' ? 'Сейчас используется ваш файл' : 'Загрузить картинку с компьютера', wUp));
       main.appendChild(w);
 
+      /* --- обои, лежащие в системе ---
+      
+         Настоящие обои GNOME и KDE приходят обычными пакетами дистрибутива
+         и лежат там же, где их ищут сами GNOME и KDE. Держать их копию у
+         себя незачем: показываем то, что есть на машине, а чего нет —
+         предлагаем доставить, как любую другую программу.
+      
+         Картинки берём не строкой в память, а ссылкой: агент отдаёт файл
+         обычной дорожкой, и дальше браузер справляется сам — иначе три
+         десятка снимков по мегабайту укладывают слабую машину. */
+      if (window.Platform && Platform.mode === 'native'){
+        const сис = card('Обои системы');
+        const место = el('div', 'walls');
+        const низ = el('div', 'wall-низ');
+        сис.appendChild(место); сис.appendChild(низ);
+        main.appendChild(сис);
+
+        const ставим = async (пакет, подпись) => {
+          const б = el('button', 'btn pri', 'Ставлю…'); б.disabled = true;
+          низ.replaceChildren(б);
+          try {
+            await Platform.rpc('pkg.install', { name:пакет, source:'apt' });
+            for (let i = 0; i < 900; i++){
+              const j = await Platform.rpc('pkg.job').catch(() => ({ running:false }));
+              if (!j.running) break;
+              б.textContent = 'Ставлю ' + подпись + '…';
+              await new Promise(r => setTimeout(r, 1500));
+            }
+            Shell.toast('Обои', подпись + ' — готово', '🖼️');
+          } catch(e){
+            Dlg.alert('Не вышло поставить обои', String(e.message || e), '⚠️');
+          }
+          рисуйСистемные();
+        };
+
+        const рисуйСистемные = async () => {
+          место.replaceChildren(el('div', 'tiny muted', 'Смотрю, что есть на машине…'));
+          низ.replaceChildren();
+          let д;
+          try { д = await Platform.rpc('sys.обои'); }
+          catch(e){
+            /* Агента без системного слоя об обоях спрашивать бессмысленно:
+               он про них не знает вовсе. Тогда и карточки быть не должно —
+               пустая карточка с жалобой хуже её отсутствия. */
+            if (/нет такого метода/.test(String(e.message || e))) сис.remove();
+            else место.replaceChildren(el('div', 'tiny muted',
+              'Не удалось прочитать обои системы: ' + (e.message || e)));
+            return;
+          }
+
+          const список = (д && д.list) || [];
+          место.replaceChildren();
+          if (!список.length)
+            место.appendChild(el('div', 'tiny muted', 'На машине пока нет ни одних обоев'));
+
+          список.forEach(о => {
+            const id = 'файл:' + о.путь;
+            const d = el('div', 'wall' + (id === S.wallpaper ? ' on' : ''),
+              `<span class="nm">${esc(о['откуда'] + ' · ' + о['имя'])}</span>`);
+            /* Показываем снимок, если он есть: у KDE рядом с обоями лежит
+               маленькая картинка ровно для такого случая. */
+            d.style.backgroundImage = `url("${адресОбоев(о['превью'] || о.путь)}")`;
+            d.style.backgroundSize = 'cover';
+            d.onclick = () => {
+              set('wallpaper', id);
+              $$('.wall', место).forEach(n => n.classList.remove('on'));
+              $$('.wall', g).forEach(n => n.classList.remove('on'));
+              d.classList.add('on');
+            };
+            место.appendChild(d);
+          });
+
+          const сколько = (д && д['сколько']) || {};
+          if (!сколько.GNOME)
+            низ.appendChild(кнопкаНабора('Обои GNOME', 'gnome-backgrounds', '30 МБ'));
+          if (!сколько.KDE)
+            низ.appendChild(кнопкаНабора('Обои KDE', 'plasma-workspace-wallpapers', '90 МБ'));
+        };
+
+        function кнопкаНабора(подпись, пакет, вес){
+          const б = el('button', 'btn', '⬇ ' + подпись + ' · ' + вес);
+          б.title = 'Поставить пакет ' + пакет;
+          б.onclick = () => ставим(пакет, подпись);
+          return б;
+        }
+
+        рисуйСистемные();
+      }
+
       const t = card('Цвета и тема');
       t.appendChild(row('🌗', 'Режим', 'Светлая или тёмная тема',
         seg([{ n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }],
@@ -1197,109 +1286,14 @@ APPS.settings = {
 
     }
 
-    /* --- Персонализация --- */
-    function pPerson(){
-      const w = card('Фон рабочего стола');
-      const g = el('div', 'walls');
-      WALLPAPERS.forEach(x => {
-        const d = el('div', 'wall' + (x.id === S.wallpaper ? ' on' : ''), `<span class="nm">${x.name}</span>`);
-        d.style.backgroundImage = x.css;
-        d.onclick = () => { set('wallpaper', x.id); $$('.wall', g).forEach(n => n.classList.remove('on')); d.classList.add('on'); };
-        g.appendChild(d);
-      });
-      w.appendChild(g);
-      w.appendChild(row('🔀', 'Слайд-шоу', 'Менять обои каждые 30 секунд', toggle(() => S.wallShuffle, v => { set('wallShuffle', v); Shell.wallShuffle(); })));
-      const wUp = el('button', 'btn pri', '🖼 Выбрать файл…');
-      wUp.onclick = () => {
-        const f = el('input'); f.type = 'file'; f.accept = 'image/*';
-        f.onchange = async () => {
-          if (!f.files[0]) return;
-          await IDB.put('wallpaper', f.files[0]);
-          window.__customWall = URL.createObjectURL(f.files[0]);
-          set('wallpaper', 'custom'); drawMain();
-          Shell.toast('Обои', 'Своё изображение установлено', '🖼');
-        };
-        f.click();
-      };
-      w.appendChild(row('📤', 'Своё изображение', S.wallpaper === 'custom' ? 'Сейчас используется ваш файл' : 'Загрузить картинку с компьютера', wUp));
-      main.appendChild(w);
+    /* Второй, слово в слово такой же, набор «Персонализации» и «Стекла»
+       отсюда убран.
 
-      const t = card('Цвета и тема');
-      t.appendChild(row('🌗', 'Режим', 'Светлая или тёмная тема',
-        seg([{ n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }],
-            () => S.theme, v => { set('theme', v); drawMain(); })));
-      const swWrap = el('div', 'swatches');
-      ACCENTS.forEach((a, i) => {
-        const s = el('div', 'sw' + (!S.accentCustom && i === S.accent ? ' on' : ''));
-        s.style.background = `linear-gradient(140deg,${a.a},${a.b})`; s.title = a.n;
-        s.onclick = () => { S.accentCustom = null; set('accent', i); $$('.sw', swWrap).forEach(x => x.classList.remove('on')); s.classList.add('on'); };
-        swWrap.appendChild(s);
-      });
-      t.appendChild(row('🎯', 'Цвет акцента', 'Используется в кнопках и подсветке', swWrap));
-      const cp = el('input'); cp.type = 'color'; cp.className = 'inp'; cp.style.cssText = 'width:48px;padding:2px';
-      cp.value = S.accentCustom || accentPair().a;
-      cp.oninput = () => { S.accentCustom = cp.value; Store.save(); applySettings(); };
-      t.appendChild(row('🖌️', 'Свой цвет', 'Задать акцент вручную', cp));
-      main.appendChild(t);
-
-      pGlass();                       // материал интерфейса живёт здесь, отдельного раздела нет
-
-      const f = card('Шрифт и текст');
-      f.appendChild(row('🔤', 'Системный шрифт', 'Гарнитура интерфейса',
-        sel([{ n:'Системный', v:"system-ui,'Inter','Segoe UI Variable',sans-serif" },
-             { n:'SF Pro (macOS)', v:"-apple-system,'SF Pro Display','Helvetica Neue',sans-serif" },
-             { n:'Inter / системный', v:"Inter,system-ui,sans-serif" },
-             { n:'Georgia (с засечками)', v:"Georgia,'Times New Roman',serif" },
-             { n:'Моноширинный', v:"'Cascadia Code',Consolas,monospace" }], () => S.font, v => set('font', v))));
-      main.appendChild(f);
-
-      const st = card('Меню Пуск');
-      const pinBox = el('div'); pinBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px 14px';
-      Object.entries(APPS).forEach(([id, a]) => {
-        const on = S.pinned.includes(id);
-        const b = el('button', 'btn' + (on ? ' pri' : ''), a.glyph + ' ' + a.name);
-        b.onclick = () => {
-          const i = S.pinned.indexOf(id);
-          if (i >= 0) S.pinned.splice(i, 1); else S.pinned.push(id);
-          Store.save(); Shell.renderStart(); b.classList.toggle('pri');
-        };
-        pinBox.appendChild(b);
-      });
-      st.appendChild(row('📌', 'Закреплённые приложения', 'Нажмите, чтобы закрепить или открепить', el('span')));
-      st.appendChild(pinBox);
-      main.appendChild(st);
-
-      const wd = card('Виджеты рабочего стола');
-      wd.appendChild(row('🧩', 'Показывать виджеты', 'Перетаскиваются мышью, удаляются крестиком',
-        toggle(() => S.showDeskWidgets, v => { set('showDeskWidgets', v); Shell.renderDeskWidgets(); })));
-      const wdBox = el('div'); wdBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:4px 16px 14px';
-      Object.entries(WIDGETS).forEach(([k, d]) => {
-        const b = el('button', 'btn', d.e + ' ' + d.n);
-        b.onclick = () => { addWidget(k); drawMain(); };
-        wdBox.appendChild(b);
-      });
-      wd.appendChild(wdBox);
-      (S.deskWidgets || []).forEach((w2, idx) => {
-        const d = WIDGETS[w2.t]; if (!d) return;
-        const rm = el('button', 'btn', '✖ Убрать');
-        rm.onclick = () => { S.deskWidgets.splice(idx, 1); Store.save(); Shell.renderDeskWidgets(); drawMain(); };
-        wd.appendChild(row(d.e, d.n, 'На рабочем столе', rm));
-      });
-      main.appendChild(wd);
-    }
-
-    /* --- форма поверхностей (внутри Персонализации) --- */
-    function pGlass(){
-      const hd = el('div', 'card-t', 'Форма поверхностей');
-      hd.style.cssText = 'padding:8px 2px 10px;font-size:13px;opacity:.85';
-      main.appendChild(hd);
-
-      const r = card('Форма');
-      r.appendChild(row('⬜', 'Скругление панелей', '', slider(() => S.radius, v => set('radius', v), 0, 34, 1, v => v + 'px')));
-      r.appendChild(row('🪟', 'Скругление окон', '', slider(() => S.winRadius, v => set('winRadius', v), 0, 30, 1, v => v + 'px')));
-      main.appendChild(r);
-
-    }
+       Они лежали ниже первых и потому их заслоняли: объявления функций
+       поднимаются, и работает последнее. Это не мелочь — правка в первый
+       набор не делала ровно ничего, и найти это можно было только
+       случайно. Что я и сделал, добавив сюда обои системы и не увидев
+       их на экране. */
 
     /* --- Док --- */
     function pDock(){

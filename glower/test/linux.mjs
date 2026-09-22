@@ -1164,6 +1164,45 @@ try {
     check('Ctrl+V в терминале вставляет', /Control\+v(\s|$)/.test(вставка), вставка);
   }
 
+  /* --- обои системы: список и отдача файлов --- */
+  {
+    const о = await page.evaluate(() => Platform.rpc('sys.обои').catch(e => ({ ошибка:String(e.message || e) })));
+    check('агент читает обои, лежащие в системе',
+      !!о && Array.isArray(о.list), JSON.stringify(о).slice(0, 120));
+
+    /* Дорожка отдачи — единственное место, где агент отдаёт наружу файл не
+       из своей папки. Проверяем оба ответа: своё отдаёт, чужое не отдаёт. */
+    const свои = (о.list || []).filter(x => /^\/usr\/share\/(backgrounds|wallpapers)\//.test(x.путь));
+    if (свои.length){
+      const код = await page.evaluate(async путь => {
+        const r = await fetch(Platform.url + '/обои?p=' + encodeURIComponent(путь));
+        return { код:r.status, тип:r.headers.get('content-type') || '' };
+      }, свои[0].путь);
+      check('обои системы отдаются страницей',
+        код.код === 200 && /^image\//.test(код.тип), JSON.stringify(код));
+    } else {
+      check('обои системы отдаются страницей', true, 'на этой машине обоев нет — проверять нечего');
+    }
+    const чужой = await page.evaluate(async () => {
+      const r = await fetch(Platform.url + '/обои?p=' + encodeURIComponent('/etc/passwd'));
+      return r.status;
+    });
+    check('чужие файлы этой дорожкой не отдаются', чужой === 403, 'ответ ' + чужой);
+    const вверх = await page.evaluate(async () => {
+      const r = await fetch(Platform.url + '/обои?p='
+        + encodeURIComponent('/usr/share/backgrounds/../../../etc/shadow.png'));
+      return r.status;
+    });
+    check('и путём «вверх» тоже не отдаются', вверх === 403, 'ответ ' + вверх);
+
+    /* Второй одинаковый набор «Персонализации» однажды уже съел правку:
+       объявления поднимаются, работает последнее, и изменения в первом
+       наборе не делали ровно ничего. */
+    const настройки = await readFile(join(root, 'js', 'apps.js'), 'utf8');
+    const сколько = (настройки.match(/function pPerson\(/g) || []).length;
+    check('набор «Персонализации» в «Параметрах» один', сколько === 1, 'нашлось: ' + сколько);
+  }
+
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));
 
 } catch(e){

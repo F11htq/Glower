@@ -2100,6 +2100,100 @@ export async function capabilities(flags){
 /* ---------- железо: то, что машина говорит о себе сама ---------- */
 const readOr = async (p, d = '') => readFile(p, 'utf8').then(s => s.trim()).catch(() => d);
 
+/* ==========================================================================
+   Обои, лежащие в системе
+
+   Свои обои у нас нарисованы прямо в странице — это градиенты, они ничего
+   не весят и одинаковы на любой машине. Но настоящие обои у человека тоже
+   есть: их приносят обычные пакеты дистрибутива — gnome-backgrounds и
+   plasma-workspace-wallpapers, — и лежат они там, где их кладут все.
+
+   Читаем те же папки, что читают GNOME и KDE, и отдаём список. Сами файлы
+   наружу отдаёт отдельная дорожка в агенте: гонять картинку по пять
+   мегабайт строкой base64 через шину — значит положить страницу на слабой
+   машине, а так её отдаёт обычный веб-сервер, и браузер её кеширует.
+   ========================================================================== */
+const ОБОИ_КОРНИ = ['/usr/share/backgrounds', '/usr/share/wallpapers',
+                    '/usr/share/glower/wallpapers'];
+const ОБОИ_ВИДЫ = /\.(jpe?g|png|webp|svg|avif)$/i;
+
+/* Дорожка отдачи проверяет путь этим же списком: наружу уходит только то,
+   что лежит в папках обоев, и ничего больше. */
+export function обоиМожно(путь){
+  const п = String(путь || '');
+  return ОБОИ_КОРНИ.some(к => п === к || п.startsWith(к + '/')) && ОБОИ_ВИДЫ.test(п);
+}
+
+export const wallpapers = {
+  async 'sys.обои'(){
+    const список = [];
+
+    /* KDE кладёт каждые обои отдельной папкой: имя в metadata.json (и там
+       же перевод), сама картинка — в contents/images, а маленькая картинка
+       для выбора — contents/screenshot.png. Её и показываем: тянуть ради
+       предпросмотра файл на пять мегабайт незачем. */
+    const kde = async корень => {
+      let папки = [];
+      try { папки = await readdir(корень, { withFileTypes:true }); } catch(e){ return; }
+      for (const д of папки){
+        if (!д.isDirectory()) continue;
+        const дом = join(корень, д.name);
+        let картинки = [];
+        try { картинки = await readdir(join(дом, 'contents', 'images')); } catch(e){ continue; }
+        const годные = картинки.filter(и => ОБОИ_ВИДЫ.test(и));
+        if (!годные.length) continue;
+        /* Берём самую широкую: имя файла у KDE — это и есть разрешение. */
+        const по = и => +((и.match(/^(\d+)x/) || [])[1] || 0);
+        годные.sort((a, b) => по(b) - по(a));
+        let имя = д.name;
+        try {
+          const м = JSON.parse(await readFile(join(дом, 'metadata.json'), 'utf8'));
+          const к = (м && м.KPlugin) || {};
+          имя = к['Name[ru]'] || к.Name || имя;
+        } catch(e){}
+        const снимок = join(дом, 'contents', 'screenshot.png');
+        список.push({ путь:join(дом, 'contents', 'images', годные[0]), 'имя':имя,
+                      'откуда':'KDE', 'превью':existsSync(снимок) ? снимок : null });
+      }
+    };
+
+    /* GNOME и всё остальное лежит файлами. Светлый и тёмный вариант одних
+       и тех же обоев различаются хвостом «-l» и «-d» — так их и называем,
+       иначе в списке два одинаковых имени подряд. */
+    const файлами = async корень => {
+      let имена = [];
+      try { имена = await readdir(корень, { withFileTypes:true }); } catch(e){ return; }
+      for (const и of имена){
+        if (и.isDirectory()) { await файлами(join(корень, и.name)); continue; }
+        if (!ОБОИ_ВИДЫ.test(и.name)) continue;
+        const путь = join(корень, и.name);
+        /* Откуда обои — видно по папке. Пакет GNOME кладёт свои в
+           backgrounds/gnome, а в самой backgrounds лежат обои дистрибутива
+           и то, что положил туда человек. */
+        const откуда = /\/backgrounds\/gnome\//.test(путь) ? 'GNOME'
+          : путь.startsWith('/usr/share/glower/') ? 'GlowerOS' : 'Система';
+        const голое = и.name.replace(ОБОИ_ВИДЫ, '');
+        const тёмное = /-d$/.test(голое), светлое = /-l$/.test(голое);
+        const имя = голое.replace(/-[ld]$/, '').replace(/[-_]+/g, ' ')
+          .replace(/^./, б => б.toUpperCase())
+          + (тёмное ? ' (тёмные)' : светлое ? ' (светлые)' : '');
+        список.push({ путь, 'имя':имя, 'откуда':откуда, 'превью':путь });
+      }
+    };
+
+    await kde('/usr/share/wallpapers');
+    await файлами('/usr/share/backgrounds');
+    await файлами('/usr/share/glower/wallpapers');
+
+    список.sort((a, b) => (a['откуда'] + a['имя']).localeCompare(b['откуда'] + b['имя'], 'ru'));
+    /* Сколько чего есть — чтобы «Параметры» могли предложить доставить
+       недостающий набор, а не молчать о том, что его просто нет. */
+    const счёт = { KDE:0, GNOME:0 };
+    список.forEach(о => { if (счёт[о['откуда']] != null) счёт[о['откуда']]++; });
+    return { list:список, 'сколько':счёт };
+  }
+};
+
 export const hardware = {
   async 'sys.hardware'(){
     const cpuinfo = await readOr('/proc/cpuinfo');

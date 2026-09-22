@@ -50,6 +50,29 @@ const WALLPAPERS = [
   { id:'cosmos',  name:'Космос',   css:'radial-gradient(70% 70% at 30% 30%,#5b2a86 0%,#1b1b3a 40%,#05060f 100%),radial-gradient(50% 50% at 80% 70%,#ff4d9d33,transparent 70%)' }
 ];
 
+/* ---------- Обои: наши, свои и системные ----------
+
+   Обои бывают трёх сортов, и всем, кто их рисует — стол, обзор, просмотр
+   задач, «Параметры», — нужен один и тот же ответ на вопрос «чем красить».
+
+   Наши нарисованы градиентом прямо здесь: они ничего не весят и выглядят
+   одинаково на любой машине. Свои — картинка человека, лежит у нас же.
+   Системные — настоящие файлы дистрибутива, те самые обои GNOME и KDE:
+   их приносят обычные пакеты, а отдаёт агент отдельной дорожкой. Держать
+   их у себя незачем — они уже лежат на диске. */
+function адресОбоев(путь){
+  const корень = (window.Platform && Platform.url) || '';
+  return корень + '/обои?p=' + encodeURIComponent(путь);
+}
+
+function обоиФоном(id){
+  const кто = id === undefined ? S.wallpaper : id;
+  if (кто === 'custom' && window.__customWall) return `url(${window.__customWall})`;
+  if (typeof кто === 'string' && кто.startsWith('файл:'))
+    return `url("${адресОбоев(кто.slice(5))}")`;
+  return (WALLPAPERS.find(x => x.id === кто) || WALLPAPERS[0]).css;
+}
+
 /* ---------- Акценты ---------- */
 const ACCENTS = [
   { n:'Синий',    a:'#3a86ff', b:'#8b5cf6' },
@@ -152,9 +175,13 @@ function applySettings(){
   const dw = $('#desk-widgets');  if (dw) dw.style.display = S.showDeskWidgets ? '' : 'none';
   const wp = $('#wallpaper');
   if (wp){
-    const w = WALLPAPERS.find(x => x.id === S.wallpaper) || WALLPAPERS[0];
-    wp.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
-      ? `url(${window.__customWall})` : w.css;
+    wp.style.backgroundImage = обоиФоном();
+    /* Файл надо ещё и уложить по экрану: градиент тянется сам, а картинка
+       иначе ляжет плиткой в свой настоящий размер. */
+    const файлом = S.wallpaper === 'custom' || String(S.wallpaper).startsWith('файл:');
+    wp.style.backgroundSize = файлом ? 'cover' : '';
+    wp.style.backgroundPosition = файлом ? 'center' : '';
+    wp.style.backgroundRepeat = файлом ? 'no-repeat' : '';
     const dim = S.theme === 'dark' ? 0.82 : 1;      // в тёмной теме обои чуть тише, но не в темноту
     wp.style.filter = `brightness(${S.brightness / 100 * dim}) ${S.theme === 'dark' ? 'saturate(.8)' : ''} ${S.nightLight ? 'sepia(.35) saturate(1.2) hue-rotate(-14deg)' : ''}`;
   }

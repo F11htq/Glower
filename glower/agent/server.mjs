@@ -40,7 +40,9 @@ const bump = () => { rev++; };
 const TEXT = /\.(txt|md|log|json|js|css|html?|xml|csv|ini|conf|yml|yaml|py|sh|ts|jsx?)$/i;
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i;
 const MIME = { html:'text/html', js:'text/javascript', css:'text/css', json:'application/json',
-  png:'image/png', jpg:'image/jpeg', svg:'image/svg+xml', ico:'image/x-icon', mjs:'text/javascript' };
+  png:'image/png', jpg:'image/jpeg', svg:'image/svg+xml', ico:'image/x-icon', mjs:'text/javascript',
+  /* обои дистрибутивов бывают и такими */
+  jpeg:'image/jpeg', webp:'image/webp', avif:'image/avif' };
 
 /* ---------- защита: наружу корня не выходим ---------- */
 function safe(parts){
@@ -108,6 +110,7 @@ if (SYSTEM){
   SYS = {
     ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
     ...m.apps(ALLOW_LAUNCH), ...m.hardware, ...m.wifi(ALLOW_NET), ...m.shots(ALLOW_LAUNCH),
+    ...m.wallpapers,
     ...m.tray(ALLOW_LAUNCH),
     ...(await import('./browser.mjs')).browser(PORT, ALLOW_LAUNCH),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
@@ -199,6 +202,37 @@ const server = createServer(async (req, res) => {
       send(res, 200, JSON.stringify(out), { 'Content-Type':'application/json; charset=utf-8' });
     });
     return;
+  }
+
+  /* Обои системы отдаём отдельной дорожкой.
+
+     Картинка на пять мегабайт, пересказанная строкой base64 через шину,
+     стоит вдвое дороже и не кешируется вовсе: на слабой машине страница
+     от этого встаёт. А так её отдаёт обычный веб-сервер и берёт на себя
+     браузер. Наружу уходит только то, что лежит в папках обоев: путь
+     проверяется тем же списком, по которому их и нашли. */
+  const дорожка = (() => {
+    try { return decodeURIComponent(req.url.split('?')[0]); } catch(e){ return req.url.split('?')[0]; }
+  })();
+  if (дорожка === '/обои'){
+    /* Имя довода латиницей — «p», и это не про вкус. Всё, что попадает в
+       строку запроса, должно быть закодировано, иначе разбор запроса
+       отказывает ещё до нас: сервер отвечает «400» на кириллицу в сыром
+       виде, и понять по такому ответу нечего. Путь кодирует страница,
+       а имя довода пусть будет тем, что можно набрать руками. */
+    const спрос = new URLSearchParams(req.url.split('?')[1] || '');
+    const путь = спрос.get('p') || '';
+    if (!SYSTEM) return send(res, 403, 'системный слой выключен');
+    const m = await import('./system.mjs');
+    if (!m.обоиМожно(путь) || путь.includes('..')) return send(res, 403, 'не обои');
+    try {
+      const данные = await readFile(путь);
+      const ext = extname(путь).slice(1).toLowerCase();
+      return send(res, 200, данные, {
+        'Content-Type':(MIME[ext] || 'application/octet-stream'),
+        /* Обои не меняются — пусть браузер держит их у себя. */
+        'Cache-Control':'public, max-age=86400' });
+    } catch(e){ return send(res, 404, 'нет такого файла'); }
   }
 
   // статика оболочки

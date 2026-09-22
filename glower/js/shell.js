@@ -518,7 +518,8 @@ const Shell = {
     desks.innerHTML = '';
     for (let i = 0; i < WM.desks; i++){
       const d = el('div', 'tv-desk' + (i === WM.desk ? ' on' : ''), 'Рабочий стол ' + (i + 1));
-      d.style.backgroundImage = (WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0]).css;
+      d.style.backgroundImage = обоиФоном();
+      d.style.backgroundSize = 'cover';
       d.onclick = () => { WM.gotoDesk(i); this.renderTaskview(); };
       desks.appendChild(d);
     }
@@ -557,16 +558,15 @@ const Shell = {
        обои, и подмена была бы видна сразу. */
     const фон = $('#об-фон');
     if (фон){
-      const о = WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0];
-      фон.style.backgroundImage = (S.wallpaper === 'custom' && window.__customWall)
-        ? `url(${window.__customWall})` : о.css;
+      фон.style.backgroundImage = обоиФоном();
     }
 
     столы.innerHTML = '';
     for (let i = 0; i < WM.desks; i++){
       const сколько = WM.wins.filter(w => w.desk === i).length;
       const д = el('div', 'об-стол' + (i === WM.desk ? ' on' : ''));
-      д.style.backgroundImage = (WALLPAPERS.find(w => w.id === S.wallpaper) || WALLPAPERS[0]).css;
+      д.style.backgroundImage = обоиФоном();
+      д.style.backgroundSize = 'cover';
       д.appendChild(el('div', 'номер', (i + 1) + (сколько ? ' · ' + сколько : '')));
       д.onclick = () => { WM.gotoDesk(i); this.рисуйОбзор(); };
 
