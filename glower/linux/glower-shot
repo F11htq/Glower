@@ -24,6 +24,13 @@ URL="http://127.0.0.1:$PORT/rpc"
 # проверенных выше, так что подставлять нечего.
 BODY="{\"method\":\"ui.say\",\"params\":{\"тема\":\"снимок\",\"что\":\"$MODE\"}}"
 
+# Рамку выделения рисует сама оболочка, поверх застывшего кадра, — а её
+# окно лежит под чужими: открой браузер во весь экран, и рамка окажется за
+# ним. Поднимаем оболочку, как это делает клавиша Win.
+if [ "$MODE" = "область" ] && command -v wlrctl >/dev/null 2>&1; then
+  wlrctl toplevel focus app_id:glowershell >/dev/null 2>&1 || true
+fi
+
 if command -v curl >/dev/null 2>&1; then
   curl -sf -m 5 -X POST -H 'Content-Type: application/json' -d "$BODY" "$URL" >/dev/null || {
     echo "оболочка не отвечает — снимок сделать некому" >&2; exit 1; }

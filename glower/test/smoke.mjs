@@ -1310,6 +1310,61 @@ try {
     обзор.нашлось.length === 1 && /Калькулятор/.test(обзор.нашлось[0]),
     JSON.stringify(обзор.нашлось));
   check('обзор закрывается', обзор.закрылся === true);
+
+  /* --- своё выделение области, как в Windows --- */
+  {
+    /* Кадр делаем сами и с приметой: слева красное, справа синее. Если
+       вырезано не то место, цвет в середине куска это сразу покажет. */
+    await page.evaluate(() => {
+      const c = document.createElement('canvas'); c.width = innerWidth; c.height = innerHeight;
+      const g = c.getContext('2d');
+      g.fillStyle = '#ff0000'; g.fillRect(0, 0, innerWidth / 2, innerHeight);
+      g.fillStyle = '#0000ff'; g.fillRect(innerWidth / 2, 0, innerWidth / 2, innerHeight);
+      window.__проба = Снимки.выдели(c.toDataURL('image/png'));
+    });
+    await page.waitForTimeout(400);
+    check('выделение области показывает застывший кадр',
+      await page.evaluate(() => !!document.querySelector('.выделение .выд-кадр')));
+
+    const мышь = await page.evaluate(() => ({ w:innerWidth, h:innerHeight }));
+    const x = Math.round(мышь.w * 0.6), y = Math.round(мышь.h * 0.3);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 200, y + 150, { steps:8 });
+    await page.waitForTimeout(150);
+    check('размер рамки виден цифрами',
+      /200 × 150/.test(await page.evaluate(() => document.querySelector('.выд-подпись').textContent)),
+      await page.evaluate(() => document.querySelector('.выд-подпись').textContent));
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const кусок = await page.evaluate(async () => {
+      const url = await window.__проба;
+      if (!url) return { нет:true };
+      const и = new Image();
+      await new Promise(r => { и.onload = r; и.src = url; });
+      const c = document.createElement('canvas'); c.width = и.width; c.height = и.height;
+      c.getContext('2d').drawImage(и, 0, 0);
+      const d = c.getContext('2d').getImageData(и.width >> 1, и.height >> 1, 1, 1).data;
+      return { ш:и.width, в:и.height, цвет:[d[0], d[1], d[2]].join(','),
+               слойУбран:!document.querySelector('.выделение') };
+    });
+    check('вырезан кусок нужного размера',
+      кусок.ш === 200 && кусок.в === 150, JSON.stringify(кусок));
+    check('и именно с того места, где тянули рамку',
+      кусок.цвет === '0,0,255', JSON.stringify(кусок));
+    check('после выделения слой уходит', кусок.слойУбран === true);
+
+    /* Esc — отмена, и она должна вернуть пустоту, а не кусок в один пиксель. */
+    const отмена = await page.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 100; c.height = 100;
+      const ждём = Снимки.выдели(c.toDataURL('image/png'));
+      await new Promise(r => setTimeout(r, 200));
+      dispatchEvent(new KeyboardEvent('keydown', { key:'Escape' }));
+      return await ждём;
+    });
+    check('Esc отменяет выделение', отмена === null, String(отмена).slice(0, 40));
+  }
   check('в обзоре есть кнопка нового рабочего стола', обзор.плюс === true);
 
   /* --- новый рабочий стол и перетаскивание программы на него --- */
