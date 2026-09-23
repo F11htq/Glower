@@ -111,6 +111,32 @@ case "$area" in
 esac
 
 echo
+echo "=== снимок экрана ==="
+# Win+Shift+S приходил, рамка не появлялась, и понять было нечего. Спрашиваем
+# у агента: чем он умеет снимать, что видит про экран и жив ли slurp.
+shot=$(curl -s --max-time 6 -X POST "http://localhost:$PORT/rpc" \
+        -H 'Content-Type: application/json' \
+        -d '{"method":"sys.shot.проба","params":{}}' 2>/dev/null)
+case "$shot" in
+  *'"ждёт":true'*)   echo '  slurp запустился и ждёт выделения — с ним всё хорошо' ;;
+  *'"slurp":false'*) echo '  slurp НЕ УСТАНОВЛЕН — выделять область нечем' ;;
+  *'"вышел"'*)       echo "  slurp сразу вышел: $(echo "$shot" | sed 's/.*"вышел"://; s/,.*//')" ;;
+  '')                echo "  агент не отвечает на порту $PORT" ;;
+  *)                 echo "  ответ непонятен: $(echo "$shot" | cut -c1-80)" ;;
+esac
+case "$shot" in
+  *'"жалоба":"'*) said=$(echo "$shot" | sed 's/.*"жалоба":"//; s/".*//')
+                  [ -n "$said" ] && echo "  slurp сказал: $said" ;;
+esac
+case "$shot" in
+  *'"grim":false'*) echo '  grim НЕ УСТАНОВЛЕН — снимать экран нечем' ;;
+esac
+case "$shot" in
+  *'WAYLAND_DISPLAY'*) echo "  агент видит экран: $(echo "$shot" \
+      | sed 's/.*"WAYLAND_DISPLAY":"//; s/".*//')" ;;
+esac
+
+echo
 echo "=== Bluetooth ==="
 bt=$(curl -s --max-time 4 -X POST "http://localhost:$PORT/rpc" \
       -H 'Content-Type: application/json' \

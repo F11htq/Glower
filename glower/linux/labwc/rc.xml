@@ -48,6 +48,24 @@
       <action name="Execute" command="glower-menu отмени" />
       <action name="Close" />
     </keybind>
+    <!-- Рабочие столы с клавиатуры — теми же сочетаниями, что в GNOME:
+         Win с Page Up / Page Down и Ctrl+Alt со стрелками. Первым
+         действием всюду отметка: иначе Win, пришедшая первой в сочетании,
+         успеет открыть меню программ. -->
+    <keybind key="W-Prior">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-desk назад" />
+    </keybind>
+    <keybind key="W-Next">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-desk вперёд" />
+    </keybind>
+    <keybind key="C-A-Left">
+      <action name="Execute" command="glower-desk назад" />
+    </keybind>
+    <keybind key="C-A-Right">
+      <action name="Execute" command="glower-desk вперёд" />
+    </keybind>
     <!-- Снимок экрана. Сочетания держит оконный сервер, а не оболочка:
          страница получает клавиши, только пока она в фокусе, и стоило
          открыть любую программу, как Win+Shift+S уходил ей. -->

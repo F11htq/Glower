@@ -820,7 +820,22 @@ body.обзор-открыт #desk-widgets{filter:blur(14px) saturate(.9);opacit
 body.эконом.обзор-открыт #desktop-icons,
 body.эконом.обзор-открыт #desk-widgets,
 body.эконом.обзор-открыт #windows{filter:blur(9px);opacity:.4;transition:none}
-.обзор{padding-bottom:calc(var(--dock-size) + 42px)}
+/* Место под док внизу держим только тогда, когда док на экране. Пока
+   открыты окна, он уезжает вниз — и держать под него сотню точек значит
+   обрезать нижний ряд программ на пустом месте. Ровно это человек и
+   увидел: ряд, не доходящий до края. */
+body:not(.док-прячется) .обзор{padding-bottom:calc(var(--dock-size) + 42px)}
+
+/* Экран низкий — значки меньше. На ноутбучных 768 точках рядов помещается
+   три с половиной: половина ряда внизу выглядит поломкой, а не прокруткой.
+   Уменьшенный шаг даёт четвёртый ряд целиком. */
+@media (max-height:860px){
+  .об-сетка{grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:6px}
+  .об-прог{padding:10px 6px 8px;gap:6px;font-size:12px}
+  .об-прог .app-ico{width:46px;height:46px;border-radius:13px;font-size:25px}
+  .об-стол{width:132px;height:78px}
+  .обзор{gap:12px;padding-top:16px}
+}
 /* Окна на время обзора тоже уходят — как в GNOME, где обзор заменяет
    рабочий стол, а не ложится на него. Возвращают их строчкой над сеткой:
    там они названы и по ним же попадаешь обратно. */
@@ -847,3 +862,8 @@ body.обзор-открыт #windows{filter:blur(14px) saturate(.9);opacity:.42
 
 /* Кнопки «доставить набор обоев» — под сеткой системных обоев. */
 .wall-низ{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+
+/* Пока система ждёт выделения области, страница не выделяет ничего своего:
+   курсор — крест, как у всех, и подписи значков не подсвечиваются. */
+body.ждём-область,
+body.ждём-область *{cursor:crosshair !important;user-select:none !important}
