@@ -1398,17 +1398,60 @@ export function apps(allowLaunch){
         list, можно:!!allowLaunch };
     },
 
+    /* Включить Bluetooth — это три разные вещи подряд, и до сих пор делали
+       только последнюю.
+
+       Сперва рубильник ядра: пока он опущен, включение через bluetoothctl
+       проходит впустую. На ноутбуках он остаётся опущенным после нажатия
+       клавиши на клавиатуре — и, что хуже, systemd запоминает это между
+       перезагрузками, так что человек видит «выключен программно» изо дня
+       в день, ничего для этого не делая.
+
+       Потом сама служба: с опущенным рубильником bluetooth.service на
+       старте машины мог и не подняться, и тогда контроллера просто нет в
+       списке — bluetoothctl отвечает пустотой.
+
+       И только потом — power on. Делаем всё три и говорим, что помогло. */
     async 'sys.bt.power'({ включить }){
       if (!allowLaunch) throw new Error('управление Bluetooth выключено: запустите агент с ключом --allow-launch');
       if (!await has('bluetoothctl')) throw new Error('на машине нет bluetoothctl');
-      /* То же, что и с Wi-Fi: пока держит рубильник ядра, включение через
-         bluetoothctl проходит впустую. На ноутбуках он часто остаётся
-         опущенным после нажатия клавиши на клавиатуре. */
-      if (включить && await has('rfkill'))
-        await call('rfkill', ['unblock', 'bluetooth']).catch(() => {});
+      const сделано = [];
+
+      if (включить){
+        const п = await почемуНетBT();
+        if (п['блокировка'] && п['блокировка']['рубильником'])
+          throw new Error('Bluetooth выключен на самом ноутбуке — переключателем на корпусе '
+            + 'или клавишей на клавиатуре (обычно Fn с изображением антенны). '
+            + 'Включить его отсюда нельзя.');
+
+        if (await has('rfkill')){
+          await call('rfkill', ['unblock', 'bluetooth']).catch(() => {});
+          сделано.push('снят рубильник');
+        }
+
+        /* Служба могла не подняться вовсе. Своими правами, потом через
+           sudo — ровно как с выключением машины. */
+        const списокДо = await call('bluetoothctl', ['list']).catch(() => '');
+        if (!String(списокДо).trim() && await has('systemctl')){
+          const ок = await call('systemctl', ['start', 'bluetooth'])
+            .then(() => true)
+            .catch(() => call('sudo', ['-n', 'systemctl', 'start', 'bluetooth'])
+              .then(() => true).catch(() => false));
+          if (ок){
+            сделано.push('запущена служба');
+            /* Службе нужно мгновение, чтобы поднять контроллер. */
+            await new Promise(r => setTimeout(r, 1200));
+          }
+        }
+      }
+
       await call('bluetoothctl', ['power', включить ? 'on' : 'off'])
-        .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
-      return { ok:true, включён:!!включить };
+        .catch(e => {
+          const жалоба = String(e.stderr || e.message).trim().split('\n')[0];
+          throw new Error(жалоба || 'bluetoothctl отказался, не сказав почему');
+        });
+      сделано.push(включить ? 'включён' : 'выключен');
+      return { ok:true, включён:!!включить, 'сделано':сделано };
     },
 
     /* ---------- Прошивки ----------

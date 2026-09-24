@@ -1215,6 +1215,62 @@ try {
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
+    /* --- Bluetooth: кнопка там, где она поможет, и только там ---
+
+       Система сама писала «выключен программно — его можно включить» и
+       сама же не давала ничем: строка без кнопки, плитка в панели гасла.
+       Проверяем все четыре состояния разом, подменив ответ машины: на этой
+       Bluetooth может не быть вовсе, а поведение должно быть верным на
+       любой. */
+    for (const [случай, ответ, ждём] of [
+      ['выключен программно',
+       { есть:false, почему:'Bluetooth выключен программно — его можно включить',
+         подробно:{ блокировка:{ программно:true, рубильником:false }, железо:'Intel' } }, 'Включить'],
+      ['выключен кнопкой на корпусе',
+       { есть:false, почему:'Bluetooth выключен переключателем на корпусе или клавишей на клавиатуре',
+         подробно:{ блокировка:{ программно:true, рубильником:true }, железо:'Intel' } }, null],
+      ['адаптера нет вовсе',
+       { есть:false, почему:'Bluetooth-адаптера на этой машине не видно',
+         подробно:{ блокировка:null, железо:null } }, null],
+      ['нечем управлять',
+       { есть:false, почему:'на машине нет bluetoothctl — Bluetooth не настроен' }, null],
+      ['ядро не дало хода',
+       { есть:false, почему:'Адаптер в машине есть, но ядро не дало ему хода — похоже, не хватает прошивки',
+         подробно:{ блокировка:{ программно:false, рубильником:false }, железо:'Intel' } },
+       'Попробовать включить']
+    ]){
+      const вышло = await page.evaluate(async о => {
+        const было = Platform.rpc.bind(Platform);
+        window.__звали = [];
+        Platform.rpc = (m, p) => {
+          if (m === 'sys.bt' || m === 'sys.bt.scan') return Promise.resolve(о);
+          if (m === 'sys.bt.power'){ window.__звали.push(p); return Promise.resolve({ ok:true }); }
+          return было(m, p);
+        };
+        WM.wins.filter(w => w.appId === 'settings').forEach(w => WM.close(w));
+        await new Promise(r => setTimeout(r, 300));
+        WM.open('settings', { section:'bt' });
+        await new Promise(r => setTimeout(r, 1500));
+        const w = WM.wins.find(x => x.appId === 'settings');
+        const б = [...w.body.querySelectorAll('button')]
+          .find(b => /^(Включить|Попробовать включить)$/.test(b.textContent.trim()));
+        /* Подпись читаем до нажатия: нажатая кнопка пишет «Включаю…». */
+        const подпись = б ? б.textContent.trim() : null;
+        if (б) б.click();
+        await new Promise(r => setTimeout(r, 400));
+        const звали = window.__звали.slice();
+        Platform.rpc = было;
+        WM.wins.filter(x => x.appId === 'settings').forEach(x => WM.close(x));
+        return { кнопка:подпись, звали };
+      }, ответ);
+      check('Bluetooth, ' + случай + ': кнопка ' + (ждём ? '«' + ждём + '»' : 'не нужна'),
+        (вышло.кнопка || null) === ждём, 'вышло: ' + вышло.кнопка);
+      if (ждём)
+        check('и она просит машину включить Bluetooth',
+          вышло.звали.length === 1 && вышло.звали[0]['включить'] === true,
+          JSON.stringify(вышло.звали));
+    }
+
     /* Проба выделения области — та, что показывает «врач». */
     const проба = await page.evaluate(() =>
       Platform.rpc('sys.shot.проба').catch(e => ({ ошибка:String(e.message || e) })));
