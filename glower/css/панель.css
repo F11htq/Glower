@@ -236,3 +236,7 @@ body.притемнено::after{
   content:''; position:fixed; inset:0; z-index:99;
   background:rgba(6,8,14,.55); pointer-events:none;
 }
+
+/* Тот же уговор, что и на столе: над полосой курсор обычный, а не
+   палочка для набора текста. */
+body{cursor:default}

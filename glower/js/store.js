@@ -370,6 +370,15 @@ APPS.store = {
       if (набрано.length >= 2) найтиВРепозиториях(набрано); else draw();
     };
 
+    /* Магазин можно открыть сразу с готовым вопросом: так его зовёт пункт
+       «Найти в Магазине» из меню программы в обзоре. Человек уже сказал,
+       что ищет, — переспрашивать незачем. */
+    if (opts && opts['найти']){
+      поле.value = String(opts['найти']);
+      набрано = поле.value.trim();
+      if (набрано.length >= 2) setTimeout(() => найтиВРепозиториях(набрано), 60);
+    }
+
     const дождисьРаботы = async () => {
       for (let i = 0; i < 900; i++){
         const j = await Pkg.job().catch(() => ({ running:false }));
@@ -1216,7 +1225,7 @@ APPS.store = {
    программу при уже открытом Магазине, видел ту вкладку, на которой он
    его оставил, — а ход установки идёт на другой. */
 APPS.store.onReopen = function(win, opts){
-  if (!opts || !opts['вкладка']) return;
+  if (!opts || !(opts['вкладка'] || opts['найти'])) return;
   win.body.replaceChildren();
   APPS.store.render(win, opts);
 };

@@ -941,3 +941,15 @@ body.ждём-область *{cursor:crosshair !important;user-select:none !imp
 body.reduced .di,body.reduced .w-card,body.reduced .scroll.pad > .card,body.reduced .плитка,
 body.эконом .di,body.эконом .w-card,body.эконом .scroll.pad > .card,body.эконом .плитка{animation:none}
 body.reduced .ms-hero-art,body.эконом .ms-hero-art{animation:none}
+
+/* ---------- курсор над оболочкой ----------
+   Текстовый курсор появлялся там, где никакого текста набрать нельзя: при
+   протяжке по рабочему столу, над подписями значков, над панелями.
+   Выделение текста на странице запрещено давно, но дело не в нём: этот
+   движок показывает курсор-палочку над любым текстом, у которого курсор
+   оставлен «на усмотрение» (auto), — запрет выделения ему не указ.
+
+   Поэтому оболочке курсор назначен прямо. Дети наследуют его сами, а у
+   кого свой (кнопки, поля ввода) — тот и останется со своим. */
+#desktop,#wallpaper,#desktop-icons,#desk-widgets,.dock-wrap,.обзор,.topbar,
+.start,#cc,#widgets,.taskview,.toasts,.ctx,#windows > .win > .titlebar{cursor:default}

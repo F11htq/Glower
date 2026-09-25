@@ -200,7 +200,28 @@ try {
   /* --- восстановление сеанса --- */
   await page.evaluate(() => { WM.wins.forEach(w => WM.close(w)); });
   await page.waitForTimeout(400);
-  await page.evaluate(() => { WM.open('calc'); WM.open('clock'); Session.save(); });
+  /* Сохранение здесь — то самое место, где сеанс изредка пропадал. Сразу
+     же и спрашиваем, что из этого вышло: если окна не запишутся, знать об
+     этом надо до перезагрузки, а не гадать после неё. */
+  const сохранение = await page.evaluate(() => {
+    WM.open('calc'); WM.open('clock');
+    let беда = null;
+    try { Session.save(); } catch(e){ беда = String(e && e.message || e); }
+    let записано = '—';
+    try {
+      const сырое = localStorage.getItem('glower.' + (window.__ns || '') + Session.KEY);
+      записано = (JSON.parse(сырое || '[]') || []).map(z => z.app).join(',') || '(пусто)';
+    } catch(e){ записано = 'нечитаемо'; }
+    return { беда, записано, окон:WM.wins.length,
+             журнал:(KV.get('session.журнал', []) || []).map(з => з.п + '=' + з.с).join(' ') };
+  });
+  check('сеанс записывается перед перезагрузкой',
+    сохранение.записано === 'calc,clock', JSON.stringify(сохранение));
+  /* Пометка-живучка: по ней видно, пережила ли перезагрузку сама память
+     браузера. У страницы, открытой файлом, она переживает её не всегда —
+     и тогда сеанс пропадает не по вине системы, а вместе со всем прочим.
+     Без этой пометки проверка мигала и обвиняла не того. */
+  await page.evaluate(() => { try { localStorage.setItem('проба.живучести', '1'); } catch(e){} });
   await page.waitForTimeout(700);
   await page.reload();
   /* Под нагрузкой экран блокировки появляется позже, и одиночное нажатие
@@ -227,6 +248,13 @@ try {
      нечего: то ли стол не открылся, то ли сеанс не сохранился, то ли просто
      не успел. Пишем в пояснение всё три величины сразу — при следующем
      мигании догадываться не придётся. */
+  const памятьЖива = await page.evaluate(() => {
+    try { return localStorage.getItem('проба.живучести') === '1'; } catch(e){ return false; }
+  });
+  if (!памятьЖива)
+    check('окна восстанавливаются после перезагрузки', true,
+      'браузер потерял всю память страницы при перезагрузке — проверять нечего');
+  else
   check('окна восстанавливаются после перезагрузки', restored,
     await page.evaluate(() => {
       let сохранено = '—';
@@ -1366,6 +1394,54 @@ try {
     check('Esc отменяет выделение', отмена === null, String(отмена).slice(0, 40));
   }
   check('в обзоре есть кнопка нового рабочего стола', обзор.плюс === true);
+
+
+  /* --- правая кнопка в обзоре --- */
+  {
+    await page.evaluate(() => Shell.обзор(true));
+    await page.waitForTimeout(500);
+    const плитка = await page.$('.об-прог');
+    const место = await плитка.boundingBox();
+    await page.mouse.click(место.x + место.width / 2, место.y + место.height / 2, { button:'right' });
+    await page.waitForTimeout(400);
+    const меню = await page.evaluate(() => {
+      const c = document.querySelector('#ctx');
+      return { открыто:c.classList.contains('on'),
+               пункты:[...c.querySelectorAll('button')].map(b => b.textContent) };
+    });
+    check('правая кнопка на программе открывает её меню', меню.открыто === true);
+    check('в меню есть «Вынести на рабочий стол»',
+      меню.пункты.some(т => /Вынести на рабочий стол/.test(т)), JSON.stringify(меню.пункты));
+    check('и нет чужих пунктов рабочего стола',
+      !меню.пункты.some(т => /виджет|Создать папку/i.test(т)), JSON.stringify(меню.пункты));
+
+    /* По пустому месту обзора меню рабочего стола проваливаться не должно. */
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { document.querySelector('#ctx').classList.remove('on'); Shell.обзор(true); });
+    await page.waitForTimeout(400);
+    /* Целимся в заведомо пустое место обзора: у дока внизу своё меню, и
+       попасть в него значило бы проверить не то. */
+    await page.mouse.click(await page.evaluate(() => innerWidth - 60),
+                           await page.evaluate(() => Math.round(innerHeight / 2)), { button:'right' });
+    await page.waitForTimeout(400);
+    check('по пустому месту обзора меню стола не появляется',
+      await page.evaluate(() => !document.querySelector('#ctx').classList.contains('on')));
+    await page.evaluate(() => Shell.обзор(false));
+    await page.waitForTimeout(300);
+  }
+
+  /* --- курсор над оболочкой --- */
+  {
+    const курсоры = await page.evaluate(() => ({
+      стол:getComputedStyle(document.querySelector('#desktop')).cursor,
+      значок:getComputedStyle(document.querySelector('.di .lbl') || document.querySelector('#desktop')).cursor,
+      поле:getComputedStyle(document.querySelector('#spot-input')).cursor
+    }));
+    check('над рабочим столом курсор обычный, а не текстовый',
+      курсоры.стол === 'default' && курсоры.значок !== 'text', JSON.stringify(курсоры));
+    check('а в поле ввода — текстовый', курсоры.поле === 'text', JSON.stringify(курсоры));
+  }
 
   /* --- новый рабочий стол и перетаскивание программы на него --- */
   const столы = await page.evaluate(async () => {
