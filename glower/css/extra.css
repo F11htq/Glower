@@ -884,3 +884,60 @@ body.ждём-область *{cursor:crosshair !important;user-select:none !imp
   padding:7px 14px;border-radius:11px;font-size:13px;pointer-events:none;
   background:rgba(10,12,20,.78);color:#fff;
   box-shadow:0 8px 26px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.12)}
+
+/* ==========================================================================
+   Живость: мелкие движения по всей системе
+
+   Система была правильной и скучной: всё появлялось мгновенно и никак не
+   отзывалось на нажатия. Добавлено ровно то, что стоит дёшево и читается
+   как отклик, а не как украшение.
+
+   Всё здесь выключается в двух случаях: щадящий режим (слабая машина) и
+   «меньше движения» в спец-возможностях. Это не украшение ради украшения,
+   и человеку должно быть чем его убрать.
+   ========================================================================== */
+@keyframes появление{from{opacity:0;transform:translateY(10px)}}
+@keyframes всплытие{from{opacity:0;transform:scale(.94)}}
+
+/* Нажатие видно везде, где вообще можно нажать. Это самое дешёвое из всех
+   движений — и самое заметное: система перестаёт казаться картинкой. */
+.btn:active,.mini-btn:active,.об-прог:active,.об-окно:active,.dock-item:active,
+.плитка:active,.wall:active,.st-card:active,.ms-chip:active,.tv-item:active,
+.sw-b:active,.seg b:active{transform:scale(.96)}
+.btn,.mini-btn,.wall,.st-card,.ms-chip{transition:transform var(--t1) var(--e-out),
+  background var(--t1),box-shadow var(--t1),opacity var(--t1)}
+
+/* Значки на столе, виджеты и карточки «Параметров» приходят лесенкой.
+   Задержки считаются по месту в ряду — без единой строки в коде: так
+   лесенка не может разойтись с тем, что на экране. */
+.di{animation:появление .3s var(--e-out) both}
+.di:nth-child(1){animation-delay:.02s} .di:nth-child(2){animation-delay:.06s}
+.di:nth-child(3){animation-delay:.1s}  .di:nth-child(4){animation-delay:.14s}
+.di:nth-child(5){animation-delay:.18s} .di:nth-child(6){animation-delay:.22s}
+.di:nth-child(n+7){animation-delay:.26s}
+
+.desk-widgets .w-card{animation:появление .36s var(--e-out) both}
+.desk-widgets .w-card:nth-child(2){animation-delay:.08s}
+.desk-widgets .w-card:nth-child(3){animation-delay:.16s}
+
+.scroll.pad > .card{animation:появление .28s var(--e-out) both}
+.scroll.pad > .card:nth-child(2){animation-delay:.05s}
+.scroll.pad > .card:nth-child(3){animation-delay:.1s}
+.scroll.pad > .card:nth-child(4){animation-delay:.15s}
+.scroll.pad > .card:nth-child(n+5){animation-delay:.2s}
+
+/* Плитки быстрых настроек в панели — тем же движением, что и меню над
+   ними: панель и стол должны шевелиться одинаково. */
+.плитка{animation:всплытие .22s var(--e-out) both}
+.плитка:nth-child(2){animation-delay:.03s}
+.плитка:nth-child(3){animation-delay:.06s}
+.плитка:nth-child(4){animation-delay:.09s}
+.плитка:nth-child(n+5){animation-delay:.12s}
+
+/* Запущенная программа отмечается точкой под значком — пусть она появится
+   заметно, один раз, а не проступит молча. */
+.dock-item.run::before{animation:всплытие .3s var(--e-spring) both}
+
+body.reduced .di,body.reduced .w-card,body.reduced .scroll.pad > .card,body.reduced .плитка,
+body.эконом .di,body.эконом .w-card,body.эконом .scroll.pad > .card,body.эконом .плитка{animation:none}
+body.reduced .ms-hero-art,body.эконом .ms-hero-art{animation:none}

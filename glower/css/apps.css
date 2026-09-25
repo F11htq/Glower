@@ -274,10 +274,27 @@ select.inp option{background:#1a1e28;color:#fff}
 .ms-hero-tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:99px;
   background:rgba(0,0,0,.28)}
 .ms-hero-btn{margin-top:14px;display:inline-block;background:rgba(255,255,255,.92);color:#12141b}
-.ms-hero-art{font-size:64px;opacity:.95;filter:drop-shadow(0 8px 20px rgba(0,0,0,.35));
-  animation:стПарение 6s ease-in-out infinite}
+/* Значок на витрине покачивается — но не крутится.
+
+   Поворот на живой машине выглядел дёрганьем: при повороте картинку
+   приходится пересчитывать заново каждый кадр, а рядом с ней ещё и тень
+   от фильтра — на машине без ускорения это видно глазом. Оставили одно
+   движение вверх-вниз, и потише: подъём меньше, ход длиннее. Тень
+   перенесли на саму карточку — она не движется, и считать её каждый кадр
+   больше не нужно. */
+.ms-hero-art{font-size:64px;opacity:.95;flex:none;will-change:transform;
+  animation:стПарение 7s ease-in-out infinite}
+.ms-hero-art img,.ms-hero-art .emo{max-width:100%;height:auto}
+.ms-hero-card{isolation:isolate}
 .ms-hero-big .ms-hero-art{font-size:110px}
-@keyframes стПарение{50%{transform:translateY(-10px) rotate(-3deg)}}
+/* В маленьких карточках значок вылезал за край и обрезался: места под него
+   там вдвое меньше, а лежал он в одном ряду с подписью. Убираем его из
+   ряда вовсе и кладём в угол — там он никому не мешает и ничего не режет,
+   а подпись получает всю ширину. */
+.ms-hero-pair .ms-hero-card{padding:16px;display:block}
+.ms-hero-pair .ms-hero-txt{max-width:100%;padding-right:40px}
+.ms-hero-pair .ms-hero-art{position:absolute;right:10px;bottom:10px;font-size:34px;opacity:.9}
+@keyframes стПарение{50%{transform:translateY(-7px)}}
 
 .ms-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px;z-index:2}
 .ms-dot{width:7px;height:7px;border-radius:99px;border:0;cursor:pointer;padding:0;
@@ -415,4 +432,7 @@ body.эконом .st-skel{animation:none}
 /* В витрине значок — это картинка, а не плитка: ни фона, ни рамки. */
 .ms-hero-art .st-ico{width:110px;height:110px;background:none!important;font-size:inherit}
 .ms-hero-card:not(.ms-hero-big) .ms-hero-art .st-ico{width:64px;height:64px}
+/* В нижней паре карточек места вдвое меньше: значок в 64 точки вылезал за
+   край и обрезался, а на узкой карточке ещё и налезал на подпись. */
+.ms-hero-pair .ms-hero-art .st-ico{width:40px;height:40px}
 .st-skel-r{height:52px;margin:8px 0;border-radius:12px}
