@@ -693,7 +693,7 @@ async function попытка(программа, части, via){
    Различить это можно, только спросив саму машину, — иначе человек
    ищет драйверы к тому, что просто выключено кнопкой. */
 async function почемуНетBT(){
-  const о = { блокировка:null, железо:null, журнал:[] };
+  const о = { блокировка:null, железо:null, журнал:[], файл:null, код:null };
   if (await has('rfkill')){
     const rf = await call('rfkill', ['list']).catch(() => '');
     const кусок = String(rf).split(/\n(?=\d)/).find(к => /bluetooth/i.test(к)) || '';
@@ -707,7 +707,12 @@ async function почемуНетBT(){
   if (await has('lsusb')){
     const usb = await call('lsusb').catch(() => '');
     const строка = String(usb).split('\n').find(л => /bluetooth/i.test(л));
-    if (строка) о.железо = строка.replace(/^Bus.*?ID\s+/, '').trim().slice(0, 120);
+    if (строка){
+      о.железо = строка.replace(/^Bus.*?ID\s+/, '').trim().slice(0, 120);
+      /* Код вида 105b:e065 — по нему и зовётся файл прошивки у Broadcom,
+         и по нему же человек найдёт нужный файл, если станет искать. */
+      о.код = (строка.match(/ID\s+([0-9a-f]{4}:[0-9a-f]{4})/i) || [])[1] || null;
+    }
   }
   if (!о.железо && await has('lspci')){
     const pci = await call('lspci').catch(() => '');
@@ -716,17 +721,32 @@ async function почемуНетBT(){
   }
   if (await has('journalctl')){
     const лог = await call('journalctl', ['-k', '-b', '--no-pager']).catch(() => '');
-    о.журнал = String(лог).split('\n')
+    const строки = String(лог).split('\n');
+    о.журнал = строки
       .filter(л => /bluetooth|hci\d|btusb/i.test(л) && /fail|error|firmware|not found|отказ/i.test(л))
       .slice(-4).map(л => л.slice(-110));
+    /* Ядро называет недостающий файл прямо, и это самое важное слово во
+       всей этой истории: «похоже, не хватает прошивки» человеку не
+       поможет, а «нет файла brcm/BCM43142A0-105b-e065.hcd» — поможет.
+       Ядро пишет это по-разному, поэтому смотрим оба вида строк. */
+    for (let i = строки.length - 1; i >= 0 && !о.файл; i--){
+      const л = строки[i];
+      if (!/bluetooth|btusb|brcm|firmware/i.test(л)) continue;
+      const м = л.match(/Direct firmware load for (\S+) failed/i)
+             || л.match(/failed to load (?:firmware )?['"]?([\w./-]+\.(?:hcd|bin|dfu|fw))/i)
+             || л.match(/firmware file ['"]?([\w./-]+\.(?:hcd|bin|dfu|fw))['"]? not found/i);
+      if (м) о.файл = м[1];
+    }
   }
   о.словами = о.блокировка && о.блокировка.рубильником
     ? 'Bluetooth выключен переключателем на корпусе или клавишей на клавиатуре'
     : о.блокировка && о.блокировка.программно
       ? 'Bluetooth выключен программно — его можно включить'
-      : о.железо
-        ? 'Адаптер в машине есть, но ядро не дало ему хода — похоже, не хватает прошивки'
-        : 'Bluetooth-адаптера на этой машине не видно';
+      : о.файл
+        ? 'Адаптеру не хватает файла прошивки: ' + о.файл
+        : о.железо
+          ? 'Адаптер в машине есть, но ядро не дало ему хода — похоже, не хватает прошивки'
+          : 'Bluetooth-адаптера на этой машине не видно';
   return о;
 }
 
