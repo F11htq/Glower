@@ -590,7 +590,7 @@ export function packages(allowPackages){
       let текст = '';
       try {
         const { stdout } = await run('sudo', ['-n', 'apt-get', '-s',
-          '-o', 'APT::Get::Show-User-Simulation-Note=false', 'upgrade'],
+          '-o', 'APT::Get::Show-User-Simulation-Note=false', '--with-new-pkgs', 'upgrade'],
           { timeout:30000, maxBuffer:8 << 20,
             env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' } });
         текст = String(stdout);
@@ -667,7 +667,19 @@ export function packages(allowPackages){
         await этоFlathub();
         return запустиFlatpak('update', '', ['update', '-y', '--noninteractive', '--system']);
       }
-      return запусти('upgrade', 'система', ['upgrade', '-y', '--no-install-recommends']);
+      /* --with-new-pkgs — ради ядра, и это не мелочь.
+
+         Обычное apt-get upgrade никогда не ставит новых пакетов, а новое
+         ядро Ubuntu приходит именно новым пакетом: linux-image-6.8.0-52 —
+         это другое имя, чем linux-image-6.8.0-51. Метапакет, который его
+         тянет, получал отказ, и apt молча «придерживал» его. Всё остальное
+         обновлялось, а ядро с его исправлениями безопасности и драйверами
+         оставалось тем, что было в образе, — навсегда.
+
+         Этот ключ разрешает ставить новое, если оно нужно для обновления,
+         и ничего не удаляет. Ровно так обновляет и сама Ubuntu, когда
+         человек пишет apt upgrade. */
+      return запусти('upgrade', 'система', ['upgrade', '-y', '--with-new-pkgs', '--no-install-recommends']);
     },
 
     async 'pkg.remove'({ name, source }){
