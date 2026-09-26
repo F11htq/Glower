@@ -1305,6 +1305,40 @@ try {
     check('набор «Персонализации» в «Параметрах» один', сколько === 1, 'нашлось: ' + сколько);
   }
 
+  /* --- программа называется своим именем, а не именем своего подменю ---
+
+     У человека Steam в меню назывался «Магазин» и вытеснял наш Магазин.
+     В ярлыке Steam есть подменю «Store» с русским именем «Магазин»; у самой
+     программы русского имени нет, и разбор, шедший по всему файлу подряд,
+     брал первое русское имя, какое находил. Поднимаем отдельного агента
+     со своим домом и русским языком и кладём ему такой же ярлык. */
+  {
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const дом = await mkdtemp(join(tmpdir(), 'glower-дом-'));
+    await mkdir(join(дом, '.local/share/applications'), { recursive:true });
+    await writeFile(join(дом, '.local/share/applications', 'проба-steam.desktop'), [
+      '[Desktop Entry]', 'Name=Steam', 'Comment=Games', 'Exec=true', 'Type=Application',
+      'Actions=Store;', '',
+      '[Desktop Action Store]', 'Name=Store', 'Name[ru]=Магазин', 'Exec=true', ''
+    ].join('\n'));
+    const порт2 = PORT + 300;
+    const второй = spawn(process.execPath,
+      [join(root, 'agent/server.mjs'), '--port', String(порт2), '--root', дом, '--system'],
+      { stdio:'ignore', env:{ ...process.env, HOME:дом, LANG:'ru_RU.UTF-8' } });
+    await new Promise(r => setTimeout(r, 1500));
+    let имя = null;
+    try {
+      const r = await fetch(`http://localhost:${порт2}/rpc`, { method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ method:'sys.apps', params:{} }) });
+      const д = await r.json();
+      имя = ((д.result && д.result.list) || []).find(a => a.id === 'проба-steam.desktop');
+      имя = имя ? имя.name : '(нет в списке)';
+    } catch(e){ имя = 'агент не ответил: ' + e.message; }
+    второй.kill();
+    check('программа называется своим именем, а не именем подменю', имя === 'Steam', 'вышло: ' + имя);
+  }
+
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));
 
 } catch(e){

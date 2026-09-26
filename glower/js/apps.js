@@ -2782,6 +2782,11 @@ APPS.settings = {
            человек нажал «Обновить», а не после: список к тому времени уже
            другой. */
         let нашеОбновление = false;
+        /* Вторая очередь — Flathub. apt и flatpak обновляют разное и каждый
+           своим путём; вести их разом система не умеет — работа одна за
+           раз. Поэтому «Обновить всё» идёт в две ступени: сперва apt,
+           потом, если есть что, Flathub. */
+        let втораяОчередь = false;
         const следи = () => {
           const шаг = el('div', 'set-note', 'Идёт работа…');
           место.innerHTML = '';
@@ -2791,6 +2796,12 @@ APPS.settings = {
               if (!j) return;
               if (j.running){ шаг.textContent = (j.step || 'Работаю') + ' · ' + (j.percent || 0) + '%'; return; }
               clearInterval(часы);
+              if (j.ok && нужнаВтораяОчередь()){
+                втораяОчередь = false;
+                Platform.rpc('pkg.upgrade.run', { source:'flatpak' }).then(следи)
+                  .catch(e => Dlg.alert('Не вышло обновить программы Flathub', String(e.message || e), '⚠️'));
+                return;
+              }
               if (j.ok){
                 Shell.toast('Обновления', 'Готово', '✅', 8000);
                 /* Если обновилась сама система — сказать об этом прямо.
@@ -2818,6 +2829,8 @@ APPS.settings = {
           }, 1500);
         };
 
+        const нужнаВтораяОчередь = () => втораяОчередь;
+
         const проверь = () => {
           место.innerHTML = '';
           место.appendChild(el('div', 'set-note', 'Спрашиваю систему об обновлениях…'));
@@ -2839,17 +2852,31 @@ APPS.settings = {
                 + 'Помогает «Обновить списки», а если не помогло — полная установка новой версии.',
                 el('span')));
 
-            if (!всего){
+            /* Программы из Flathub — Telegram, Steam и прочее, что человек
+               поставил оттуда. Раньше их здесь не было вовсе, и казалось,
+               что система обновляет только то, что написали мы. */
+            const изFlathub = d['flathub'] || [];
+
+            if (!всего && !изFlathub.length){
               место.appendChild(row('✅', 'Система обновлена',
                 держим.length ? 'Всё остальное обновлено'
                               : 'Ничего нового в репозиториях для неё нет', el('span')));
+            } else if (!всего){
+              /* Для apt нового нет, а для Flathub есть — кнопка только своя. */
+              const flat = el('button', 'btn pri', 'Обновить');
+              flat.onclick = () => Platform.rpc('pkg.upgrade.run', { source:'flatpak' }).then(следи)
+                .catch(e => Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'));
+              место.appendChild(row('🫙', 'Программы Flathub: ' + изFlathub.length,
+                изFlathub.map(x => x['имя'] || x.name).slice(0, 6).join(', '), flat));
             } else {
               const ставить = el('button', 'btn pri', 'Обновить всё');
               ставить.onclick = async () => {
                 if (!await Dlg.confirm('Обновить систему?',
-                  'Будет обновлено программ: ' + всего + '. Это займёт время и потребует сети.',
+                  'Будет обновлено программ: ' + (всего + изFlathub.length)
+                  + '. Это займёт время и потребует сети.',
                   { okText:'Обновить', icon:'⬆️' })) return;
                 нашеОбновление = !!наш;
+                втораяОчередь = изFlathub.length > 0;
                 Platform.rpc('pkg.upgrade.run', {}).then(следи)
                   .catch(e => Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'));
               };
@@ -2871,6 +2898,9 @@ APPS.settings = {
               if ((d.list || []).length > 40)
                 место.appendChild(el('div', 'set-note',
                   'И ещё ' + ((d.list || []).length - 40) + ' — весь список система покажет при установке.'));
+              изFlathub.forEach(x =>
+                место.appendChild(row('🫙', x['имя'] || x.name,
+                  'Flathub' + (x['станет'] ? ' · будет ' + x['станет'] : ''), el('span'))));
             }
           }).catch(e => {
             место.innerHTML = '';

@@ -149,7 +149,8 @@ APPS.store = {
       job(){ return Platform.rpc('pkg.job'); },
       cancel(){ return Platform.rpc('pkg.cancel'); },
       обновления(){ return Platform.rpc('pkg.upgrade.check'); },
-      обновить(){ return Platform.rpc('pkg.upgrade.run', {}); }
+      обновить(){ return Platform.rpc('pkg.upgrade.run', {}); },
+      обновитьFlathub(){ return Platform.rpc('pkg.upgrade.run', { source:'flatpak' }); }
     };
     const размер = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ'
                                               : Math.round(b / 1024) + ' КБ';
@@ -1075,7 +1076,29 @@ APPS.store = {
         место.appendChild(к);
       }
       const прочие = (д.list || []).filter(x => x.name !== 'glower');
-      if (!д.list || !д.list.length){
+      const изFlathub = д['flathub'] || [];
+
+      /* Программы из Flathub — отдельной группой и своей кнопкой.
+
+         Раньше их здесь не было вовсе: обновления знали только apt, и
+         Telegram со Steam выглядели чем-то, что система обновлять не
+         умеет. Умеет — своим путём, flatpak'ом; поэтому и кнопка своя, а
+         не общая: это другая очередь, и идёт она отдельно. */
+      if (изFlathub.length){
+        const кн = el('button', 'btn pri', '⬆ Обновить');
+        кн.disabled = !!работа;
+        кн.onclick = async () => {
+          try { await Pkg.обновитьFlathub(); следиЗаРаботой(); draw(); }
+          catch(e){ Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'); }
+        };
+        место.appendChild(заголовок('Программы Flathub · ' + изFlathub.length, кн));
+        изFlathub.forEach(x => {
+          место.appendChild(row('🫙', x['имя'] || x.name,
+            (x['станет'] ? 'будет ' + x['станет'] + ' · ' : '') + x.name, el('span')));
+        });
+      }
+
+      if ((!д.list || !д.list.length) && !изFlathub.length){
         место.appendChild(el('div', 'empty', 'Всё обновлено'));
       } else if (прочие.length){
         /* Кнопка — в заголовке, а не под списком из сорока строк. Раньше
