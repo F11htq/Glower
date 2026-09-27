@@ -338,7 +338,13 @@ const Поверхности = {
          панели, и вторая такая же кнопка внизу только путала. */
       const док = document.querySelector('#dock-wrap');
       const пуск = document.querySelector('#start-btn');
-      if (пуск) пуск.remove();
+      /* Вместе с кнопкой уходит и черта за ней: одна она оставляла в начале
+         дока пустое место, будто значок там не догрузился. */
+      if (пуск){
+        const черта = пуск.nextElementSibling;
+        if (черта && черта.classList.contains('dock-sep')) черта.remove();
+        пуск.remove();
+      }
 
       if (док){
         let укурсора = false;
