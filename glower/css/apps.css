@@ -81,9 +81,12 @@ select.inp option{background:#1a1e28;color:#fff}
 .seg button.on{background:rgba(var(--tint),.3);box-shadow:0 2px 8px rgba(0,0,0,.18)}
 
 .swatches{display:flex;gap:8px;flex-wrap:wrap}
-.sw{width:26px;height:26px;border-radius:50%;cursor:pointer;position:relative;transition:transform var(--t2) var(--e-spring);
+/* :not(.rsz) — уголок окна для растягивания тоже зовётся «sw» (юго-запад).
+   Без этой оговорки он получал вид образца цвета: кружок с тенью в левом
+   нижнем углу каждого окна, да ещё и выпадал из своего угла. */
+.sw:not(.rsz){width:26px;height:26px;border-radius:50%;cursor:pointer;position:relative;transition:transform var(--t2) var(--e-spring);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 8px rgba(0,0,0,.3)}
-.sw:hover{transform:scale(1.18)}
+.sw:not(.rsz):hover{transform:scale(1.18)}
 .sw.on::after{content:'';position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 0 2px var(--fg)}
 
 .walls{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;padding:14px 16px}
@@ -434,5 +437,7 @@ body.эконом .st-skel{animation:none}
 .ms-hero-card:not(.ms-hero-big) .ms-hero-art .st-ico{width:64px;height:64px}
 /* В нижней паре карточек места вдвое меньше: значок в 64 точки вылезал за
    край и обрезался, а на узкой карточке ещё и налезал на подпись. */
-.ms-hero-pair .ms-hero-art .st-ico{width:40px;height:40px}
+/* Селектор нарочно не слабее правила выше: с «.ms-hero-card:not(...)» он
+   проигрывал, и значок оставался в 64 точки, закрывая подпись. */
+.ms-hero-pair .ms-hero-card .ms-hero-art .st-ico{width:40px;height:40px}
 .st-skel-r{height:52px;margin:8px 0;border-radius:12px}

@@ -1642,6 +1642,16 @@ try {
          проверки считала после — и падала, ничего не поймав. */
       const было = { разделов:к('.ms-rail-i'), витрина:к('.ms-hero-card'),
                      кругляшей:к('.ms-chip'), строк:к('.ms-row') };
+      /* Значок в нижней паре карточек не должен наезжать на подпись:
+         правило «40 точек» уже раз проигрывало более сильному «64». */
+      const наезд = [...w.node.querySelectorAll('.ms-hero-pair .ms-hero-card')].some(к2 => {
+        const з = к2.querySelector('.ms-hero-art').getBoundingClientRect();
+        return [...к2.querySelectorAll('.ms-hero-txt > *')].some(т2 => {
+          const о = т2.getBoundingClientRect();
+          return о.width && з.left < о.right && з.right > о.left && з.top < о.bottom && з.bottom > о.top;
+        });
+      });
+      было.наезд = наезд;
       /* переход на страницу программы: строка — это вход, а не кнопка */
       w.node.querySelector('.ms-row').click();
       await new Promise(r2 => setTimeout(r2, 500));
@@ -1652,8 +1662,25 @@ try {
     check('на главной витрина из четырёх карточек и полоса разделов',
       r.витрина === 4 && r.кругляшей >= 6 && r.строк >= 8, JSON.stringify(r));
     check('карточка открывает страницу программы', r.страница, JSON.stringify(r));
+    check('значок в малой карточке витрины не закрывает подпись', !r.наезд, JSON.stringify(r));
     check('наших игрушек в системе больше нет',
       !r.игрушки && !r.был.length, JSON.stringify(r));
+  }
+
+  /* Уголок для растягивания зовётся «sw», как и образец цвета в настройках,
+     и получал его вид: кружок с тенью в левом нижнем углу каждого окна. */
+  {
+    const r = await page.evaluate(() => {
+      const w = WM.open('settings');
+      const у = w.node.querySelector('.rsz.sw'), cs = getComputedStyle(у);
+      const о = у.getBoundingClientRect(), к = w.node.getBoundingClientRect();
+      const итог = { pos:cs.position, тень:cs.boxShadow, w:cs.width,
+                     угол:Math.abs(о.left - к.left) < 2 && Math.abs(о.bottom - к.bottom) < 2 };
+      WM.close(w);
+      return итог;
+    });
+    check('уголок растягивания окна невидим и стоит в своём углу',
+      r.pos === 'absolute' && r.тень === 'none' && r.w === '12px' && r.угол, JSON.stringify(r));
   }
 
   check('в консоли нет ошибок JS', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
