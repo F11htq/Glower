@@ -58,10 +58,11 @@ trap 'rm -rf "$BUILD"' EXIT
 OUR_DIRS="usr/share/glower usr/share/plymouth/themes/glower"
 OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/glower-shell usr/bin/glower-open-package usr/bin/glower-shot
-            usr/bin/glower-menu usr/bin/glower-desk
+            usr/bin/glower-menu usr/bin/glower-desk usr/bin/glower-exe
             usr/bin/glower-tray usr/bin/glower-greeter usr/bin/врач
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
+            usr/share/applications/glower-exe.desktop
             etc/glower-release"
 
 found=0

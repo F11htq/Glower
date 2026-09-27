@@ -2208,6 +2208,39 @@ APPS.settings = {
 
     /* --- Приложения --- */
     function pApps(){
+      /* Программы Windows: стоит ли Wine, и если нет — поставить одной
+         кнопкой, не дожидаясь, пока человек щёлкнет по .exe. */
+      if (window.Platform && Platform.mode === 'native'){
+        const w = card('Программы Windows');
+        w.classList.add('win-wine');
+        const место = el('div');
+        const строка = row('🪟', 'Wine', 'Проверяю…', место);
+        w.appendChild(строка);
+        main.appendChild(w);
+        const скажи = т => { const м = $('small', строка); if (м) м.textContent = т; };
+        Platform.rpc('pkg.windows').then(в => {
+          if (в['полный']){
+            скажи('Стоит. Программы .exe и .msi открываются двойным щелчком, ' +
+                  'а поставленные появляются в меню приложений');
+            место.appendChild(el('span', 'tiny muted', '✓ готово'));
+            return;
+          }
+          скажи(в['wine64']
+            ? 'Стоит только 64-битная половина — большинство установщиков 32-битные и не запустятся'
+            : 'Не стоит. Без него программы для Windows не запускаются');
+          if (!в['можно']) return;
+          const кн = el('button', 'btn pri', в['wine64'] ? 'Доставить' : 'Поставить');
+          кн.onclick = async () => {
+            кн.disabled = true;
+            try { await Platform.rpc('pkg.windows.install'); }
+            catch(e){ кн.disabled = false; return Dlg.alert('Не удалось начать установку', String(e.message || e), '⚠️'); }
+            if (typeof следиЗаУстановкой === 'function')
+              следиЗаУстановкой('Поддержка программ Windows', () => drawMain());
+          };
+          место.appendChild(кн);
+        }).catch(() => скажи('Агент не ответил — состояние неизвестно'));
+      }
+
       const c = card('Установленные приложения');
       Object.entries(APPS).forEach(([id, a]) => {
         const b = el('button', 'btn', 'Открыть'); b.onclick = () => WM.open(id);

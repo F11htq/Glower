@@ -117,6 +117,9 @@ if (SYSTEM){
     ...(await import('./packages.mjs')).packages(ALLOW_PKG),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
   };
+  /* Папку Windows готовим заранее — только в настоящем сеансе, где
+     программы вообще разрешено запускать. */
+  if (ALLOW_LAUNCH) m.подготовь_wine();
 }
 
 /* Не выключать посреди установки.
@@ -198,6 +201,12 @@ const API = {
     return { ok:true, opened:p, via:cmd };
   },
   ...SYS,
+  /* Программа Windows из Проводника: путь у него свой, от корня файлов
+     агента, а системному слою нужен настоящий. */
+  async 'sys.windows.open'({ path }){
+    if (!SYS['sys.windows.run']) throw new Error('системный слой выключен: запустите агент с ключом --system');
+    return SYS['sys.windows.run']({ 'путь':safe(path) });
+  },
   async 'sys.info'(){
     const { totalmem, freemem, cpus, hostname, userInfo, uptime, release } = await import('node:os');
     return { host:hostname(), user:userInfo().username, platform:process.platform, release:release(),

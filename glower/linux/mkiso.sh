@@ -302,6 +302,27 @@ for extra in gnome-backgrounds steam-devices; do
     || echo "  доп.: $extra — в репозитории нет, пропускаю"
 done
 
+# Программы для Windows — через Wine, и он стоит в системе сразу.
+#
+# Ставить его по первому щелчку по .exe значило бы заставить человека ждать
+# сотни мегабайт закачки как раз тогда, когда он хочет просто открыть файл.
+# Поэтому он в образе, а папка Windows готовится при первом входе заранее.
+#
+# Нужны обе половины: wine64 для 64-битных программ и wine32 для 32-битных.
+# Вторых большинство — почти все установщики setup.exe собраны 32-битными,
+# и без wine32 они не запускаются вовсе. wine32 — пакет архитектуры i386,
+# поэтому сначала разрешаем её системе. Не вышло целиком — ставим хотя бы
+# 64-битную половину: лучше половина программ, чем ни одной.
+dpkg --add-architecture i386 || true
+apt-get update -qq || true
+if apt-get install -y --no-install-recommends wine wine64 wine32:i386 >/dev/null 2>&1; then
+  echo "  Wine: поставлен (64 и 32 бита)"
+elif apt-get install -y --no-install-recommends wine wine64 >/dev/null 2>&1; then
+  echo "  Wine: поставлен только 64-битный — 32-битные программы работать не будут"
+else
+  echo "  Wine: в репозитории нет, программы Windows запускаться не будут"
+fi
+
 # VirtualBox выдаёт себя за видеокарту VMware, но её драйвер под ним не
 # работает и сам об этом пишет: «unsupported hypervisor, configuration is
 # likely broken». Экран после этого чёрный, и человеку приходится вручную
@@ -371,6 +392,7 @@ install -m 755 "$SRC/linux/glower-shot" "$ROOTFS/usr/bin/glower-shot"
 install -m 755 "$SRC/linux/glower-menu" "$ROOTFS/usr/bin/glower-menu"
 # И такой же — для рабочих столов: Win с Page Up/Down, как в GNOME
 install -m 755 "$SRC/linux/glower-desk" "$ROOTFS/usr/bin/glower-desk"
+install -m 755 "$SRC/linux/glower-exe" "$ROOTFS/usr/bin/glower-exe"
 # Приёмник значков лотка. Разговор с шиной разобран в нём руками, поэтому
 # ничего, кроме самого Python, ему не нужно — ни python3-dbus, ни python3-gi.
 install -m 755 "$SRC/linux/glower-tray" "$ROOTFS/usr/bin/glower-tray"
@@ -549,6 +571,22 @@ NoDisplay=true
 MimeType=application/vnd.debian.binary-package;application/x-deb;application/vnd.flatpak.ref;application/vnd.appimage;application/x-iso9660-appimage;
 PKG
 
+# Программы Windows открываются двойным щелчком — через Wine.
+# Типов у .exe несколько: базы типов разных лет зовут его по-разному, и
+# отозваться нужно на все имена, иначе щелчок уйдёт в текстовый редактор.
+cat > "$ROOTFS/usr/share/applications/glower-exe.desktop" <<'EXE'
+[Desktop Entry]
+Type=Application
+Name=Программа Windows
+Name[en]=Windows program
+Comment=Запустить программу для Windows
+Exec=/usr/bin/glower-exe %f
+Icon=wine
+Terminal=false
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-ms-ne-executable;application/x-msi;application/x-ms-shortcut;
+EXE
+
 # Ссылки отдаём тому браузеру, который на самом деле лежит в образе.
 BROWSER_DESKTOP=""
 for cand in firefox.desktop org.gnome.Epiphany.desktop epiphany-browser.desktop; do
@@ -582,6 +620,12 @@ application/x-deb=glower-package.desktop
 application/vnd.flatpak.ref=glower-package.desktop
 application/vnd.appimage=glower-package.desktop
 application/x-iso9660-appimage=glower-package.desktop
+application/x-ms-dos-executable=glower-exe.desktop
+application/x-msdownload=glower-exe.desktop
+application/vnd.microsoft.portable-executable=glower-exe.desktop
+application/x-ms-ne-executable=glower-exe.desktop
+application/x-msi=glower-exe.desktop
+application/x-ms-shortcut=glower-exe.desktop
 MIME
 chroot "$ROOTFS" update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 

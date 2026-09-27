@@ -154,6 +154,52 @@ export function packages(allowPackages){
     return начни(action, name, args);
   };
 
+  /* ---------- программы Windows ----------
+
+     Wine стоит в образе сразу. Машинам, поставленным раньше, его доставляет
+     обновление системы: пакет GlowerOS обновится, а следом придёт и Wine.
+     В зависимости пакета его не записать — 32-битная половина (а она нужна
+     почти каждому setup.exe) требует разрешить системе архитектуру i386, и
+     сам apt этого не делает. Невыполнимая зависимость остановила бы
+     обновление GlowerOS целиком. */
+  const естьWine = async () => {
+    let вывод = '';
+    try {
+      вывод = (await run('dpkg-query', ['-W', '-f=${Package} ${Status}\n', 'wine64', 'wine32:i386'])).stdout;
+    } catch(e){ вывод = String(e.stdout || ''); }
+    const стоит = имя => new RegExp('^' + имя + ' install ok installed', 'm').test(вывод);
+    const wine64 = стоит('wine64'), wine32 = стоит('wine32');
+    return { wine64, wine32, полный:wine64 && wine32 };
+  };
+
+  const ПАКЕТЫ_WINE = ['wine', 'wine64', 'wine32:i386'];
+  const СРЕДА_APT = () => ({ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' });
+
+  /* Поставить Wine. Если работа уже идёт (обновление системы), она сама
+     передаёт сюда управление, и тогда job не создаётся заново. */
+  const доставьWine = async мягко => {
+    if (!job || job.done)
+      job = { name:'wine', action:'install', percent:2, step:'', done:false, ok:false,
+              error:null, log:'', слышно:Date.now(), pid:null };
+    job.name = 'wine'; job.action = 'install'; job.percent = 3;
+    job.step = 'Добавляю поддержку программ Windows';
+    job.мягко = !!мягко;
+    try {
+      const { stdout } = await run('dpkg', ['--print-foreign-architectures']).catch(() => ({ stdout:'' }));
+      if (!/\bi386\b/.test(stdout))
+        await run('sudo', ['-n', 'dpkg', '--add-architecture', 'i386'], { timeout:60000, env:СРЕДА_APT() });
+      job.step = 'Обновляю списки пакетов'; job.слышно = Date.now();
+      await run('sudo', ['-n', 'apt-get', 'update'], { timeout:600000, env:СРЕДА_APT() });
+    } catch(e){
+      const почему = String(e.stderr || e.message || '').trim().split('\n').pop();
+      job.done = true; job.percent = 100;
+      if (мягко){ job.ok = true; job.step = 'Готово'; job.заметка = 'Wine поставить не вышло: ' + почему; }
+      else { job.ok = false; job.error = 'Не вышло подготовить систему к Wine: ' + почему; }
+      return;
+    }
+    начни('install', 'wine', ['install', '-y', '--no-install-recommends', ...ПАКЕТЫ_WINE]);
+  };
+
   const начни = (action, name, args) => {
     /* apt умеет отдавать свой собственный ход работы числами — просим его об
        этом. Раньше проценты выводились по узнаваемым строкам, и на длинной
@@ -215,6 +261,13 @@ export function packages(allowPackages){
     });
     p.on('exit', async code => {
       if (code === 0){
+        /* Следом за этой работой может идти ещё одна — так за обновлением
+           системы идёт доставка Wine. Одна работа за раз, поэтому очередь
+           здесь, а не у того, кто просил. */
+        if (job.потом){
+          const дальше = job.потом; job.потом = null;
+          return дальше();
+        }
         job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null;
         return;
       }
@@ -246,6 +299,8 @@ export function packages(allowPackages){
           const прежний = { ...job };
           запусти(action, name, args);
           job.починка = true;
+          job.мягко = прежний.мягко;
+          job.потом = прежний.потом;
           job.log = (прежний.log + '\n— пакеты в порядке, пробую снова\n').slice(-8000);
           return;
         }
@@ -270,11 +325,19 @@ export function packages(allowPackages){
         const прежний = { ...job };
         запусти(action, name, args);
         job.повтор = true;
+        job.мягко = прежний.мягко;
+        job.потом = прежний.потом;
         job.log = прежний.log;
         return;
       }
       job.done = true;
       if (!job.error) job.error = 'apt завершился с кодом ' + code;
+      /* Необязательное дело, пристёгнутое к главному: главное уже сделано,
+         и его провал не должен выглядеть провалом всего. Обновление системы
+         прошло — значит, «Готово», а о Wine скажем отдельной строкой. */
+      if (job.мягко){
+        job.заметка = job.error; job.error = null; job.ok = true; job.step = 'Готово';
+      }
     });
     return { started:true, name, action };
   };
@@ -731,7 +794,29 @@ export function packages(allowPackages){
          Этот ключ разрешает ставить новое, если оно нужно для обновления,
          и ничего не удаляет. Ровно так обновляет и сама Ubuntu, когда
          человек пишет apt upgrade. */
-      return запусти('upgrade', 'система', ['upgrade', '-y', '--with-new-pkgs', '--no-install-recommends']);
+      /* Обновление системы приводит её к тому, что система обещает, — а
+         обещает она и программы Windows. Wine идёт следом, в той же работе,
+         и его неудача обновление не портит. Спрашиваем заранее: быстрое
+         обновление успело бы закончиться, пока мы спрашиваем, и очередь
+         опоздала бы. */
+      const нуженWine = !(await естьWine()).полный;
+      const пуск = запусти('upgrade', 'система', ['upgrade', '-y', '--with-new-pkgs', '--no-install-recommends']);
+      if (нуженWine) job.потом = () => доставьWine(true);
+      return пуск;
+    },
+
+    /* Программы Windows: есть ли Wine и можно ли его поставить. */
+    async 'pkg.windows'(){
+      const в = await естьWine();
+      return { ...в, можно:!!allowPackages };
+    },
+    async 'pkg.windows.install'(){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      if ((await естьWine()).полный) return { started:false, уже:true };
+      job = null;
+      доставьWine(false);
+      return { started:true, name:'wine', action:'install' };
     },
 
     async 'pkg.remove'({ name, source }){
@@ -771,6 +856,7 @@ export function packages(allowPackages){
       if (!job) return { running:false };
       return { running:!job.done, ok:job.ok, percent:job.percent, step:job.step,
         error:job.error, name:job.name, action:job.action, source:job.source || 'apt',
+        'заметка':job.заметка || null,
         log:job.log.slice(-3000),
         молчит: job.done ? 0 : Math.round((Date.now() - job.слышно) / 1000) };
     }

@@ -137,6 +137,32 @@ case "$shot" in
 esac
 
 echo
+echo "=== программы Windows ==="
+# Щёлкнули по .exe — и ничего. Причин немного: нет Wine, нет его 32-битной
+# половины (а на ней почти все установщики), .exe открывает не наш
+# glower-exe, или Wine запустился и упал. Последнее видно по его журналу.
+if command -v wine >/dev/null 2>&1; then
+  echo "  Wine: $(wine --version 2>/dev/null || echo 'есть')"
+else
+  echo '  Wine НЕ УСТАНОВЛЕН — «Параметры → Приложения → Программы Windows»'
+fi
+w32=$(dpkg-query -W -f='${Status}' wine32:i386 2>/dev/null)
+case "$w32" in
+  *'install ok installed'*) echo '  32-битная половина: есть' ;;
+  *) echo '  32-битной половины НЕТ — большинство setup.exe не запустится' ;;
+esac
+[ -d "$HOME/.wine" ] && echo '  папка Windows (~/.wine): готова' \
+                     || echo '  папки Windows (~/.wine) ещё нет — создастся при первом запуске'
+exe_by=$(grep -h '^application/x-msdownload=\|^application/x-ms-dos-executable=' \
+         "$HOME/.config/mimeapps.list" /usr/share/applications/mimeapps.list 2>/dev/null | head -1)
+[ -n "$exe_by" ] && echo "  .exe открывает: ${exe_by#*=}" || echo '  чем открывать .exe, системе не сказано'
+WLOG="${XDG_CACHE_HOME:-$HOME/.cache}/glower/wine.log"
+if [ -s "$WLOG" ]; then
+  echo '  последнее, что сказал Wine:'
+  grep -v '^$' "$WLOG" | grep -v 'fixme:' | tail -3 | cut -c1-96 | sed 's/^/    /'
+fi
+
+echo
 echo "=== Bluetooth ==="
 bt=$(curl -s --max-time 4 -X POST "http://localhost:$PORT/rpc" \
       -H 'Content-Type: application/json' \

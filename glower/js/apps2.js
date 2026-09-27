@@ -41,6 +41,9 @@ const Assoc = {
 
   open(node, path, appId){
     if (!node || node.type === 'dir') return;
+    /* Программа Windows не открывается как текст: её запускает Wine. */
+    if (!appId && /^(exe|msi|bat|lnk)$/.test(this.ext(node.name)) && window.ПрограммыWindows)
+      return ПрограммыWindows.изПроводника([...(path || []), node.name].join('/'));
     const id = appId || this.appFor(node);
     const file = { name:node.name, path:(path || []).slice(), body:node.body, img:node.img };
     if (id === 'photos' && node.img) return WM.open('photos', { img:node.img, name:node.name });

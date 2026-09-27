@@ -9,7 +9,7 @@
    ========================================================================== */
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { tmpdir, hostname, totalmem } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1215,6 +1215,30 @@ try {
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
+    /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет
+       обновления — иначе машины, поставленные раньше, .exe открывать не
+       научатся. И типы, на которые отзывается ярлык, те же, что сеанс
+       записывает человеку: разойдись списки — часть .exe уйдёт в редактор. */
+    {
+      const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+      check('glower-exe есть в дереве и исполняемый',
+        existsSync(join(root, 'linux', 'glower-exe'))
+          && (statSync(join(root, 'linux', 'glower-exe')).mode & 0o111) !== 0);
+      check('glower-exe попадает в образ и в пакет',
+        образ2.includes('linux/glower-exe') && пакет.includes('usr/bin/glower-exe')
+          && пакет.includes('usr/share/applications/glower-exe.desktop'));
+      const типы = ((образ2.match(/Exec=\/usr\/bin\/glower-exe %f[\s\S]*?MimeType=([^\n]+)/) || [])[1] || '')
+        .split(';').filter(Boolean).sort();
+      const уЧеловека = [...сеанс.matchAll(/([\w./+-]+)=glower-exe\.desktop/g)].map(m => m[1]).sort();
+      const вСписке = [...образ2.matchAll(/^([\w./+-]+)=glower-exe\.desktop$/gm)].map(m => m[1]).sort();
+      check('типы .exe у ярлыка, в списке образа и у человека совпадают',
+        типы.length >= 4 && JSON.stringify(типы) === JSON.stringify(уЧеловека)
+          && JSON.stringify(типы) === JSON.stringify(вСписке),
+        JSON.stringify({ типы, уЧеловека, вСписке }));
+      check('Wine ставится в образ вместе с 32-битной половиной',
+        /add-architecture i386/.test(образ2) && /wine32:i386/.test(образ2));
+    }
+
     /* --- Bluetooth: кнопка там, где она поможет, и только там ---
 
        Система сама писала «выключен программно — его можно включить» и
@@ -1386,6 +1410,164 @@ try {
     } catch(e){ имя = 'агент не ответил: ' + e.message; }
     второй.kill();
     check('программа называется своим именем, а не именем подменю', имя === 'Steam', 'вышло: ' + имя);
+  }
+
+  /* --- программы Windows: ярлык Wine в меню и запуск ---
+
+     Wine кладёт ярлык каждой поставленной программы в подпапку
+     applications/wine/Programs/…, и строка запуска у него с кавычками
+     посередине и экранированным пробелом. Прежде такой ярлык не был виден
+     вовсе (подпапки не смотрели), а будь виден — запустился бы с испорченной
+     папкой Windows. Wine здесь подставной: он только записывает, с чем его
+     позвали. Настоящего Wine на стенде нет, и тянуть его ради теста незачем —
+     проверяем то, что делаем мы. */
+  {
+    const { mkdir, writeFile, readFile, chmod, rm } = await import('node:fs/promises');
+    const дом = await mkdtemp(join(tmpdir(), 'glower-win-'));
+    const бин = join(дом, 'bin');
+    await mkdir(бин, { recursive:true });
+    await writeFile(join(бин, 'wine'),
+      '#!/bin/sh\nprintf "%s\\n" "PREFIX=$WINEPREFIX" "$@" > "$HOME/wine-позвали"\n');
+    await chmod(join(бин, 'wine'), 0o755);
+    const ярл = join(дом, '.local/share/applications/wine/Programs/Notepad++');
+    await mkdir(ярл, { recursive:true });
+    await writeFile(join(ярл, 'Notepad++.desktop'), [
+      '[Desktop Entry]', 'Name=Notepad++', 'Type=Application',
+      'Exec=env WINEPREFIX="' + дом + '/.wine" wine C:\\\\\\\\ProgramData\\\\\\\\Microsoft\\\\\\\\Windows\\\\\\\\Start\\\\ Menu\\\\\\\\Programs\\\\\\\\Notepad++.lnk',
+      'Icon=A1B2_notepad++.0', ''
+    ].join('\n'));
+    await mkdir(join(дом, 'Загрузки'), { recursive:true });
+    await writeFile(join(дом, 'Загрузки', 'My Setup.exe'), 'MZ');
+
+    const зов = async (порт, method, params = {}) => {
+      const r = await fetch(`http://localhost:${порт}/rpc`, { method:'POST',
+        headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ method, params }) });
+      return r.json();
+    };
+    const подними = (порт, путь) => spawn(process.execPath,
+      [join(root, 'agent/server.mjs'), '--port', String(порт), '--root', дом, '--system', '--allow-launch'],
+      { stdio:'ignore', env:{ ...process.env, HOME:дом, PATH:путь } });
+    const позвали = async () => { try { return (await readFile(join(дом, 'wine-позвали'), 'utf8')).split('\n'); } catch(e){ return []; } };
+
+    const порт3 = PORT + 301;
+    const с_wine = подними(порт3, бин + ':' + process.env.PATH);
+    await new Promise(r => setTimeout(r, 1500));
+    let ид = null, запуск = null, изПроводника = null, вызов1 = [], вызов2 = [];
+    try {
+      const д = await зов(порт3, 'sys.apps');
+      const п = ((д.result && д.result.list) || []).find(a => a.name === 'Notepad++');
+      ид = п ? п.id : null;
+      if (ид){
+        запуск = await зов(порт3, 'sys.launch', { id:ид });
+        await new Promise(r => setTimeout(r, 400));
+        вызов1 = await позвали();
+      }
+      await rm(join(дом, 'wine-позвали'), { force:true });
+      изПроводника = await зов(порт3, 'sys.windows.open', { path:'Загрузки/My Setup.exe' });
+      await new Promise(r => setTimeout(r, 600));
+      вызов2 = await позвали();
+    } catch(e){ запуск = { error:e.message }; }
+    с_wine.kill();
+
+    check('программа Windows из подпапки Wine видна в меню',
+      ид === 'wine-Programs-Notepad++-Notepad++.desktop', 'ид: ' + ид);
+    check('ярлык Wine запускается с верной папкой и целым путём',
+      запуск && запуск.ok && вызов1[0] === 'PREFIX=' + дом + '/.wine'
+        && вызов1[1] === 'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Notepad++.lnk',
+      JSON.stringify({ запуск, вызов1 }));
+    check('.exe из Проводника уходит в Wine целым путём',
+      изПроводника && изПроводника.ok && изПроводника.result.ok
+        && вызов2.includes(join(дом, 'Загрузки', 'My Setup.exe')),
+      JSON.stringify({ изПроводника, вызов2 }));
+
+    /* Без Wine — не ошибка, а ответ, по которому оболочка предложит его поставить. */
+    const порт4 = PORT + 302;
+    const без_wine = подними(порт4, '/usr/bin:/bin');
+    await new Promise(r => setTimeout(r, 1500));
+    let нет = null;
+    try { нет = await зов(порт4, 'sys.windows.open', { path:'Загрузки/My Setup.exe' }); }
+    catch(e){ нет = { error:e.message }; }
+    без_wine.kill();
+    check('без Wine система говорит «нет Wine», а не падает',
+      нет && нет.ok && нет.result['нетWine'] === true, JSON.stringify(нет));
+    check('чужое расширение за программу Windows не выдать',
+      /не программа Windows/.test(JSON.stringify(await (async () => {
+        const п = подними(порт4, бин + ':' + process.env.PATH);
+        await new Promise(r => setTimeout(r, 1500));
+        await writeFile(join(дом, 'Загрузки', 'note.txt'), 'x');
+        try { return await зов(порт4, 'sys.windows.open', { path:'Загрузки/note.txt' }); }
+        finally { п.kill(); }
+      })())), '');
+  }
+
+  /* --- обновление системы доставляет Wine, и его неудача обновление не портит ---
+
+     apt, dpkg и sudo подставные: они записывают, что с ними делали. Прошлая
+     версия этой очереди проверяла Wine уже после старта обновления, и
+     быстрое обновление успевало закончиться раньше — Wine не приходил. */
+  {
+    const { mkdir, writeFile, chmod, readFile: читай } = await import('node:fs/promises');
+    const папка = await mkdtemp(join(tmpdir(), 'glower-apt-'));
+    const бин = join(папка, 'bin');
+    await mkdir(бин);
+    const скрипт = (имя, тело) => writeFile(join(бин, имя), '#!/bin/sh\n' + тело).then(() => chmod(join(бин, имя), 0o755));
+    await скрипт('sudo', '[ "$1" = "-n" ] && shift\nexec "$@"\n');
+    await скрипт('apt-get', 'echo "apt-get $*" >> "$APTLOG"\ncase "$*" in *wine32*) [ -n "${WINE_FAIL:-}" ] && { echo "E: Unable to locate package wine32" >&2; exit 100; } ;; esac\nexit 0\n');
+    await скрипт('dpkg', 'echo "dpkg $*" >> "$APTLOG"\nexit 0\n');
+    await скрипт('dpkg-query', 'exit 1\n');
+    await writeFile(join(папка, 't.mjs'),
+      "import { packages } from " + JSON.stringify(pathToFileURL(join(root, 'agent/packages.mjs')).href) + ";\n" +
+      "const p = packages(true); await p['pkg.upgrade.run']({});\n" +
+      "for (let i = 0; i < 150; i++){ const j = await p['pkg.job'](); if (!j.running){ console.log(JSON.stringify(j)); break; } await new Promise(r => setTimeout(r, 100)); }\n");
+    const прогон = async провал => {
+      const журнал = join(папка, 'log' + (провал ? '-провал' : ''));
+      const итог = await new Promise(готово => {
+        let вывод = '';
+        const д = spawn(process.execPath, [join(папка, 't.mjs')], { env:{ ...process.env,
+          PATH:бин + ':' + process.env.PATH, APTLOG:журнал, ...(провал ? { WINE_FAIL:'1' } : {}) } });
+        д.stdout.on('data', x => вывод += x);
+        д.on('close', () => { try { готово(JSON.parse(вывод)); } catch(e){ готово({ вывод }); } });
+      });
+      return { итог, журнал:await читай(журнал, 'utf8').catch(() => '') };
+    };
+    const хорошо = await прогон(false);
+    check('обновление системы следом ставит Wine с 32-битной половиной',
+      хорошо.итог.ok && хорошо.итог.name === 'wine'
+        && /add-architecture i386/.test(хорошо.журнал)
+        && /install -y --no-install-recommends wine wine64 wine32:i386/.test(хорошо.журнал)
+        && хорошо.журнал.indexOf('upgrade') < хорошо.журнал.indexOf('install'),
+      JSON.stringify(хорошо.итог).slice(0, 200));
+    const плохо = await прогон(true);
+    check('не вышло с Wine — обновление всё равно «готово», причина в заметке',
+      плохо.итог.ok === true && !плохо.итог.error && /wine32/.test(плохо.итог['заметка'] || ''),
+      JSON.stringify(плохо.итог).slice(0, 200));
+  }
+
+  /* --- .exe в Проводнике уходит системе, а не в Блокнот ---
+     Здесь агенту запуск не разрешён, и это кстати: его отказ доказывает,
+     что файл дошёл до системного слоя, а не открылся как текст. */
+  {
+    const r = await page.evaluate(async () => {
+      await Platform.rpc('fs.write', { path:'проба.exe', body:'MZ' });
+      const окон = WM.wins.filter(w => w.appId === 'notepad').length;
+      Assoc.open({ name:'проба.exe', type:'file' }, []);
+      await new Promise(r2 => setTimeout(r2, 900));
+      const текст = document.body.innerText;
+      const итог = { блокнот:WM.wins.filter(w => w.appId === 'notepad').length > окон,
+                     отказ:/запуск программ выключен/.test(текст) };
+      document.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }));
+      await new Promise(r2 => setTimeout(r2, 300));
+      const w = WM.open('settings', { section:'apps' });
+      await new Promise(r2 => setTimeout(r2, 1500));
+      const карта = w.node.querySelector('.win-wine');
+      итог.карта = карта ? карта.innerText.replace(/\s+/g, ' ').slice(0, 160) : null;
+      WM.close(w);
+      return итог;
+    });
+    check('.exe в Проводнике уходит системе, а не открывается Блокнотом',
+      !r.блокнот && r.отказ, JSON.stringify(r));
+    check('в Параметрах → Приложения есть «Программы Windows» с состоянием Wine',
+      r.карта && /Wine/.test(r.карта) && !/Проверяю/.test(r.карта), JSON.stringify(r));
   }
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));

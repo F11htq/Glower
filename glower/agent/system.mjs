@@ -442,6 +442,90 @@ const APP_DIRS = ['/usr/share/applications', '/usr/local/share/applications',
   join(os.homedir(), '.local/share/flatpak/exports/share/applications'),
   '/var/lib/flatpak/exports/share/applications'];
 
+/* Ярлыки лежат не только в самих папках, но и в подпапках. Wine кладёт
+   каждую программу Windows в applications/wine/Programs/<её папка>/, и
+   пока мы смотрели только верхний уровень, поставленная программа в меню
+   не появлялась вовсе — хотя ярлык ей Wine честно сделал.
+
+   Имя такого ярлыка по правилам freedesktop — путь от папки через дефис:
+   wine/Programs/Notepad++/Notepad++.desktop зовётся
+   «wine-Programs-Notepad++-Notepad++.desktop». Косой черты в имени нет, и
+   проверка имени при запуске остаётся такой же строгой. */
+const ЯРЛЫКИ = new Map();                 // имя ярлыка → полный путь
+
+async function ярлыки_папки(корень){
+  const найдено = [];
+  const обойди = async (папка, приставка, глубина) => {
+    if (глубина > 5) return;
+    for (const з of await readdir(папка, { withFileTypes:true }).catch(() => [])){
+      const полный = join(папка, з.name);
+      if (з.isDirectory()) await обойди(полный, приставка + з.name + '-', глубина + 1);
+      else if (з.name.endsWith('.desktop')) найдено.push({ id:приставка + з.name, путь:полный });
+    }
+  };
+  await обойди(корень, '', 0);
+  return найдено;
+}
+
+/* Где лежит ярлык с таким именем. Первая папка в списке главнее — как у
+   настоящего рабочего стола. */
+async function найди_ярлык(имя){
+  for (const dir of APP_DIRS) if (existsSync(join(dir, имя))) return join(dir, имя);
+  if (!ЯРЛЫКИ.has(имя)){
+    for (const dir of APP_DIRS){
+      if (!existsSync(dir)) continue;
+      for (const я of await ярлыки_папки(dir)) if (!ЯРЛЫКИ.has(я.id)) ЯРЛЫКИ.set(я.id, я.путь);
+    }
+  }
+  const путь = ЯРЛЫКИ.get(имя);
+  return путь && existsSync(путь) ? путь : null;
+}
+
+/* Строка Exec из ярлыка — в список: программа и её доводы.
+
+   Прежний разбор резал строку по пробелам и снимал кавычки только по
+   краям. Для большинства программ этого хватало, а ярлык Wine ломался
+   целиком: в нём и «WINEPREFIX="/home/…/.wine"» с кавычками посередине,
+   и путь с экранированным пробелом «Start\ Menu». Программа получала
+   испорченную папку Windows и несуществующий путь.
+
+   Разбираем по правилам: сначала экранирование самого файла (\s, \\),
+   потом — как это делает оболочка: двойные и одинарные кавычки, обратная
+   косая перед знаком. В оболочку при этом ничего не уходит: результат —
+   готовый список доводов. */
+export function разбери_exec(exec){
+  const строка = String(exec || '').replace(/\\([sntr\\])/g, (_, з) =>
+    ({ s:' ', n:'\n', t:'\t', r:'\r', '\\':'\\' })[з]);
+  const части = [];
+  let тек = '', есть = false;
+  for (let i = 0; i < строка.length; ){
+    const з = строка[i];
+    if (з === '"'){
+      есть = true; i++;
+      while (i < строка.length && строка[i] !== '"'){
+        if (строка[i] === '\\' && i + 1 < строка.length && '"`$\\'.includes(строка[i + 1])){ тек += строка[i + 1]; i += 2; }
+        else { тек += строка[i]; i++; }
+      }
+      i++; continue;
+    }
+    if (з === "'"){
+      есть = true; i++;
+      while (i < строка.length && строка[i] !== "'"){ тек += строка[i]; i++; }
+      i++; continue;
+    }
+    if (з === '\\' && i + 1 < строка.length){ тек += строка[i + 1]; i += 2; есть = true; continue; }
+    if (/\s/.test(з)){ if (есть) части.push(тек); тек = ''; есть = false; i++; continue; }
+    тек += з; есть = true; i++;
+  }
+  if (есть) части.push(тек);
+  /* Подстановки вроде %U: файлов мы не передаём, поэтому они уходят, а
+     %% — это просто знак процента. @@ и @@u — пометки flatpak о передаче
+     файлов, без самих файлов лишние. */
+  return части
+    .filter(ч => !/^%[fFuUdDnNickvm]$/.test(ч) && !/^@@u?$/.test(ч))
+    .map(ч => ч.replace(/%[fFuUdDnNickvm]/g, '').replace(/%%/g, '%'));
+}
+
 /* ---------- настоящие значки настоящих программ ----------
 
    В ярлыке .desktop записано не изображение, а имя значка: например
@@ -581,6 +665,7 @@ async function проверь_пароль(кто, пароль){
 const ВХОД = { промахи:0, до:0 };
 
 const ЗНАЧКИ_ГОТОВЫЕ = new Map();          // имя → готовая строка data:
+let ПОДПИСЬ_ЯРЛЫКОВ = null;                  // какие ярлыки были в прошлый раз
 
 /* Список значков собираем заранее и в стороне от дела: обход тысяч файлов
    занимает секунды, а панель задач, спросив значок, ждать столько не должна.
@@ -588,6 +673,37 @@ const ЗНАЧКИ_ГОТОВЫЕ = new Map();          // имя → готов
    на плаву. */
 const заранее = setTimeout(() => { собери_значки().catch(() => {}); }, 2000);
 if (заранее.unref) заранее.unref();
+
+/* Папка Windows для Wine — заранее, пока человек ничем не занят.
+
+   Первый запуск Wine создаёт ~/.wine: раскладывает системные библиотеки,
+   заводит реестр. Это полминуты-минута, и если делать это по первому
+   щелчку по .exe, человек решит, что щелчок не услышан, и щёлкнет ещё.
+   Поэтому готовим её сами, через минуту после входа, с низким приоритетом.
+
+   Без экрана: окна «обновляю настройки Wine» человеку ни к чему. Вопросы
+   о скачивании .NET и движка страниц отключены — иначе Wine задал бы их
+   по-английски посреди загрузки системы. */
+export function подготовь_wine({ дом = os.homedir(), подождать = 60000 } = {}){
+  const папка = join(дом, '.wine');
+  const т = setTimeout(async () => {
+    if (existsSync(папка)) return;
+    if (!await has('wineboot')) return;
+    const { spawn } = await import('node:child_process');
+    const env = { ...process.env, HOME:дом, WINEPREFIX:папка,
+                  WINEDLLOVERRIDES:'mscoree,mshtml=', WINEDEBUG:'-all' };
+    delete env.DISPLAY; delete env.WAYLAND_DISPLAY;
+    const nice = await has('nice');
+    const [прог, доводы] = nice ? ['nice', ['-n', '15', 'wineboot', '-i']] : ['wineboot', ['-i']];
+    try {
+      const д = spawn(прог, доводы, { env, detached:true, stdio:'ignore' });
+      д.on('error', () => {});
+      д.unref();
+    } catch(e){}
+  }, подождать);
+  if (т.unref) т.unref();
+  return т;
+}
 
 /* Пробный запуск для осмотра: ждём, чем дело кончится, и возвращаем жалобы. */
 function попытка_тихо(программа, части){
@@ -759,12 +875,13 @@ export function apps(allowLaunch){
       const языки = [язык, язык.split('_')[0]].filter(Boolean)
         .filter((я, i, все) => я && все.indexOf(я) === i);
       const list = [];
+      const видно = new Map();
       for (const dir of APP_DIRS){
         if (!existsSync(dir)) continue;
-        for (const f of await readdir(dir).catch(() => [])){
-          if (!f.endsWith('.desktop')) continue;
+        for (const { id:f, путь } of await ярлыки_папки(dir)){
+          if (!видно.has(f)) видно.set(f, путь);
           try {
-            const весь = await readFile(join(dir, f), 'utf8');
+            const весь = await readFile(путь, 'utf8');
             /* Читаем только группу [Desktop Entry] — саму программу.
 
                Ниже в том же файле бывают подменю: у Steam это «Магазин»,
@@ -803,6 +920,16 @@ export function apps(allowLaunch){
         }
       }
       list.sort((a, b) => a.name.localeCompare(b.name));
+      /* Появились новые программы — значит, могли появиться и их значки.
+         Список значков собирается один раз и держится в памяти, и значок
+         только что поставленной программы (Wine кладёт свои в
+         ~/.local/share/icons) без этого не нашёлся бы до следующего входа. */
+      const подпись = [...видно.keys()].sort().join('|');
+      if (ПОДПИСЬ_ЯРЛЫКОВ !== null && ПОДПИСЬ_ЯРЛЫКОВ !== подпись){
+        ЗНАЧКИ_СПИСОК = null; ЗНАЧКИ_ГОТОВЫЕ.clear();
+      }
+      ПОДПИСЬ_ЯРЛЫКОВ = подпись;
+      ЯРЛЫКИ.clear(); видно.forEach((путь, id) => ЯРЛЫКИ.set(id, путь));
       return { total:list.length, list, canLaunch:!!allowLaunch };
     },
 
@@ -940,6 +1067,34 @@ export function apps(allowLaunch){
       const дитя = spawn(п, [], { env, detached:true, stdio:'ignore' });
       дитя.unref();
       return { ok:true, запущено:п };
+    },
+
+    /* Программа Windows из нашего Проводника: тот же путь, что у двойного
+       щелчка в любом другом месте, — glower-exe. Wine нет — так и говорим,
+       и оболочка предлагает его поставить. */
+    async 'sys.windows.run'({ путь }){
+      if (!allowLaunch) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
+      const п = String(путь || '');
+      if (!п.startsWith('/')) throw new Error('нужен полный путь к файлу');
+      if (/[\n\r\0]/.test(п)) throw new Error('в пути к файлу недопустимые знаки');
+      if (!existsSync(п)) throw new Error('такого файла нет: ' + п);
+      if (!/\.(exe|msi|bat|lnk)$/i.test(п)) throw new Error('это не программа Windows');
+      const дом = os.homedir();
+      const можно = [дом, '/tmp', '/var/tmp', '/media', '/mnt', '/run/media'];
+      if (!можно.some(м => п === м || п.startsWith(м + '/')))
+        throw new Error('файл лежит там, откуда система запускать не станет: ' + п);
+
+      if (!await has('wine')) return { ok:false, 'нетWine':true };
+      const env = await средаЭкрана();
+      const { spawn } = await import('node:child_process');
+      const [прог, доводы] = existsSync('/usr/bin/glower-exe')
+        ? ['/usr/bin/glower-exe', [п]]
+        : /\.msi$/i.test(п) ? ['wine', ['msiexec', '/i', п]] : ['wine', ['start', '/unix', п]];
+      const дитя = spawn(прог, доводы, { env, detached:true, stdio:'ignore' });
+      дитя.on('error', () => {});
+      дитя.unref();
+      /* glower-exe сам скажет оболочке «запускаю» — ей незачем повторять */
+      return { ok:true, запущено:п, 'сообщит':прог === '/usr/bin/glower-exe' };
     },
 
     /* ---------- вход в систему ----------
@@ -1803,8 +1958,7 @@ export function apps(allowLaunch){
         const текст = await readFile(join(dir, имя), 'utf8');
         const exec = (текст.match(/^Exec=(.*)$/m) || [])[1];
         if (!exec) continue;
-        const части = (exec.replace(/%[fFuUdDnNickvm]/g, '').match(/"[^"]+"|\S+/g) || [])
-          .map(x => x.replace(/^"|"$/g, '')).filter(x => !/^@@u?$/.test(x));
+        const части = разбери_exec(exec);
         const программа = части.shift();
         if (программа && /^[\w./+-]+$/.test(программа))
           return запустить(программа, части, 'терминал');
@@ -2100,10 +2254,10 @@ export function apps(allowLaunch){
       const имя = String(id);
       if (!/^[^/\\\0]+\.desktop$/.test(имя) || имя.startsWith('.'))
         throw new Error('неверный идентификатор программы');
-      const dir = APP_DIRS.find(d => existsSync(join(d, имя)));
-      if (!dir) throw new Error('такой программы на машине нет: ' + имя);
+      const файл = await найди_ярлык(имя);
+      if (!файл) throw new Error('такой программы на машине нет: ' + имя);
 
-      const текст = await readFile(join(dir, имя), 'utf8');
+      const текст = await readFile(файл, 'utf8');
       const поле = k => (текст.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1];
 
       /* Программы из Flathub живут в своём окружении. Их ярлык зовёт flatpak
@@ -2144,10 +2298,7 @@ export function apps(allowLaunch){
       const вТерминале = /^true$/i.test(поле('Terminal') || '');
 
       if (exec && !вТерминале){
-        const части = (exec.replace(/%[fFuUdDnNickvm]/g, '').match(/"[^"]+"|\S+/g) || [])
-          .map(x => x.replace(/^"|"$/g, ''))
-          /* @@ и @@u — пометки передачи файлов, без самих файлов они лишние */
-          .filter(x => !/^@@u?$/.test(x));
+        const части = разбери_exec(exec);
         const программа = части.shift();
         if (программа && /^[\w./+-]+$/.test(программа))
           return запустить(программа, части, 'ярлык');
@@ -2157,7 +2308,7 @@ export function apps(allowLaunch){
          gio знает больше нашего — пусть открывает он. Окружение передаём
          так же, поэтому программа увидит экран. */
       if (await has('gio'))
-        return запустить('gio', ['launch', join(dir, имя)], 'gio');
+        return запустить('gio', ['launch', файл], 'gio');
 
       if (!exec) throw new Error('в ярлыке нет строки запуска');
       throw new Error('не удалось разобрать строку запуска ярлыка');

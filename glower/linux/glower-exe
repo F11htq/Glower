@@ -1,0 +1,67 @@
+#!/bin/sh
+# ==========================================================================
+#  Открыть программу Windows
+#
+#  На этот файл система выходит, когда человек щёлкает по .exe, .msi или
+#  .bat. Запускает их Wine — он стоит в GlowerOS сразу, а папку Windows
+#  (~/.wine) агент готовит заранее, при первом входе, чтобы первый же
+#  щелчок не ждал полминуты.
+#
+#  Оболочке мы только сообщаем, что происходит: «запускаю» — чтобы человек
+#  видел, что щелчок услышан, пока программа поднимается; «нет Wine» —
+#  чтобы оболочка предложила его поставить. Если оболочка не отвечает,
+#  программа всё равно запускается: сообщение — вежливость, а не условие.
+#
+#  Имена переменных латиницей: /bin/sh кириллицу в именах не понимает.
+# ==========================================================================
+set -u
+PORT="${GLOWER_PORT:-8123}"
+FILE="${1:-}"
+
+[ -n "$FILE" ] || { echo "нужен путь к файлу" >&2; exit 2; }
+DIR=$(cd "$(dirname -- "$FILE")" 2>/dev/null && pwd)
+[ -n "$DIR" ] || { echo "такого файла нет: $FILE" >&2; exit 2; }
+FULL="$DIR/$(basename -- "$FILE")"
+[ -f "$FULL" ] || { echo "такого файла нет: $FULL" >&2; exit 2; }
+
+tell(){
+  BODY=$(python3 - "$1" "$FULL" <<'PY'
+import json, sys
+print(json.dumps({'method': 'ui.say',
+                  'params': {'тема': 'windows', 'что': {'событие': sys.argv[1], 'путь': sys.argv[2]}}},
+                 ensure_ascii=False))
+PY
+)
+  curl -sf --max-time 3 -X POST "http://localhost:$PORT/rpc" \
+       -H 'Content-Type: application/json' --data "$BODY" >/dev/null 2>&1
+}
+
+WINE=$(command -v wine 2>/dev/null)
+if [ -z "$WINE" ]; then
+  tell "нет-wine" || echo "Wine не установлен — программы Windows запускать нечем." >&2
+  exit 1
+fi
+
+tell "запуск"
+
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+# Папки ещё нет — агент не успел её подготовить. Создаст её сам Wine, и
+# тогда он спросил бы по-английски, скачать ли .NET и движок страниц.
+# Второй вопрос за один щелчок — лишний; вопросы отключаем, как и при
+# подготовке заранее.
+[ -d "$WINEPREFIX" ] || export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,mshtml=}"
+
+# Что говорит Wine, пишем в журнал: «врач» покажет его хвост, если
+# программа не открылась.
+WLOG="${XDG_CACHE_HOME:-$HOME/.cache}/glower/wine.log"
+mkdir -p "$(dirname "$WLOG")" 2>/dev/null
+{ printf '\n=== %s  %s\n' "$(date '+%F %T')" "$FULL"; } >>"$WLOG" 2>/dev/null
+
+LOW=$(printf '%s' "$FULL" | tr '[:upper:]' '[:lower:]')
+case "$LOW" in
+  # Установщик Windows Installer запускается своей программой.
+  *.msi) exec "$WINE" msiexec /i "$FULL" >>"$WLOG" 2>&1 ;;
+  # Остальное — .exe, .bat, ярлыки .lnk — открывает start: он понимает
+  # путь Linux и сам решает, чем открыть, как это сделала бы Windows.
+  *)     exec "$WINE" start /unix "$FULL" >>"$WLOG" 2>&1 ;;
+esac
