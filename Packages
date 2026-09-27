@@ -214,3 +214,21 @@ Description: GlowerOS — оболочка, агент и сценарии си�
  агент, экран входа, установщик, приёмник лотка и вспомогательные
  сценарии. Обновляется обычным путём, вместе со всей системой.
 
+Package: glower
+Version: 11.5
+Architecture: all
+Maintainer: GlowerOS <noreply@glower.local>
+Installed-Size: 2724
+Depends: python3, python3-gi, gir1.2-webkit2-4.1, gir1.2-gtklayershell-0.1, nodejs
+Filename: ./glower_11.5_all.deb
+Size: 712580
+MD5sum: 3f6ff3d1435da4d611ae1184fff275db
+SHA1: 3f997238a47227d670f05694bb816fb0dc49513d
+SHA256: f1ac175d6b1d4a417b856c6de345b51722253398d8d08cbbc45e5ab5afd13cbc
+Section: misc
+Priority: optional
+Description: GlowerOS — оболочка, агент и сценарии системы
+ Всё, что делает из Ubuntu систему GlowerOS: рабочий стол и панель,
+ агент, экран входа, установщик, приёмник лотка и вспомогательные
+ сценарии. Обновляется обычным путём, вместе со всей системой.
+
