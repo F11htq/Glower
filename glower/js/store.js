@@ -1029,6 +1029,19 @@ APPS.store = {
           к.replaceChild(свой, к.firstChild);
         }
         к.onclick = () => { OS.запустиПоЯрлыку ? OS.запустиПоЯрлыку(a.id) : null; };
+        /* Здесь же и удаляют — это список «моего», и убрать из него лишнее
+           человек ищет именно тут. */
+        к.oncontextmenu = е => {
+          е.preventDefault();
+          Shell.ctx(е.clientX, е.clientY, [
+            { i:'▶', t:'Открыть', f:() => OS.запустиПоЯрлыку && OS.запустиПоЯрлыку(a.id) },
+            'hr',
+            { i:'🗑️', t:'Удалить', f:async () => {
+              if (!OS.удалиПрограмму) return;
+              await OS.удалиПрограмму({ id:a.id, name:a.name });
+            } }
+          ]);
+        };
         г.appendChild(к);
       });
       if (!список.length) г.appendChild(el('div', 'empty', 'Система не назвала ни одной программы'));

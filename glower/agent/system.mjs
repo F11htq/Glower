@@ -469,7 +469,7 @@ async function ярлыки_папки(корень){
 
 /* Где лежит ярлык с таким именем. Первая папка в списке главнее — как у
    настоящего рабочего стола. */
-async function найди_ярлык(имя){
+export async function найди_ярлык(имя){
   for (const dir of APP_DIRS) if (existsSync(join(dir, имя))) return join(dir, имя);
   if (!ЯРЛЫКИ.has(имя)){
     for (const dir of APP_DIRS){
@@ -738,7 +738,7 @@ async function запустить(программа, части, via){
 
    Теперь выставляем оба, каждый по факту наличия своего сокета: у машины
    вполне может быть и то и другое сразу, и это норма, а не противоречие. */
-async function средаЭкрана(){
+export async function средаЭкрана(){
   const env = Object.assign({}, process.env);
   const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
   env.XDG_RUNTIME_DIR = дом;

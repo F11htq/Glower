@@ -2207,6 +2207,57 @@ APPS.settings = {
     }
 
     /* --- Приложения --- */
+    /* Поставленные программы Windows — списком, как «Программы и
+       компоненты» в Windows: у каждой своя кнопка удаления, которая
+       открывает её собственный деинсталлятор. И кнопка на крайний случай —
+       убрать их все разом, вместе с папкой Windows. */
+    async function программыWindows(карта){
+      let список = [];
+      try { список = ((await Platform.rpc('pkg.windows.list')) || {})['список'] || []; } catch(e){}
+      if (!карта.isConnected) return;
+      const после = () => {
+        if (typeof обновиСписокМашины === 'function') обновиСписокМашины();
+        drawMain();
+      };
+      список.forEach(з => {
+        const кн = el('button', 'btn', 'Удалить');
+        кн.onclick = async () => {
+          if (!await Dlg.confirm('Удалить «' + з['имя'] + '»?',
+              'Откроется окно удаления самой программы — как в Windows. Следуйте ему.',
+              { okText:'Открыть удаление', danger:true, icon:'🪟' })) return;
+          кн.disabled = true; кн.textContent = 'Удаляю…';
+          try { await Platform.rpc('pkg.windows.remove', { 'ключ':з['ключ'] }); }
+          catch(e){ кн.disabled = false; кн.textContent = 'Удалить';
+                    return Dlg.alert('Не удалось удалить', String(e.message || e), '⚠️'); }
+          const часы = setInterval(async () => {
+            let с;
+            try { с = await Platform.rpc('pkg.uninstall.windows', { id:'windows:' + з['ключ'] }); }
+            catch(e){ clearInterval(часы); return; }
+            if (с['идёт']) return;
+            clearInterval(часы);
+            if (с['удалено']) Shell.toast(з['имя'], 'Удалено', '🗑️');
+            else Shell.toast(з['имя'], 'Не удалено: ' + (с['почему'] || ''), '⚠️', 8000);
+            после();
+          }, 3000);
+        };
+        карта.appendChild(row('▫️', esc(з['имя']), 'Программа Windows', кн));
+      });
+      const сброс = el('button', 'btn', 'Удалить все');
+      сброс.onclick = async () => {
+        if (!await Dlg.confirm('Удалить все программы Windows?',
+            'Будет удалена папка Windows (~/.wine) целиком — со всеми поставленными ' +
+            'программами, их настройками и файлами, которые они там хранили, — и все их ' +
+            'ярлыки. Сам Wine останется: следующий .exe заведёт папку заново.',
+            { okText:'Удалить всё', danger:true, icon:'🧹' })) return;
+        try { await Platform.rpc('pkg.windows.reset'); Shell.toast('Программы Windows', 'Все удалены', '🧹'); }
+        catch(e){ return Dlg.alert('Не удалось удалить', String(e.message || e), '⚠️'); }
+        после();
+      };
+      карта.appendChild(row('🧹', 'Удалить все программы Windows',
+        список.length ? 'Если деинсталлятор программы не работает или нужно начать с чистого листа'
+                      : 'Поставленных установщиком программ нет — здесь можно убрать и всё остальное', сброс));
+    }
+
     function pApps(){
       /* Программы Windows: стоит ли Wine, и если нет — поставить одной
          кнопкой, не дожидаясь, пока человек щёлкнет по .exe. */
@@ -2219,6 +2270,7 @@ APPS.settings = {
         main.appendChild(w);
         const скажи = т => { const м = $('small', строка); if (м) м.textContent = т; };
         Platform.rpc('pkg.windows').then(в => {
+          if (в['полный'] || в['wine64']) программыWindows(w);
           if (в['полный']){
             скажи('Стоит. Программы .exe и .msi открываются двойным щелчком, ' +
                   'а поставленные появляются в меню приложений');

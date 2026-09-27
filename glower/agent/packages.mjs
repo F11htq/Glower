@@ -15,6 +15,7 @@ import { spawn, execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 
 const run = promisify(execFile);
 
@@ -372,10 +373,13 @@ export function packages(allowPackages){
   };
 
   /* работы flatpak идут тем же путём, что и apt: одна за раз, ход виден */
-  const запустиFlatpak = (action, name, args) => {
+  /* свой — программа стоит у человека, а не в системе: тогда flatpak
+     зовём от его имени, без sudo. Через sudo он смотрел бы в дом root и
+     честно отвечал бы, что такой программы нет. */
+  const запустиFlatpak = (action, name, args, свой = false) => {
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
             error:null, log:'', слышно:Date.now(), pid:null };
-    const p = spawn('sudo', ['-n', 'flatpak', ...args], {
+    const p = spawn(свой ? 'flatpak' : 'sudo', свой ? args : ['-n', 'flatpak', ...args], {
       stdio:['ignore', 'pipe', 'pipe'], detached:true,
       env:{ ...process.env, LC_ALL:'C' }
     });
@@ -402,6 +406,220 @@ export function packages(allowPackages){
       else if (!job.error) job.error = 'flatpak завершился с кодом ' + code;
     });
     return { started:true, name, action, source:'flatpak' };
+  };
+
+  /* ======================================================================
+     Удаление программы по её ярлыку
+
+     Меню знает о программе только ярлык: имя, значок и строку запуска. Чтобы
+     удалить программу, нужно узнать, кто её хозяин, — и у разных программ
+     он разный:
+       — пакет Ubuntu: владельца ярлыка знает dpkg;
+       — Flathub: имя программы записано прямо в ярлыке;
+       — Windows: ярлык сделал Wine, а удаляет программу её собственный
+         деинсталлятор, который Wine знает по своему списку;
+       — AppImage: программа — один файл, на него указывает ярлык;
+       — просто ярлык, сделанный руками: удалить можно только его.
+     Решает всегда агент, заново, по самому ярлыку: оболочке на слово не
+     верим — иначе «удалить Блокнот» можно было бы превратить в «удалить
+     что угодно».
+     ====================================================================== */
+
+  /* Без чего сеанс GlowerOS не живёт — сверх того, без чего не живёт сама
+     Ubuntu. Удалить labwc или агента из меню значит остаться с чёрным
+     экраном. */
+  const СВОИ_НЕЛЬЗЯ = [/^glower/, /^labwc$/, /^foot$/, /^thunar$/, /^xwayland$/,
+    /^greetd$/, /^pipewire/, /^wireplumber$/, /^network-manager/, /^policykit/, /^polkitd$/,
+    /^xdg-desktop-portal/, /^flatpak$/, /^bluez$/, /^wine/, /^gir1\.2-/, /^libwebkit/,
+    /* Сам Python — да, а не всё, что начинается с «python3»: LibreOffice
+       тянет python3-uno, и широкий образец не давал удалить LibreOffice.
+       Если удаление программы задевает сам Python, это поймает пробный
+       прогон apt — там python3 появится в списке уходящего. */
+    /^python3$/, /^python3-minimal$/, /^python3-gi/, /^libpython3\.\d+$/];
+  const несъёмный = п => НЕЛЬЗЯ_УДАЛЯТЬ.some(re => re.test(п)) || СВОИ_НЕЛЬЗЯ.some(re => re.test(п));
+
+  const домой = () => homedir();
+  const ПАПКА_WINE = () => join(домой(), '.local/share/applications/wine');
+  const СРЕДА_WINE = () => ({ ...process.env, HOME:домой(),
+    WINEPREFIX:process.env.WINEPREFIX || join(домой(), '.wine'), WINEDEBUG:'-all' });
+
+  /* Что Wine считает поставленным: ключ записи и имя, как в «Установке и
+     удалении программ» Windows. Wine печатает их строками «ключ|||имя». */
+  const списокWindows = async () => {
+    if (!existsSync(СРЕДА_WINE().WINEPREFIX)) return [];
+    let вывод = '';
+    try { вывод = (await run('wine', ['uninstaller', '--list'], { timeout:60000, env:СРЕДА_WINE() })).stdout; }
+    catch(e){ вывод = String(e.stdout || ''); }
+    return String(вывод).split('\n').map(с => с.trim()).filter(с => с.includes('|||'))
+      .map(с => { const [ключ, ...имя] = с.split('|||'); return { ключ:ключ.trim(), имя:имя.join('|||').trim() }; })
+      .filter(з => з.ключ && з.имя);
+  };
+  /* Запись Wine для программы — по имени. Сначала точное совпадение,
+     потом «одно начинается с другого»: ярлык зовётся «Steam», а запись —
+     «Steam (remove only)» или наоборот. */
+  const найдиЗапись = (список, имя) => {
+    const н = String(имя || '').toLowerCase().trim();
+    if (!н) return null;
+    return список.find(з => з.имя.toLowerCase() === н)
+        || список.find(з => з.имя.toLowerCase().startsWith(н) || н.startsWith(з.имя.toLowerCase()))
+        || null;
+  };
+
+  const поле = (текст, k) => {
+    const начало = текст.search(/^\[Desktop Entry\]\s*$/m);
+    const t = начало < 0 ? текст : текст.slice(начало).split(/^\[(?!Desktop Entry)[^\]]+\]\s*$/m)[0];
+    return (t.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1] || '';
+  };
+
+  const хозяин = async id => {
+    const имя = String(id || '');
+    if (!/^[^/\\\0]+\.desktop$/.test(имя) || имя.startsWith('.'))
+      throw new Error('неверный идентификатор программы');
+    const { найди_ярлык, разбери_exec } = await import('./system.mjs');
+    const файл = await найди_ярлык(имя);
+    if (!файл) throw new Error('такой программы на машине уже нет');
+    const текст = await readFile(файл, 'utf8');
+    const назван = поле(текст, 'Name') || имя.replace(/\.desktop$/, '');
+    const exec = разбери_exec(поле(текст, 'Exec'));
+    const свой = файл.startsWith(домой() + '/');
+    const итог = { id:имя, файл, 'имя':назван, 'можно':true };
+
+    /* Flathub: ярлык сам называет программу. */
+    const fp = поле(текст, 'X-Flatpak');
+    if (fp && APPID.test(fp))
+      return { ...итог, 'вид':'flatpak', 'пакет':fp,
+               'у_человека':файл.includes('/.local/share/flatpak/') };
+
+    /* Windows: ярлык из папки Wine или строка запуска, зовущая wine. */
+    const зовётWine = exec.some(ч => /(^|\/)wine(64)?$/.test(ч));
+    if (файл.startsWith(ПАПКА_WINE() + '/') || зовётWine){
+      const запись = найдиЗапись(await списокWindows(), назван);
+      return { ...итог, 'вид':'windows', 'ключ':запись ? запись.ключ : null,
+               'запись':запись ? запись.имя : null };
+    }
+
+    /* AppImage: удалить — значит убрать сам файл и ярлык к нему. */
+    const образ = exec.find(ч => /\.appimage$/i.test(ч) && ч.startsWith('/'));
+    if (образ && свой)
+      return { ...итог, 'вид':'appimage', 'образ':образ };
+
+    /* Ярлык в доме человека: пакета за ним нет, удалить можно его самого. */
+    if (свой) return { ...итог, 'вид':'ярлык' };
+
+    /* Системный ярлык — у него есть пакет. */
+    let пакет = '';
+    try {
+      const { stdout } = await run('dpkg', ['-S', файл], { timeout:15000, env:{ ...process.env, LC_ALL:'C' } });
+      пакет = String(stdout).split('\n').find(с => /: \//.test(с) && !/^diversion/.test(с)) || '';
+      пакет = пакет.split(': /')[0].split(',')[0].trim().replace(/:[a-z0-9]+$/, '');
+    } catch(e){}
+    if (!пакет || !NAME.test(пакет))
+      return { ...итог, 'вид':'система', 'можно':false,
+               'почему':'Этот ярлык — часть самой системы, а не отдельная программа' };
+    if (несъёмный(пакет))
+      return { ...итог, 'вид':'apt', 'пакет':пакет, 'можно':false,
+               'почему':'Без «' + назван + '» система работать не будет — удалить её нельзя' };
+
+    /* Что уйдёт вместе с ней: спрашиваем apt «понарошку», без root. Если в
+       этом списке есть то, без чего система не живёт, — отказываем: так
+       бывает, когда программа тянет за собой общую часть рабочего стола. */
+    let уйдёт = [];
+    try {
+      const { stdout } = await run('apt-get', ['-s', 'remove', '--auto-remove', пакет],
+        { timeout:60000, env:{ ...process.env, LC_ALL:'C' } });
+      уйдёт = [...String(stdout).matchAll(/^Remv (\S+)/gm)].map(м => м[1].replace(/:[a-z0-9]+$/, ''));
+    } catch(e){}
+    const опасно = уйдёт.filter(несъёмный);
+    if (опасно.length)
+      return { ...итог, 'вид':'apt', 'пакет':пакет, 'можно':false, 'уйдёт':уйдёт,
+               'почему':'Вместе с «' + назван + '» ушла бы часть системы: ' + опасно.slice(0, 3).join(', ') };
+    let кб = 0;
+    if (уйдёт.length){
+      try {
+        const { stdout } = await run('dpkg-query', ['-W', '-f=${Installed-Size}\n', ...уйдёт], { timeout:15000 });
+        кб = String(stdout).split('\n').reduce((с, ч) => с + (parseInt(ч, 10) || 0), 0);
+      } catch(e){ кб = parseInt(String(e.stdout || '').split('\n').reduce((с, ч) => с + (parseInt(ч, 10) || 0), 0), 10) || 0; }
+    }
+    return { ...итог, 'вид':'apt', 'пакет':пакет, 'уйдёт':уйдёт, 'освободит':кб * 1024 };
+  };
+
+  /* Удаление программ Windows идёт своим окном — окном её деинсталлятора.
+     Следим, пока запись не пропадёт из списка Wine: многие деинсталляторы
+     (NSIS — у Steam он такой) копируют себя во временную папку, запускают
+     копию и сразу выходят, так что «процесс закончился» ещё не значит
+     «программа удалена». */
+  const удаленияWindows = new Map();
+
+  /* Ярлыки программы Windows: сам ярлык, его соседи по папке программы в
+     меню и значки на рабочем столе с тем же именем. */
+  const уберИЯрлыки = async (файл, имя) => {
+    const { unlink, readdir, rmdir } = await import('node:fs/promises');
+    const убрано = [];
+    const убери = async ф => { try { await unlink(ф); убрано.push(ф); } catch(e){} };
+    const корень = join(ПАПКА_WINE(), 'Programs');
+    const папка = dirname(файл);
+    if (папка.startsWith(корень + '/')){
+      /* Своя папка программы в меню — уходит вся. */
+      const своя = join(корень, папка.slice(корень.length + 1).split('/')[0]);
+      const обойди = async д => {
+        for (const з of await readdir(д, { withFileTypes:true }).catch(() => [])){
+          const п = join(д, з.name);
+          if (з.isDirectory()){ await обойди(п); await rmdir(п).catch(() => {}); }
+          else if (з.name.endsWith('.desktop')) await убери(п);
+        }
+      };
+      await обойди(своя);
+      await rmdir(своя).catch(() => {});
+    } else await убери(файл);
+    for (const стол of ['Desktop', 'Рабочий стол']){
+      const д = join(домой(), стол);
+      for (const з of await readdir(д).catch(() => [])){
+        if (!з.endsWith('.desktop')) continue;
+        try {
+          const т = await readFile(join(д, з), 'utf8');
+          if (/\bwine\b/.test(поле(т, 'Exec')) && поле(т, 'Name').toLowerCase() === String(имя).toLowerCase())
+            await убери(join(д, з));
+        } catch(e){}
+      }
+    }
+    return убрано;
+  };
+
+  const удалиWindows = async о => {
+    const ключ = о.ключ;
+    const запись = { id:о.id, 'имя':о['имя'], 'идёт':true, 'удалено':false, 'почему':'', начало:Date.now() };
+    удаленияWindows.set(о.id, запись);
+    if (!ключ){
+      /* Wine не знает, как её удалять: её не ставили установщиком (или он
+         не записался). Убираем то, что видит человек, — ярлыки; файлы
+         остаются в папке Windows, и об этом говорим прямо. */
+      await уберИЯрлыки(о.файл, о['имя']);
+      Object.assign(запись, { 'идёт':false, 'удалено':true, 'толькоЯрлык':true });
+      return запись;
+    }
+    const { средаЭкрана } = await import('./system.mjs');
+    const env = { ...(await средаЭкрана()), ...СРЕДА_WINE() };
+    const д = spawn('wine', ['uninstaller', '--remove', ключ], { env, detached:true, stdio:'ignore' });
+    д.on('error', e => Object.assign(запись, { 'идёт':false, 'почему':'не удалось запустить удаление: ' + e.message }));
+    д.unref();
+    /* Смотрим в список раз в три секунды, до двадцати минут: столько
+       человек может сидеть над окном деинсталлятора. */
+    (async () => {
+      await new Promise(r => д.on('exit', r));
+      const предел = Date.now() + 20 * 60 * 1000;
+      while (Date.now() < предел && запись['идёт']){
+        const есть = (await списокWindows()).some(з => з.ключ === ключ);
+        if (!есть){
+          await уберИЯрлыки(о.файл, о['имя']);
+          Object.assign(запись, { 'идёт':false, 'удалено':true });
+          return;
+        }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      if (запись['идёт'])
+        Object.assign(запись, { 'идёт':false, 'почему':'программа осталась в списке — удаление отменили или оно не удалось' });
+    })().catch(e => Object.assign(запись, { 'идёт':false, 'почему':String(e.message || e) }));
+    return запись;
   };
 
   return {
@@ -851,6 +1069,84 @@ export function packages(allowPackages){
         throw new Error('без этой программы система работать не будет: ' + n);
       if (job && !job.done) throw new Error('уже идёт другая работа');
       return запусти('remove', n, ['remove', '-y', '--auto-remove', n]);
+    },
+
+    /* Кто хозяин программы и что уйдёт вместе с ней — для окна «Удалить?». */
+    async 'pkg.owner'({ id }){
+      const о = await хозяин(id);
+      delete о.файл;                          // путь оболочке ни к чему
+      return { ...о, 'разрешено':!!allowPackages };
+    },
+
+    /* Удалить программу по её ярлыку. Хозяина агент выясняет сам, заново. */
+    async 'pkg.uninstall'({ id }){
+      нужноРазрешение();
+      const о = await хозяин(id);
+      if (!о['можно']) throw new Error(о['почему'] || 'эту программу удалить нельзя');
+      if (о['вид'] === 'windows') return { 'вид':'windows', ...(await удалиWindows(о)) };
+      if (о['вид'] === 'appimage' || о['вид'] === 'ярлык'){
+        const { unlink } = await import('node:fs/promises');
+        if (о['вид'] === 'appimage') await unlink(о['образ']).catch(() => {});
+        await unlink(о.файл);
+        return { 'вид':о['вид'], 'удалено':true };
+      }
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      if (о['вид'] === 'flatpak')
+        return { 'вид':'flatpak', ...запустиFlatpak('remove', о['пакет'],
+          ['uninstall', '-y', '--noninteractive', о['у_человека'] ? '--user' : '--system', о['пакет']],
+          о['у_человека']) };
+      return { 'вид':'apt', ...запусти('remove', о['пакет'], ['remove', '-y', '--auto-remove', о['пакет']]) };
+    },
+
+    /* Как идёт удаление программы Windows. */
+    async 'pkg.uninstall.windows'({ id }){
+      const з = удаленияWindows.get(String(id || ''));
+      if (!з) return { 'идёт':false, 'неизвестно':true };
+      const { начало, ...ответ } = з;
+      return ответ;
+    },
+
+    /* Программы Windows списком — для «Параметров»: что стоит и чем удалить. */
+    async 'pkg.windows.list'(){
+      return { 'список':await списокWindows() };
+    },
+    async 'pkg.windows.remove'({ ключ }){
+      нужноРазрешение();
+      const к = String(ключ || '');
+      const запись = (await списокWindows()).find(з => з.ключ === к);
+      if (!запись) throw new Error('такой программы Windows нет');
+      /* Ярлык ищем по имени — чтобы после удаления убрать и его. */
+      let файл = null;
+      const { readdir } = await import('node:fs/promises');
+      const обойди = async д => {
+        for (const з of await readdir(д, { withFileTypes:true }).catch(() => [])){
+          if (файл) return;
+          const п = join(д, з.name);
+          if (з.isDirectory()) await обойди(п);
+          else if (з.name.endsWith('.desktop')){
+            const т = await readFile(п, 'utf8').catch(() => '');
+            if (найдиЗапись([запись], поле(т, 'Name'))) файл = п;
+          }
+        }
+      };
+      await обойди(ПАПКА_WINE());
+      const id = 'windows:' + к;
+      return удалиWindows({ id, 'имя':запись.имя, ключ:к, файл:файл || join(ПАПКА_WINE(), 'нет.desktop') });
+    },
+
+    /* Удалить все программы Windows разом: папку Windows целиком и все
+       ярлыки Wine. Сам Wine остаётся — следующий .exe заведёт папку заново. */
+    async 'pkg.windows.reset'(){
+      нужноРазрешение();
+      const { rm, readdir } = await import('node:fs/promises');
+      try { await run('wineserver', ['-k'], { timeout:15000, env:СРЕДА_WINE() }); } catch(e){}
+      await rm(СРЕДА_WINE().WINEPREFIX, { recursive:true, force:true });
+      await rm(ПАПКА_WINE(), { recursive:true, force:true });
+      for (const [д, образец] of [[join(домой(), '.local/share/desktop-directories'), /^wine-/],
+                                  [join(домой(), '.config/menus/applications-merged'), /^wine-/]])
+        for (const з of await readdir(д).catch(() => []))
+          if (образец.test(з)) await rm(join(д, з), { force:true });
+      return { 'удалено':true };
     },
 
     /* Остановить работу. Просто убить нельзя: apt запущен от root через sudo,

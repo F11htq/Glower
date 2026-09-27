@@ -1549,6 +1549,114 @@ try {
       JSON.stringify(плохо.итог).slice(0, 200));
   }
 
+  /* --- удаление программ по ярлыку ---
+
+     Wine подставной: «uninstaller --list» читает список из файла, а
+     «--remove ключ» вычёркивает строку — как настоящий деинсталлятор,
+     который отработал. Проверяем то, что делаем мы: кто хозяин ярлыка,
+     что удаляется и что пропадает из меню и со стола. */
+  {
+    const { mkdir, writeFile, chmod, readFile: читай } = await import('node:fs/promises');
+    const дом = await mkdtemp(join(tmpdir(), 'glower-удал-'));
+    const бин = join(дом, 'bin');
+    await mkdir(бин, { recursive:true });
+    await writeFile(join(бин, 'wine'), [
+      '#!/bin/sh',
+      'L="$HOME/wine-list"',
+      'if [ "$1" = uninstaller ] && [ "$2" = --list ]; then cat "$L" 2>/dev/null; exit 0; fi',
+      'if [ "$1" = uninstaller ] && [ "$2" = --remove ]; then grep -v "^$3|||" "$L" > "$L.n"; mv "$L.n" "$L"; exit 0; fi',
+      'exit 0', ''].join('\n'));
+    await writeFile(join(бин, 'wineserver'), '#!/bin/sh\nexit 0\n');
+    await chmod(join(бин, 'wine'), 0o755); await chmod(join(бин, 'wineserver'), 0o755);
+    await mkdir(join(дом, '.wine/drive_c'), { recursive:true });
+    await writeFile(join(дом, 'wine-list'), 'Steam|||Steam\n{A1}|||Другое\n');
+    const прил = join(дом, '.local/share/applications');
+    const ярлык = (путь, имя, exec) => mkdir(dirname(путь), { recursive:true })
+      .then(() => writeFile(путь, ['[Desktop Entry]', 'Type=Application', 'Name=' + имя, 'Exec=' + exec, ''].join('\n')));
+    const винEx = 'env WINEPREFIX="' + дом + '/.wine" wine C:\\\\\\\\x.lnk';
+    await ярлык(join(прил, 'wine/Programs/Steam/Steam.desktop'), 'Steam', винEx);
+    await ярлык(join(прил, 'wine/Programs/Steam/Uninstall Steam.desktop'), 'Uninstall Steam', винEx);
+    await ярлык(join(дом, 'Desktop/Steam.desktop'), 'Steam', винEx);
+    await ярлык(join(прил, 'wine/Programs/Портативная.desktop'), 'Портативная', винEx);
+    await mkdir(join(дом, 'Apps'), { recursive:true });
+    await writeFile(join(дом, 'Apps/Прога.AppImage'), 'x');
+    await ярлык(join(прил, 'appimagekit-prog.desktop'), 'Прога', join(дом, 'Apps/Прога.AppImage') + ' %U');
+    await ярлык(join(прил, 'мой-ярлык.desktop'), 'Мой ярлык', 'true');
+
+    const порт5 = PORT + 303;
+    const аг = spawn(process.execPath,
+      [join(root, 'agent/server.mjs'), '--port', String(порт5), '--root', дом, '--system', '--allow-packages'],
+      { stdio:'ignore', env:{ ...process.env, HOME:дом, PATH:бин + ':' + process.env.PATH, GLOWER_NO_AUTO_WINE:'1' } });
+    await new Promise(r => setTimeout(r, 1500));
+    const зов = async (method, params = {}) => {
+      const r = await fetch(`http://localhost:${порт5}/rpc`, { method:'POST',
+        headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ method, params }) });
+      return r.json();
+    };
+    const итог = {};
+    try {
+      итог.хозяинСтим = (await зов('pkg.owner', { id:'wine-Programs-Steam-Steam.desktop' })).result;
+      итог.удалениеСтим = (await зов('pkg.uninstall', { id:'wine-Programs-Steam-Steam.desktop' })).result;
+      for (let i = 0; i < 20; i++){
+        итог.ходСтим = (await зов('pkg.uninstall.windows', { id:'wine-Programs-Steam-Steam.desktop' })).result;
+        if (!итог.ходСтим['идёт']) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      итог.портативная = (await зов('pkg.uninstall', { id:'wine-Programs-Портативная.desktop' })).result;
+      итог.образ = (await зов('pkg.owner', { id:'appimagekit-prog.desktop' })).result;
+      итог.образУд = (await зов('pkg.uninstall', { id:'appimagekit-prog.desktop' })).result;
+      итог.ярлык = (await зов('pkg.uninstall', { id:'мой-ярлык.desktop' })).result;
+      итог.подлог = await зов('pkg.uninstall', { id:'../../etc/passwd.desktop' });
+      итог.список = ((await зов('sys.apps')).result.list || []).map(a => a.name);
+      итог.сброс = (await зов('pkg.windows.reset')).result;
+    } catch(e){ итог.беда = e.message; }
+    аг.kill();
+
+    check('ярлык Wine узнаётся как программа Windows с записью деинсталлятора',
+      итог.хозяинСтим && итог.хозяинСтим['вид'] === 'windows' && итог.хозяинСтим['ключ'] === 'Steam',
+      JSON.stringify(итог.хозяинСтим));
+    check('программа Windows удаляется своим деинсталлятором, и её ярлыки уходят отовсюду',
+      итог.ходСтим && итог.ходСтим['удалено']
+        && !existsSync(join(прил, 'wine/Programs/Steam'))
+        && !existsSync(join(дом, 'Desktop/Steam.desktop'))
+        && !/Steam\|\|\|/.test(await читай(join(дом, 'wine-list'), 'utf8').catch(() => ''))
+        && existsSync(join(дом, 'wine-list')),
+      JSON.stringify({ ход:итог.ходСтим }));
+    check('программа Windows без записи — убирается ярлык, и об этом сказано',
+      итог.портативная && итог.портативная['удалено'] && итог.портативная['толькоЯрлык']
+        && !existsSync(join(прил, 'wine/Programs/Портативная.desktop')), JSON.stringify(итог.портативная));
+    check('AppImage удаляется вместе со своим файлом',
+      итог.образ && итог.образ['вид'] === 'appimage' && итог.образУд && итог.образУд['удалено']
+        && !existsSync(join(дом, 'Apps/Прога.AppImage')) && !existsSync(join(прил, 'appimagekit-prog.desktop')),
+      JSON.stringify({ о:итог.образ, у:итог.образУд }));
+    check('ярлык без пакета удаляется сам', итог.ярлык && итог.ярлык['удалено']
+      && !existsSync(join(прил, 'мой-ярлык.desktop')), JSON.stringify(итог.ярлык));
+    check('подложный идентификатор программы отвергается',
+      итог.подлог && итог.подлог.ok === false, JSON.stringify(итог.подлог));
+    check('удалённых программ нет в списке меню',
+      Array.isArray(итог.список) && !итог.список.some(н => /^(Steam|Прога|Мой ярлык|Портативная)$/.test(н)),
+      JSON.stringify(итог.список));
+    check('«удалить все программы Windows» убирает папку Windows и ярлыки Wine',
+      итог.сброс && итог.сброс['удалено'] && !existsSync(join(дом, '.wine'))
+        && !existsSync(join(прил, 'wine')), JSON.stringify(итог.сброс));
+  }
+
+  /* В меню программ по правой кнопке есть «Удалить» — у программ машины. */
+  {
+    const r = await page.evaluate(() => {
+      Shell.менюПрограммы({ clientX:200, clientY:200, preventDefault(){} },
+        { id:'проба.desktop', 'вид':'машина', 'имя':'Проба' });
+      const текст = document.getElementById('ctx').textContent;
+      Shell.менюПрограммы({ clientX:200, clientY:200, preventDefault(){} },
+        { id:'notepad', 'вид':'приложение', 'имя':'Блокнот' });
+      const текст2 = document.getElementById('ctx').textContent;
+      document.getElementById('ctx').classList.remove('on');
+      return { текст, текст2 };
+    });
+    check('в меню программ у программы машины есть «Удалить», у частей системы — нет',
+      /Удалить/.test(r.текст) && !/Удалить/.test(r.текст2), JSON.stringify(r));
+  }
+
   /* --- .exe в Проводнике уходит системе, а не в Блокнот ---
      Здесь агенту запуск не разрешён, и это кстати: его отказ доказывает,
      что файл дошёл до системного слоя, а не открылся как текст. */
