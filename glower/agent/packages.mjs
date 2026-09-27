@@ -96,7 +96,7 @@ async function flatpak(args, timeout = 60000){
 /* строки flatpak приходят через табуляцию */
 const колонки = out => out.trim().split('\n').filter(Boolean).map(l => l.split('\t'));
 
-import { existsSync, statfsSync, statSync, realpathSync } from 'node:fs';
+import { existsSync, statfsSync, statSync, realpathSync, readdirSync } from 'node:fs';
 
 /* живая система держит всё в памяти — это меняет и место, и советы человеку */
 const живая = () => existsSync('/run/live/medium') || existsSync('/cdrom/live');
@@ -113,9 +113,48 @@ export function packages(allowPackages){
   /* Долгая работа apt: ход показываем по его же сообщениям. Точных процентов
      apt не даёт, поэтому считаем по узнаваемым шагам — честнее, чем рисовать
      ровную полоску, которая ничего не значит. */
+  /* Прерванная установка — есть ли она.
+
+     Если dpkg оборвать посреди работы (выход из сеанса, выключение,
+     пропавшее питание), он оставляет недоделанное в /var/lib/dpkg/updates,
+     и дальше apt отказывается делать что-либо вообще: «dpkg was
+     interrupted, you must manually run 'sudo dpkg --configure -a'».
+     Человек получал это прямо в окне «Не вышло» — и дальше ни обновить,
+     ни поставить, ни удалить. Смотрим туда же, куда смотрит сам apt. */
+  const прервано = () => {
+    try { return readdirSync('/var/lib/dpkg/updates').length > 0; }
+    catch(e){ return false; }
+  };
+
   const запусти = (action, name, args) => {
     job = { name, action, percent:2, step:'Начинаю', done:false, ok:false, error:null, log:'',
             слышно:Date.now(), pid:null };
+
+    /* Сперва доводим прерванное — ровно тем, что велит сам apt. Это не
+       ломает ничего и ничего не удаляет: dpkg просто заканчивает то, что
+       начал. Потом — то, о чём человек просил. */
+    if (прервано()){
+      job.step = 'Довожу прерванную установку';
+      const д = spawn('sudo', ['-n', 'dpkg', '--configure', '-a'], {
+        stdio:['ignore', 'pipe', 'pipe'], detached:true,
+        env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' } });
+      job.pid = д.pid;
+      let жалоба = '';
+      д.stderr.on('data', x => { жалоба += x; job.слышно = Date.now(); });
+      д.stdout.on('data', () => { job.слышно = Date.now(); });
+      д.on('close', код => {
+        if (код === 0 && !прервано()) return начни(action, name, args);
+        job.done = true; job.ok = false; job.percent = 100;
+        job.error = 'Прошлая установка была прервана, и довести её не вышло: '
+          + (String(жалоба).trim().split('\n').pop() || ('код ' + код))
+          + '. В терминале: sudo dpkg --configure -a';
+      });
+      return job;
+    }
+    return начни(action, name, args);
+  };
+
+  const начни = (action, name, args) => {
     /* apt умеет отдавать свой собственный ход работы числами — просим его об
        этом. Раньше проценты выводились по узнаваемым строкам, и на длинной
        закачке полоса просто стояла на месте. */
@@ -191,13 +230,26 @@ export function packages(allowPackages){
       const недонастроен = /dpkg was interrupted|--configure -a|not configured yet|returned an error code/i
         .test(job.log + ' ' + (job.error || ''));
       if (недонастроен && !job.починка){
-        job.починка = true;
         job.step = 'Привожу пакеты в порядок';
         job.log = (job.log + '\n— dpkg остался с ненастроенным пакетом, выполняю dpkg --configure -a\n').slice(-8000);
+        let вышло = true;
         try {
           await run('sudo', ['-n', 'dpkg', '--configure', '-a'],
             { timeout:600000, env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' } });
-        } catch(e){}
+        } catch(e){ вышло = false; }
+        /* Починили — делаем то, о чём просили, ещё раз. Раньше на этом
+           останавливались: пакеты приводились в порядок, а человек всё
+           равно видел «Не вышло» и не понимал, что достаточно нажать ещё
+           раз. Один повтор, не больше: если не помогло и он, дальше гадать
+           нечего — говорим как есть. */
+        if (вышло && !прервано()){
+          const прежний = { ...job };
+          запусти(action, name, args);
+          job.починка = true;
+          job.log = (прежний.log + '\n— пакеты в порядке, пробую снова\n').slice(-8000);
+          return;
+        }
+        job.починка = true;
       }
 
       /* «Невозможно найти пакет» здесь — не опечатка человека, а пустой
