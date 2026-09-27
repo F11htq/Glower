@@ -9,9 +9,20 @@
 
 :root{
   --полоса-высота:30px;
-  --полоса-фон:rgba(20, 22, 30, .82);
-  --полоса-текст:rgba(255, 255, 255, .92);
-  --полоса-тень:rgba(255, 255, 255, .10);
+  --полоса-текст:rgba(255, 255, 255, .95);
+  /* Стекло без размытия: размывать чужие поверхности умеет только
+     композитор, а labwc не умеет. Поэтому стекло делаем тем, чем оно
+     выглядит, — лёгкой дымкой, бликом по верхней кромке и тонкой гранью
+     снизу. Сквозь дымку видны обои, а текст держит тень. */
+  --стекло-фон:linear-gradient(180deg, rgba(255,255,255,.16) 0%,
+                                        rgba(255,255,255,.06) 55%,
+                                        rgba(255,255,255,.03) 100%),
+               rgba(16, 18, 26, .38);
+  --стекло-блик:rgba(255, 255, 255, .28);
+  --стекло-грань:rgba(255, 255, 255, .14);
+  --окошко-фон:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.02) 40%),
+               rgba(24, 26, 34, .9);
+  --плавно:cubic-bezier(.22, 1, .36, 1);
 }
 
 *{margin:0; padding:0; box-sizing:border-box}
@@ -30,11 +41,20 @@ html, body{
   position:fixed; top:0; left:0; right:0;
   height:var(--полоса-высота);
   display:flex; align-items:stretch;
-  background:var(--полоса-фон);
-  backdrop-filter:blur(22px) saturate(140%);
-  -webkit-backdrop-filter:blur(22px) saturate(140%);
-  box-shadow:inset 0 -1px 0 var(--полоса-тень);
+  padding:0 4px;
+  background:var(--стекло-фон);
+  box-shadow:inset 0 1px 0 var(--стекло-блик),
+             inset 0 -1px 0 var(--стекло-грань),
+             0 1px 10px rgba(0,0,0,.18);
+  text-shadow:0 1px 2px rgba(0,0,0,.45);
   z-index:10;
+}
+/* Косой отблеск, как на гранёном стекле: едва заметный, чтобы полоса
+   не казалась плоской плёнкой. */
+.полоса::before{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(105deg, transparent 0 30%,
+             rgba(255,255,255,.07) 42%, transparent 55%);
 }
 
 .середина{flex:1; display:flex; align-items:center; justify-content:center}
@@ -42,13 +62,17 @@ html, body{
 
 .кнопка{
   display:flex; align-items:center; gap:6px;
-  padding:0 10px; height:100%;
+  padding:0 10px; margin:3px 1px; border-radius:7px;
   border:0; background:none; color:inherit; font:inherit;
   cursor:default; white-space:nowrap;
-  transition:background .12s;
+  transition:background .2s var(--плавно), box-shadow .2s var(--плавно),
+             transform .2s var(--плавно);
 }
-.кнопка:hover{background:rgba(255,255,255,.12)}
-.кнопка.открыта{background:rgba(255,255,255,.18)}
+.кнопка:hover{background:rgba(255,255,255,.14);
+              box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.кнопка:active{transform:scale(.96)}
+.кнопка.открыта{background:rgba(255,255,255,.22);
+                box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
 
 .меню-программ{font-weight:600; padding-left:12px}
 .зн{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.9;
@@ -63,10 +87,12 @@ html, body{
 .лоток:not(:empty){margin-right:2px}
 .лоток .значок{
   display:flex; align-items:center; justify-content:center;
-  width:28px; height:100%; border:0; background:none; color:inherit;
-  font-size:11px; font-weight:600; cursor:default; transition:background .12s;
+  width:26px; margin:3px 1px; border-radius:7px; border:0; background:none;
+  color:inherit; font-size:11px; font-weight:600; cursor:default;
+  transition:background .2s var(--плавно), transform .2s var(--плавно);
 }
-.лоток .значок:hover{background:rgba(255,255,255,.12)}
+.лоток .значок:hover{background:rgba(255,255,255,.14)}
+.лоток .значок:active{transform:scale(.92)}
 .лоток .значок img{width:16px; height:16px; object-fit:contain; display:block}
 
 /* --- то, что панель открывает --- */
@@ -81,16 +107,19 @@ body.открыто .навес{display:block}
 
 .окошко{
   position:fixed; top:calc(var(--полоса-высота) + 6px);
-  background:rgba(28, 30, 38, .96);
-  backdrop-filter:blur(26px) saturate(140%);
-  -webkit-backdrop-filter:blur(26px) saturate(140%);
-  border-radius:10px;
-  box-shadow:0 18px 50px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08);
+  background:var(--окошко-фон);
+  border-radius:14px;
+  box-shadow:0 18px 50px rgba(0,0,0,.45),
+             inset 0 0 0 1px rgba(255,255,255,.10),
+             inset 0 1px 0 rgba(255,255,255,.16);
   padding:8px;
   z-index:20;
-  animation:появись .13s ease-out;
+  transform-origin:top center;
+  animation:появись .26s var(--плавно);
 }
-@keyframes появись{from{opacity:0; transform:translateY(-6px)}}
+/* translate и scale — отдельными свойствами: окошко часов уже сдвинуто
+   своим transform на середину, и анимация не должна его сбивать. */
+@keyframes появись{from{opacity:0; translate:0 -8px; scale:.97}}
 
 /* Меню программ здесь больше не рисуется: оно у стола, во весь экран.
    Осталось «пусто» — его показывают и другие меню панели. */
@@ -101,7 +130,8 @@ body.открыто .навес{display:block}
 .строка{
   display:flex; align-items:center; gap:9px; width:100%;
   padding:8px 10px; border:0; background:none; color:inherit; font:inherit;
-  border-radius:7px; cursor:default; text-align:left; transition:background .12s;
+  border-radius:8px; cursor:default; text-align:left;
+  transition:background .18s var(--плавно);
 }
 .строка:hover{background:rgba(255,255,255,.12)}
 .строка.опасно:hover{background:rgba(220, 70, 70, .35)}
@@ -134,12 +164,14 @@ body.открыто .навес{display:block}
   position:fixed; inset:0; z-index:40;
   background:rgba(0,0,0,.45);
   display:grid; place-content:center;
-  animation:появись .12s ease-out;
+  animation:проявись .2s ease-out;
 }
+@keyframes проявись{from{opacity:0}}
 .вопрос{
   width:min(380px, calc(100vw - 32px));
-  background:rgba(30, 32, 40, .98);
-  border-radius:12px; padding:16px 18px;
+  background:var(--окошко-фон);
+  border-radius:14px; padding:16px 18px;
+  animation:появись .28s var(--плавно);
   box-shadow:0 22px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.08);
 }
 .вопрос b{display:block; font-size:15px; margin-bottom:6px}
@@ -200,7 +232,9 @@ body.открыто .навес{display:block}
   background:rgba(255,255,255,.07);
   display:flex; flex-direction:column; gap:2px; min-height:52px;
 }
+.плитка{ transition:background .2s var(--плавно), transform .2s var(--плавно); }
 .плитка:hover{ background:rgba(255,255,255,.12); }
+.плитка:not(.нет):active{ transform:scale(.97); }
 .плитка.горит{ background:rgba(120,140,255,.55); }
 .плитка.горит:hover{ background:rgba(120,140,255,.65); }
 .плитка.нет{ opacity:.45; cursor:default; }
@@ -246,7 +280,12 @@ body{cursor:default}
 #питание{position:relative}
 #питание.есть-обновления::after{
   content:''; position:absolute; top:5px; right:5px; width:7px; height:7px;
-  border-radius:50%; background:#f59e0b; box-shadow:0 0 0 2px rgba(20,22,30,.9);
+  border-radius:50%; background:#f59e0b; box-shadow:0 0 0 2px rgba(20,22,30,.6);
 }
 .строка.обновить{font-weight:600}
 .черта{height:1px; margin:4px 6px; background:rgba(255,255,255,.12)}
+
+/* Кто просил меньше движения — получает меньше движения. */
+@media (prefers-reduced-motion:reduce){
+  *, *::before, *::after{animation-duration:.01ms !important; transition-duration:.01ms !important}
+}
