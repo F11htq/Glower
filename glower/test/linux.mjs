@@ -1235,8 +1235,14 @@ try {
         типы.length >= 4 && JSON.stringify(типы) === JSON.stringify(уЧеловека)
           && JSON.stringify(типы) === JSON.stringify(вСписке),
         JSON.stringify({ типы, уЧеловека, вСписке }));
-      check('Wine ставится в образ вместе с 32-битной половиной',
-        /add-architecture i386/.test(образ2) && /wine32:i386/.test(образ2));
+      /* Сам Wine в образ не кладём: с ним образ перерос 2 ГБ, и GitHub
+         отказался его выкладывать (v11.8). Его ставит агент, а образ лишь
+         заранее разрешает архитектуру i386 для его 32-битной половины. */
+      const пакеты = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+      check('Wine не раздувает образ, а систему к нему образ готовит',
+        /add-architecture i386/.test(образ2) && !/apt-get install[^\n]*wine/.test(образ2));
+      check('агент сам доставляет Wine после входа, но не с носителя',
+        /доставьWine\(true\)/.test(пакеты) && /живая\(\)/.test(пакеты.slice(пакеты.indexOf('GLOWER_NO_AUTO_WINE'))));
     }
 
     /* --- Bluetooth: кнопка там, где она поможет, и только там ---

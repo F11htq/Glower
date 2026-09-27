@@ -86,7 +86,7 @@ PY
 # Ключи — те же, что у настоящего сеанса. Урезанный набор показывает не ту
 # систему: Магазин честно пишет «установка выключена», лоток пуст, и
 # проверять на таком стенде ровно эти вещи негде.
-nohup node "$TST/agent/server.mjs" --port 8124 --root "$RT/home" \
+GLOWER_NO_AUTO_WINE=1 nohup node "$TST/agent/server.mjs" --port 8124 --root "$RT/home" \
       --system --allow-open --allow-launch --allow-power \
       --allow-install --allow-net --allow-packages > "$RT/agent.log" 2>&1 &
 for i in $(seq 1 40); do curl -sf http://localhost:8124/ >/dev/null && break; sleep 0.3; done
