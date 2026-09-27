@@ -1305,6 +1305,42 @@ try {
     check('набор «Персонализации» в «Параметрах» один', сколько === 1, 'нашлось: ' + сколько);
   }
 
+  /* --- обновление системы как в Windows: обновить, потом перезагрузить ---
+     Система подменяется: здесь не место ни настоящему apt, ни настоящей
+     перезагрузке. Проверяем сам ход — экран, шаги и то, что питание зовут
+     ровно один раз и только после удачного обновления. */
+  for (const [случай, удачно] of [['удачно', true], ['с отказом', false]]){
+    const итог = await page.evaluate(async удачно => {
+      const было = Platform.rpc.bind(Platform);
+      let шаг = 0; const питание = [];
+      Platform.rpc = (m, p) => {
+        if (m === 'pkg.upgrade.run') return Promise.resolve({ started:true });
+        if (m === 'pkg.job'){ шаг++; return Promise.resolve(шаг < 3
+          ? { running:true, step:'Устанавливаю', percent:шаг * 30 }
+          : (удачно ? { running:false, ok:true } : { running:false, ok:false, error:'нет места на диске' })); }
+        if (m === 'sys.power'){ питание.push(p.action); return Promise.resolve({ ok:true }); }
+        return было(m, p);
+      };
+      const ждём = OS.обновиИ('reboot');
+      await new Promise(r => setTimeout(r, 400));
+      const экранБыл = !!document.querySelector('.обновление-системы');
+      await Promise.race([ждём, new Promise(r => setTimeout(r, 9000))]);
+      const экран = document.querySelector('.обновление-системы');
+      const кнопки = экран ? [...экран.querySelectorAll('button')].map(b => b.textContent) : [];
+      Platform.rpc = было;
+      if (экран) экран.remove();
+      return { экранБыл, питание, кнопки };
+    }, удачно);
+    check('обновление системы ' + случай + ': экран «не выключайте компьютер»', итог.экранБыл === true);
+    if (удачно)
+      check('после обновления машина перезагружается — один раз',
+        итог.питание.length === 1 && итог.питание[0] === 'reboot', JSON.stringify(итог));
+    else
+      check('при отказе не перезагружает молча, а даёт выбор',
+        итог.питание.length === 0 && итог.кнопки.some(т => /без обновления/.test(т))
+          && итог.кнопки.some(т => /Вернуться/.test(т)), JSON.stringify(итог));
+  }
+
   /* --- обновление подтягивает новое ядро ---
      Новое ядро Ubuntu приходит новым пакетом, а обычное apt-get upgrade
      новых пакетов не ставит: ядро «придерживалось» и навсегда оставалось

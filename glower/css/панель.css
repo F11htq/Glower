@@ -240,3 +240,13 @@ body.притемнено::after{
 /* Тот же уговор, что и на столе: над полосой курсор обычный, а не
    палочка для набора текста. */
 body{cursor:default}
+
+/* Есть обновления системы: точка у кнопки питания, как у Windows, и два
+   пункта сверху в её меню. */
+#питание{position:relative}
+#питание.есть-обновления::after{
+  content:''; position:absolute; top:5px; right:5px; width:7px; height:7px;
+  border-radius:50%; background:#f59e0b; box-shadow:0 0 0 2px rgba(20,22,30,.9);
+}
+.строка.обновить{font-weight:600}
+.черта{height:1px; margin:4px 6px; background:rgba(255,255,255,.12)}

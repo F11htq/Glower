@@ -149,7 +149,6 @@ APPS.store = {
       job(){ return Platform.rpc('pkg.job'); },
       cancel(){ return Platform.rpc('pkg.cancel'); },
       обновления(){ return Platform.rpc('pkg.upgrade.check'); },
-      обновить(){ return Platform.rpc('pkg.upgrade.run', {}); },
       обновитьFlathub(){ return Platform.rpc('pkg.upgrade.run', { source:'flatpak' }); }
     };
     const размер = b => !b ? '' : b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ'
@@ -1060,22 +1059,23 @@ APPS.store = {
         место.appendChild(el('div', 'set-note', 'Система не ответила про обновления: ' + esc(беда)));
         return;
       }
-      const наш = (д.list || []).find(x => x.name === 'glower');
-      if (наш){
+      /* Здесь — только приложения, как в Магазине Windows.
+
+         Система — сама GlowerOS, ядро, библиотеки Ubuntu — обновляется
+         иначе: «Обновить и перезагрузить» в меню питания или в
+         «Параметрах». Ставить её отсюда, посреди работы, было бы ровно
+         тем, от чего мы уходим. Поэтому о ней — одна строка со ссылкой. */
+      const системных = (д.list || []).length;
+      if (системных){
         const к = el('div', 'card st-upd');
         к.innerHTML = `<div class="st-upd-l"><div class="st-hero-z">✨</div>
-          <div><b>GlowerOS ${esc(наш['станет'])}</b>
-          <div class="tiny muted">Сама система: оболочка, панель и внутренности · сейчас ${esc(наш['было'])}</div></div></div>`;
-        const б = el('button', 'btn pri', '⬇ Обновить');
-        б.disabled = !!работа;
-        б.onclick = async () => {
-          try { await Pkg.обновить(); следиЗаРаботой(); draw(); }
-          catch(e){ Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'); }
-        };
+          <div><b>Обновления системы: ${системных}</b>
+          <div class="tiny muted">Ставятся при перезагрузке — меню питания → «Обновить и перезагрузить»</div></div></div>`;
+        const б = el('button', 'btn', 'Открыть');
+        б.onclick = () => WM.open('settings', { section:'update' });
         к.appendChild(б);
         место.appendChild(к);
       }
-      const прочие = (д.list || []).filter(x => x.name !== 'glower');
       const изFlathub = д['flathub'] || [];
 
       /* Программы из Flathub — отдельной группой и своей кнопкой.
@@ -1098,32 +1098,9 @@ APPS.store = {
         });
       }
 
-      if ((!д.list || !д.list.length) && !изFlathub.length){
-        место.appendChild(el('div', 'empty', 'Всё обновлено'));
-      } else if (прочие.length){
-        /* Кнопка — в заголовке, а не под списком из сорока строк. Раньше
-           до неё надо было прокрутить весь список, чтобы понять, что она
-           вообще есть. */
-        const все = el('button', 'btn pri', '⬆ Обновить всё');
-        все.disabled = !!работа;
-        все.onclick = async () => {
-          if (!await Dlg.confirm('Обновить систему?',
-              'Будет обновлено программ: ' + (д.list || []).length + '. Это займёт время и потребует сети.',
-              { okText:'Обновить', icon:'⬆️' })) return;
-          try { await Pkg.обновить(); следиЗаРаботой(); draw(); }
-          catch(e){ Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'); }
-        };
-        место.appendChild(заголовок('Программы Ubuntu · ' + прочие.length, все));
-        прочие.slice(0, 40).forEach(x =>
-          место.appendChild(row('📦', x.name, x['было'] + ' → ' + x['станет'], el('span'))));
-        if (прочие.length > 40)
-          место.appendChild(el('div', 'set-note',
-            'И ещё ' + (прочие.length - 40) + ' — система покажет весь список при установке.'));
+      if (!изFlathub.length){
+        место.appendChild(el('div', 'empty', 'Все приложения обновлены'));
       }
-      const держим = д['удержано'] || [];
-      if (держим.length)
-        место.appendChild(row('⏸', 'Отложено системой: ' + держим.join(', '),
-          'Этим обновлениям нужны пакеты, которых на машине ещё нет', el('span')));
     }
 
     function экранСвоё(){

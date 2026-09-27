@@ -953,3 +953,28 @@ body.reduced .ms-hero-art,body.эконом .ms-hero-art{animation:none}
    кого свой (кнопки, поля ввода) — тот и останется со своим. */
 #desktop,#wallpaper,#desktop-icons,#desk-widgets,.dock-wrap,.обзор,.topbar,
 .start,#cc,#widgets,.taskview,.toasts,.ctx,#windows > .win > .titlebar{cursor:default}
+
+/* ---------- обновление системы, как в Windows ----------
+   Весь экран, тёмный, посередине — круг, заголовок, ход работы и просьба
+   не выключать. Панель наверху на это время прячется: стол говорит ей,
+   что экран занят. */
+.обновление-системы{position:fixed;inset:0;z-index:12000;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;text-align:center;color:#fff;
+  background:#0b1330;opacity:0;transition:opacity .4s ease;cursor:default}
+.обновление-системы.on{opacity:1}
+.обновление-системы.беда{background:#1f1020}
+.обн-круг svg{width:54px;height:54px;animation:spin 1.1s linear infinite}
+.обн-круг circle{fill:none;stroke:rgba(255,255,255,.85);stroke-width:3;stroke-linecap:round;stroke-dasharray:30 100}
+.обновление-системы.беда .обн-круг{display:none}
+.обн-заголовок{font-size:24px;font-weight:300;letter-spacing:.3px}
+.обн-шаг{font-size:14px;opacity:.75;max-width:560px;line-height:1.45}
+.обн-полоса{width:min(360px,70vw);height:4px;border-radius:4px;background:rgba(255,255,255,.14);overflow:hidden}
+.обн-полоса i{display:block;height:100%;width:3%;background:#fff;border-radius:4px;transition:width .6s ease}
+.обновление-системы.беда .обн-полоса{display:none}
+.обн-низ{position:absolute;bottom:48px;font-size:13px;opacity:.55}
+.обн-кнопки{display:flex;gap:10px;margin-top:10px}
+
+/* Подзаголовки «Система» и «Приложения» в обновлениях. */
+.set-sub{font-size:12px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+  opacity:.6;margin:14px 4px 6px}
+.set-sub:first-child{margin-top:4px}

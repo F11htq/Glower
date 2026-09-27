@@ -2782,11 +2782,6 @@ APPS.settings = {
            человек нажал «Обновить», а не после: список к тому времени уже
            другой. */
         let нашеОбновление = false;
-        /* Вторая очередь — Flathub. apt и flatpak обновляют разное и каждый
-           своим путём; вести их разом система не умеет — работа одна за
-           раз. Поэтому «Обновить всё» идёт в две ступени: сперва apt,
-           потом, если есть что, Flathub. */
-        let втораяОчередь = false;
         const следи = () => {
           const шаг = el('div', 'set-note', 'Идёт работа…');
           место.innerHTML = '';
@@ -2796,12 +2791,6 @@ APPS.settings = {
               if (!j) return;
               if (j.running){ шаг.textContent = (j.step || 'Работаю') + ' · ' + (j.percent || 0) + '%'; return; }
               clearInterval(часы);
-              if (j.ok && нужнаВтораяОчередь()){
-                втораяОчередь = false;
-                Platform.rpc('pkg.upgrade.run', { source:'flatpak' }).then(следи)
-                  .catch(e => Dlg.alert('Не вышло обновить программы Flathub', String(e.message || e), '⚠️'));
-                return;
-              }
               if (j.ok){
                 Shell.toast('Обновления', 'Готово', '✅', 8000);
                 /* Если обновилась сама система — сказать об этом прямо.
@@ -2829,8 +2818,6 @@ APPS.settings = {
           }, 1500);
         };
 
-        const нужнаВтораяОчередь = () => втораяОчередь;
-
         const проверь = () => {
           место.innerHTML = '';
           место.appendChild(el('div', 'set-note', 'Спрашиваю систему об обновлениях…'));
@@ -2852,55 +2839,63 @@ APPS.settings = {
                 + 'Помогает «Обновить списки», а если не помогло — полная установка новой версии.',
                 el('span')));
 
-            /* Программы из Flathub — Telegram, Steam и прочее, что человек
-               поставил оттуда. Раньше их здесь не было вовсе, и казалось,
-               что система обновляет только то, что написали мы. */
-            const изFlathub = d['flathub'] || [];
+            /* Система и приложения — порознь, как в Windows.
 
-            if (!всего && !изFlathub.length){
+               Система — всё, что приходит через apt: сама GlowerOS, ядро,
+               библиотеки, программы Ubuntu. Ставится она не посреди
+               работы, а «Обновить и перезагрузить» или «Обновить и
+               завершить работу»: экран закрывается, обновление ставится,
+               машина уходит. Те же два пункта — в меню питания.
+
+               Приложения — то, что человек сам поставил из Flathub:
+               Telegram, Steam. Их можно обновлять сразу, без перезагрузки,
+               как в Магазине Windows. */
+            const изFlathub = d['flathub'] || [];
+            const наш = (d.list || []).find(x => x.name === 'glower');
+
+            место.appendChild(el('div', 'set-sub', 'Система'));
+            if (!всего){
               место.appendChild(row('✅', 'Система обновлена',
                 держим.length ? 'Всё остальное обновлено'
                               : 'Ничего нового в репозиториях для неё нет', el('span')));
-            } else if (!всего){
-              /* Для apt нового нет, а для Flathub есть — кнопка только своя. */
-              const flat = el('button', 'btn pri', 'Обновить');
-              flat.onclick = () => Platform.rpc('pkg.upgrade.run', { source:'flatpak' }).then(следи)
-                .catch(e => Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'));
-              место.appendChild(row('🫙', 'Программы Flathub: ' + изFlathub.length,
-                изFlathub.map(x => x['имя'] || x.name).slice(0, 6).join(', '), flat));
             } else {
-              const ставить = el('button', 'btn pri', 'Обновить всё');
-              ставить.onclick = async () => {
-                if (!await Dlg.confirm('Обновить систему?',
-                  'Будет обновлено программ: ' + (всего + изFlathub.length)
-                  + '. Это займёт время и потребует сети.',
-                  { okText:'Обновить', icon:'⬆️' })) return;
-                нашеОбновление = !!наш;
-                втораяОчередь = изFlathub.length > 0;
-                Platform.rpc('pkg.upgrade.run', {}).then(следи)
-                  .catch(e => Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'));
-              };
-              /* Сама система — отдельной строкой и первой.
-              
-                 Наши файлы приезжают обычным пакетом «glower», и в общем
-                 списке он выглядел бы как любая другая программа Ubuntu —
-                 среди сотни строк его было бы не найти. А человеку важно
-                 именно это: новая версия самой системы. */
-              const наш = (d.list || []).find(x => x.name === 'glower');
-              место.appendChild(row('⬆️', 'Доступно обновлений: ' + всего,
-                наш ? 'Среди них — сама система' : 'Программы Ubuntu', ставить));
+              const кнопки = el('div', 'row');
+              const перезагрузить = el('button', 'btn pri', 'Обновить и перезагрузить');
+              const выключить = el('button', 'btn', 'Обновить и выключить');
+              перезагрузить.onclick = () => Shell.power('update-reboot');
+              выключить.onclick = () => Shell.power('update-poweroff');
+              кнопки.append(перезагрузить, выключить);
+              место.appendChild(row('⬆️', 'Обновлений системы: ' + всего,
+                наш ? 'Среди них — новая версия GlowerOS' : 'Ubuntu: ядро, библиотеки и программы',
+                кнопки));
+              /* Сама система — отдельной строкой и первой: среди сотни
+                 пакетов её было бы не найти, а человеку важно именно это. */
               if (наш)
                 место.appendChild(row('✨', 'GlowerOS ' + наш['было'] + ' → ' + наш['станет'],
                   'Оболочка, панель и внутренности системы', el('span')));
-
-              (d.list || []).filter(x => x.name !== 'glower').slice(0, 40).forEach(x =>
+              const ядро = (d.list || []).filter(x => /^linux-(image|generic|modules)/.test(x.name));
+              if (ядро.length)
+                место.appendChild(row('🧩', 'Новое ядро Linux',
+                  ядро.map(x => x.name).slice(0, 3).join(', '), el('span')));
+              const прочие = (d.list || []).filter(x => x.name !== 'glower'
+                && !/^linux-(image|generic|modules|headers)/.test(x.name));
+              прочие.slice(0, 12).forEach(x =>
                 место.appendChild(row('📦', x.name, x['было'] + ' → ' + x['станет'], el('span'))));
-              if ((d.list || []).length > 40)
+              if (прочие.length > 12)
                 место.appendChild(el('div', 'set-note',
-                  'И ещё ' + ((d.list || []).length - 40) + ' — весь список система покажет при установке.'));
+                  'И ещё ' + (прочие.length - 12) + ' пакетов Ubuntu.'));
+            }
+
+            if (изFlathub.length){
+              место.appendChild(el('div', 'set-sub', 'Приложения'));
+              const flat = el('button', 'btn pri', 'Обновить сейчас');
+              flat.onclick = () => Platform.rpc('pkg.upgrade.run', { source:'flatpak' }).then(следи)
+                .catch(e => Dlg.alert('Не вышло начать', String(e.message || e), '⚠️'));
+              место.appendChild(row('🫙', 'Приложений с обновлениями: ' + изFlathub.length,
+                'Без перезагрузки — как в Магазине', flat));
               изFlathub.forEach(x =>
                 место.appendChild(row('🫙', x['имя'] || x.name,
-                  'Flathub' + (x['станет'] ? ' · будет ' + x['станет'] : ''), el('span'))));
+                  x['станет'] ? 'будет ' + x['станет'] : x.name, el('span'))));
             }
           }).catch(e => {
             место.innerHTML = '';
