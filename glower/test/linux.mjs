@@ -1215,6 +1215,21 @@ try {
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
+    /* Заставка загрузки: каждая картинка, которую зовёт сценарий, едет в
+       образ (logo.png кладёт сборка из assets), а пакет просит пересобрать
+       initramfs — иначе новую заставку машина увидит только с новым ядром. */
+    {
+      const { readdir } = await import('node:fs/promises');
+      const сцен = await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8');
+      const зовёт = [...сцен.matchAll(/Image\("([^"]+)"\)/g)].map(m => m[1]);
+      const есть = await readdir(join(root, 'linux', 'plymouth'));
+      const нет = зовёт.filter(ф => ф !== 'logo.png' && !есть.includes(ф));
+      check('заставка: все картинки сценария есть в теме', зовёт.length >= 4 && !нет.length,
+        JSON.stringify({ зовёт, нет }));
+      check('заставка: сборка кладёт все картинки темы, а пакет пересобирает initramfs',
+        /linux\/plymouth\/\*\.png/.test(образ2) && /activate-noawait update-initramfs/.test(пакет));
+    }
+
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет
        обновления — иначе машины, поставленные раньше, .exe открывать не
        научатся. И типы, на которые отзывается ярлык, те же, что сеанс

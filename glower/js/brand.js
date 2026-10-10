@@ -22,7 +22,7 @@ window.Brand = Brand;
 document.title = Brand.name;
 addEventListener('DOMContentLoaded', () => {
   const b = document.querySelector('.boot-text');
-  if (b) b.textContent = 'Запуск ' + Brand.name;
+  if (b) b.textContent = Brand.name;
   const sl = document.getElementById('tb-search-label');
   if (sl) sl.textContent = 'Поиск в ' + Brand.name;
 }, { once:true });
