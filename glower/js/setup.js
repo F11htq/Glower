@@ -358,21 +358,49 @@ const Welcome = {
    Языки — только те, чьё письмо есть в шрифтах системы (Noto): слово из
    квадратиков хуже, чем его отсутствие. Китайский, японский и корейский
    потребовали бы шрифта на десятки мегабайт. */
-  ЯЗЫКИ:[
-    ['Bonjour', 'fr'], ['Hola', 'es'], ['Hallo', 'de'], ['Ciao', 'it'], ['Olá', 'pt'],
-    ['Merhaba', 'tr'], ['Γειά σου', 'el'], ['नमस्ते', 'hi'], ['مرحبا', 'ar']
-  ],
+  ПРИВЕТ:{
+    ru:'Привет', en:'Hello', uk:'Привіт', de:'Hallo', fr:'Bonjour', es:'Hola', it:'Ciao',
+    pt:'Olá', tr:'Merhaba', el:'Γειά σου', hi:'नमस्ते', ar:'مرحبا'
+  },
+  /* Мир — в этом порядке, после языков самого человека */
+  МИР:['en', 'ru', 'fr', 'es', 'de', 'it', 'pt', 'tr', 'el', 'hi', 'ar'],
+
+  /* Подписи — на языке системы. Сейчас в настройке два языка, русский и
+     английский; остальные лежат заранее, чтобы приветствие заговорило на
+     новом языке системы в тот же день, когда он появится. Незнакомый язык
+     получает английские подписи. */
+  ТЕКСТЫ:{
+    ru:{ welcome:'Добро пожаловать в GlowerOS', skip:'Щелчок — пропустить', безИмени:'Добро пожаловать',
+         система:'Система', готово:'Настройка завершена — добро пожаловать' },
+    en:{ welcome:'Welcome to GlowerOS', skip:'Click to skip', безИмени:'Welcome',
+         система:'System', готово:'Setup complete — welcome' },
+    uk:{ welcome:'Ласкаво просимо до GlowerOS', skip:'Клацніть, щоб пропустити', безИмени:'Ласкаво просимо',
+         система:'Система', готово:'Налаштування завершено — ласкаво просимо' },
+    de:{ welcome:'Willkommen bei GlowerOS', skip:'Klicken zum Überspringen', безИмени:'Willkommen',
+         система:'System', готово:'Einrichtung abgeschlossen — willkommen' },
+    fr:{ welcome:'Bienvenue dans GlowerOS', skip:'Cliquez pour passer', безИмени:'Bienvenue',
+         система:'Système', готово:'Configuration terminée — bienvenue' },
+    es:{ welcome:'Bienvenido a GlowerOS', skip:'Haz clic para omitir', безИмени:'Bienvenido',
+         система:'Sistema', готово:'Configuración completada — bienvenido' }
+  },
+
+  /* Порядок слов: язык системы — первым, за ним языки раскладок, которые
+     человек выбрал в настройке (включил немецкую — второе слово «Hallo»),
+     потом весь остальной мир. Без повторов. */
+  порядок(язык, раскладки){
+    const коды = [язык, ...(раскладки || []), ...this.МИР];
+    return [...new Set(коды)].filter(к => this.ПРИВЕТ[к]).map(к => [this.ПРИВЕТ[к], к]);
+  },
 
   play(name){
     const who = name || (Profiles.current() || {}).name || S.userName || '';
-    const en = (window.I18N ? I18N.lang() : 'ru') === 'en';
-    const T = en ? { hi:'Hello', welcome:'Welcome to GlowerOS', skip:'Click to skip' }
-                 : { hi:'Привет', welcome:'Добро пожаловать в GlowerOS', skip:'Щелчок — пропустить' };
+    const язык = window.I18N ? I18N.lang() : 'ru';
+    const T = this.ТЕКСТЫ[язык] || this.ТЕКСТЫ.en;
     const тихо = document.body.classList.contains('эконом') || document.body.classList.contains('reduced');
 
-    /* Слова по порядку: язык системы первым, второй язык интерфейса
-       следом, дальше — мир. Длительности тают: каскад разгоняется. */
-    const слова = [[T.hi, en ? 'en' : 'ru'], [en ? 'Привет' : 'Hello', en ? 'ru' : 'en'], ...this.ЯЗЫКИ];
+    /* Длительности тают: каскад разгоняется */
+    const раскладки = (window.Layouts && Layouts.enabled) ? Layouts.enabled() : [];
+    const слова = this.порядок(язык, раскладки);
     const длит = тихо ? слова.slice(0, 2).map(() => 900)
                       : слова.map((_, i) => i === 0 ? 1500 : Math.max(380, 820 - i * 55));
     const показать = тихо ? слова.slice(0, 2) : слова;
@@ -383,7 +411,7 @@ const Welcome = {
       <canvas class="wl-пыль"></canvas>
       <div class="wl-слово" aria-hidden="true"></div>
       <div class="wl-итог">
-        <div class="wl-who">${esc(who || (en ? 'Welcome' : 'Добро пожаловать'))}</div>
+        <div class="wl-who">${esc(who || T.безИмени)}</div>
         <div class="wl-hi">${esc(T.welcome)}</div>
       </div>
       <div class="wl-skip">${esc(T.skip)}</div>
@@ -455,8 +483,7 @@ const Welcome = {
         setTimeout(() => { if (пыль) пыль.стоп(); ov.remove(); }, 600);
       }, 800);
       setTimeout(() => document.body.classList.remove('стол-въезд'), 2000);
-      Shell.toast(en ? 'System' : 'Система',
-        en ? 'Setup complete — welcome' : 'Настройка завершена — добро пожаловать', '✨', 4000);
+      Shell.toast(T.система, T.готово, '✨', 4000);
       removeEventListener('keydown', пропуск, true);
     };
 
