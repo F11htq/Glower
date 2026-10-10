@@ -111,6 +111,7 @@ if (SYSTEM){
     ...m.power(ALLOW_POWER), ...m.sound, ...m.backlight, ...m.net, ...m.procs,
     ...m.apps(ALLOW_LAUNCH), ...m.hardware, ...m.wifi(ALLOW_NET), ...m.shots(ALLOW_LAUNCH),
     ...m.wallpapers,
+    ...m.keyboard,
     ...m.tray(ALLOW_LAUNCH),
     ...(await import('./browser.mjs')).browser(PORT, ALLOW_LAUNCH),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),

@@ -46,7 +46,20 @@ fi
 XDG_CONFIG_DIRS="/usr/share/glower/xdg:${XDG_CONFIG_DIRS:-/etc/xdg}"
 export XDG_CONFIG_DIRS
 
-XKB_DEFAULT_LAYOUT="${GLOWER_KB_LAYOUT:-us,ru}"
+# Раскладки человек выбирает сам — в начальной настройке и в «Параметрах»;
+# агент записывает выбор в ~/.config/glower/keyboard строкой вида «us,ru,de».
+# Читаем его осторожно: в строке только имена раскладок XKB через запятую,
+# не больше четырёх (больше XKB держать разом не умеет). Испорченный файл
+# не должен оставить человека без клавиатуры — тогда берём привычное.
+KB_USER=""
+if [ -r "$HOME/.config/glower/keyboard" ]; then
+  KB_USER="$(head -n1 "$HOME/.config/glower/keyboard" | tr -d ' \r')"
+  case "$KB_USER" in
+    *[!a-z0-9,]*|"") KB_USER="" ;;
+  esac
+  [ "$(printf '%s' "$KB_USER" | tr -cd ',' | wc -c)" -le 3 ] || KB_USER=""
+fi
+XKB_DEFAULT_LAYOUT="${GLOWER_KB_LAYOUT:-${KB_USER:-us,ru}}"
 XKB_DEFAULT_OPTIONS="${GLOWER_KB_OPTIONS:-grp:alt_shift_toggle}"
 export XKB_DEFAULT_LAYOUT XKB_DEFAULT_OPTIONS
 
@@ -356,10 +369,32 @@ STARTUP
     export WLR_DRM_NO_ATOMIC
   fi
 
+  # Своя папка настроек labwc на время сеанса: те же файлы, что в системе
+  # (ссылками), и рядом файл environment с раскладками. labwc перечитывает
+  # его по команде перенастройки — так агент меняет раскладки, не трогая
+  # системную папку, в которую человеку писать нельзя. Сам environment —
+  # всегда свой файл, не ссылка: иначе запись ушла бы в системный. Не
+  # вышло завести папку — работаем прямо от системной, как раньше.
+  LABWC_SYS="${GLOWER_LABWC:-/usr/share/glower/labwc}"
+  LABWC_DIR="${XDG_RUNTIME_DIR:-/tmp}/glower-labwc"
+  if mkdir -p "$LABWC_DIR" 2>/dev/null && [ ! -L "$LABWC_DIR/environment" ]; then
+    for f in "$LABWC_SYS"/*; do
+      [ -e "$f" ] || continue
+      [ "$(basename "$f")" = environment ] && continue
+      ln -sfn "$f" "$LABWC_DIR/$(basename "$f")"
+    done
+    {
+      [ -r "$LABWC_SYS/environment" ] && cat "$LABWC_SYS/environment"
+      printf 'XKB_DEFAULT_LAYOUT=%s\nXKB_DEFAULT_OPTIONS=%s\n' "$XKB_DEFAULT_LAYOUT" "$XKB_DEFAULT_OPTIONS"
+    } > "$LABWC_DIR/environment"
+  else
+    LABWC_DIR="$LABWC_SYS"
+  fi
+
   STATUS="$HOME/.local/share/glower/labwc.code"
   rm -f "$STATUS"
   {
-    labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc}" -s "$START_SH" 2>&1
+    labwc -C "$LABWC_DIR" -s "$START_SH" 2>&1
     echo $? > "$STATUS"
   } | fold_repeats >> "$LOG"
   code="$(cat "$STATUS" 2>/dev/null || echo 0)"

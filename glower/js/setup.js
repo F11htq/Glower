@@ -22,6 +22,7 @@ const Setup = {
       'Его можно будет сменить в Параметрах в любой момент.':'You can change it in Settings at any time.',
       'Раскладки клавиатуры':'Keyboard layouts',
       'Переключение — Alt + Shift или щелчок по индикатору в панели.':'Switch with Alt + Shift or by clicking the indicator in the taskbar.',
+      'Выберите до четырёх. Переключение — Alt + Shift или щелчок по индикатору в панели.':'Pick up to four. Switch with Alt + Shift or by clicking the indicator in the taskbar.',
       'Ваш город':'Your city',
       'Нужен только для погоды. Данные берутся из открытого сервиса Open-Meteo.':'Used only for weather, from the open Open-Meteo service.',
       'Как к вам обращаться':'What should we call you',
@@ -159,29 +160,37 @@ const Setup = {
         area.appendChild(hi);
       } },
 
+    /* Язык системы — списком: все языки, на которые переведён интерфейс.
+       Сейчас их два; новый появится здесь сам, как только его добавят в
+       словари I18N. */
     { title:'Язык системы', sub:'Его можно будет сменить в Параметрах в любой момент.',
       fill(area){
-        this.cards(area, Object.entries(I18N.LANGS).map(([v, l]) => ({ v, n:l.name, big:l.code })),
-          () => this.data.lang, v => this.data.lang = v);
+        const список = el('div', 'kb-список kb-языки');
+        Object.entries(I18N.LANGS).forEach(([v, l]) => {
+          const вкл = this.data.lang === v;
+          const с = el('button', 'kb-строка' + (вкл ? ' on' : ''),
+            `<span class="kb-флаг">${esc(l.code)}</span><b>${esc(l.name)}</b><small>${esc(l.locale)}</small><span class="kb-галка">${вкл ? '✓' : ''}</span>`);
+          с.onclick = () => { this.data.lang = v; Snd.click(); this.paint(); };
+          список.appendChild(с);
+        });
+        area.appendChild(список);
       } },
 
-    { title:'Раскладки клавиатуры', sub:'Переключение — Alt + Shift или щелчок по индикатору в панели.',
+    /* Раскладки — все, что есть в системе (база XKB), с поиском. Список сам
+       перерисовывает себя, не трогая шаг: поиск не теряет фокус. */
+    { title:'Раскладки клавиатуры', sub:'Выберите до четырёх. Переключение — Alt + Shift или щелчок по индикатору в панели.',
       fill(area){
-        const g = el('div', 'setup-cards');
-        Object.entries(Layouts.ALL).forEach(([id, d]) => {
-          const on = this.data.layouts.includes(id);
-          const c = el('button', 'setup-card' + (on ? ' on' : ''));
-          c.innerHTML = `<span class="big">${d.flag}</span><b>${esc(this.t(d.name))}</b>
-            <small>${this.t(on ? 'включена' : 'выключена')}</small>`;
-          c.onclick = () => {
-            const l = this.data.layouts;
-            if (l.includes(id)){ if (l.length > 1) this.data.layouts = l.filter(x => x !== id); }
-            else l.push(id);
-            Snd.click(); this.paint();
-          };
-          g.appendChild(c);
+        Layouts.список(area, {
+          получить:() => this.data.layouts,
+          задать:l => { this.data.layouts = l; },
+          англ:this.data.lang === 'en'
         });
-        area.appendChild(g);
+        /* Полный список раскладок знает система — подгружаем его и
+           дорисовываем, когда придёт */
+        if (window.Platform && Platform.mode === 'native' && !this._раскладкиСистемы){
+          this._раскладкиСистемы = true;
+          Platform.rpc('sys.kb.list').then(д => { Layouts.дополни(д['список']); this.paint(); }).catch(() => {});
+        }
       } },
 
     { title:'Ваш город', sub:'Нужен только для погоды. Данные берутся из открытого сервиса Open-Meteo.',
@@ -304,8 +313,10 @@ const Setup = {
     Store.set('city', d.city || 'Москва');
     Store.set('userName', d.name.trim());
 
-    KV.set('kb.enabled', d.layouts);
+    /* Раскладки — и себе, и самой системе: оконный сервер получит их сразу
+       или со следующего входа */
     KV.set('kb.current', d.layouts.includes('en') ? 'en' : d.layouts[0]);
+    Layouts.применить(d.layouts);
 
     const me = Profiles.current();
     if (me){

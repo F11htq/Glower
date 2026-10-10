@@ -2652,15 +2652,20 @@ APPS.settings = {
       const kb = card('Клавиатура');
       const names = () => Layouts.enabled().map(id => Layouts.ALL[id].name).join(', ');
       kb.appendChild(expander('⌨️', 'Раскладки', names(), body => {
-        Object.entries(Layouts.ALL).forEach(([id, d]) => {
-          body.appendChild(row(d.flag, d.name,
-            id === Layouts.current() ? 'Активна' : (Layouts.enabled().includes(id) ? 'Включена' : 'Выключена'),
-            toggle(() => Layouts.enabled().includes(id), () => { Layouts.toggle(id); drawMain(); })));
+        /* Все раскладки системы списком с поиском — тот же список, что в
+           начальной настройке. Выбор уходит оконному серверу. */
+        const итог = el('div', 'set-note');
+        Layouts.список(body, {
+          получить:() => Layouts.enabled(),
+          задать:async l => {
+            const о = await Layouts.применить(l);
+            итог.textContent = !о ? '' : о.ошибка ? 'Не удалось передать системе: ' + о.ошибка
+              : о['сразу'] ? 'Раскладки применены.' : 'Раскладки сохранены — заработают со следующего входа в систему.';
+          }
         });
-        body.appendChild(el('div', 'set-note',
-          'Переключение — Alt + Shift или щелчок по индикатору в панели. Пока выбрана нелатинская ' +
-          'раскладка, буквы с физической клавиатуры превращаются в её символы внутри окон системы. ' +
-          'Разложить клавиатуру самой вашей ОС страница не может — и не притворяется.'));
+        body.appendChild(итог);
+        if (window.Platform && Platform.mode === 'native')
+          Platform.rpc('sys.kb.list').then(д => { Layouts.дополни(д['список']); }).catch(() => {});
       }, 'kb'));
       main.appendChild(kb);
     }

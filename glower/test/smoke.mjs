@@ -656,7 +656,8 @@ try {
       exp.querySelector('.set-row').click();
       await new Promise(r => setTimeout(r, 600));
       const opened = exp.classList.contains('open')
-        && exp.querySelectorAll('.exp-body .switch').length === Object.keys(Layouts.ALL).length
+        && exp.querySelectorAll('.exp-body .kb-строка').length === Layouts.все().length
+        && !!exp.querySelector('.exp-body .kb-поиск')
         && exp.querySelector('.exp-body').getBoundingClientRect().height > 60;
       exp.querySelector('.set-row').click();
       await new Promise(r => setTimeout(r, 500));
@@ -855,7 +856,7 @@ try {
       Setup.i = 1; Setup.paint();                       // шаг «Язык системы»
       await new Promise(r => setTimeout(r, 300));
       const ru = document.querySelector('.setup-t').textContent;
-      [...document.querySelectorAll('.setup-card')].find(c => /English/.test(c.textContent)).click();
+      [...document.querySelectorAll('#setup .kb-строка')].find(c => /English/.test(c.textContent)).click();
       await new Promise(r => setTimeout(r, 350));
       const en = document.querySelector('.setup-t').textContent;
       const btn = document.querySelector('#setup-next').textContent;

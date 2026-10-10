@@ -203,6 +203,8 @@ window.OS = OS;
   wirePower();
   wireApps();
   wireMachineApps();
+  /* раскладки: что включено в самой системе, то и показываем */
+  if (window.Layouts && Layouts.изСистемы) Layouts.изСистемы();
   wireNativeWindows();
   wireRealApps();
   wireTaskManager();

@@ -1656,6 +1656,121 @@ try {
         && !existsSync(join(прил, 'wine')), JSON.stringify(итог.сброс));
   }
 
+  /* --- раскладки: список из системы и выбор, который доходит до неё ---
+
+     Агенту даём свой дом и свою папку сеанса: он пишет выбор в
+     ~/.config/glower/keyboard и в environment личной папки labwc. Сценарий
+     входа читает тот же файл — проверяем и его кусок: испорченная строка не
+     должна оставить человека без клавиатуры. */
+  {
+    const { mkdir, writeFile, readFile: читай } = await import('node:fs/promises');
+    const дом = await mkdtemp(join(tmpdir(), 'glower-kb-'));
+    const рт = join(дом, 'rt');
+    await mkdir(join(рт, 'glower-labwc'), { recursive:true });
+    await writeFile(join(рт, 'glower-labwc', 'environment'), 'XKB_DEFAULT_LAYOUT=us,ru\nXKB_DEFAULT_OPTIONS=grp:alt_shift_toggle\n');
+    const порт6 = PORT + 304;
+    const аг = spawn(process.execPath, [join(root, 'agent/server.mjs'), '--port', String(порт6), '--root', дом, '--system'],
+      { stdio:'ignore', env:{ ...process.env, HOME:дом, XDG_RUNTIME_DIR:рт, GLOWER_NO_AUTO_WINE:'1' } });
+    await new Promise(r => setTimeout(r, 1500));
+    const зов = async (method, params = {}) => (await fetch(`http://localhost:${порт6}/rpc`, { method:'POST',
+      headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ method, params }) })).json();
+    const и = {};
+    try {
+      и.список = (await зов('sys.kb.list')).result;
+      и.пять = await зов('sys.kb.set', { 'раскладки':['us', 'ru', 'de', 'fr', 'it'] });
+      и.плохое = await зов('sys.kb.set', { 'раскладки':['us;reboot'] });
+      и.нет = await зов('sys.kb.set', { 'раскладки':['us', 'zzzz'] });
+      и.ок = (await зов('sys.kb.set', { 'раскладки':['us', 'ru', 'ua'] })).result;
+      и.файл = (await читай(join(дом, '.config/glower/keyboard'), 'utf8')).trim();
+      и.env = await читай(join(рт, 'glower-labwc', 'environment'), 'utf8');
+      и.снова = (await зов('sys.kb.list')).result['выбрано'];
+    } catch(e){ и.беда = e.message; }
+    аг.kill();
+    const xkb = и.список && и.список['список'] || [];
+    const есть = !!xkb.length;
+    check('раскладки берутся из базы XKB системы',
+      !есть || (xkb.length > 50 && xkb.some(x => x.id === 'ru') && xkb.some(x => x.id === 'ua')),
+      JSON.stringify((xkb || []).slice(0, 3)));
+    check('больше четырёх раскладок, чужие знаки и несуществующие — отвергаются',
+      и.пять && !и.пять.ok && и.плохое && !и.плохое.ok && (!есть || (и.нет && !и.нет.ok)),
+      JSON.stringify({ пять:и.пять, плохое:и.плохое, нет:и.нет }));
+    check('выбор раскладок записан для входа и в настройки сеанса labwc',
+      и.файл === 'us,ru,ua' && /^XKB_DEFAULT_LAYOUT=us,ru,ua$/m.test(и.env || '')
+        && /XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle/.test(и.env || '')
+        && (и.env.match(/XKB_DEFAULT_LAYOUT=/g) || []).length === 1
+        && JSON.stringify(и.снова) === JSON.stringify(['us', 'ru', 'ua']),
+      JSON.stringify({ файл:и.файл, env:и.env, снова:и.снова, беда:и.беда }));
+
+    /* Кусок сценария входа: чтение файла раскладок */
+    const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+    const кусок = (сеанс.match(/^KB_USER=""[\s\S]*?^export XKB_DEFAULT_LAYOUT XKB_DEFAULT_OPTIONS$/m) || [''])[0];
+    const раскладкаПри = async строка => {
+      await writeFile(join(дом, '.config/glower/keyboard'), строка + '\n');
+      return new Promise(готово => {
+        let вывод = '';
+        const д = spawn('sh', ['-c', кусок + '\nprintf %s "$XKB_DEFAULT_LAYOUT"'],
+          { env:{ PATH:process.env.PATH, HOME:дом } });
+        д.stdout.on('data', x => вывод += x);
+        д.on('close', () => готово(вывод));
+      });
+    };
+    const р = {
+      хорошая:await раскладкаПри('us,ru,de'),
+      знаки:await раскладкаПри('us;reboot'),
+      пять:await раскладкаПри('us,ru,de,fr,it'),
+      пусто:await раскладкаПри('')
+    };
+    check('вход берёт раскладки из файла, а испорченный файл — заменяет привычными',
+      кусок && р.хорошая === 'us,ru,de' && р.знаки === 'us,ru' && р.пять === 'us,ru' && р.пусто === 'us,ru',
+      JSON.stringify(р));
+
+    /* Кусок сценария входа: личная папка labwc */
+    const папка = (сеанс.match(/^  LABWC_SYS=[\s\S]*?^  fi$/m) || [''])[0];
+    const сис = join(дом, 'sys');
+    await mkdir(сис, { recursive:true });
+    await writeFile(join(сис, 'rc.xml'), '<labwc_config/>');
+    const рт2 = join(дом, 'rt2');
+    await mkdir(рт2, { recursive:true });
+    const куда = await new Promise(готово => {
+      let вывод = '';
+      const д = spawn('sh', ['-c', папка + '\nprintf %s "$LABWC_DIR"'], { env:{ PATH:process.env.PATH, HOME:дом,
+        XDG_RUNTIME_DIR:рт2, GLOWER_LABWC:сис, XKB_DEFAULT_LAYOUT:'us,de', XKB_DEFAULT_OPTIONS:'grp:alt_shift_toggle' } });
+      д.stdout.on('data', x => вывод += x);
+      д.on('close', () => готово(вывод));
+    });
+    const { lstatSync } = await import('node:fs');
+    const env2 = await читай(join(рт2, 'glower-labwc', 'environment'), 'utf8').catch(() => '');
+    check('сеанс собирает labwc личную папку: системные файлы ссылками, раскладки своим файлом',
+      куда === join(рт2, 'glower-labwc') && lstatSync(join(куда, 'rc.xml')).isSymbolicLink()
+        && /XKB_DEFAULT_LAYOUT=us,de/.test(env2) && !lstatSync(join(куда, 'environment')).isSymbolicLink(),
+      JSON.stringify({ куда, env2 }));
+  }
+
+  /* Начальная настройка: раскладки списком из каталога, не больше четырёх */
+  {
+    const r = await page.evaluate(async () => {
+      const был = Setup.i;
+      Setup.data.layouts = ['en', 'ru'];
+      Setup.i = Setup.STEPS.findIndex(s => /Раскладки/.test(s.title));
+      const откр = !document.getElementById('setup');
+      if (откр) Setup.open && Setup.open();
+      Setup.i = Setup.STEPS.findIndex(s => /Раскладки/.test(s.title));
+      Setup.paint();
+      await new Promise(r2 => setTimeout(r2, 300));
+      const строки = [...document.querySelectorAll('#setup .kb-строка')];
+      const нажми = имя => строки.find(с => с.textContent.includes(имя)).click();
+      нажми('Украинская'); нажми('Немецкая'); нажми('Французская');
+      const итог = { строк:строки.length, выбрано:Setup.data.layouts.slice(),
+        заблок:document.querySelectorAll('#setup .kb-строка:disabled').length };
+      Setup.i = был;
+      const у = document.getElementById('setup'); if (у && откр) у.remove();
+      return итог;
+    });
+    check('в настройке раскладки — списком, и больше четырёх выбрать нельзя',
+      r.строк >= 50 && JSON.stringify(r.выбрано) === JSON.stringify(['en', 'ru', 'ua', 'de']) && r.заблок > 40,
+      JSON.stringify(r));
+  }
+
   /* В меню программ по правой кнопке есть «Удалить» — у программ машины. */
   {
     const r = await page.evaluate(() => {

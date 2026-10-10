@@ -2365,6 +2365,88 @@ export function обоиМожно(путь){
   return ОБОИ_КОРНИ.some(к => п === к || п.startsWith(к + '/')) && ОБОИ_ВИДЫ.test(п);
 }
 
+/* ---------- раскладки клавиатуры ----------
+
+   Настоящую раскладку держит оконный сервер, а не мы. Список берём там же,
+   где его берёт сама система, — в базе XKB: это сотня с лишним раскладок,
+   и любую из них человек может выбрать.
+
+   Выбор записываем в ~/.config/glower/keyboard (его читает сценарий входа)
+   и, если сеанс идёт под labwc, — в его файл environment в личной папке
+   сеанса, после чего просим labwc перенастроиться. labwc перечитывает
+   этот файл; пересобирает ли он при этом раскладку клавиатуры, зависит от
+   его версии, поэтому честно обещаем одно: со следующего входа — точно. */
+const РАСКЛАДКИ_ФАЙЛ = () => join(os.homedir(), '.config/glower/keyboard');
+
+async function список_xkb(){
+  for (const f of ['/usr/share/X11/xkb/rules/evdev.lst', '/usr/share/X11/xkb/rules/base.lst']){
+    let текст;
+    try { текст = await readFile(f, 'utf8'); } catch(e){ continue; }
+    const список = [];
+    let внутри = false;
+    for (const с of текст.split('\n')){
+      if (/^! layout\b/.test(с)){ внутри = true; continue; }
+      if (/^!/.test(с)){ if (внутри) break; continue; }
+      if (!внутри) continue;
+      const м = с.match(/^\s+([a-z0-9_]+)\s+(.+?)\s*$/);
+      if (м) список.push({ id:м[1], 'имя':м[2] });
+    }
+    if (список.length) return список;
+  }
+  return [];
+}
+
+export const keyboard = {
+  async 'sys.kb.list'(){
+    let выбрано = [];
+    try { выбрано = (await readFile(РАСКЛАДКИ_ФАЙЛ(), 'utf8')).trim().split(',').filter(Boolean); } catch(e){}
+    return { 'список':await список_xkb(), 'выбрано':выбрано };
+  },
+
+  async 'sys.kb.set'({ раскладки }){
+    const р = Array.isArray(раскладки) ? раскладки.map(String) : [];
+    if (!р.length) throw new Error('нужна хотя бы одна раскладка');
+    /* Больше четырёх групп XKB держать разом не умеет */
+    if (р.length > 4) throw new Error('одновременно можно включить не больше четырёх раскладок');
+    if (р.some(x => !/^[a-z]{2,8}$/.test(x))) throw new Error('недопустимое имя раскладки');
+    const известные = new Set((await список_xkb()).map(x => x.id));
+    if (известные.size && р.some(x => !известные.has(x)))
+      throw new Error('такой раскладки в системе нет: ' + р.find(x => !известные.has(x)));
+    const строка = [...new Set(р)].join(',');
+
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(os.homedir(), '.config/glower'), { recursive:true });
+    await writeFile(РАСКЛАДКИ_ФАЙЛ(), строка + '\n');
+
+    /* Сразу — если сеанс идёт под labwc с нашей личной папкой настроек */
+    let сразу = false;
+    const дом = process.env.XDG_RUNTIME_DIR || '/run/user/' + (process.getuid ? process.getuid() : 1000);
+    const env = join(дом, 'glower-labwc/environment');
+    try {
+      const { lstat } = await import('node:fs/promises');
+      const св = await lstat(env);
+      if (св.isFile()){
+        const было = await readFile(env, 'utf8');
+        const стало = было.split('\n').filter(с => с && !/^XKB_DEFAULT_LAYOUT=/.test(с))
+          .concat('XKB_DEFAULT_LAYOUT=' + строка).join('\n') + '\n';
+        await writeFile(env, стало);
+        const кто = String(await call('pgrep', ['-u', String(process.getuid ? process.getuid() : ''), '-x', 'labwc']).catch(() => ''))
+          .split('\n').map(Number).filter(Boolean);
+        for (const pid of кто){ try { process.kill(pid, 'SIGHUP'); сразу = true; } catch(e){} }
+      }
+    } catch(e){ /* папки нет — сеанс не под labwc или старый вход */ }
+
+    /* Под X-сервером раскладку меняют командой — она действует сразу */
+    if (!сразу && process.env.DISPLAY && await has('setxkbmap')){
+      try {
+        await call('setxkbmap', ['-layout', строка, '-option', '', '-option', 'grp:alt_shift_toggle']);
+        сразу = true;
+      } catch(e){}
+    }
+    return { 'записано':строка, 'сразу':сразу };
+  }
+};
+
 export const wallpapers = {
   async 'sys.обои'(){
     const список = [];
