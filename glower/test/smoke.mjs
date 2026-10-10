@@ -910,10 +910,23 @@ try {
       return !!w && /Проверка/.test(w.textContent) && /Добро пожаловать/.test(w.textContent);
     }));
 
-  check('приветствие уходит и открывает рабочий стол',
+  /* Приветствие — «Привет» на языках мира: первым словом язык системы,
+     потом каскад. Целиком сцена идёт около десяти секунд; щелчок сразу
+     ведёт к имени и раскрытию. */
+  check('приветствие начинается с «Привет» на языке системы',
     await page.evaluate(async () => {
-      await new Promise(r => setTimeout(r, 3400));
-      return !document.querySelector('.welcome')
+      await new Promise(r => setTimeout(r, 900));
+      const п = document.querySelector('.welcome .wl-перо text');
+      return !!п && п.textContent === 'Привет';
+    }));
+
+  check('щелчок пропускает приветствие: имя, раскрытие и рабочий стол',
+    await page.evaluate(async () => {
+      document.querySelector('.welcome').click();
+      await new Promise(r => setTimeout(r, 200));
+      const имя = document.querySelector('.welcome').classList.contains('имя');
+      await new Promise(r => setTimeout(r, 3600));
+      return имя && !document.querySelector('.welcome')
         && document.querySelector('#desktop').classList.contains('on');
     }));
 

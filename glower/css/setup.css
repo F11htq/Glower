@@ -77,34 +77,120 @@
 .setup-foot{display:flex;align-items:center;gap:10px;padding:14px 24px 20px}
 .setup-foot .btn{min-width:104px;justify-content:center;padding:11px 18px;font-size:14px}
 
-/* ---------- приветствие ---------- */
-.welcome{position:fixed;inset:0;z-index:2300;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:6px;opacity:0;
-  background:radial-gradient(120% 120% at 50% 40%,rgba(var(--tint),.30),rgba(6,8,16,.92));
-  backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);
-  transition:opacity .6s var(--e-io)}
+/* ---------- приветствие: «Привет» на языках мира ----------
+   Сцену ведёт Welcome в setup.js. Классы такты: «имя» — каскад кончился,
+   выписывается имя; «раскрытие» — круг раскрывается к рабочему столу;
+   «bye» — остатки тают. Стол въезжает по частям (body.стол-въезд). */
+@property --wl-край{syntax:'<percentage>';inherits:false;initial-value:0%}
+@property --wl-дыра{syntax:'<length>';inherits:false;initial-value:0px}
+
+.welcome{position:fixed;inset:0;z-index:2300;overflow:hidden;opacity:0;color:#fff;cursor:default;
+  background:linear-gradient(#070814, #020207);transition:opacity .7s var(--e-io)}
 .welcome.on{opacity:1}
-.welcome.bye{opacity:0;transform:scale(1.06);transition:opacity .8s var(--e-io),transform .8s var(--e-out)}
+.welcome.bye{opacity:0;transition:opacity .6s var(--e-io)}
 
-.wl-logo{width:112px;height:112px;animation:wl-pop .9s var(--e-spring) both}
-@keyframes wl-pop{from{opacity:0;transform:scale(.6) rotate(-70deg)}to{opacity:1;transform:none}}
+/* Сияние: три мягких пятна в цветах системы медленно плывут по небу */
+.wl-сияние{position:absolute;inset:-20%;pointer-events:none}
+.wl-сияние i{position:absolute;width:60%;height:60%;border-radius:50%;opacity:.55;
+  animation:wl-плыть 16s ease-in-out infinite alternate}
+.wl-сияние i:nth-child(1){left:5%;top:10%;background:radial-gradient(circle, rgba(70,110,255,.55), transparent 65%)}
+.wl-сияние i:nth-child(2){right:0;top:25%;background:radial-gradient(circle, rgba(150,80,255,.45), transparent 65%);
+  animation-duration:21s;animation-delay:-6s}
+.wl-сияние i:nth-child(3){left:25%;bottom:0;background:radial-gradient(circle, rgba(40,190,210,.35), transparent 65%);
+  animation-duration:25s;animation-delay:-11s}
+@keyframes wl-плыть{from{transform:translate(-6%,4%) scale(1)} to{transform:translate(8%,-6%) scale(1.18)}}
+.wl-пыль{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 
-.wl-ring{position:absolute;width:340px;height:340px;pointer-events:none}
-.wl-ring span{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(var(--tint),.45);
-  animation:wl-ring 2.8s var(--e-out) infinite}
-.wl-ring span:nth-child(2){animation-delay:.5s}
-.wl-ring span:nth-child(3){animation-delay:1s}
-@keyframes wl-ring{from{transform:scale(.35);opacity:0}
-  35%{opacity:.65}to{transform:scale(1);opacity:0}}
+/* Слово «пером света» */
+.wl-слово{position:absolute;left:50%;top:50%;width:min(1000px, 92vw);height:220px;transform:translate(-50%,-56%)}
+.wl-перо{position:absolute;inset:0;transition:opacity .6s var(--e-io), transform .7s var(--e-out), filter .6s}
+.wl-перо svg{width:100%;height:100%;overflow:visible}
+.wl-перо text{font-family:'Noto Sans','Noto Sans Devanagari','Noto Sans Arabic','DejaVu Sans',sans-serif;
+  font-weight:300;font-size:112px;letter-spacing:1px;
+  fill:url(#wl-г);fill-opacity:0;stroke:rgba(210,222,255,.95);stroke-width:1.6;
+  stroke-dasharray:700;stroke-dashoffset:700;paint-order:stroke}
+.wl-перо.крупно text{font-size:138px}
+/* Пишем: обводка прорисовывается, затем наливается заливка, а маска
+   открывает слово по ходу письма */
+.wl-перо{-webkit-mask-image:linear-gradient(90deg,#000 calc(var(--wl-край) - 10%),transparent var(--wl-край));
+  mask-image:linear-gradient(90deg,#000 calc(var(--wl-край) - 10%),transparent var(--wl-край))}
+.wl-перо.ртл{-webkit-mask-image:linear-gradient(270deg,#000 calc(var(--wl-край) - 10%),transparent var(--wl-край));
+  mask-image:linear-gradient(270deg,#000 calc(var(--wl-край) - 10%),transparent var(--wl-край))}
+.wl-перо.пишу{animation:wl-край var(--мс) cubic-bezier(.45,.05,.35,1) forwards}
+.wl-перо.пишу text{animation:wl-обводка var(--мс) ease-out forwards, wl-заливка calc(var(--мс) * .7) calc(var(--мс) * .45) ease-out forwards}
+@keyframes wl-край{to{--wl-край:115%}}
+@keyframes wl-обводка{to{stroke-dashoffset:0}}
+@keyframes wl-заливка{to{fill-opacity:1;stroke-opacity:.25}}
+/* Искра на кончике пера: бежит вдоль строки вместе с краем маски */
+.wl-искра{position:absolute;top:50%;left:8%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,#fff 0 22%,rgba(170,200,255,.9) 35%,rgba(120,140,255,.3) 60%,transparent 72%);
+  box-shadow:0 0 22px 6px rgba(130,160,255,.55)}
+.wl-перо.пишу .wl-искра{animation:wl-искра var(--мс) cubic-bezier(.45,.05,.35,1) forwards}
+.wl-перо.ртл.пишу .wl-искра{animation-name:wl-искра-ртл}
+@keyframes wl-искра{0%{left:12%;opacity:0} 10%{opacity:1} 85%{opacity:1} 100%{left:88%;opacity:0}}
+@keyframes wl-искра-ртл{0%{left:88%;opacity:0} 10%{opacity:1} 85%{opacity:1} 100%{left:12%;opacity:0}}
+/* Уходит: всплывает, тает и расплывается — искры холста рассыпаются из него */
+/* Уходит быстрее, чем пишется следующее, и вверх: иначе на быстрых
+   сменах два слова на миг ложатся друг на друга. */
+.wl-перо.ушло{opacity:0;transform:translateY(-46px) scale(1.04);filter:blur(8px);
+  transition:opacity .28s ease-out, transform .45s var(--e-out), filter .3s}
 
-.wl-hi{font-size:15px;letter-spacing:3px;text-transform:uppercase;opacity:.7;margin-top:22px;
-  animation:up .7s .35s var(--e-out) both}
-.wl-who{font-size:40px;font-weight:250;letter-spacing:-1px;
-  animation:up .8s .5s var(--e-out) both}
-.wl-note{font-size:12.5px;opacity:.55;margin-top:16px;animation:up .8s .9s var(--e-out) both}
+/* Итог: имя крупно и приветствие системы */
+.wl-итог{position:absolute;left:0;right:0;top:50%;transform:translateY(-58%);text-align:center;pointer-events:none}
+.wl-who{font-size:76px;font-weight:200;letter-spacing:-1px;line-height:1.1;opacity:0;
+  font-family:'Noto Sans','DejaVu Sans',sans-serif;
+  background:linear-gradient(100deg,#9cc2ff 0%,#ffffff 40%,#c9a6ff 60%,#9cc2ff 100%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.wl-hi{margin-top:14px;font-size:14px;letter-spacing:5px;text-transform:uppercase;opacity:0}
+.welcome.имя .wl-who{animation:wl-имя 1.1s var(--e-out) forwards, wl-перелив 2.2s .3s ease-in-out forwards}
+.welcome.имя .wl-hi{animation:wl-подпись .9s .55s var(--e-out) forwards}
+@keyframes wl-имя{from{opacity:0;transform:translateY(16px) scale(.96);filter:blur(10px);letter-spacing:12px}
+  to{opacity:1;transform:none;filter:none;letter-spacing:-1px}}
+@keyframes wl-перелив{from{background-position:100% 0} to{background-position:0 0}}
+@keyframes wl-подпись{from{opacity:0;letter-spacing:12px} to{opacity:.7;letter-spacing:5px}}
 
+.wl-skip{position:absolute;left:0;right:0;bottom:28px;text-align:center;font-size:12px;opacity:0;
+  animation:wl-подсказка .8s 1.6s forwards}
+@keyframes wl-подсказка{to{opacity:.32}}
+.welcome.имя .wl-skip{opacity:0;animation:none;transition:opacity .3s}
+
+/* Раскрытие: в сцене открывается круг, и в нём уже рабочий стол; по краю
+   круга идёт волна света того же радиуса */
+.welcome.раскрытие{
+  -webkit-mask-image:radial-gradient(circle at 50% 50%,transparent var(--wl-дыра),#000 calc(var(--wl-дыра) + 2px));
+  mask-image:radial-gradient(circle at 50% 50%,transparent var(--wl-дыра),#000 calc(var(--wl-дыра) + 2px));
+  animation:wl-дыра .95s cubic-bezier(.6,0,.4,1) forwards}
+@keyframes wl-дыра{to{--wl-дыра:150vmax}}
+.wl-волна{position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:radial-gradient(circle at 50% 50%, transparent calc(var(--wl-дыра) - 2px),
+    rgba(225,232,255,.95) var(--wl-дыра), rgba(120,150,255,.45) calc(var(--wl-дыра) + 16px),
+    rgba(150,100,255,.15) calc(var(--wl-дыра) + 60px), transparent calc(var(--wl-дыра) + 120px))}
+/* Ореол живёт внутри сцены, поэтому видна только его внешняя половина —
+   светящаяся кромка, которая бежит впереди раскрывающегося круга. */
+.welcome.раскрытие .wl-волна{opacity:1;animation:wl-дыра .95s cubic-bezier(.6,0,.4,1) forwards}
+
+/* Стол въезжает по частям: значки по очереди, виджеты справа, док снизу */
+body.стол-въезд #desktop-icons > *{animation:wl-въезд-значок .7s var(--e-out) both}
+body.стол-въезд #desktop-icons > :nth-child(1){animation-delay:.25s}
+body.стол-въезд #desktop-icons > :nth-child(2){animation-delay:.32s}
+body.стол-въезд #desktop-icons > :nth-child(3){animation-delay:.39s}
+body.стол-въезд #desktop-icons > :nth-child(4){animation-delay:.46s}
+body.стол-въезд #desktop-icons > :nth-child(n+5){animation-delay:.53s}
+@keyframes wl-въезд-значок{from{opacity:0;transform:translateY(14px) scale(.9)}}
+body.стол-въезд #desk-widgets > *{animation:wl-въезд-виджет .8s .4s var(--e-out) both}
+@keyframes wl-въезд-виджет{from{opacity:0;transform:translateX(40px)}}
+body.стол-въезд .dock-wrap{animation:wl-въезд-док .8s .55s var(--e-out) both}
+@keyframes wl-въезд-док{from{opacity:0;transform:translateY(60px)}}
+
+/* Меньше движения: слова просто проявляются, без пера и раскрытия кругом */
+body.reduced .wl-перо, body.reduced .wl-перо text, body.reduced .wl-искра,
+body.reduced .welcome.раскрытие, body.reduced .wl-волна, body.reduced .wl-сияние i{animation:none !important}
+body.reduced .wl-перо{-webkit-mask-image:none;mask-image:none}
+body.reduced .wl-перо text{fill-opacity:1;stroke:none}
+body.reduced.стол-въезд #desktop-icons > *, body.reduced.стол-въезд #desk-widgets > *,
+body.reduced.стол-въезд .dock-wrap{animation:none}
 @media (prefers-reduced-motion:reduce){
-  .wl-ring span,.wl-logo,.setup-hello .os-logo{animation:none}
+  .wl-перо,.wl-перо text,.wl-искра,.wl-сияние i,.setup-hello .os-logo{animation:none !important}
 }
 
 /* ==========================================================================

@@ -3,6 +3,61 @@
    ========================================================================== */
 'use strict';
 
+/* Рой: светящиеся частицы на наклонной орбите вокруг вихря.
+
+   То же движение, что в заставке Plymouth: частицы выходят из центра на
+   орбиту и кружат; позади вихря они мельче и тусклее, впереди — крупнее и
+   поверх него. Так заставка оболочки продолжает заставку загрузки, а
+   приветствие после настройки — их обеих. Считаем сами, по кадрам:
+   двадцать точек — копейки, а CSS такого объёма без трёхмерных фокусов не
+   даёт.
+
+   собери(мс) — финал приветствия: частицы по спирали стягиваются в центр.
+   Работа кончается сама, как только место убрали со страницы. */
+function Рой(место, { rx = 124, ry = 40, n = 22 } = {}){
+  if (!место) return { собери(){}, стоп(){} };
+  const точки = [], фазы = [], скорости = [];
+  for (let i = 0; i < n; i++){
+    const т = document.createElement('i');
+    место.appendChild(т); точки.push(т);
+    фазы.push(i * (2 * Math.PI / n) + Math.sin(i * 1.7) * 0.25);
+    скорости.push(0.55 + (i % 3) * 0.08);
+  }
+  const плавно = v => { v = Math.max(0, Math.min(1, v)); return 1 - (1 - v) ** 3; };
+  const начало = performance.now();
+  let сбор = null, стоим = false;
+  const кадр = now => {
+    if (стоим || !место.isConnected) return;
+    const t = (now - начало) / 1000;
+    const ш = место.clientWidth / 2, в = место.clientHeight / 2;
+    let выход = плавно((t - 0.25) / 1.4), вихрь = 0;
+    if (сбор){
+      /* Стягиваемся: радиус тает с ускорением, а вращение разгоняется —
+         частицы не падают в центр, а закручиваются в него. */
+      const д = Math.max(0, Math.min(1, (now - сбор.с) / сбор.мс));
+      выход *= 1 - д * д;
+      вихрь = д * д * 5;
+    }
+    точки.forEach((т, i) => {
+      const a = фазы[i] + t * скорости[i] + вихрь;
+      const sx = Math.cos(a), sy = Math.sin(a);
+      const x = ш + sx * rx * выход;
+      const y = в + (sy * ry - sx * ry * 0.35) * выход;
+      const м = 0.55 + 0.45 * (sy + 1) / 2;
+      т.style.transform = `translate(${x}px,${y}px) scale(${(0.5 + 0.9 * (sy + 1) / 2).toFixed(3)})`;
+      т.style.opacity = (Math.min(1, выход * 1.4) * (0.75 + 0.25 * Math.sin(t * 3.1 + i * 1.3)) * м).toFixed(3);
+      т.style.zIndex = sy > 0 ? 3 : 1;
+    });
+    requestAnimationFrame(кадр);
+  };
+  requestAnimationFrame(кадр);
+  return {
+    собери(мс = 700){ сбор = { с:performance.now(), мс }; },
+    стоп(){ стоим = true; }
+  };
+}
+window.Рой = Рой;
+
 (function boot(){
   /* Экран входа — не рабочий стол. Здесь нечего запускать: ни оконного
      хозяйства, ни своего замка. Раньше оболочка всё равно проходила всю
@@ -33,43 +88,10 @@
 
   const boot = $('#boot'), desktop = $('#desktop');
 
-  /* Рой вокруг вихря — то же движение, что в заставке Plymouth: частицы
-     выходят из центра на наклонную орбиту и кружат; позади вихря они
-     мельче и тусклее, впереди — крупнее и поверх него. Так одна заставка
-     продолжает другую, а не сменяет её. Считаем сами, по кадрам: двадцать
-     точек — копейки, а CSS такого объёма без трёхмерных фокусов не даёт.
-     На слабой машине и при просьбе о меньшем движении роя нет вовсе. */
-  (function рой(){
-    const место = document.getElementById('boot-рой');
-    if (!место || document.body.classList.contains('эконом') || document.body.classList.contains('reduced')) return;
-    const N = 22, точки = [], фазы = [], скорости = [];
-    for (let i = 0; i < N; i++){
-      const т = document.createElement('i');
-      место.appendChild(т); точки.push(т);
-      фазы.push(i * (2 * Math.PI / N) + Math.sin(i * 1.7) * 0.25);
-      скорости.push(0.55 + (i % 3) * 0.08);
-    }
-    const плавно = v => { v = Math.max(0, Math.min(1, v)); return 1 - (1 - v) ** 3; };
-    const начало = performance.now();
-    const кадр = now => {
-      if (!место.isConnected) return;
-      const t = (now - начало) / 1000;
-      const ш = место.clientWidth / 2, в = место.clientHeight / 2;
-      const rx = 124, ry = 40, выход = плавно((t - 0.25) / 1.4);
-      точки.forEach((т, i) => {
-        const a = фазы[i] + t * скорости[i];
-        const sx = Math.cos(a), sy = Math.sin(a);
-        const x = ш + sx * rx * выход;
-        const y = в + (sy * ry - sx * ry * 0.35) * выход;
-        const м = 0.55 + 0.45 * (sy + 1) / 2;
-        т.style.transform = `translate(${x}px,${y}px) scale(${(0.5 + 0.9 * (sy + 1) / 2).toFixed(3)})`;
-        т.style.opacity = (выход * (0.75 + 0.25 * Math.sin(t * 3.1 + i * 1.3)) * м).toFixed(3);
-        т.style.zIndex = sy > 0 ? 3 : 1;
-      });
-      requestAnimationFrame(кадр);
-    };
-    requestAnimationFrame(кадр);
-  })();
+  /* Рой вокруг вихря — то же движение, что в заставке Plymouth (см. Рой
+     ниже). На слабой машине и при просьбе о меньшем движении роя нет. */
+  if (!document.body.classList.contains('эконом') && !document.body.classList.contains('reduced'))
+    Рой(document.getElementById('boot-рой'));
   /* Установочная среда: человек пришёл ставить систему. Заставку ему
      показывать незачем — он и так смотрит в экран загрузки уже полминуты,
      и каждая наша секунда добавляется к тем. */

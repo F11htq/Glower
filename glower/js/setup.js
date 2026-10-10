@@ -339,31 +339,198 @@ window.Setup = Setup;
    Приветствие: экран между настройкой и рабочим столом
    ========================================================================== */
 const Welcome = {
+  /* Приветствие после настройки — «Привет» на языках мира, как у macOS.
+
+   Человек только что закончил настройку: это момент, когда система впервые
+   становится его. Поэтому здесь не заставка, а маленькая сцена:
+     — на тёмном небе медленно течёт сияние в цветах системы, вверх плывут
+       пылинки;
+     — первым словом — «Привет» на языке системы: его выписывает «перо
+       света» — сначала контуры букв, потом заливка, а по краю письма бежит
+       искра;
+     — дальше каскад приветствий, всё быстрее: каждое слово рассыпается
+       искрами и уступает место следующему;
+     — последним крупно выписывается имя и «Добро пожаловать в GlowerOS»;
+     — финал: от центра раскрывается круг, по краю идёт волна света, за ней
+       рабочий стол.
+   Щелчок или любая клавиша — сразу к финалу.
+
+   Языки — только те, чьё письмо есть в шрифтах системы (Noto): слово из
+   квадратиков хуже, чем его отсутствие. Китайский, японский и корейский
+   потребовали бы шрифта на десятки мегабайт. */
+  ЯЗЫКИ:[
+    ['Bonjour', 'fr'], ['Hola', 'es'], ['Hallo', 'de'], ['Ciao', 'it'], ['Olá', 'pt'],
+    ['Merhaba', 'tr'], ['Γειά σου', 'el'], ['नमस्ते', 'hi'], ['مرحبا', 'ar']
+  ],
+
   play(name){
     const who = name || (Profiles.current() || {}).name || S.userName || '';
-    const T = { hi:'Добро пожаловать', note:'Готовим рабочий стол…' };
-    if ((window.I18N ? I18N.lang() : 'ru') === 'en'){ T.hi = 'Welcome'; T.note = 'Preparing your desktop…'; }
+    const en = (window.I18N ? I18N.lang() : 'ru') === 'en';
+    const T = en ? { hi:'Hello', welcome:'Welcome to GlowerOS', skip:'Click to skip' }
+                 : { hi:'Привет', welcome:'Добро пожаловать в GlowerOS', skip:'Щелчок — пропустить' };
+    const тихо = document.body.classList.contains('эконом') || document.body.classList.contains('reduced');
+
+    /* Слова по порядку: язык системы первым, второй язык интерфейса
+       следом, дальше — мир. Длительности тают: каскад разгоняется. */
+    const слова = [[T.hi, en ? 'en' : 'ru'], [en ? 'Привет' : 'Hello', en ? 'ru' : 'en'], ...this.ЯЗЫКИ];
+    const длит = тихо ? слова.slice(0, 2).map(() => 900)
+                      : слова.map((_, i) => i === 0 ? 1500 : Math.max(380, 820 - i * 55));
+    const показать = тихо ? слова.slice(0, 2) : слова;
+
     const ov = el('div', 'welcome');
     ov.innerHTML = `
-      <div class="wl-ring"><span></span><span></span><span></span></div>
-      <img class="os-logo wl-logo" src="assets/logo.png" alt="" draggable="false">
-      <div class="wl-hi">${T.hi}</div>
-      <div class="wl-who">${esc(who)}</div>
-      <div class="wl-note">${T.note}</div>`;
+      <div class="wl-сияние"><i></i><i></i><i></i></div>
+      <canvas class="wl-пыль"></canvas>
+      <div class="wl-слово" aria-hidden="true"></div>
+      <div class="wl-итог">
+        <div class="wl-who">${esc(who || (en ? 'Welcome' : 'Добро пожаловать'))}</div>
+        <div class="wl-hi">${esc(T.welcome)}</div>
+      </div>
+      <div class="wl-skip">${esc(T.skip)}</div>
+      <div class="wl-волна"></div>`;
     document.body.appendChild(ov);
     requestAnimationFrame(() => ov.classList.add('on'));
 
-    Snd.blip(523, .18, 'sine', .04);
-    setTimeout(() => Snd.blip(659, .18, 'sine', .035), 160);
-    setTimeout(() => Snd.blip(784, .30, 'sine', .03), 330);
+    const пыль = тихо ? null : this.пыль(ov.querySelector('.wl-пыль'));
+    const место = ov.querySelector('.wl-слово');
 
-    setTimeout(() => {
-      ov.classList.add('bye');
-      setTimeout(() => ov.remove(), 900);
+    /* Одно слово «пером света»: SVG-текст, у которого сначала рисуется
+       обводка, потом проявляется заливка; маска открывает его слева
+       направо (справа налево — для арабского), а по краю бежит искра. */
+    const напиши = (текст, язык, мс, крупно) => {
+      const ртл = язык === 'ar' || язык === 'he';
+      const н = el('div', 'wl-перо' + (ртл ? ' ртл' : '') + (крупно ? ' крупно' : ''));
+      н.style.setProperty('--мс', мс + 'ms');
+      н.setAttribute('lang', язык);
+      н.innerHTML = `<svg viewBox="0 0 1000 220" preserveAspectRatio="xMidYMid meet">
+          <defs><linearGradient id="wl-г" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stop-color="#9cc2ff"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="#c9a6ff"/>
+          </linearGradient></defs>
+          <text x="500" y="150" text-anchor="middle">${esc(текст)}</text>
+        </svg><span class="wl-искра"></span>`;
+      место.appendChild(н);
+      requestAnimationFrame(() => н.classList.add('пишу'));
+      return н;
+    };
+
+    let шаг = 0, таймер = null, конец = false;
+    const следующее = () => {
+      if (конец) return;
+      const прежнее = место.querySelector('.wl-перо:not(.ушло)');
+      if (прежнее){
+        прежнее.classList.add('ушло');
+        if (пыль) пыль.искры(прежнее);
+        setTimeout(() => прежнее.remove(), 700);
+      }
+      if (шаг >= показать.length) return итог();
+      const [текст, язык] = показать[шаг];
+      /* Новое слово начинаем писать чуть позже, чем ушло прежнее */
+      const н = шаг, мс = Math.min(1100, длит[шаг] * 0.8);
+      setTimeout(() => { if (!конец) напиши(текст, язык, мс, н === 0); }, прежнее ? 120 : 0);
+      таймер = setTimeout(следующее, длит[шаг]);
+      шаг++;
+    };
+
+    /* Имя — крупно и тем же пером; под ним приветствие системы */
+    const итог = () => {
+      if (конец) return;
+      конец = true;
+      clearTimeout(таймер);
+      место.querySelectorAll('.wl-перо').forEach(н => н.classList.add('ушло'));
+      ov.classList.add('имя');
+      Snd.blip(523, .18, 'sine', .04);
+      setTimeout(() => Snd.blip(659, .18, 'sine', .035), 160);
+      setTimeout(() => Snd.blip(784, .30, 'sine', .03), 330);
+      setTimeout(финал, тихо ? 1200 : 2100);
+    };
+
+    /* Финал: круг раскрывается от центра, по краю — волна света */
+    const финал = () => {
+      ov.classList.add('раскрытие');
+      Snd.blip(1046, .35, 'sine', .028);
+      document.body.classList.add('стол-въезд');
       $('#desktop').classList.add('on');
+      setTimeout(() => {
+        ov.classList.add('bye');
+        setTimeout(() => { if (пыль) пыль.стоп(); ov.remove(); }, 600);
+      }, 800);
+      setTimeout(() => document.body.classList.remove('стол-въезд'), 2000);
+      Shell.toast(en ? 'System' : 'Система',
+        en ? 'Setup complete — welcome' : 'Настройка завершена — добро пожаловать', '✨', 4000);
+      removeEventListener('keydown', пропуск, true);
+    };
 
-      Shell.toast('Система', 'Настройка завершена — добро пожаловать', '✨', 4000);
-    }, 2600);
+    /* Пропустить: щелчок или клавиша — сразу к имени и финалу */
+    const пропуск = e => {
+      if (e.type === 'keydown'){ e.preventDefault(); e.stopPropagation(); }
+      if (!конец) итог();
+    };
+    ov.addEventListener('click', пропуск);
+    addEventListener('keydown', пропуск, true);
+
+    setTimeout(следующее, 450);
+  },
+
+  /* Пылинки и искры — на одном холсте. Пылинки плывут вверх и мерцают;
+     искры вылетают из уходящего слова и гаснут. Холст сам себя убирает,
+     когда приветствие закончилось. */
+  пыль(холст){
+    const к = холст.getContext('2d');
+    if (!к) return null;
+    let w = 0, h = 0, стоим = false;
+    const размер = () => {
+      const d = Math.min(2, devicePixelRatio || 1);
+      w = холст.clientWidth; h = холст.clientHeight;
+      холст.width = w * d; холст.height = h * d; к.setTransform(d, 0, 0, d, 0, 0);
+    };
+    размер();
+    const пылинки = Array.from({ length:70 }, () => ({
+      x:Math.random() * w, y:Math.random() * h, r:0.6 + Math.random() * 1.6,
+      v:6 + Math.random() * 18, ф:Math.random() * 6.28 }));
+    const искры = [];
+    let было = performance.now();
+    const кадр = now => {
+      if (стоим || !холст.isConnected) return;
+      const dt = Math.min(0.05, (now - было) / 1000); было = now;
+      к.clearRect(0, 0, w, h);
+      к.globalCompositeOperation = 'lighter';
+      for (const п of пылинки){
+        п.y -= п.v * dt; п.x += Math.sin(now / 1400 + п.ф) * 6 * dt;
+        if (п.y < -4){ п.y = h + 4; п.x = Math.random() * w; }
+        const а = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(now / 600 + п.ф));
+        к.fillStyle = `rgba(190,210,255,${а.toFixed(3)})`;
+        к.beginPath(); к.arc(п.x, п.y, п.r, 0, 6.283); к.fill();
+      }
+      for (let i = искры.length - 1; i >= 0; i--){
+        const и = искры[i];
+        и.ж -= dt; if (и.ж <= 0){ искры.splice(i, 1); continue; }
+        и.vy += 40 * dt; и.x += и.vx * dt; и.y += и.vy * dt;
+        const а = Math.max(0, и.ж / и.ж0);
+        const г = к.createRadialGradient(и.x, и.y, 0, и.x, и.y, и.r * 3);
+        г.addColorStop(0, `rgba(255,255,255,${а})`);
+        г.addColorStop(0.4, `rgba(${и.ц},${(а * 0.6).toFixed(3)})`);
+        г.addColorStop(1, 'rgba(0,0,0,0)');
+        к.fillStyle = г; к.beginPath(); к.arc(и.x, и.y, и.r * 3, 0, 6.283); к.fill();
+      }
+      к.globalCompositeOperation = 'source-over';
+      requestAnimationFrame(кадр);
+    };
+    requestAnimationFrame(кадр);
+    addEventListener('resize', размер);
+    return {
+      искры(узел){
+        const р = узел.getBoundingClientRect(), о = холст.getBoundingClientRect();
+        for (let i = 0; i < 26; i++){
+          const у = Math.random() * 6.283, с = 60 + Math.random() * 160;
+          искры.push({ x:р.left - о.left + р.width * (0.2 + Math.random() * 0.6),
+                       y:р.top - о.top + р.height * (0.35 + Math.random() * 0.3),
+                       vx:Math.cos(у) * с, vy:Math.sin(у) * с - 40, r:1.2 + Math.random() * 2,
+                       ж0:0.6 + Math.random() * 0.5, ж:0, ц:Math.random() < 0.5 ? '120,160,255' : '190,140,255' });
+          искры[искры.length - 1].ж = искры[искры.length - 1].ж0;
+        }
+      },
+      стоп(){ стоим = true; removeEventListener('resize', размер); }
+    };
   }
 };
 window.Welcome = Welcome;
