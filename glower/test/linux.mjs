@@ -1656,6 +1656,36 @@ try {
         && !existsSync(join(прил, 'wine')), JSON.stringify(итог.сброс));
   }
 
+  /* --- комплектующие: «О системе» спрашивает машину, а не браузер ---
+     Раньше там было «8 логических ядер» и всё: это знал браузер. Теперь —
+     модель процессора, ядра и потоки, видеокарты, диски, плата. */
+  {
+    const r = await page.evaluate(async () => {
+      const w = WM.open('settings', { section:'about' });
+      await new Promise(r2 => setTimeout(r2, 2500));
+      const т = w.body.innerText;
+      WM.close(w);
+      return т;
+    });
+    const { readFileSync } = await import('node:fs');
+    const модель = ((readFileSync('/proc/cpuinfo', 'utf8').match(/^model name\s*:\s*(.+)$/m) || [])[1] || '')
+      .replace(/\((R|TM|tm)\)/g, '').replace(/\s+CPU\s+@.*$/, '').replace(/\s{2,}/g, ' ').trim().slice(0, 12);
+    check('«О системе» показывает модель процессора, потоки и память машины',
+      (!модель || r.includes(модель)) && /поток/.test(r) && /Оперативная память/.test(r) && !/логических ядер/.test(r),
+      r.slice(0, 300));
+    const { разбери_lspci } = await import(pathToFileURL(join(root, 'agent/system.mjs')).href);
+    const у = разбери_lspci([
+      '00:02.0 VGA compatible controller [0300]: Intel Corporation HD Graphics 520 [8086:1916] (rev 07)',
+      '\tKernel driver in use: i915',
+      '01:00.0 3D controller [0302]: NVIDIA Corporation GM108M [GeForce 940MX] [10de:134d] (rev a2)',
+      '02:00.0 Network controller [0280]: Intel Corporation Wireless 8260 [8086:24f3] (rev 3a)',
+      '\tKernel driver in use: iwlwifi'].join('\n'));
+    check('разбор lspci: видеокарты, сеть и драйверы',
+      у.length === 3 && у[0]['имя'] === 'Intel Corporation HD Graphics 520' && у[0]['драйвер'] === 'i915'
+        && у[1]['класс'] === '3D controller' && у[1]['драйвер'] === null && у[2]['драйвер'] === 'iwlwifi',
+      JSON.stringify(у));
+  }
+
   /* --- раскладки: список из системы и выбор, который доходит до неё ---
 
      Агенту даём свой дом и свою папку сеанса: он пишет выбор в

@@ -2517,23 +2517,95 @@ export const wallpapers = {
   }
 };
 
+/* Разбор «lspci -nnk»: устройство — строка с адресом, под ней с отступом
+   подробности, среди них драйвер. Отдельной функцией — её проверяют тесты
+   на образце настоящего вывода: на машине сборки PCI-устройств нет. */
+export function разбери_lspci(текст){
+  const устройства = [];
+  let тек = null;
+  for (const с of String(текст || '').split('\n')){
+    /* «00:02.0 VGA compatible controller [0300]: Intel … [8086:0416] (rev 06)»;
+       без ключа -nn кодов в квадратных скобках нет — понимаем и так */
+    const м = с.match(/^[0-9a-f]{2,4}:[0-9a-f]{2}\.[0-9a-f]\s+([^:\[]+?)\s*(?:\[([0-9a-f]{4})\])?:\s*(.+)$/i);
+    if (м){
+      const имя = м[3].replace(/\s*\(rev [^)]+\)\s*$/i, '').replace(/\s*\[[0-9a-f]{4}:[0-9a-f]{4}\]\s*$/i, '').trim();
+      тек = { 'класс':м[1].trim(), 'код':м[2] || '', 'имя':имя, 'драйвер':null };
+      устройства.push(тек);
+      continue;
+    }
+    const д = с.match(/^\s+Kernel driver in use:\s*(\S+)/);
+    if (д && тек) тек['драйвер'] = д[1];
+  }
+  return устройства;
+}
+
+/* Имя без лишнего: «Intel Corporation» → «Intel», «[AMD/ATI]» и прочие
+   скобки — убираем: человеку нужно название, а не родословная. */
+const чище = т => String(т || '')
+  .replace(/\b(Corporation|Corp\.?|Inc\.?|Co\.,? Ltd\.?|Technology|Semiconductor|Electronics)\b/g, '')
+  .replace(/Advanced Micro Devices, Inc\.\s*\[AMD\/ATI\]/, 'AMD')
+  .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
+
 export const hardware = {
   async 'sys.hardware'(){
     const cpuinfo = await readOr('/proc/cpuinfo');
-    const model = (cpuinfo.match(/^model name\s*:\s*(.+)$/m) || [])[1]
-      || (cpuinfo.match(/^Model\s*:\s*(.+)$/m) || [])[1] || null;
+    const поле = к => (cpuinfo.match(new RegExp('^' + к + '\\s*:\\s*(.+)$', 'm')) || [])[1] || null;
+    const model = поле('model name') || поле('Model') || поле('Hardware') || null;
+    /* Физические ядра: «cpu cores» на каждый процессор, процессоров —
+       сколько разных «physical id». Потоков — сколько всего строк processor. */
+    const физ = new Set([...cpuinfo.matchAll(/^physical id\s*:\s*(\d+)/gm)].map(м => м[1])).size || 1;
+    const ядер = parseInt(поле('cpu cores'), 10) ? parseInt(поле('cpu cores'), 10) * физ : null;
+    const частота = parseInt(await readOr('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq'), 10) || null;
     const osrel = await readOr('/etc/os-release');
     const pretty = (osrel.match(/^PRETTY_NAME="?([^"\n]+)"?$/m) || [])[1] || null;
 
-    /* имя машины: DMI есть не везде, поэтому мягко */
-    const vendor = await readOr('/sys/class/dmi/id/sys_vendor');
-    const product = await readOr('/sys/class/dmi/id/product_name');
+    /* Машина и плата: DMI есть не везде (виртуалки, ARM), поэтому мягко */
+    const dmi = async к => {
+      const в = await readOr('/sys/class/dmi/id/' + к);
+      return /^(To be filled|Default string|System Product Name|Not Specified|None|O\.E\.M\.)/i.test(в) ? '' : в;
+    };
+    const vendor = await dmi('sys_vendor'), product = await dmi('product_name');
+    const плата = [await dmi('board_vendor'), await dmi('board_name')].filter(Boolean).join(' ');
+    const биос = [await dmi('bios_vendor'), await dmi('bios_version'), await dmi('bios_date')].filter(Boolean).join(' · ');
+    const uefi = existsSync('/sys/firmware/efi');
+
+    /* PCI: видеокарты, сеть, звук */
+    let pci = [];
+    if (await has('lspci')){
+      try { pci = разбери_lspci(await call('lspci', ['-nnk'])); } catch(e){}
+    }
+    const по = re => pci.filter(у => re.test(у['класс'])).map(у => ({ 'имя':чище(у['имя']), 'драйвер':у['драйвер'] }));
+    const видео = по(/VGA|3D controller|Display controller/i);
+    const сеть = по(/Network controller|Ethernet controller/i);
+    const звук = по(/Audio device|Multimedia audio/i);
+
+    /* Накопители: только настоящие диски, без zram и петель */
+    const диски = [];
+    if (await has('lsblk')){
+      try {
+        const д = JSON.parse(await call('lsblk', ['-d', '-J', '-b', '-o', 'NAME,MODEL,SIZE,ROTA,TRAN,TYPE']));
+        (д.blockdevices || []).forEach(б => {
+          if (б.type !== 'disk' || /^(zram|loop|ram|sr)/.test(б.name) || !(+б.size > 0)) return;
+          const вид = /^nvme/.test(б.name) || б.tran === 'nvme' ? 'NVMe SSD'
+                    : б.tran === 'usb' ? 'USB-накопитель'
+                    : (б.rota === false || б.rota === '0') ? 'SSD' : (б.tran === 'virtio' ? 'виртуальный диск' : 'HDD');
+          диски.push({ 'имя':(б.model || '').trim() || б.name, 'размер':+б.size, 'вид':вид });
+        });
+      } catch(e){}
+    }
+
+    /* Подкачка */
+    const meminfo = await readOr('/proc/meminfo');
+    const кб = к => (parseInt((meminfo.match(new RegExp('^' + к + ':\\s*(\\d+)', 'm')) || [])[1], 10) || 0) * 1024;
 
     return {
-      cpu:{ model, cores:os.cpus().length, arch:os.arch() },
-      mem:{ total:os.totalmem(), free:os.freemem() },
+      cpu:{ model, cores:os.cpus().length, 'ядер':ядер, arch:os.arch(),
+            'частота':частота ? частота * 1000 : null, 'кэш':поле('cache size') },
+      mem:{ total:os.totalmem(), free:os.freemem(), 'подкачка':кб('SwapTotal') },
       kernel:os.release(), distro:pretty, uptime:Math.round(os.uptime()),
       machine:[vendor, product].filter(Boolean).join(' ') || null,
+      'плата':плата || null, 'биос':биос || null, 'uefi':uefi,
+      'видео':видео, 'сеть':сеть, 'звук':звук, 'диски':диски,
       host:os.hostname()
     };
   },

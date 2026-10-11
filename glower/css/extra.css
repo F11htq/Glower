@@ -1009,3 +1009,6 @@ body.reduced .ms-hero-art,body.эконом .ms-hero-art{animation:none}
 .kb-строка small{opacity:.45;font-size:11px;font-family:ui-monospace,monospace}
 .kb-галка{color:var(--accent);font-weight:700;text-align:center}
 .kb-пусто{padding:14px;text-align:center;opacity:.5;font-size:13px}
+
+/* Сведения о железе: названия бывают длинными — переносим, а не режем */
+.hw-знач{max-width:min(380px, 45vw);text-align:right;white-space:normal;line-height:1.35}

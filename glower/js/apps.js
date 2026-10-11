@@ -1751,6 +1751,47 @@ APPS.settings = {
 
     /* Настоящая система или прототип в браузере — от этого зависит, чему верить */
     const isSys = () => !!(window.OS && OS.on());
+
+    /* Железо машины словами — для «Системы» и «О системе». Что машина не
+       сообщает (DMI у виртуалок, частоту у некоторых ARM), то не пишем,
+       а не выдумываем. */
+    const рисуйЖелезо = (куда, hw) => {
+      куда.innerHTML = '';
+      const гб = b => {
+        const g = b / 1073741824;
+        return g >= 1000 ? (g / 1024).toFixed(1) + ' ТБ' : g >= 10 ? Math.round(g) + ' ГБ' : g.toFixed(1) + ' ГБ';
+      };
+      const слово = (n, о, д, м) => { const a = n % 10, b = n % 100;
+        return n + ' ' + (a === 1 && b !== 11 ? о : a >= 2 && a <= 4 && (b < 12 || b > 14) ? д : м); };
+      const upt = sec => Math.floor(sec / 3600) + ' ч ' + Math.round(sec % 3600 / 60) + ' мин';
+      const строка = (e, k, v, sub) => куда.appendChild(row(e, k, esc(sub || ''), el('div', 'muted tiny hw-знач', esc(String(v)))));
+      const ц = hw.cpu || {};
+      const модель = String(ц.model || 'название не сообщается')
+        .replace(/\((R|TM|tm)\)/g, '').replace(/\s+CPU\s+@.*$/, '').replace(/\s+@\s+[\d.]+\s*GHz$/i, '').replace(/\s{2,}/g, ' ').trim();
+      const про = [
+        ц['ядер'] ? слово(ц['ядер'], 'ядро', 'ядра', 'ядер') : null,
+        слово(ц.cores, 'поток', 'потока', 'потоков'),
+        ц['частота'] ? 'до ' + (ц['частота'] / 1e9).toFixed(1).replace('.', ',') + ' ГГц' : null,
+        ц['кэш'] ? 'кэш ' + ц['кэш'].replace(/\s*KB$/i, ' КБ') : null,
+        ц.arch
+      ].filter(Boolean).join(' · ');
+      строка('⚙️', 'Процессор', модель, про);
+      const видео = hw['видео'] || [];
+      видео.forEach((в, i) => строка('🎮', видео.length > 1 ? 'Видеокарта ' + (i + 1) : 'Видеокарта', в['имя'],
+        в['драйвер'] ? 'драйвер ' + в['драйвер'] : 'драйвер не загружен'));
+      /* Память — с десятыми: «15,6 ГБ» честнее, чем «16 ГБ» */
+      const точно = b => (b / 1073741824).toFixed(1) + ' ГБ';
+      строка('🧠', 'Оперативная память', точно(hw.mem.total),
+        'свободно ' + точно(hw.mem.free) + (hw.mem['подкачка'] ? ' · подкачка ' + точно(hw.mem['подкачка']) : ''));
+      (hw['диски'] || []).forEach(д => строка('💽', 'Накопитель', д['имя'], гб(д['размер']) + ' · ' + д['вид']));
+      if (hw['плата'] || hw.machine) строка('🧩', 'Материнская плата', hw['плата'] || hw.machine, hw['плата'] ? (hw.machine || '') : '');
+      if (hw['биос']) строка('🔧', hw['uefi'] ? 'UEFI' : 'BIOS', hw['биос'], hw['uefi'] ? 'загрузка UEFI' : 'загрузка Legacy BIOS');
+      (hw['сеть'] || []).forEach(с => строка('📶', 'Сетевой адаптер', с['имя'], с['драйвер'] ? 'драйвер ' + с['драйвер'] : ''));
+      (hw['звук'] || []).forEach(з => строка('🔊', 'Звук', з['имя'], з['драйвер'] ? 'драйвер ' + з['драйвер'] : ''));
+      строка('🖥', 'Система', Brand.name, 'ядро Linux ' + hw.kernel);
+      строка('🏷', 'Имя машины', hw.host, '');
+      строка('⏱', 'Время работы', upt(hw.uptime), 'с момента включения');
+    };
     const fail = (box, e) => { box.innerHTML = '';
       box.appendChild(row('⚠️', 'Не удалось опросить машину', String(e && e.message || e), el('span'))); };
 
@@ -2152,18 +2193,7 @@ APPS.settings = {
       const h = card('Оборудование');
       const hl = el('div'); h.appendChild(hl);
       if (isSys()){
-        OS.hardware().then(hw => {
-          hl.innerHTML = '';
-          const gb = b => (b / 1073741824).toFixed(1) + ' ГБ';
-          const upt = sec => Math.floor(sec / 3600) + ' ч ' + Math.round(sec % 3600 / 60) + ' мин';
-          [['⚙️', 'Процессор', hw.cpu.model || 'название не сообщается',
-             hw.cpu.cores + ' логических ядер · ' + hw.cpu.arch],
-           ['🧠', 'Оперативная память', gb(hw.mem.total), 'свободно ' + gb(hw.mem.free)],
-           ['🖥', 'Система', Brand.name, 'ядро Linux ' + hw.kernel],
-           ['🏷', 'Имя машины', hw.host, hw.machine || ''],
-           ['⏱', 'Время работы', upt(hw.uptime), 'с момента включения']
-          ].forEach(([e, k, v, sub]) => hl.appendChild(row(e, k, sub || '', el('div', 'muted tiny', String(v)))));
-        }).catch(e => fail(hl, e));
+        OS.hardware().then(hw => рисуйЖелезо(hl, hw)).catch(e => fail(hl, e));
       } else {
         [['⚙️','Логических ядер', sy.cores || 'н/д'],
          ['🧠','Оперативная память', sy.mem ? '≈ ' + sy.mem + ' ГБ' : 'н/д'],
@@ -3127,7 +3157,14 @@ APPS.settings = {
         <div class="muted">${Brand.versionLine()}</div></div>`;
       main.appendChild(box);
       const c = card('Характеристики устройства');
-      [['💻','Имя устройства', Brand.hostname],
+      /* На настоящей машине — её железо целиком, а не то, что знает браузер */
+      if (isSys()){
+        const место = el('div');
+        место.appendChild(el('div', 'muted tiny', 'Спрашиваю систему…'));
+        c.appendChild(место);
+        main.appendChild(c);
+        OS.hardware().then(hw => рисуйЖелезо(место, hw)).catch(e => fail(место, e));
+      } else [['💻','Имя устройства', Brand.hostname],
        ['⚙️','Процессор', (navigator.hardwareConcurrency || 8) + ' логических ядер'],
        ['🧠','Память', (navigator.deviceMemory ? navigator.deviceMemory + ' ГБ' : 'н/д')],
        ['🖥️','Экран', screen.width + ' × ' + screen.height + ' @ ' + (devicePixelRatio || 1) + 'x'],
