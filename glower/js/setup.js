@@ -350,79 +350,71 @@ window.Setup = Setup;
    Приветствие: экран между настройкой и рабочим столом
    ========================================================================== */
 const Welcome = {
-  /* Приветствие после настройки — «Привет» на языках мира, как у macOS.
+  /* Приветствие после настройки — «Сборка вихря».
 
-   Человек только что закончил настройку: это момент, когда система впервые
-   становится его. Поэтому здесь не заставка, а маленькая сцена:
-     — на тёмном небе медленно течёт сияние в цветах системы, вверх плывут
-       пылинки;
-     — первым словом — «Привет» на языке системы: его выписывает «перо
-       света» — сначала контуры букв, потом заливка, а по краю письма бежит
-       искра;
-     — дальше каскад приветствий, всё быстрее: каждое слово рассыпается
-       искрами и уступает место следующему;
-     — последним крупно выписывается имя и «Добро пожаловать в GlowerOS»;
-     — финал: от центра раскрывается круг, по краю идёт волна света, за ней
-       рабочий стол.
-   Щелчок или любая клавиша — сразу к финалу.
+   Своя сцена, а не чужая: знак системы собирается из пыли.
+     — на тёмном небе проявляются круговые оси — тонкие орбиты, по ним
+       кружат тысячи мельчайших частиц;
+     — каждая частица по спирали вдоль своей орбиты стягивается к своей
+       точке логотипа и принимает её цвет — точки берутся из самой
+       картинки, поэтому вихрь собирается буквально из пыли, оставляя
+       светящиеся следы;
+     — собранный вихрь вспыхивает, вокруг пролетает комета света;
+     — появляется приветствие — только на языке, выбранном в настройке;
+     — всё сжимается в точку, и из неё кругом раскрывается рабочий стол.
+   Щелчок или любая клавиша — сразу к приветствию и финалу. На слабой
+   машине частиц меньше и без следов; при просьбе о меньшем движении —
+   без частиц вовсе: знак и слова просто проявляются. */
 
-   Языки — только те, чьё письмо есть в шрифтах системы (Noto): слово из
-   квадратиков хуже, чем его отсутствие. Китайский, японский и корейский
-   потребовали бы шрифта на десятки мегабайт. */
-  ПРИВЕТ:{
-    ru:'Привет', en:'Hello', uk:'Привіт', de:'Hallo', fr:'Bonjour', es:'Hola', it:'Ciao',
-    pt:'Olá', tr:'Merhaba', el:'Γειά σου', hi:'नमस्ते', ar:'مرحبا'
-  },
-  /* Мир — в этом порядке, после языков самого человека */
-  МИР:['en', 'ru', 'fr', 'es', 'de', 'it', 'pt', 'tr', 'el', 'hi', 'ar'],
-
-  /* Подписи — на языке системы. Сейчас в настройке два языка, русский и
-     английский; остальные лежат заранее, чтобы приветствие заговорило на
-     новом языке системы в тот же день, когда он появится. Незнакомый язык
-     получает английские подписи. */
+  /* Слова — на языке системы. Незнакомый язык получает английские. */
   ТЕКСТЫ:{
-    ru:{ welcome:'Добро пожаловать в GlowerOS', skip:'Щелчок — пропустить', безИмени:'Добро пожаловать',
+    ru:{ привет:'Привет', welcome:'Добро пожаловать в GlowerOS', skip:'Щелчок — пропустить', безИмени:'Добро пожаловать',
          система:'Система', готово:'Настройка завершена — добро пожаловать' },
-    en:{ welcome:'Welcome to GlowerOS', skip:'Click to skip', безИмени:'Welcome',
+    en:{ привет:'Hello', welcome:'Welcome to GlowerOS', skip:'Click to skip', безИмени:'Welcome',
          система:'System', готово:'Setup complete — welcome' },
-    uk:{ welcome:'Ласкаво просимо до GlowerOS', skip:'Клацніть, щоб пропустити', безИмени:'Ласкаво просимо',
+    uk:{ привет:'Привіт', welcome:'Ласкаво просимо до GlowerOS', skip:'Клацніть, щоб пропустити', безИмени:'Ласкаво просимо',
          система:'Система', готово:'Налаштування завершено — ласкаво просимо' },
-    de:{ welcome:'Willkommen bei GlowerOS', skip:'Klicken zum Überspringen', безИмени:'Willkommen',
+    be:{ привет:'Прывітанне', welcome:'Сардэчна запрашаем у GlowerOS', skip:'Пстрыкніце, каб прапусціць', безИмени:'Сардэчна запрашаем',
+         система:'Сістэма', готово:'Наладка завершана — сардэчна запрашаем' },
+    kk:{ привет:'Сәлем', welcome:'GlowerOS-қа қош келдіңіз', skip:'Өткізіп жіберу үшін басыңыз', безИмени:'Қош келдіңіз',
+         система:'Жүйе', готово:'Баптау аяқталды — қош келдіңіз' },
+    de:{ привет:'Hallo', welcome:'Willkommen bei GlowerOS', skip:'Klicken zum Überspringen', безИмени:'Willkommen',
          система:'System', готово:'Einrichtung abgeschlossen — willkommen' },
-    fr:{ welcome:'Bienvenue dans GlowerOS', skip:'Cliquez pour passer', безИмени:'Bienvenue',
+    fr:{ привет:'Bonjour', welcome:'Bienvenue dans GlowerOS', skip:'Cliquez pour passer', безИмени:'Bienvenue',
          система:'Système', готово:'Configuration terminée — bienvenue' },
-    es:{ welcome:'Bienvenido a GlowerOS', skip:'Haz clic para omitir', безИмени:'Bienvenido',
-         система:'Sistema', готово:'Configuración completada — bienvenido' }
+    es:{ привет:'Hola', welcome:'Bienvenido a GlowerOS', skip:'Haz clic para omitir', безИмени:'Bienvenido',
+         система:'Sistema', готово:'Configuración completada — bienvenido' },
+    it:{ привет:'Ciao', welcome:'Benvenuto in GlowerOS', skip:'Fai clic per saltare', безИмени:'Benvenuto',
+         система:'Sistema', готово:'Configurazione completata — benvenuto' },
+    pt:{ привет:'Olá', welcome:'Bem-vindo ao GlowerOS', skip:'Clique para pular', безИмени:'Bem-vindo',
+         система:'Sistema', готово:'Configuração concluída — bem-vindo' },
+    pl:{ привет:'Cześć', welcome:'Witamy w GlowerOS', skip:'Kliknij, aby pominąć', безИмени:'Witamy',
+         система:'System', готово:'Konfiguracja zakończona — witamy' },
+    tr:{ привет:'Merhaba', welcome:'GlowerOS’a hoş geldiniz', skip:'Geçmek için tıklayın', безИмени:'Hoş geldiniz',
+         система:'Sistem', готово:'Kurulum tamamlandı — hoş geldiniz' }
   },
 
-  /* Порядок слов: язык системы — первым, за ним языки раскладок, которые
-     человек выбрал в настройке (включил немецкую — второе слово «Hallo»),
-     потом весь остальной мир. Без повторов. */
-  порядок(язык, раскладки){
-    const коды = [язык, ...(раскладки || []), ...this.МИР];
-    return [...new Set(коды)].filter(к => this.ПРИВЕТ[к]).map(к => [this.ПРИВЕТ[к], к]);
-  },
+  тексты(язык){ return this.ТЕКСТЫ[язык] || this.ТЕКСТЫ.en; },
 
   play(name){
     const who = name || (Profiles.current() || {}).name || S.userName || '';
     const язык = window.I18N ? I18N.lang() : 'ru';
-    const T = this.ТЕКСТЫ[язык] || this.ТЕКСТЫ.en;
-    const тихо = document.body.classList.contains('эконом') || document.body.classList.contains('reduced');
+    const T = this.тексты(язык);
+    const тело = document.body.classList;
+    const тихо = тело.contains('reduced');
+    const слабо = тело.contains('эконом');
 
-    /* Длительности тают: каскад разгоняется */
-    const раскладки = (window.Layouts && Layouts.enabled) ? Layouts.enabled() : [];
-    const слова = this.порядок(язык, раскладки);
-    const длит = тихо ? слова.slice(0, 2).map(() => 900)
-                      : слова.map((_, i) => i === 0 ? 1500 : Math.max(380, 820 - i * 55));
-    const показать = тихо ? слова.slice(0, 2) : слова;
+    const строка = who ? T.привет + ', ' + who : T.безИмени;
+    const буквы = [...строка].map((б, i) =>
+      `<span style="--i:${i}">${б === ' ' ? '&nbsp;' : esc(б)}</span>`).join('');
 
     const ov = el('div', 'welcome');
+    ov.setAttribute('lang', язык);
     ov.innerHTML = `
-      <div class="wl-сияние"><i></i><i></i><i></i></div>
-      <canvas class="wl-пыль"></canvas>
-      <div class="wl-слово" aria-hidden="true"></div>
-      <div class="wl-итог">
-        <div class="wl-who">${esc(who || T.безИмени)}</div>
+      <canvas class="wl-холст"></canvas>
+      <img class="os-logo wl-лого" src="assets/logo.png" alt="" draggable="false">
+      <div class="wl-текст">
+        <div class="wl-who">${буквы}</div>
         <div class="wl-hi">${esc(T.welcome)}</div>
       </div>
       <div class="wl-skip">${esc(T.skip)}</div>
@@ -430,143 +422,221 @@ const Welcome = {
     document.body.appendChild(ov);
     requestAnimationFrame(() => ov.classList.add('on'));
 
-    const пыль = тихо ? null : this.пыль(ov.querySelector('.wl-пыль'));
-    const место = ov.querySelector('.wl-слово');
+    const сцена = тихо ? null : this.сцена(ov.querySelector('.wl-холст'), { слабо });
+    const таймеры = [];
+    const потом = (мс, f) => таймеры.push(setTimeout(f, мс));
+    let этап = 'сборка';
 
-    /* Одно слово «пером света»: SVG-текст, у которого сначала рисуется
-       обводка, потом проявляется заливка; маска открывает его слева
-       направо (справа налево — для арабского), а по краю бежит искра. */
-    const напиши = (текст, язык, мс, крупно) => {
-      const ртл = язык === 'ar' || язык === 'he';
-      const н = el('div', 'wl-перо' + (ртл ? ' ртл' : '') + (крупно ? ' крупно' : ''));
-      н.style.setProperty('--мс', мс + 'ms');
-      н.setAttribute('lang', язык);
-      н.innerHTML = `<svg viewBox="0 0 1000 220" preserveAspectRatio="xMidYMid meet">
-          <defs><linearGradient id="wl-г" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" stop-color="#9cc2ff"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="#c9a6ff"/>
-          </linearGradient></defs>
-          <text x="500" y="150" text-anchor="middle">${esc(текст)}</text>
-        </svg><span class="wl-искра"></span>`;
-      место.appendChild(н);
-      requestAnimationFrame(() => н.classList.add('пишу'));
-      return н;
-    };
-
-    let шаг = 0, таймер = null, конец = false;
-    const следующее = () => {
-      if (конец) return;
-      const прежнее = место.querySelector('.wl-перо:not(.ушло)');
-      if (прежнее){
-        прежнее.classList.add('ушло');
-        if (пыль) пыль.искры(прежнее);
-        setTimeout(() => прежнее.remove(), 700);
-      }
-      if (шаг >= показать.length) return итог();
-      const [текст, язык] = показать[шаг];
-      /* Новое слово начинаем писать чуть позже, чем ушло прежнее */
-      const н = шаг, мс = Math.min(1100, длит[шаг] * 0.8);
-      setTimeout(() => { if (!конец) напиши(текст, язык, мс, н === 0); }, прежнее ? 120 : 0);
-      таймер = setTimeout(следующее, длит[шаг]);
-      шаг++;
-    };
-
-    /* Имя — крупно и тем же пером; под ним приветствие системы */
-    const итог = () => {
-      if (конец) return;
-      конец = true;
-      clearTimeout(таймер);
-      место.querySelectorAll('.wl-перо').forEach(н => н.classList.add('ушло'));
-      ov.classList.add('имя');
+    /* Вихрь собран: чёткий знак проявляется сквозь пыль, вспышка, комета */
+    const собран = () => {
+      if (этап !== 'сборка') return;
+      этап = 'собран';
+      ov.classList.add('собран');
+      if (сцена) сцена.вспышка();
       Snd.blip(523, .18, 'sine', .04);
-      setTimeout(() => Snd.blip(659, .18, 'sine', .035), 160);
-      setTimeout(() => Snd.blip(784, .30, 'sine', .03), 330);
-      setTimeout(финал, тихо ? 1200 : 2100);
+      setTimeout(() => Snd.blip(784, .28, 'sine', .03), 140);
+      потом(450, слова);
     };
-
-    /* Финал: круг раскрывается от центра, по краю — волна света */
+    /* Приветствие — по буквам */
+    const слова = () => {
+      if (этап === 'слова' || этап === 'финал') return;
+      этап = 'слова';
+      ov.classList.add('собран', 'слова');
+      setTimeout(() => Snd.blip(1046, .30, 'sine', .022), 300);
+      потом(тихо ? 1600 : 2300, финал);
+    };
+    /* Финал: всё сжимается к центру, и кругом раскрывается стол */
     const финал = () => {
-      ov.classList.add('раскрытие');
-      Snd.blip(1046, .35, 'sine', .028);
-      document.body.classList.add('стол-въезд');
-      $('#desktop').classList.add('on');
+      if (этап === 'финал') return;
+      этап = 'финал';
+      таймеры.forEach(clearTimeout);
+      ov.classList.add('сжатие');
+      if (сцена) сцена.сожми();
       setTimeout(() => {
-        ov.classList.add('bye');
-        setTimeout(() => { if (пыль) пыль.стоп(); ov.remove(); }, 600);
-      }, 800);
-      setTimeout(() => document.body.classList.remove('стол-въезд'), 2000);
-      Shell.toast(T.система, T.готово, '✨', 4000);
+        ov.classList.add('раскрытие');
+        document.body.classList.add('стол-въезд');
+        $('#desktop').classList.add('on');
+        setTimeout(() => {
+          ov.classList.add('bye');
+          setTimeout(() => { if (сцена) сцена.стоп(); ov.remove(); }, 600);
+        }, 800);
+        setTimeout(() => document.body.classList.remove('стол-въезд'), 2000);
+        Shell.toast(T.система, T.готово, '✨', 4000);
+      }, 380);
       removeEventListener('keydown', пропуск, true);
     };
 
-    /* Пропустить: щелчок или клавиша — сразу к имени и финалу */
+    /* Пропустить: щелчок или клавиша — сразу к словам, повторно — к финалу */
     const пропуск = e => {
       if (e.type === 'keydown'){ e.preventDefault(); e.stopPropagation(); }
-      if (!конец) итог();
+      if (этап === 'сборка' || этап === 'собран'){
+        таймеры.forEach(clearTimeout);
+        if (сцена) сцена.дособери();
+        ov.classList.add('собран');
+        слова();
+      } else финал();
     };
     ov.addEventListener('click', пропуск);
     addEventListener('keydown', пропуск, true);
 
-    setTimeout(следующее, 450);
+    if (сцена) сцена.собрано.then(собран);
+    else потом(500, собран);
   },
 
-  /* Пылинки и искры — на одном холсте. Пылинки плывут вверх и мерцают;
-     искры вылетают из уходящего слова и гаснут. Холст сам себя убирает,
-     когда приветствие закончилось. */
-  пыль(холст){
+  /* Сцена на холсте: круговые оси, частицы, следы, вспышка и комета.
+
+     Точки логотипа берём из самой картинки. Если картинку прочитать нельзя
+     (страница открыта файлом — браузер тогда не даёт читать пиксели),
+     вихрь рисуется по формуле: пять закрученных рукавов, как у знака. */
+  сцена(холст, { слабо }){
     const к = холст.getContext('2d');
-    if (!к) return null;
-    let w = 0, h = 0, стоим = false;
+    const d = Math.min(2, devicePixelRatio || 1);
+    let w = 0, h = 0, cx = 0, cy = 0;
     const размер = () => {
-      const d = Math.min(2, devicePixelRatio || 1);
       w = холст.clientWidth; h = холст.clientHeight;
       холст.width = w * d; холст.height = h * d; к.setTransform(d, 0, 0, d, 0, 0);
+      cx = w / 2; cy = h * 0.42;
     };
     размер();
-    const пылинки = Array.from({ length:70 }, () => ({
-      x:Math.random() * w, y:Math.random() * h, r:0.6 + Math.random() * 1.6,
-      v:6 + Math.random() * 18, ф:Math.random() * 6.28 }));
-    const искры = [];
-    let было = performance.now();
+    const ЛОГО = 180;                                   // как .wl-лого в CSS
+    const N = слабо ? 900 : 2600;
+    const частицы = [];
+    let готово;
+    const собрано = new Promise(r => готово = r);
+
+    const цели = cb => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas'); c.width = c.height = 120;
+          const cc = c.getContext('2d'); cc.drawImage(img, 0, 0, 120, 120);
+          const px = cc.getImageData(0, 0, 120, 120).data, точки = [];
+          for (let y = 0; y < 120; y++) for (let x = 0; x < 120; x++){
+            const i = (y * 120 + x) * 4;
+            if (px[i + 3] > 140 && px[i] + px[i + 1] + px[i + 2] > 120)
+              точки.push([(x / 120 - 0.5) * ЛОГО, (y / 120 - 0.5) * ЛОГО, px[i], px[i + 1], px[i + 2]]);
+          }
+          if (точки.length > 200) return cb(точки);
+        } catch(e){ /* холст «испорчен» чужой картинкой — рисуем по формуле */ }
+        cb(null);
+      };
+      img.onerror = () => cb(null);
+      img.src = 'assets/logo.png';
+    };
+    const поФормуле = () => {
+      const т = [];
+      for (let i = 0; i < 4000; i++){
+        const рукав = i % 5, u = Math.random();
+        const r = 8 + u * (ЛОГО * 0.47);
+        const a = рукав * (2 * Math.PI / 5) + u * 2.4 + (Math.random() - 0.5) * 0.35 * (1 - u * 0.5);
+        const синий = u > 0.5;
+        т.push([Math.cos(a) * r, Math.sin(a) * r, синий ? 70 : 150, синий ? 130 : 90, 255]);
+      }
+      return т;
+    };
+
+    const начало = performance.now();
+    let вспышкаС = 0, сжатиеС = 0, стоим = false, дособрать = false;
+    const плавно = p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+
+    цели(точки => {
+      const т = точки || поФормуле();
+      for (let i = 0; i < N; i++){
+        const [tx, ty, R, G, B] = т[(Math.random() * т.length) | 0];
+        const rt = Math.hypot(tx, ty), θt = Math.atan2(ty, tx);
+        /* Орбита старта: одна из «осей» — колец, на которых частицы кружат
+           до того, как пойти к своей точке */
+        const ось = [150, 230, 320, 420, 540][(Math.random() * 5) | 0] + (Math.random() - 0.5) * 26;
+        частицы.push({ rt, θt, r0:Math.max(ось, rt + 60), θ0:Math.random() * 6.283,
+          витков:1 + Math.random() * 1.2, з:0.25 + Math.random() * 0.9 + (1 - rt / ЛОГО) * 0.3,
+          д:1.5 + Math.random() * 0.6, ω:(0.25 + Math.random() * 0.35) * (Math.random() < 0.85 ? 1 : -1),
+          ц:`${Math.min(255, R + 40)},${Math.min(255, G + 40)},${Math.min(255, B + 20)}`, р:0.7 + Math.random() * 1.1 });
+      }
+    });
+
     const кадр = now => {
       if (стоим || !холст.isConnected) return;
-      const dt = Math.min(0.05, (now - было) / 1000); было = now;
-      к.clearRect(0, 0, w, h);
-      к.globalCompositeOperation = 'lighter';
-      for (const п of пылинки){
-        п.y -= п.v * dt; п.x += Math.sin(now / 1400 + п.ф) * 6 * dt;
-        if (п.y < -4){ п.y = h + 4; п.x = Math.random() * w; }
-        const а = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(now / 600 + п.ф));
-        к.fillStyle = `rgba(190,210,255,${а.toFixed(3)})`;
-        к.beginPath(); к.arc(п.x, п.y, п.r, 0, 6.283); к.fill();
+      const t = (now - начало) / 1000;
+      /* Следы: прежний кадр не стираем, а гасим — частицы тянут хвосты */
+      if (слабо) к.clearRect(0, 0, w, h);
+      else {
+        к.globalCompositeOperation = 'destination-out';
+        к.fillStyle = 'rgba(0,0,0,0.22)';
+        к.fillRect(0, 0, w, h);
       }
-      for (let i = искры.length - 1; i >= 0; i--){
-        const и = искры[i];
-        и.ж -= dt; if (и.ж <= 0){ искры.splice(i, 1); continue; }
-        и.vy += 40 * dt; и.x += и.vx * dt; и.y += и.vy * dt;
-        const а = Math.max(0, и.ж / и.ж0);
-        const г = к.createRadialGradient(и.x, и.y, 0, и.x, и.y, и.r * 3);
-        г.addColorStop(0, `rgba(255,255,255,${а})`);
-        г.addColorStop(0.4, `rgba(${и.ц},${(а * 0.6).toFixed(3)})`);
-        г.addColorStop(1, 'rgba(0,0,0,0)');
-        к.fillStyle = г; к.beginPath(); к.arc(и.x, и.y, и.r * 3, 0, 6.283); к.fill();
+      к.globalCompositeOperation = 'lighter';
+
+      /* Круговые оси: тонкие кольца, по ним бегут светлые дуги */
+      const оси = Math.min(1, t / 0.8) * (сжатиеС ? Math.max(0, 1 - (now - сжатиеС) / 350) : 1)
+                * (вспышкаС ? Math.max(0.25, 1 - (now - вспышкаС) / 1500) : 1);
+      if (оси > 0.01) [150, 230, 320, 420, 540].forEach((R, i) => {
+        к.strokeStyle = `rgba(140,160,255,${(0.035 * оси).toFixed(3)})`;
+        к.lineWidth = 1;
+        к.beginPath(); к.arc(cx, cy, R, 0, 6.283); к.stroke();
+        const a = t * (0.5 - i * 0.07) * (i % 2 ? -1 : 1) + i;
+        к.strokeStyle = `rgba(170,190,255,${(0.10 * оси).toFixed(3)})`;
+        к.lineWidth = 1.5;
+        к.beginPath(); к.arc(cx, cy, R, a, a + 0.7); к.stroke();
+      });
+
+      /* Частицы: кружат на своей оси, потом по спирали — к своей точке */
+      let дошли = 0;
+      const сжатие = сжатиеС ? Math.min(1, (now - сжатиеС) / 380) : 0;
+      for (const ч of частицы){
+        let p = дособрать ? 1 : Math.max(0, Math.min(1, (t - ч.з) / ч.д));
+        const e = плавно(p);
+        let r, θ;
+        if (p <= 0){ r = ч.r0; θ = ч.θ0 + t * ч.ω; }
+        else {
+          const старт = ч.θ0 + ч.з * ч.ω;
+          r = ч.r0 + (ч.rt - ч.r0) * e;
+          θ = ч.θt + (старт - ч.θt + ч.витков * 6.283) * (1 - e);
+        }
+        if (p >= 1) дошли++;
+        if (сжатие) r *= 1 - сжатие * сжатие;
+        const x = cx + Math.cos(θ) * r, y = cy + Math.sin(θ) * r;
+        const а = Math.min(1, t * 1.5) * (p >= 1 ? (вспышкаС ? Math.max(0.15, 1 - (now - вспышкаС) / 900) : 0.95) : 0.8);
+        к.fillStyle = `rgba(${ч.ц},${а.toFixed(3)})`;
+        к.fillRect(x - ч.р / 2, y - ч.р / 2, ч.р, ч.р);
+      }
+      if (частицы.length && дошли >= частицы.length * 0.97 && готово){ const г = готово; готово = null; г(); }
+
+      /* Вспышка: кольцо света расходится, по орбите пролетает комета */
+      if (вспышкаС){
+        const ф = (now - вспышкаС) / 1000;
+        if (ф < 0.9){
+          /* Тонкое и прозрачное: следы кадров превращают его в лёгкую
+             рябь, а толстое кольцо оставляло стопку серых колец */
+          const R = ЛОГО * 0.5 + ф * 420, а = (1 - ф / 0.9) * 0.28;
+          const г = к.createRadialGradient(cx, cy, R * 0.94, cx, cy, R);
+          г.addColorStop(0, 'rgba(120,150,255,0)'); г.addColorStop(0.7, `rgba(180,200,255,${а})`); г.addColorStop(1, 'rgba(120,150,255,0)');
+          к.fillStyle = г; к.beginPath(); к.arc(cx, cy, R, 0, 6.283); к.fill();
+        }
+        if (ф < 1.4){
+          const а = -Math.PI / 2 + ф * 4.6, R = ЛОГО * 0.66;
+          for (let j = 0; j < 14; j++){
+            const аа = а - j * 0.05, x = cx + Math.cos(аа) * R, y = cy + Math.sin(аа) * R;
+            const сила = (1 - j / 14) * Math.min(1, (1.4 - ф) * 2);
+            const г = к.createRadialGradient(x, y, 0, x, y, 9 - j * 0.4);
+            г.addColorStop(0, `rgba(255,255,255,${сила.toFixed(3)})`); г.addColorStop(1, 'rgba(130,150,255,0)');
+            к.fillStyle = г; к.beginPath(); к.arc(x, y, 9 - j * 0.4, 0, 6.283); к.fill();
+          }
+        }
       }
       к.globalCompositeOperation = 'source-over';
       requestAnimationFrame(кадр);
     };
     requestAnimationFrame(кадр);
     addEventListener('resize', размер);
+
+    /* На случай, если машина не успевает: собрано не позже чем через 4 с */
+    setTimeout(() => { if (готово){ const г = готово; готово = null; г(); } }, 4000);
+
     return {
-      искры(узел){
-        const р = узел.getBoundingClientRect(), о = холст.getBoundingClientRect();
-        for (let i = 0; i < 26; i++){
-          const у = Math.random() * 6.283, с = 60 + Math.random() * 160;
-          искры.push({ x:р.left - о.left + р.width * (0.2 + Math.random() * 0.6),
-                       y:р.top - о.top + р.height * (0.35 + Math.random() * 0.3),
-                       vx:Math.cos(у) * с, vy:Math.sin(у) * с - 40, r:1.2 + Math.random() * 2,
-                       ж0:0.6 + Math.random() * 0.5, ж:0, ц:Math.random() < 0.5 ? '120,160,255' : '190,140,255' });
-          искры[искры.length - 1].ж = искры[искры.length - 1].ж0;
-        }
-      },
+      собрано,
+      вспышка(){ вспышкаС = performance.now(); },
+      дособери(){ дособрать = true; if (!вспышкаС) вспышкаС = performance.now(); },
+      сожми(){ сжатиеС = performance.now(); },
       стоп(){ стоим = true; removeEventListener('resize', размер); }
     };
   }

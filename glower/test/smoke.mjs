@@ -914,32 +914,30 @@ try {
   /* Приветствие — «Привет» на языках мира: первым словом язык системы,
      потом каскад. Целиком сцена идёт около десяти секунд; щелчок сразу
      ведёт к имени и раскрытию. */
-  check('приветствие начинается с «Привет» на языке системы',
+  /* Приветствие — «Сборка вихря»: знак собирается из частиц, слова —
+     только на языке, выбранном в настройке. */
+  check('приветствие собирает знак из частиц и говорит только на языке системы',
     await page.evaluate(async () => {
-      await new Promise(r => setTimeout(r, 900));
-      const п = document.querySelector('.welcome .wl-перо text');
-      return !!п && п.textContent === 'Привет';
+      await new Promise(r => setTimeout(r, 600));
+      const w = document.querySelector('.welcome');
+      const т = w.textContent;
+      return !!w.querySelector('canvas.wl-холст') && /Привет, Проверка/.test(т.replace(/\u00a0/g, ' '))
+        && /Добро пожаловать в GlowerOS/.test(т) && !/Hello|Bonjour|Hola/.test(т);
     }));
 
-  /* Приветствие говорит на языке, выбранном в настройке: язык системы —
-     первым словом, языки выбранных раскладок — следом, потом мир. */
-  check('порядок приветствий следует выбору в настройке',
-    await page.evaluate(() => {
-      const слова = (я, р) => Welcome.порядок(я, р).map(x => x[0]);
-      const ru = слова('ru', ['en', 'ru']), en = слова('en', ['en', 'de']), uk = слова('uk', ['uk']);
-      const безПовторов = м => new Set(м).size === м.length;
-      return ru[0] === 'Привет' && ru[1] === 'Hello'
-        && en[0] === 'Hello' && en[1] === 'Hallo' && en[2] === 'Привет'
-        && uk[0] === 'Привіт' && безПовторов(ru) && безПовторов(en) && ru.length >= 10;
-    }));
+  check('слова приветствия есть на всех языках системы',
+    await page.evaluate(() => ['ru', 'en', 'uk', 'de', 'fr', 'es', 'pl', 'tr']
+      .every(я => Welcome.тексты(я).привет && Welcome.тексты(я).welcome)
+      && Welcome.тексты('de').привет === 'Hallo' && Welcome.тексты('xx') === Welcome.тексты('en')));
 
-  check('щелчок пропускает приветствие: имя, раскрытие и рабочий стол',
+  check('щелчок ведёт к словам, второй — к рабочему столу',
     await page.evaluate(async () => {
       document.querySelector('.welcome').click();
-      await new Promise(r => setTimeout(r, 200));
-      const имя = document.querySelector('.welcome').classList.contains('имя');
-      await new Promise(r => setTimeout(r, 3600));
-      return имя && !document.querySelector('.welcome')
+      await new Promise(r => setTimeout(r, 300));
+      const слова = document.querySelector('.welcome').classList.contains('слова');
+      document.querySelector('.welcome').click();
+      await new Promise(r => setTimeout(r, 2400));
+      return слова && !document.querySelector('.welcome')
         && document.querySelector('#desktop').classList.contains('on');
     }));
 
@@ -948,12 +946,12 @@ try {
       const было = KV.get('lang', 'ru');
       KV.set('lang', 'en');
       Welcome.play('Test');
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 500));
       const w = document.querySelector('.welcome');
-      const первое = (w.querySelector('.wl-перо text') || {}).textContent;
-      const ок = /Welcome to GlowerOS/.test(w.textContent) && /Click to skip/.test(w.textContent) && первое === 'Hello';
-      w.click();
-      await new Promise(r => setTimeout(r, 3600));
+      const т = w.textContent.replace(/\u00a0/g, ' ');
+      const ок = /Hello, Test/.test(т) && /Welcome to GlowerOS/.test(т) && /Click to skip/.test(т) && !/Привет/.test(т);
+      w.click(); await new Promise(r => setTimeout(r, 200)); w.click();
+      await new Promise(r => setTimeout(r, 2400));
       KV.set('lang', было);
       return ок && !document.querySelector('.welcome');
     }));
