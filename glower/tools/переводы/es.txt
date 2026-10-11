@@ -1,0 +1,297 @@
+0 Inicio
+1 Buscar
+2 Buscar en GlowerOS
+3 Buscar aplicaciones, archivos y configuración
+4 Todas las aplicaciones ›
+5 ‹ Atrás
+6 Todas las aplicaciones
+7 Ancladas
+8 Recientes
+9 Recomendado
+10 Widgets
+11 Centro de control
+12 Batería
+13 Notificaciones
+14 Borrar todo
+15 No hay notificaciones nuevas
+16 Mostrar escritorio
+17 Papelera
+18 Este equipo
+19 Escritorio
+20 Documentos
+21 Imágenes
+22 Música
+23 Descargas
+24 Acceso rápido
+25 Sistema
+26 Vista de tareas
+27 No hay ventanas abiertas
+28 Total de aplicaciones
+29 Apagar
+30 Cambiar de usuario
+31 Bloquear
+32 Suspender
+33 Reiniciar
+34 Apagar
+35 Cancelar
+36 Iniciar sesión
+37 Contraseña
+38 Contraseña incorrecta
+39 Otros usuarios
+40 haz clic en cualquier lugar o pulsa Intro
+41 Bloc de notas
+42 Explorador de archivos
+43 Configuración
+44 Navegador
+45 Calculadora
+46 Terminal
+47 Fotos
+48 Calendario
+49 Reloj
+50 Tienda
+51 Tareas
+52 Administrador de tareas
+53 Propiedades
+54 Abrir
+55 Abrir con
+56 Cerrar
+57 Minimizar
+58 Maximizar
+59 Restaurar
+60 Eliminar
+61 Cambiar nombre
+62 Copiar
+63 Cortar
+64 Pegar
+65 Actualizar
+66 Guardar
+67 Nueva carpeta
+68 Nuevo archivo
+69 Nuevo archivo de texto
+70 Carpeta
+71 Archivo
+72 Nombre
+73 Descargar
+74 Buscar
+75 Nuevo
+76 Imprimir…
+77 Minimizar todo
+78 Ventanas en mosaico
+79 Ventanas en cascada
+80 Alinear iconos
+81 Añadir widget…
+82 Quitar widget
+83 Acceso directo en el escritorio
+84 Crear acceso directo en el escritorio
+85 Desanclar del dock
+86 Anclar al dock
+87 Anclar a Inicio
+88 Desanclar de Inicio
+89 Desanclar
+90 Cerrar todas las ventanas
+91 Mostrar en el Explorador
+92 Borrar la lista
+93 Nueva pestaña
+94 Cerrar pestaña
+95 Abrir en una ventana nueva
+96 Abrir la carpeta
+97 Fecha de modificación
+98 Tipo
+99 Tamaño
+100 Elementos
+101 Seleccionados
+102 Esta carpeta está vacía
+103 No se encontró nada
+104 Mosaicos
+105 Detalles
+106 Por nombre
+107 Por tamaño
+108 Por fecha
+109 Por tipo
+110 La papelera está vacía
+111 Restaurar todo
+112 Vaciar la papelera
+113 El archivo ya existe
+114 Reemplazar el archivo en la carpeta de destino
+115 Conservar ambos archivos: el nuevo recibe un número
+116 Omitir este archivo
+117 Aplicar a todos los restantes
+118 Mover a la papelera
+119 Borrar
+120 Siempre
+121 Solo esta vez
+122 Inicio
+123 Personalización
+124 Escritorio y dock
+125 Movimiento y animaciones
+126 Sonido
+127 Pantalla
+128 Red e Internet
+129 Dispositivos y sensores
+130 Notificaciones y concentración
+131 Aplicaciones
+132 Cuentas
+133 Hora e idioma
+134 Accesibilidad
+135 Privacidad
+136 Compilación
+137 Acerca de
+138 Buscar un ajuste
+139 Tema
+140 Transparente
+141 Oscuro
+142 Claro
+143 Modo
+144 Color de énfasis
+145 Color personalizado
+146 Fondo del escritorio
+147 Presentación
+148 Imagen propia
+149 Forma de las superficies
+150 Brillo del borde
+151 Saturación
+152 Forma
+153 Preajustes
+154 Volumen
+155 Brillo
+156 Luz nocturna
+157 Widgets del escritorio
+158 Mostrar widgets
+159 Inicio automático
+160 Copia de seguridad del sistema
+161 Exportar todo el sistema
+162 Restaurar desde un archivo
+163 Almacenamiento
+164 Restablecer el sistema
+165 Idioma de la interfaz
+166 Distribuciones de teclado
+167 Zona horaria
+168 Ciudad para el tiempo
+169 Fecha y hora
+170 Idioma y región
+171 Conexión con el sistema
+172 Modo independiente
+173 Conectado al sistema
+174 disco real
+175 navegador
+176 Sincronización
+177 Hardware
+178 Procesador
+179 Memoria
+180 Nombre del equipo
+181 Tiempo activo
+182 desde el encendido
+183 libre
+184 Entrada
+185 Puntero
+186 Ratón o panel táctil
+187 conectado
+188 no encontrado
+189 Pantalla táctil
+190 no detectada
+191 Mandos
+192 No se encontraron mandos
+193 No se encontró ningún adaptador
+194 listo
+195 Cámaras, micrófonos y altavoces
+196 Cámaras
+197 Tarjetas de sonido
+198 Tarjeta de sonido
+199 Tarjeta de sonido del sistema
+200 No se encontró ninguna en el sistema
+201 Energía
+202 Carga de la batería
+203 Cargando
+204 Con batería
+205 Conectado a la corriente
+206 No se detectó batería
+207 El equipo funciona con la corriente
+208 Dispositivos de audio del sistema
+209 Permisos de las aplicaciones
+210 Configuración regional
+211 Preferencias del sistema
+212 Esquema de colores
+213 No se pudo consultar el equipo
+214 Configuración completada — bienvenido
+215 Tiempo
+216 Hoy
+217 No hay eventos
+218 Todo hecho 🎉
+219 Nota
+220 Haz clic y escribe…
+221 Nueva tarea…
+222 Distribución del teclado
+223 Configuración de idioma
+224 Ruso
+225 Inglés
+226 Alemán
+227 Usado recientemente
+228 Ventanas abiertas
+229 Desenfoque
+230 demo
+231 Despejado
+232 Parcialmente nublado
+233 Lluvia
+234 Nieve
+235 Poco nuboso
+236 Tormenta
+237 Niebla
+238 Nublado
+239 Carga
+240 Red
+241 Lun
+242 Mar
+243 Mié
+244 Jue
+245 Vie
+246 Sáb
+247 Dom
+248 Te damos la bienvenida
+249 Configuremos el sistema para ti. Lleva un minuto.
+250 Idioma del sistema
+251 Podrás cambiarlo en Configuración en cualquier momento.
+252 Distribuciones de teclado
+253 Cambia con Alt + Mayús o haciendo clic en el indicador de la barra.
+254 Elige hasta cuatro. Cambia con Alt + Mayús o haciendo clic en el indicador de la barra.
+255 Tu ciudad
+256 Solo para el tiempo. Los datos vienen del servicio abierto Open-Meteo.
+257 ¿Cómo te llamamos?
+258 El nombre aparece en Inicio y al cambiar de usuario.
+259 Nombre de usuario
+260 Sin nombre no se puede continuar: así se dirigirá a ti el sistema
+261 Apariencia
+262 El tema y el color también se pueden cambiar en cualquier momento.
+263 Oscuro
+264 Claro
+265 superficies opacas
+266 superficies claras
+267 Fondo de pantalla
+268 Lo que el sistema sabe de ti
+269 En breve y sin letra pequeña.
+270 Todo se queda aquí
+271 La configuración y los archivos se guardan en este equipo. Sin cuenta y sin enviar nada fuera.
+272 La única solicitud al exterior
+273 Tiempo: el nombre de la ciudad se envía al servicio abierto Open-Meteo. Si lo rechazas, el tiempo simplemente no se mostrará.
+274 Lo que no hay aquí
+275 Ni estadísticas, ni identificador publicitario, ni «programa de mejora del producto».
+276 Verificable
+277 El sistema es abierto: todo el código está al lado y se puede leer.
+278 Todo listo
+279 Solo queda pulsar el botón.
+280 Idioma
+281 Distribuciones
+282 Ciudad
+283 Usuario
+284 Inicio de sesión
+285 Tema
+286 sin indicar
+287 activada
+288 desactivada
+289 Atrás
+290 Siguiente
+291 Empezar
+292 Ruso
+293 Inglés
+294 Alemán
+295 Bienvenido
+296 Preparando el escritorio…

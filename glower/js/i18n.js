@@ -11,7 +11,8 @@ const I18N = {
   LANGS:{ ru:{ name:'Русский', code:'RU', locale:'ru-RU' },
           en:{ name:'English', code:'EN', locale:'en-GB' } },
 
-  lang(){ return KV.get('lang', 'ru'); },
+  /* Язык, которого нет среди словарей (файл языка убрали), — это русский */
+  lang(){ const l = KV.get('lang', 'ru'); return this.LANGS[l] ? l : 'ru'; },
   locale(){ return this.LANGS[this.lang()].locale; },
 
   DICT:{ en:{
@@ -155,16 +156,38 @@ const I18N = {
     });
   },
 
-  set(lang){
+  async set(lang){
     if (!this.LANGS[lang]) return;
     KV.set('lang', lang);
     document.documentElement.lang = lang;
+    /* На машине — и программам Linux: локаль и пакет перевода. Ждём только
+       записи локали; пакет ставится в фоне, перезагрузке страницы он не
+       мешает — его ставит агент, а не она. */
+    if (window.Platform && Platform.mode === 'native'){
+      try {
+        const о = await Platform.rpc('sys.locale.set', { 'язык':lang });
+        if (о && о['пакет']) Platform.rpc('pkg.install', { name:о['пакет'] }).catch(() => {});
+      } catch(e){}
+    }
     location.reload();                    // перерисовываем систему целиком
   },
 
-  /* сколько строк вообще переведено */
-  coverage(){ return Object.keys(this.DICT.en).length; }
+  /* сколько строк переведено на текущий язык */
+  coverage(){ return Object.keys(this.DICT[this.lang()] || this.DICT.en).length; },
+
+  /* Словари мастера настройки для языков из js/lang/ */
+  МАСТЕР:{}
 };
+
+/* Остальные языки лежат по файлу на язык в js/lang/ и загружаются раньше
+   этого модуля: каждый кладёт себя в window.ЯЗЫКИ. Забираем их отсюда —
+   так добавить язык значит положить файл и строчку в index.html, не трогая
+   кода. Порядок в списке языков — как в этом списке. */
+(window.ЯЗЫКИ || []).forEach(я => {
+  I18N.LANGS[я.код] = { name:я.имя, code:я.метка, locale:я.локаль };
+  I18N.DICT[я.код] = я.оболочка;
+  I18N.МАСТЕР[я.код] = я.мастер;
+});
 window.I18N = I18N;
 
 /* даты и время следуют за языком интерфейса */

@@ -1,0 +1,297 @@
+0 Start
+1 Szukaj
+2 Szukaj w GlowerOS
+3 Szukaj aplikacji, plików i ustawień
+4 Wszystkie aplikacje ›
+5 ‹ Wstecz
+6 Wszystkie aplikacje
+7 Przypięte
+8 Ostatnie
+9 Polecane
+10 Widżety
+11 Centrum sterowania
+12 Bateria
+13 Powiadomienia
+14 Wyczyść wszystko
+15 Brak nowych powiadomień
+16 Pokaż pulpit
+17 Kosz
+18 Ten komputer
+19 Pulpit
+20 Dokumenty
+21 Obrazy
+22 Muzyka
+23 Pobrane
+24 Szybki dostęp
+25 System
+26 Widok zadań
+27 Brak otwartych okien
+28 Aplikacji łącznie
+29 Zamknij system
+30 Przełącz użytkownika
+31 Zablokuj
+32 Uśpij
+33 Uruchom ponownie
+34 Wyłącz
+35 Anuluj
+36 Zaloguj się
+37 Hasło
+38 Nieprawidłowe hasło
+39 Inni użytkownicy
+40 kliknij w dowolnym miejscu lub naciśnij Enter
+41 Notatnik
+42 Eksplorator plików
+43 Ustawienia
+44 Przeglądarka
+45 Kalkulator
+46 Terminal
+47 Zdjęcia
+48 Kalendarz
+49 Zegar
+50 Sklep
+51 Zadania
+52 Menedżer zadań
+53 Właściwości
+54 Otwórz
+55 Otwórz za pomocą
+56 Zamknij
+57 Minimalizuj
+58 Maksymalizuj
+59 Przywróć
+60 Usuń
+61 Zmień nazwę
+62 Kopiuj
+63 Wytnij
+64 Wklej
+65 Odśwież
+66 Zapisz
+67 Nowy folder
+68 Nowy plik
+69 Nowy plik tekstowy
+70 Folder
+71 Plik
+72 Nazwa
+73 Pobierz
+74 Znajdź
+75 Nowy
+76 Drukuj…
+77 Minimalizuj wszystko
+78 Rozmieść okna
+79 Okna kaskadowo
+80 Wyrównaj ikony
+81 Dodaj widżet…
+82 Usuń widżet
+83 Skrót na pulpicie
+84 Utwórz skrót na pulpicie
+85 Odepnij od docka
+86 Przypnij do docka
+87 Przypnij do menu Start
+88 Odepnij od menu Start
+89 Odepnij
+90 Zamknij wszystkie okna
+91 Pokaż w Eksploratorze
+92 Wyczyść listę
+93 Nowa karta
+94 Zamknij kartę
+95 Otwórz w nowym oknie
+96 Otwórz folder
+97 Data modyfikacji
+98 Typ
+99 Rozmiar
+100 Elementów
+101 Zaznaczono
+102 Ten folder jest pusty
+103 Nic nie znaleziono
+104 Kafelki
+105 Szczegóły
+106 Według nazwy
+107 Według rozmiaru
+108 Według daty
+109 Według typu
+110 Kosz jest pusty
+111 Przywróć wszystko
+112 Opróżnij kosz
+113 Plik już istnieje
+114 Zastąp plik w folderze docelowym
+115 Zachowaj oba pliki — nowy otrzyma numer
+116 Pomiń ten plik
+117 Zastosuj do wszystkich pozostałych
+118 Przenieś do kosza
+119 Wyczyść
+120 Zawsze
+121 Tylko teraz
+122 Strona główna
+123 Personalizacja
+124 Pulpit i dock
+125 Ruch i animacje
+126 Dźwięk
+127 Ekran
+128 Sieć i Internet
+129 Urządzenia i czujniki
+130 Powiadomienia i skupienie
+131 Aplikacje
+132 Konta
+133 Czas i język
+134 Ułatwienia dostępu
+135 Prywatność
+136 Kompilacja
+137 Informacje
+138 Znajdź ustawienie
+139 Motyw
+140 Przezroczysty
+141 Ciemny
+142 Jasny
+143 Tryb
+144 Kolor akcentu
+145 Własny kolor
+146 Tło pulpitu
+147 Pokaz slajdów
+148 Własny obraz
+149 Kształt powierzchni
+150 Jasność krawędzi
+151 Nasycenie
+152 Kształt
+153 Ustawienia wstępne
+154 Głośność
+155 Jasność
+156 Światło nocne
+157 Widżety pulpitu
+158 Pokaż widżety
+159 Autostart
+160 Kopia zapasowa systemu
+161 Eksportuj cały system
+162 Przywróć z pliku
+163 Pamięć
+164 Resetuj system
+165 Język interfejsu
+166 Układy klawiatury
+167 Strefa czasowa
+168 Miasto dla pogody
+169 Data i godzina
+170 Język i region
+171 Połączenie z systemem
+172 Tryb samodzielny
+173 Połączono z systemem
+174 prawdziwy dysk
+175 przeglądarka
+176 Synchronizacja
+177 Sprzęt
+178 Procesor
+179 Pamięć RAM
+180 Nazwa komputera
+181 Czas pracy
+182 od włączenia
+183 wolne
+184 Wprowadzanie
+185 Wskaźnik
+186 Mysz lub touchpad
+187 podłączona
+188 nie znaleziono
+189 Ekran dotykowy
+190 nie wykryto
+191 Gamepady
+192 Nie znaleziono gamepadów
+193 Nie znaleziono adaptera
+194 gotowy
+195 Kamery, mikrofony i głośniki
+196 Kamery
+197 Karty dźwiękowe
+198 Karta dźwiękowa
+199 Karta dźwiękowa systemu
+200 Nie znaleziono żadnej w systemie
+201 Zasilanie
+202 Poziom baterii
+203 Ładowanie
+204 Na baterii
+205 Zasilanie sieciowe
+206 Nie wykryto baterii
+207 Komputer działa z gniazdka
+208 Urządzenia audio systemu
+209 Uprawnienia aplikacji
+210 Ustawienia regionalne
+211 Preferencje systemowe
+212 Schemat kolorów
+213 Nie udało się odpytać komputera
+214 Konfiguracja zakończona — witamy
+215 Pogoda
+216 Dziś
+217 Brak wydarzeń
+218 Wszystko zrobione 🎉
+219 Notatka
+220 Kliknij i pisz…
+221 Nowe zadanie…
+222 Układ klawiatury
+223 Ustawienia języka
+224 Rosyjski
+225 Angielski
+226 Niemiecki
+227 Ostatnio używane
+228 Otwartych okien
+229 Rozmycie
+230 demo
+231 Bezchmurnie
+232 Zmienne zachmurzenie
+233 Deszcz
+234 Śnieg
+235 Niewielkie zachmurzenie
+236 Burza
+237 Mgła
+238 Pochmurno
+239 Naładowanie
+240 Sieć
+241 Pn
+242 Wt
+243 Śr
+244 Cz
+245 Pt
+246 So
+247 Nd
+248 Witamy
+249 Skonfigurujmy system dla Ciebie. To zajmie minutę.
+250 Język systemu
+251 Możesz go zmienić w Ustawieniach w dowolnej chwili.
+252 Układy klawiatury
+253 Przełączanie — Alt + Shift lub kliknięcie wskaźnika na pasku.
+254 Wybierz maksymalnie cztery. Przełączanie — Alt + Shift lub kliknięcie wskaźnika na pasku.
+255 Twoje miasto
+256 Potrzebne tylko do pogody. Dane pochodzą z otwartej usługi Open-Meteo.
+257 Jak się do Ciebie zwracać
+258 Imię jest widoczne w menu Start i przy zmianie użytkownika.
+259 Nazwa użytkownika
+260 Bez imienia nie da się przejść dalej — tak system będzie się do Ciebie zwracać
+261 Wygląd
+262 Motyw i kolor też można zmienić w dowolnej chwili.
+263 Ciemny
+264 Jasny
+265 nieprzezroczyste powierzchnie
+266 jasne powierzchnie
+267 Tapeta
+268 Co system o Tobie wie
+269 Krótko i bez drobnego druku.
+270 Wszystko zostaje tutaj
+271 Ustawienia i pliki są przechowywane na tym komputerze. Żadnego konta, nic nie jest wysyłane na zewnątrz.
+272 Jedyne zapytanie na zewnątrz
+273 Pogoda: nazwa miasta trafia do otwartej usługi Open-Meteo. Jeśli odmówisz, pogoda po prostu się nie pokaże.
+274 Czego tu nie ma
+275 Ani zbierania statystyk, ani identyfikatora reklamowego, ani „programu poprawy jakości produktu”.
+276 Do sprawdzenia
+277 System jest otwarty: cały kod leży obok i można go przeczytać.
+278 Wszystko gotowe
+279 Zostało nacisnąć przycisk.
+280 Język
+281 Układy
+282 Miasto
+283 Użytkownik
+284 Logowanie
+285 Motyw
+286 nie podano
+287 włączony
+288 wyłączony
+289 Wstecz
+290 Dalej
+291 Zaczynamy
+292 Rosyjski
+293 Angielski
+294 Niemiecki
+295 Witamy
+296 Przygotowujemy pulpit…

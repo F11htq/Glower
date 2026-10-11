@@ -220,6 +220,33 @@ export function packages(allowPackages){
     if (сам.unref) сам.unref();
   }
 
+  /* Перевод программ Linux на выбранный язык — тоже сам, в фоне.
+
+     В образе его нет: пакет перевода весит десятки мегабайт на язык, и
+     везти их все ради одного выбранного незачем. Его скачивает смена языка
+     — в начальной настройке или в «Параметрах». Не было сети в ту минуту
+     — он не пришёл; поэтому при каждом входе смотрим, стоит ли пакет
+     выбранного языка, и докачиваем, если нет. Неудача ничего не ломает:
+     программы просто остаются на английском до следующей попытки. */
+  if (allowPackages && !process.env.GLOWER_NO_AUTO_WINE){
+    const перевод = setTimeout(async () => {
+      try {
+        if (живая() || (job && !job.done)) return;
+        const л = (await readFile(join(homedir(), '.config/glower/locale'), 'utf8').catch(() => '')).trim();
+        const код = (л.match(/^([a-z]{2})_[A-Z]{2}\.UTF-8$/) || [])[1];
+        if (!код) return;
+        const пакет = 'language-pack-' + код;
+        let стоит = false;
+        try { стоит = /install ok installed/.test((await run('dpkg-query', ['-W', '-f=${Status}', пакет])).stdout); }
+        catch(e){}
+        if (стоит) return;
+        запусти('install', пакет, ['install', '-y', '--no-install-recommends', пакет]);
+        if (job) job.мягко = true;
+      } catch(e){}
+    }, 7 * 60 * 1000);
+    if (перевод.unref) перевод.unref();
+  }
+
   const начни = (action, name, args) => {
     /* apt умеет отдавать свой собственный ход работы числами — просим его об
        этом. Раньше проценты выводились по узнаваемым строкам, и на длинной

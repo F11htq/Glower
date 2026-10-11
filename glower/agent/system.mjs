@@ -2447,6 +2447,37 @@ export const keyboard = {
   }
 };
 
+/* ---------- язык программ Linux ----------
+   Свой интерфейс система переводит сама, а программам Linux нужна локаль:
+   LANG=uk_UA.UTF-8 и сама локаль, собранная в системе. Выбор пишем в
+   ~/.config/glower/locale — его читает сценарий входа; недостающую
+   локаль собирает glower-fix из закрытого списка. Действует со
+   следующего входа: программы читают язык при запуске. */
+export const ЛОКАЛИ = { ru:'ru_RU.UTF-8', en:'en_US.UTF-8', uk:'uk_UA.UTF-8', be:'be_BY.UTF-8',
+  kk:'kk_KZ.UTF-8', de:'de_DE.UTF-8', fr:'fr_FR.UTF-8', es:'es_ES.UTF-8', it:'it_IT.UTF-8',
+  pt:'pt_BR.UTF-8', pl:'pl_PL.UTF-8', tr:'tr_TR.UTF-8' };
+/* «uk_UA.UTF-8» в выводе locale -a — «uk_UA.utf8» */
+const локальЕсть = (список, л) => String(список).split('\n').map(x => x.trim().toLowerCase())
+  .includes(л.toLowerCase().replace('.utf-8', '.utf8'));
+
+export const locale = {
+  async 'sys.locale.set'({ язык }){
+    const л = ЛОКАЛИ[String(язык || '')];
+    if (!л) throw new Error('неизвестный язык: ' + язык);
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(os.homedir(), '.config/glower'), { recursive:true });
+    await writeFile(join(os.homedir(), '.config/glower/locale'), л + '\n');
+    let есть = false;
+    try { есть = локальЕсть((await run('locale', ['-a'], { timeout:5000 })).stdout, л); } catch(e){}
+    let собрана = есть;
+    if (!есть && existsSync('/usr/bin/glower-fix')){
+      try { await run('sudo', ['-n', '/usr/bin/glower-fix', 'язык', л], { timeout:120000 }); собрана = true; }
+      catch(e){ собрана = false; }
+    }
+    return { 'локаль':л, 'собрана':собрана, 'пакет':'language-pack-' + (язык === 'ru' ? 'ru' : язык) };
+  }
+};
+
 export const wallpapers = {
   async 'sys.обои'(){
     const список = [];

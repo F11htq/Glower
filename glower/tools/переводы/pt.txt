@@ -1,0 +1,297 @@
+0 Iniciar
+1 Pesquisar
+2 Pesquisar no GlowerOS
+3 Pesquisar aplicativos, arquivos e configurações
+4 Todos os aplicativos ›
+5 ‹ Voltar
+6 Todos os aplicativos
+7 Fixados
+8 Recentes
+9 Recomendados
+10 Widgets
+11 Central de controle
+12 Bateria
+13 Notificações
+14 Limpar tudo
+15 Nenhuma notificação nova
+16 Mostrar a área de trabalho
+17 Lixeira
+18 Este computador
+19 Área de trabalho
+20 Documentos
+21 Imagens
+22 Músicas
+23 Downloads
+24 Acesso rápido
+25 Sistema
+26 Visão de tarefas
+27 Nenhuma janela aberta
+28 Total de aplicativos
+29 Desligar
+30 Trocar de usuário
+31 Bloquear
+32 Suspender
+33 Reiniciar
+34 Desligar
+35 Cancelar
+36 Entrar
+37 Senha
+38 Senha incorreta
+39 Outros usuários
+40 clique em qualquer lugar ou pressione Enter
+41 Bloco de notas
+42 Explorador de arquivos
+43 Configurações
+44 Navegador
+45 Calculadora
+46 Terminal
+47 Fotos
+48 Calendário
+49 Relógio
+50 Loja
+51 Tarefas
+52 Gerenciador de tarefas
+53 Propriedades
+54 Abrir
+55 Abrir com
+56 Fechar
+57 Minimizar
+58 Maximizar
+59 Restaurar
+60 Excluir
+61 Renomear
+62 Copiar
+63 Recortar
+64 Colar
+65 Atualizar
+66 Salvar
+67 Nova pasta
+68 Novo arquivo
+69 Novo arquivo de texto
+70 Pasta
+71 Arquivo
+72 Nome
+73 Baixar
+74 Localizar
+75 Novo
+76 Imprimir…
+77 Minimizar tudo
+78 Janelas lado a lado
+79 Janelas em cascata
+80 Alinhar ícones
+81 Adicionar widget…
+82 Remover widget
+83 Atalho na área de trabalho
+84 Criar atalho na área de trabalho
+85 Desafixar do dock
+86 Fixar no dock
+87 Fixar em Iniciar
+88 Desafixar de Iniciar
+89 Desafixar
+90 Fechar todas as janelas
+91 Mostrar no Explorador
+92 Limpar lista
+93 Nova guia
+94 Fechar guia
+95 Abrir em nova janela
+96 Abrir pasta
+97 Data de modificação
+98 Tipo
+99 Tamanho
+100 Itens
+101 Selecionados
+102 Esta pasta está vazia
+103 Nada encontrado
+104 Blocos
+105 Detalhes
+106 Por nome
+107 Por tamanho
+108 Por data
+109 Por tipo
+110 A lixeira está vazia
+111 Restaurar tudo
+112 Esvaziar a lixeira
+113 O arquivo já existe
+114 Substituir o arquivo na pasta de destino
+115 Manter os dois arquivos — o novo recebe um número
+116 Ignorar este arquivo
+117 Aplicar a todos os restantes
+118 Mover para a lixeira
+119 Limpar
+120 Sempre
+121 Só desta vez
+122 Início
+123 Personalização
+124 Área de trabalho e dock
+125 Movimento e animações
+126 Som
+127 Tela
+128 Rede e Internet
+129 Dispositivos e sensores
+130 Notificações e foco
+131 Aplicativos
+132 Contas
+133 Hora e idioma
+134 Acessibilidade
+135 Privacidade
+136 Compilação
+137 Sobre
+138 Localizar uma configuração
+139 Tema
+140 Transparente
+141 Escuro
+142 Claro
+143 Modo
+144 Cor de destaque
+145 Cor personalizada
+146 Plano de fundo
+147 Apresentação de slides
+148 Imagem própria
+149 Forma das superfícies
+150 Brilho da borda
+151 Saturação
+152 Forma
+153 Predefinições
+154 Volume
+155 Brilho
+156 Luz noturna
+157 Widgets da área de trabalho
+158 Mostrar widgets
+159 Inicialização
+160 Backup do sistema
+161 Exportar todo o sistema
+162 Restaurar de um arquivo
+163 Armazenamento
+164 Redefinir o sistema
+165 Idioma da interface
+166 Layouts de teclado
+167 Fuso horário
+168 Cidade para o clima
+169 Data e hora
+170 Idioma e região
+171 Conexão com o sistema
+172 Modo independente
+173 Conectado ao sistema
+174 disco real
+175 navegador
+176 Sincronização
+177 Hardware
+178 Processador
+179 Memória
+180 Nome do computador
+181 Tempo ligado
+182 desde que foi ligado
+183 livre
+184 Entrada
+185 Ponteiro
+186 Mouse ou touchpad
+187 conectado
+188 não encontrado
+189 Tela sensível ao toque
+190 não detectada
+191 Controles
+192 Nenhum controle encontrado
+193 Nenhum adaptador encontrado
+194 pronto
+195 Câmeras, microfones e alto-falantes
+196 Câmeras
+197 Placas de som
+198 Placa de som
+199 Placa de som do sistema
+200 Nenhuma encontrada no sistema
+201 Energia
+202 Carga da bateria
+203 Carregando
+204 Na bateria
+205 Na tomada
+206 Nenhuma bateria detectada
+207 O computador está ligado na tomada
+208 Dispositivos de áudio do sistema
+209 Permissões dos aplicativos
+210 Configurações regionais
+211 Preferências do sistema
+212 Esquema de cores
+213 Não foi possível consultar o computador
+214 Configuração concluída — bem-vindo
+215 Clima
+216 Hoje
+217 Nenhum evento
+218 Tudo feito 🎉
+219 Nota
+220 Clique e escreva…
+221 Nova tarefa…
+222 Layout do teclado
+223 Configurações de idioma
+224 Russo
+225 Inglês
+226 Alemão
+227 Usados recentemente
+228 Janelas abertas
+229 Desfoque
+230 demo
+231 Céu limpo
+232 Parcialmente nublado
+233 Chuva
+234 Neve
+235 Poucas nuvens
+236 Trovoada
+237 Neblina
+238 Nublado
+239 Carga
+240 Rede
+241 Seg
+242 Ter
+243 Qua
+244 Qui
+245 Sex
+246 Sáb
+247 Dom
+248 Boas-vindas
+249 Vamos configurar o sistema para você. Leva um minuto.
+250 Idioma do sistema
+251 Você pode alterá-lo nas Configurações a qualquer momento.
+252 Layouts de teclado
+253 Alterne com Alt + Shift ou clicando no indicador da barra.
+254 Escolha até quatro. Alterne com Alt + Shift ou clicando no indicador da barra.
+255 Sua cidade
+256 Usada apenas para o clima. Os dados vêm do serviço aberto Open-Meteo.
+257 Como devemos chamar você
+258 O nome aparece em Iniciar e ao trocar de usuário.
+259 Nome de usuário
+260 Sem nome não dá para continuar — é assim que o sistema vai chamar você
+261 Aparência
+262 O tema e a cor também podem ser alterados a qualquer momento.
+263 Escuro
+264 Claro
+265 superfícies opacas
+266 superfícies claras
+267 Papel de parede
+268 O que o sistema sabe sobre você
+269 Em poucas palavras e sem letras miúdas.
+270 Tudo fica aqui
+271 Configurações e arquivos ficam neste computador. Nenhuma conta, nada é enviado para fora.
+272 A única solicitação externa
+273 Clima: o nome da cidade vai para o serviço aberto Open-Meteo. Se recusar, o clima simplesmente não aparecerá.
+274 O que não existe aqui
+275 Nem estatísticas, nem identificador de publicidade, nem «programa de melhoria do produto».
+276 Verificável
+277 O sistema é aberto: todo o código está ao lado e pode ser lido.
+278 Tudo pronto
+279 Só falta apertar o botão.
+280 Idioma
+281 Layouts
+282 Cidade
+283 Usuário
+284 Entrada
+285 Tema
+286 não informado
+287 ativado
+288 desativado
+289 Voltar
+290 Avançar
+291 Começar
+292 Russo
+293 Inglês
+294 Alemão
+295 Bem-vindo
+296 Preparando a área de trabalho…

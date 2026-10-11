@@ -1776,6 +1776,57 @@ try {
       JSON.stringify({ куда, env2 }));
   }
 
+  /* --- язык программ Linux: локаль для входа ---
+     Агент пишет её в ~/.config/glower/locale; сценарий входа выставляет
+     LANG, только если локаль в системе собрана (locale здесь подставной). */
+  {
+    const { mkdir, writeFile, chmod, readFile: читай } = await import('node:fs/promises');
+    const дом = await mkdtemp(join(tmpdir(), 'glower-лок-'));
+    const порт7 = PORT + 305;
+    const аг = spawn(process.execPath, [join(root, 'agent/server.mjs'), '--port', String(порт7), '--root', дом, '--system'],
+      { stdio:'ignore', env:{ ...process.env, HOME:дом, GLOWER_NO_AUTO_WINE:'1' } });
+    await new Promise(r => setTimeout(r, 1500));
+    const зов = async (method, params = {}) => (await fetch(`http://localhost:${порт7}/rpc`, { method:'POST',
+      headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ method, params }) })).json();
+    const и = {};
+    try {
+      и.ук = (await зов('sys.locale.set', { 'язык':'uk' })).result;
+      и.файл = (await читай(join(дом, '.config/glower/locale'), 'utf8')).trim();
+      и.чужой = await зов('sys.locale.set', { 'язык':'xx;reboot' });
+    } catch(e){ и.беда = e.message; }
+    аг.kill();
+    check('язык программ записан локалью, чужой язык отвергнут',
+      и.ук && и.ук['локаль'] === 'uk_UA.UTF-8' && и.ук['пакет'] === 'language-pack-uk'
+        && и.файл === 'uk_UA.UTF-8' && и.чужой && !и.чужой.ok, JSON.stringify(и));
+
+    const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+    const кусок = (сеанс.match(/^if \[ -r "\$HOME\/\.config\/glower\/locale" \]; then[\s\S]*?^fi$/m) || [''])[0];
+    const бин = join(дом, 'bin');
+    await mkdir(бин, { recursive:true });
+    const языкПри = async (локали, файл) => {
+      await writeFile(join(бин, 'locale'), '#!/bin/sh\nprintf "%s\\n" ' + локали.map(л => `"${л}"`).join(' ') + '\n');
+      await chmod(join(бин, 'locale'), 0o755);
+      await writeFile(join(дом, '.config/glower/locale'), файл + '\n');
+      return new Promise(готово => {
+        let вывод = '';
+        const д = spawn('sh', ['-c', 'LANG=C.UTF-8\n' + кусок + '\nprintf "%s|%s" "$LANG" "${LANGUAGE:-}"'],
+          { env:{ PATH:бин + ':' + process.env.PATH, HOME:дом } });
+        д.stdout.on('data', x => вывод += x);
+        д.on('close', () => готово(вывод));
+      });
+    };
+    const р = {
+      есть:await языкПри(['C.utf8', 'uk_UA.utf8'], 'uk_UA.UTF-8'),
+      нет:await языкПри(['C.utf8'], 'uk_UA.UTF-8'),
+      мусор:await языкПри(['C.utf8', 'uk_UA.utf8'], 'uk_UA.UTF-8; reboot')
+    };
+    check('вход выставляет программам только собранную локаль',
+      кусок && р.есть === 'uk_UA.UTF-8|uk_UA' && р.нет === 'C.UTF-8|' && р.мусор === 'C.UTF-8|', JSON.stringify(р));
+    const фикс = await readFile(join(root, 'linux', 'glower-fix'), 'utf8');
+    check('glower-fix собирает только локали из закрытого списка',
+      /язык\)/.test(фикс) && /uk_UA\.UTF-8\|/.test(фикс) && /неизвестная локаль/.test(фикс));
+  }
+
   /* Начальная настройка: раскладки списком из каталога, не больше четырёх */
   {
     const r = await page.evaluate(async () => {

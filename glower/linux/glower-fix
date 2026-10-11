@@ -28,6 +28,18 @@ case "$case_name" in
     value="$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo нет)"
     echo "песочница: ограничение=$value"
     ;;
+  язык)
+    # Локаль для программ Linux: без неё Firefox, Thunar и прочие говорят
+    # по-английски, даже когда сама система уже на другом языке. Имя
+    # локали — только из закрытого списка: никаких произвольных строк.
+    loc="${2:-}"
+    case "$loc" in
+      ru_RU.UTF-8|en_US.UTF-8|en_GB.UTF-8|uk_UA.UTF-8|be_BY.UTF-8|kk_KZ.UTF-8|de_DE.UTF-8|fr_FR.UTF-8|es_ES.UTF-8|it_IT.UTF-8|pt_BR.UTF-8|pl_PL.UTF-8|tr_TR.UTF-8) ;;
+      *) echo "неизвестная локаль: $loc" >&2; exit 2 ;;
+    esac
+    locale-gen "$loc" >/dev/null 2>&1 || { echo "локаль $loc не создалась" >&2; exit 1; }
+    echo "язык: $loc готова"
+    ;;
   *)
     echo "неизвестная починка: $case_name" >&2
     exit 2

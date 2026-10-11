@@ -46,6 +46,22 @@ fi
 XDG_CONFIG_DIRS="/usr/share/glower/xdg:${XDG_CONFIG_DIRS:-/etc/xdg}"
 export XDG_CONFIG_DIRS
 
+# Язык программ Linux. Свой интерфейс система переводит сама, а Firefox,
+# Thunar и прочие берут язык из LANG. Выбор пишет агент в
+# ~/.config/glower/locale; берём его, только если такая локаль в системе
+# действительно собрана — иначе программы ругались бы на каждом запуске.
+if [ -r "$HOME/.config/glower/locale" ]; then
+  LOC_USER="$(head -n1 "$HOME/.config/glower/locale" | tr -d ' \r')"
+  case "$LOC_USER" in
+    [a-z][a-z]_[A-Z][A-Z].UTF-8)
+      LOC_SHORT="$(printf '%s' "$LOC_USER" | sed 's/\.UTF-8$/.utf8/')"
+      if locale -a 2>/dev/null | grep -qx "$LOC_SHORT"; then
+        LANG="$LOC_USER"; LANGUAGE="${LOC_USER%%.*}"
+        export LANG LANGUAGE
+      fi ;;
+  esac
+fi
+
 # Раскладки человек выбирает сам — в начальной настройке и в «Параметрах»;
 # агент записывает выбор в ~/.config/glower/keyboard строкой вида «us,ru,de».
 # Читаем его осторожно: в строке только имена раскладок XKB через запятую,

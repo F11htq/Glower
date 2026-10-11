@@ -58,7 +58,7 @@ const Setup = {
   },
 
   t(s){
-    const d = this.T[this.data.lang];
+    const d = this.T[this.data.lang] || (window.I18N && I18N.МАСТЕР[this.data.lang]);
     return (d && d[s]) || s;
   },
 
@@ -183,7 +183,9 @@ const Setup = {
         Layouts.список(area, {
           получить:() => this.data.layouts,
           задать:l => { this.data.layouts = l; },
-          англ:this.data.lang === 'en'
+          /* Названия раскладок по-русски понятны и украинцу, и казаху;
+             остальным — по-английски */
+          англ:!['ru', 'uk', 'be', 'kk'].includes(this.data.lang)
         });
         /* Полный список раскладок знает система — подгружаем его и
            дорисовываем, когда придёт */

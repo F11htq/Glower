@@ -760,6 +760,27 @@ try {
   check('интерфейс переключается на английский',
     enUI.start.includes('All apps') && /Search/.test(enUI.search) && enUI.pinned === 'Pinned',
     JSON.stringify(enUI));
+  /* --- другие языки: десять словарей из js/lang --- */
+  check('в системе двенадцать языков, у каждого полный словарь',
+    await page.evaluate(() => {
+      const коды = Object.keys(I18N.LANGS);
+      const ключи = Object.keys(I18N.DICT.en);
+      const мастер = Object.keys(Setup.T.en);
+      return коды.length === 12
+        && коды.filter(к => к !== 'ru' && к !== 'en').every(к =>
+             ключи.every(x => I18N.DICT[к][x]) && мастер.every(x => I18N.МАСТЕР[к][x]));
+    }), await page.evaluate(() => Object.keys(I18N.LANGS).join(',')));
+  await page.evaluate(() => { KV.set('lang', 'uk'); });
+  await page.reload();
+  await page.waitForTimeout(2600); await page.keyboard.press('Enter'); await page.waitForTimeout(1200);
+  await page.evaluate(() => Shell.toggleStart(true));
+  await page.waitForTimeout(600);
+  const ukUI = await page.evaluate(() => ({
+    start: document.querySelector('#start-all').textContent,
+    pinned: document.querySelector('.start-head span').textContent, lang:document.documentElement.lang
+  }));
+  check('интерфейс переключается на украинский',
+    ukUI.start.includes('Усі програми') && ukUI.pinned === 'Закріплені' && ukUI.lang === 'uk', JSON.stringify(ukUI));
   await page.evaluate(() => { KV.set('lang', 'ru'); });
   await page.reload();
   await page.waitForTimeout(2600); await page.keyboard.press('Enter'); await page.waitForTimeout(900);
