@@ -970,6 +970,19 @@ try {
       (await Platform.rpc('ui.last', { 'тема':'батарея' }) || {}).что);
     check('стол рассказывает панели о заряде',
       !!бат && 'есть' in бат && 'заряжается' in бат, JSON.stringify(бат));
+
+    /* Alt+F4 на столе оконный сервер отдаёт странице через шину — и
+       закрыться должно верхнее окно системы, а не ничего. */
+    const клав = await p2.evaluate(async () => {
+      const w = WM.open('notepad');
+      await new Promise(r => setTimeout(r, 500));
+      const было = WM.wins.includes(w);
+      await Platform.rpc('ui.say', { 'тема':'клавиша', что:'A-F4' });
+      for (let i = 0; i < 25 && WM.wins.includes(w); i++) await new Promise(r => setTimeout(r, 200));
+      return { было, закрыто:!WM.wins.includes(w) };
+    });
+    check('Alt+F4 с оконного сервера закрывает верхнее окно системы',
+      клав.было && клав.закрыто, JSON.stringify(клав));
     await p2.close();
   }
 
@@ -1212,6 +1225,34 @@ try {
         existsSync(join(root, 'linux', прог)));
       check('и она попадает в образ', образ2.includes('linux/' + прог));
       check('и в пакет обновления', пакет.includes('usr/bin/' + прог));
+    }
+
+    /* Окна системы живут внутри страницы стола, и оконный сервер видит их
+       одним окном. Alt+F4, Alt+Tab и Win со стрелками на столе он должен
+       отдавать странице, иначе до неё они не доходят вовсе: Alt+F4 на
+       открытых Параметрах не делал ничего. */
+    {
+      const привязка = к => (rc.match(new RegExp('<keybind key="' + к + '">([\\s\\S]*?)</keybind>')) || [])[1] || '';
+      const не_так = ['A-F4', 'A-Tab', 'W-q', 'W-Left', 'W-Right', 'W-Up', 'W-Down'].filter(к => {
+        const п = привязка(к);
+        return !(/<query identifier="glowershell" \/>/.test(п)
+          && п.includes('glower-menu клавиша ' + к) && /<else>[\s\S]*<action name="(Close|NextWindow|SnapToEdge)"/.test(п));
+      });
+      check('на столе сочетания уходят странице, в чужих окнах — как прежде', !не_так.length,
+        'не так: ' + не_так.join(', '));
+      check('Alt со стрелками остаётся программам («назад» в браузере)',
+        ['A-Left', 'A-Right', 'A-Up', 'A-Down'].every(к => привязка(к).trim() === '<action name="None" />'));
+      const меню = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
+      const стол = await readFile(join(root, 'js', 'поверхности.js'), 'utf8');
+      check('glower-menu передаёт сочетание странице, а страница его слушает',
+        /"\$\{1:-\}" = "клавиша"/.test(меню) && /"тема":"клавиша"/.test(меню)
+          && /слушай\(\['клавиша'\]/.test(стол) && /case 'A-F4'/.test(стол) && /case 'A-Tab'/.test(стол));
+      /* WebKit называет Win «Super», и metaKey при ней у страницы ложный:
+         Win+E, Win+R, Win+Tab не работали ни одно. Оболочка вручает их сама. */
+      const оболочка = await readFile(join(root, 'linux', 'glower-shell'), 'utf8');
+      check('оболочка вручает странице сочетания с Win как metaKey',
+        /def win_для_страницы/.test(оболочка) && /metaKey:true/.test(оболочка)
+          && (оболочка.match(/win_для_страницы\(окно, в\)/g) || []).length >= 2);
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 

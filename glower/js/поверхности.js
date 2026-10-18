@@ -586,6 +586,47 @@ const Поверхности = {
             && document.querySelector('#обзор.on')) Shell.рисуйОбзор();
       });
 
+      /* Сочетания, которые оконный сервер поймал на столе.
+
+         Окна системы живут внутри этой страницы, и для оконного сервера
+         все они одно окно — стол. Alt+F4, Alt+Tab и Win со стрелками он
+         забирал себе раньше нас: Alt+F4 просил закрыться весь стол (стол
+         не закрывается), и человек жал его на открытых Параметрах без
+         всякого толку. Теперь на столе сервер отдаёт сочетание нам
+         (linux/labwc/rc.xml), и решаем мы — мы знаем, чьё окно сверху. */
+      this.слушай(['клавиша'], м => {
+        if (м.тема !== 'клавиша' || !window.WM) return;
+        const верх = WM.top();
+        switch (м.что){
+          case 'A-F4': case 'W-q':
+            if (верх) WM.close(верх);
+            break;
+          case 'A-Tab': {
+            const список = WM.wins.filter(w => !w.minimized && w.desk === WM.desk);
+            if (список.length > 1){ WM.focus(список[(список.indexOf(верх) + 1) % список.length]); break; }
+            /* Своих окон не больше одного — переходим к чужому, как
+               сделал бы Alt+Tab в любой системе */
+            Platform.rpc('sys.windows').then(о => {
+              const чужое = ((о && о.list) || []).find(w => !w.оболочка);
+              if (чужое) Platform.rpc('sys.window', { action:'focus', appId:чужое.appId, title:чужое.title });
+            }).catch(() => {});
+            break;
+          }
+          case 'W-d':
+            WM.minimizeAll();
+            break;
+          case 'W-Up':
+            if (верх) WM.snap(верх, 'max');
+            break;
+          case 'W-Down':
+            if (верх){ if (верх.maximized) WM.toggleMax(верх); else WM.minimize(верх); }
+            break;
+          case 'W-Left': case 'W-Right':
+            if (верх) WM.snap(верх, м.что === 'W-Left' ? 'left' : 'right');
+            break;
+        }
+      });
+
       /* ---------- машина проснулась ----------
       
          О сне не знал никто, и после открытия крышки система возвращалась

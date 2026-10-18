@@ -136,10 +136,31 @@ APPS.store = {
     wrap.append(side, main);
 
     /* ---------- разговор с системой ---------- */
+    /* Сведения о программах — не больше трёх вопросов разом.
+
+       Каждый такой вопрос — это apt-cache, на машине с полными списками
+       пакетов он думает секунду-две. Магазин при открытии спрашивал про
+       два десятка программ сразу, а браузер держит с одним адресом всего
+       шесть соединений: все они оказывались заняты, и любой другой вызов —
+       ход установки, шина, часы в панели — ждал своей очереди по десять–
+       двадцать секунд. Плашка установки появлялась, когда работа уже
+       кончилась. Три соединения Магазину, остальные — всем прочим. */
+    const вопросы = { идёт:0, ждут:[] };
+    const поОчереди = дело => new Promise((да, нет) => {
+      const пуск = () => {
+        вопросы.идёт++;
+        дело().then(да, нет).finally(() => {
+          вопросы.идёт--;
+          const следующий = вопросы.ждут.shift();
+          if (следующий) следующий();
+        });
+      };
+      if (вопросы.идёт < 3) пуск(); else вопросы.ждут.push(пуск);
+    });
     const Pkg = {
       state(){ return Platform.rpc('pkg.state'); },
       search(query){ return Platform.rpc('pkg.search', { query }); },
-      info(name, source){ return Platform.rpc('pkg.info', { name, source }); },
+      info(name, source){ return поОчереди(() => Platform.rpc('pkg.info', { name, source })); },
       installed(){ return Platform.rpc('pkg.installed'); },
       install(name, source){ return Platform.rpc('pkg.install', { name, source }); },
       remove(name, source){ return Platform.rpc('pkg.remove', { name, source }); },

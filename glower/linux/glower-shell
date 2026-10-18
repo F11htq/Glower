@@ -444,6 +444,7 @@ def стол_окном(имя):
     # Нажатия приходят сюда вместе с номером раскладки — по ним и держим
     # указатель языка честным.
     следи_за_раскладкой(окно)
+    win_для_страницы(окно, в)
     return окно
 
 
@@ -468,6 +469,7 @@ def поверхность(имя, слой, края, высота=None, пол
     в.set_can_focus(True)
     в.grab_focus()
     окно.set_focus(в)
+    win_для_страницы(окно, в)
     return окно
 
 
@@ -575,6 +577,92 @@ def следи_за_раскладкой(окно):
     окно.add_events(Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.KEY_RELEASE_MASK)
     окно.connect('key-press-event', проверь)
     окно.connect('key-release-event', проверь)
+
+
+# --------------------------------------------------------------------------
+#  Сочетания с Win — странице
+#
+#  Win+E, Win+R, Win+Tab, Win+Пробел и остальные страница ждёт по признаку
+#  metaKey. А движок WebKit под GTK клавишу Win так не называет: для него
+#  это «Super», и признак metaKey при ней всегда ложный. Страница получала
+#  просто «e» — и ни одно сочетание с Win не срабатывало, да ещё буква
+#  печаталась в поле, где стоял курсор.
+#
+#  Поэтому сочетания с Win ловим здесь, раньше движка, и сами вручаем
+#  странице — как нажатие с metaKey, ровно таким, каким его прислал бы
+#  любой браузер. Букву берём латинскую, той же клавиши: при русской
+#  раскладке Win+E приходит как «Win+у», а страница ищет «e».
+# --------------------------------------------------------------------------
+КЛАВИШИ_СТРАНИЦЫ = {
+    'Left': 'ArrowLeft', 'Right': 'ArrowRight', 'Up': 'ArrowUp', 'Down': 'ArrowDown',
+    'Tab': 'Tab', 'ISO_Left_Tab': 'Tab', 'Return': 'Enter', 'KP_Enter': 'Enter',
+    'Escape': 'Escape', 'space': ' ', 'BackSpace': 'Backspace', 'Delete': 'Delete',
+    'Home': 'Home', 'End': 'End', 'Prior': 'PageUp', 'Next': 'PageDown',
+    'Print': 'PrintScreen',
+}
+КЛАВИШИ_СТРАНИЦЫ.update({'F%d' % н: 'F%d' % н for н in range(1, 13)})
+С_WIN = Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.MOD4_MASK
+ПРИЖАТЫЕ = ('Shift_L', 'Shift_R', 'Control_L', 'Control_R', 'Alt_L', 'Alt_R',
+            'Super_L', 'Super_R', 'Meta_L', 'Meta_R', 'ISO_Level3_Shift', 'Caps_Lock')
+
+
+def латинская_клавиша(событие):
+    """Что написано на клавише в латинской раскладке: «e», а не «у»."""
+    карта = Gdk.Keymap.get_for_display(Gdk.Display.get_default())
+    try:
+        ок, места, значения = карта.get_entries_for_keycode(событие.hardware_keycode)
+    except Exception:
+        ок = False
+    if ок:
+        for место, значение in zip(места, значения):
+            if место.level != 0:
+                continue
+            буква = chr(Gdk.keyval_to_unicode(значение) or 0)
+            if 'a' <= буква <= 'z' or '0' <= буква <= '9':
+                return буква
+    буква = chr(Gdk.keyval_to_unicode(событие.keyval) or 0)
+    return буква.lower() if буква.isprintable() and буква.strip() else ''
+
+
+def win_для_страницы(окно, вид_):
+    def нажато(_окно, событие):
+        if not (событие.state & С_WIN):
+            return False
+        имя = Gdk.keyval_name(событие.keyval) or ''
+        if имя in ПРИЖАТЫЕ:
+            return False
+        клавиша = КЛАВИШИ_СТРАНИЦЫ.get(имя) or латинская_клавиша(событие)
+        if not клавиша:
+            return False
+        сдвиг = bool(событие.state & Gdk.ModifierType.SHIFT_MASK)
+        что = {
+            'key': клавиша.upper() if сдвиг and len(клавиша) == 1 else клавиша,
+            'code': ('Key' + клавиша.upper()) if 'a' <= клавиша <= 'z' and len(клавиша) == 1 else клавиша,
+            'shiftKey': сдвиг,
+            'ctrlKey': bool(событие.state & Gdk.ModifierType.CONTROL_MASK),
+            'altKey': bool(событие.state & Gdk.ModifierType.MOD1_MASK),
+        }
+        сценарий = ('(function(d){var t=document.activeElement||document.body;'
+                    "['keydown','keyup'].forEach(function(n){t.dispatchEvent(new KeyboardEvent(n,"
+                    'Object.assign({bubbles:true,cancelable:true,composed:true,metaKey:true},d)))})})('
+                    + json.dumps(что) + ')')
+        try:
+            if hasattr(вид_, 'evaluate_javascript'):
+                вид_.evaluate_javascript(сценарий, -1, None, None, None, None, None)
+            else:
+                вид_.run_javascript(сценарий, None, None, None)
+        except Exception as e:
+            print('GlowerOS: не передал сочетание странице: %s' % e, file=sys.stderr, flush=True)
+            return False
+        # Win пришла первой и уже позвала меню программ — пусть оно знает,
+        # что это было сочетание, и не открывается.
+        try:
+            open(os.path.join(os.environ.get('XDG_RUNTIME_DIR', '/tmp'), 'glower-combo'), 'w').close()
+        except OSError:
+            pass
+        return True    # дальше не пускаем: иначе буква напечатается в поле
+
+    окно.connect('key-press-event', нажато)
 
 
 def приём_уведомлений():
