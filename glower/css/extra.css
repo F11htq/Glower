@@ -1012,3 +1012,40 @@ body.reduced .ms-hero-art,body.эконом .ms-hero-art{animation:none}
 
 /* Сведения о железе: названия бывают длинными — переносим, а не режем */
 .hw-знач{max-width:min(380px, 45vw);text-align:right;white-space:normal;line-height:1.35}
+
+/* ---------- ход работы: плашка справа внизу ----------
+   Живёт в столбике уведомлений последней — уведомления встают над ней. */
+.работа{pointer-events:auto;position:relative;display:grid;grid-template-columns:42px 1fr 30px;
+  grid-template-areas:'зн текст отмена' 'полоса полоса полоса';align-items:center;column-gap:12px;row-gap:10px;
+  padding:12px 12px 14px 14px;border-radius:16px;color:#fff;
+  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 60%), rgba(22,24,34,.94);
+  box-shadow:0 14px 40px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08), inset 0 1px 0 rgba(255,255,255,.10);
+  opacity:0;transform:translateX(24px) scale(.97);
+  transition:opacity .35s var(--e-out), transform .45s var(--e-out)}
+.работа.on{opacity:1;transform:none}
+.работа.уходит{opacity:0;transform:translateX(30px) scale(.97)}
+.работа-зн{grid-area:зн;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:22px;
+  background:rgba(255,255,255,.08);overflow:hidden;transition:background .3s}
+.работа-зн img{width:100%;height:100%;object-fit:contain}
+.работа-текст{grid-area:текст;min-width:0;display:flex;flex-direction:column;gap:3px}
+.работа-имя{font-size:14px;font-weight:600;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.работа-шаг{font-size:12px;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums}
+.работа-отмена{grid-area:отмена;width:30px;height:30px;border:0;border-radius:50%;cursor:pointer;
+  background:rgba(255,255,255,.08);color:inherit;font:inherit;font-size:13px;transition:background .2s}
+.работа-отмена:hover{background:rgba(255,90,90,.45)}
+.работа-полоса{grid-area:полоса;height:5px;border-radius:99px;background:rgba(255,255,255,.10);overflow:hidden;position:relative}
+.работа-полоса i{display:block;height:100%;border-radius:inherit;width:0;
+  background:linear-gradient(90deg, var(--accent), #a36bff);box-shadow:0 0 12px rgba(120,140,255,.6);
+  transition:width .9s var(--e-out)}
+/* Процентов нет — полоса бежит, чтобы не казалась застывшей */
+.работа.неточно .работа-полоса i{width:35% !important;animation:работа-бег 1.3s ease-in-out infinite}
+@keyframes работа-бег{from{transform:translateX(-110%)} to{transform:translateX(300%)}}
+.работа.готово .работа-зн{background:rgba(52,199,89,.28);color:#7dffa6;font-weight:700}
+.работа.готово .работа-полоса i{background:linear-gradient(90deg,#34c759,#7dffa6);box-shadow:0 0 12px rgba(52,199,89,.6)}
+.работа.ошибка .работа-зн{background:rgba(255,80,80,.28);color:#ff9b9b;font-weight:700}
+.работа.ошибка .работа-полоса i{background:#ff5a5a;box-shadow:none}
+[data-theme="light"] .работа{color:#10131a;background:rgba(250,251,253,.97);
+  box-shadow:0 14px 40px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.08)}
+[data-theme="light"] .работа-зн,[data-theme="light"] .работа-отмена,[data-theme="light"] .работа-полоса{background:rgba(0,0,0,.06)}
+body.reduced .работа.неточно .работа-полоса i{animation:none;width:100% !important;opacity:.5}

@@ -1852,6 +1852,67 @@ try {
       JSON.stringify(r));
   }
 
+  /* --- ход установки: плашка справа внизу, а Магазин не трясётся ---
+
+     Подставной apt «ставит» Wine четыре секунды и сообщает проценты.
+     Прежде Магазин раз в секунду перерисовывал страницу целиком — она
+     дёргалась всё время установки. Теперь ход показывает плашка, и она же
+     — один и тот же элемент, у которого меняются только текст и полоса. */
+  {
+    const { mkdir, writeFile, chmod } = await import('node:fs/promises');
+    const дом = await mkdtemp(join(tmpdir(), 'glower-плашка-'));
+    const бин = join(дом, 'bin');
+    await mkdir(бин, { recursive:true });
+    const скрипт = (имя, тело) => writeFile(join(бин, имя), '#!/bin/sh\n' + тело).then(() => chmod(join(бин, имя), 0o755));
+    await скрипт('sudo', '[ "$1" = "-n" ] && shift\nexec "$@"\n');
+    await скрипт('dpkg', 'exit 0\n');
+    await скрипт('dpkg-query', 'exit 1\n');
+    await скрипт('apt-get', 'case "$*" in *install*) for p in 10 30 55 80; do echo "pmstatus:wine:$p:Ставлю" >&3; sleep 1; done ;; esac\nexit 0\n');
+    const порт8 = PORT + 306;
+    const аг = spawn(process.execPath, [join(root, 'agent/server.mjs'), '--port', String(порт8), '--root', дом,
+      '--system', '--allow-packages'],
+      { stdio:'ignore', env:{ ...process.env, HOME:дом, PATH:бин + ':' + process.env.PATH, GLOWER_NO_AUTO_WINE:'1' } });
+    await new Promise(r => setTimeout(r, 1500));
+    const стр = await browser.newPage({ viewport:{ width:1280, height:800 } });
+    await стр.addInitScript(() => { localStorage.setItem('glower.setup.done', 'true'); localStorage.setItem('glower.perf.userChoice', 'true'); });
+    let и = {};
+    try {
+      await стр.goto(`http://localhost:${порт8}/`);
+      await стр.waitForTimeout(3500);
+      и = await стр.evaluate(async () => {
+        document.querySelectorAll('.welcome, .вход').forEach(н => н.remove());
+        /* Сначала работа, потом Магазин: открытый посреди работы, он
+           подхватывает её сам — прежде именно так он и начинал трястись */
+        await Platform.rpc('pkg.windows.install');
+        Работы.следи('wine', 'Поддержка программ Windows', '🪟');
+        WM.open('store');
+        await new Promise(r => setTimeout(r, 1800));
+        const плашка = document.querySelector('.работа');
+        const ст = document.querySelector('.st-body');
+        const первая = ст && ст.firstElementChild;
+        const было = { есть:!!плашка, текст:плашка ? плашка.textContent : '', вСтолбике:!!(плашка && плашка.closest('#toasts')) };
+        const место = плашка ? плашка.getBoundingClientRect() : null;
+        await new Promise(r => setTimeout(r, 2000));
+        const та = document.querySelector('.работа') === плашка;
+        const страницаНаМесте = !!первая && ст.firstElementChild === первая;
+        const проценты = (плашка.querySelector('.работа-шаг') || {}).textContent;
+        await new Promise(r => setTimeout(r, 3500));
+        return { ...было, та, страницаНаМесте, проценты,
+          справаВнизу:!!место && место.right > innerWidth - 60 && место.bottom > innerHeight * 0.6,
+          итог:(document.querySelector('.работа-шаг') || {}).textContent,
+          готово:!!document.querySelector('.работа.готово') };
+      });
+    } catch(e){ и.беда = e.message; }
+    await стр.close();
+    аг.kill();
+    check('ход установки — плашка справа внизу с названием и процентами',
+      и.есть && и.вСтолбике && /Поддержка программ Windows/.test(и.текст) && /%/.test(и.проценты || '') && и.справаВнизу,
+      JSON.stringify(и));
+    check('плашка не пересоздаётся, а страница Магазина не перерисовывается во время установки',
+      и.та && и.страницаНаМесте, JSON.stringify(и));
+    check('в конце плашка говорит «Установлено»', и.готово && /Установлено/.test(и.итог || ''), JSON.stringify(и));
+  }
+
   /* В меню программ по правой кнопке есть «Удалить» — у программ машины. */
   {
     const r = await page.evaluate(() => {
