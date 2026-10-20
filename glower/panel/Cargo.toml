@@ -1,0 +1,23 @@
+[package]
+name = "glower-panel"
+version = "0.1.0"
+edition = "2021"
+description = "Панель GlowerOS — нативная, без браузерного движка"
+license = "MIT"
+
+[dependencies]
+gtk = "0.18"
+gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
+# Пояс по имени (Europe/Moscow) — с GLib 2.68, в Ubuntu 24.04 она 2.80
+glib = { version = "0.18", features = ["v2_68"] }
+serde_json = "1"
+ureq = { version = "2", default-features = false, features = ["json"] }
+base64 = "0.22"
+async-channel = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

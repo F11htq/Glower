@@ -1254,6 +1254,41 @@ try {
         /def win_для_страницы/.test(оболочка) && /metaKey:true/.test(оболочка)
           && (оболочка.match(/win_для_страницы\(окно, в\)/g) || []).length >= 2);
     }
+
+    /* Нативная панель (panel/, Rust). Она должна доехать и до образа, и до
+       машин через пакет обновления, собираться на GitHub до образа — и не
+       оставить человека без панели вовсе, если с ней что-то не так. */
+    {
+      const cargo = await readFile(join(root, 'panel', 'Cargo.toml'), 'utf8');
+      const сборка = await readFile(join(root, '..', '.github', 'workflows', 'build-iso.yml'), 'utf8');
+      const оболочка = await readFile(join(root, 'linux', 'glower-shell'), 'utf8');
+      check('панель на Rust: проект и замок версий на месте',
+        /name = "glower-panel"/.test(cargo) && /gtk-layer-shell/.test(cargo)
+          && existsSync(join(root, 'panel', 'Cargo.lock')) && existsSync(join(root, 'panel', 'src', 'main.rs')));
+      check('GitHub собирает и проверяет панель до образа',
+        /cargo test --release --locked --manifest-path glower\/panel\/Cargo.toml/.test(сборка)
+          && /cargo build --release --locked --manifest-path glower\/panel\/Cargo.toml/.test(сборка)
+          && /libgtk-layer-shell-dev/.test(сборка)
+          && сборка.indexOf('Собрать панель') < сборка.indexOf('Собрать образ'));
+      check('выпуск и репозиторий берут пакет любой архитектуры',
+        !/glower_\*_all\.deb/.test(сборка) && (сборка.match(/glower_\*\.deb/g) || []).length >= 2);
+      check('панель кладётся в образ и в пакет обновления (тогда он amd64)',
+        /panel\/target\/release\/glower-panel/.test(образ2) && /usr\/bin\/glower-panel/.test(образ2)
+          && пакет.includes('usr/bin/glower-panel') && /ARCH=amd64/.test(пакет)
+          && /glower_\$\{DEB_VER\}_\$\{ARCH\}\.deb/.test(пакет) && /libgtk-layer-shell0/.test(пакет));
+      check('оболочка поднимает нативную панель, а при беде — страничную',
+        /shutil\.which\('glower-panel'\)/.test(оболочка) && /def страничная_панель/.test(оболочка)
+          && /падений\['подряд'\] >= 2/.test(оболочка) && /get_exit_status\(\) == 3/.test(оболочка)
+          && /if not нативная_панель\(\):\s*страничная_панель\(\)/.test(оболочка));
+      /* Нативная говорит на той же шине, что страничная: стол ждёт от
+         панели «готова» и её рост, и слушает она те же темы. */
+      const главная = await readFile(join(root, 'panel', 'src', 'main.rs'), 'utf8');
+      const страничная = await readFile(join(root, 'js', 'панель.js'), 'utf8');
+      const темы = ['раскладка', 'часы', 'батарея', 'обновления', 'настройки', 'стол-занят', 'затемни', 'открой-пуск'];
+      check('нативная панель слушает те же темы шины, что страничная',
+        темы.every(т => страничная.includes("'" + т + "'") && главная.includes('"' + т + '"'))
+          && /скажи\("панель-готова"/.test(главная) && /скажи\("полоса-высота"/.test(главная));
+    }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
     /* Заставка загрузки: каждая картинка, которую зовёт сценарий, едет в

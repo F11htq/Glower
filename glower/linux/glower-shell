@@ -20,6 +20,7 @@
 import glob
 import json
 import os
+import shutil
 import sys
 import urllib.request
 import ctypes
@@ -802,9 +803,76 @@ if 'install=1' in ДОВОД:
 # Без панели наверху развёрнутая программа съедает полосу целиком: ни
 # часов, ни лотка, ни поиска. Если слои вдруг не заладятся, живём без
 # отдельной панели — некрасиво, но система работает.
+# Панель — своя программа на Rust (glower-panel), без браузерного движка.
+#
+# Страничная панель стоила целый движок WebKit: отдельный процесс страницы
+# и сетевой, около трёхсот мегабайт памяти ради полосы с часами. Нативная
+# делает то же самое — те же кнопки, та же шина — в тридцати.
+#
+# Страничная остаётся запасной. Её показываем, если нативной нет на машине,
+# если человек попросил её сам (GLOWER_PANEL=web или слово «web» в
+# ~/.config/glower/panel) и если нативная падает раз за разом: два падения
+# подряд в первые пятнадцать секунд — и мы перестаём её поднимать. Панели
+# лучше быть страничной, чем никакой.
+def какая_панель():
+    выбор = os.environ.get('GLOWER_PANEL', '').strip()
+    if not выбор:
+        try:
+            with open(os.path.expanduser('~/.config/glower/panel'), encoding='utf-8') as ф:
+                выбор = ф.read().strip()
+        except OSError:
+            выбор = ''
+    return 'web' if выбор == 'web' else 'native'
+
+
+def страничная_панель():
+    панель_слоем('панель-верх', [К.TOP, К.LEFT, К.RIGHT], ВЕРХ)
+
+
+def нативная_панель():
+    путь = shutil.which('glower-panel')
+    if not путь or какая_панель() == 'web':
+        return False
+    падений = {'подряд': 0}
+
+    def запусти():
+        try:
+            процесс = Gio.Subprocess.new([путь], Gio.SubprocessFlags.NONE)
+        except GLib.Error as е:
+            print('GlowerOS: нативная панель не запустилась (%s) — страничная' % е,
+                  file=sys.stderr, flush=True)
+            страничная_панель()
+            return False
+        начало = GLib.get_monotonic_time()
+
+        def вышла(п, итог):
+            try:
+                п.wait_finish(итог)
+            except GLib.Error:
+                pass
+            прожила = (GLib.get_monotonic_time() - начало) / 1e6
+            падений['подряд'] = падений['подряд'] + 1 if прожила < 15 else 0
+            # Код 3 — оконный сервер не умеет слоёв: ждать тут нечего
+            без_слоёв = п.get_if_exited() and п.get_exit_status() == 3
+            if без_слоёв or падений['подряд'] >= 2:
+                print('GlowerOS: нативная панель не держится — показываю страничную',
+                      file=sys.stderr, flush=True)
+                страничная_панель()
+                return
+            print('GlowerOS: нативная панель завершилась — поднимаю снова',
+                  file=sys.stderr, flush=True)
+            GLib.timeout_add_seconds(1, lambda: (запусти(), False)[1])
+
+        процесс.wait_async(None, вышла)
+        return True
+
+    return запусти()
+
+
 if РАЗДЕЛЬНО:
     try:
-        панель_слоем('панель-верх', [К.TOP, К.LEFT, К.RIGHT], ВЕРХ)
+        if not нативная_панель():
+            страничная_панель()
     except Exception as е:
         print('GlowerOS: панель слоем не поднялась (%s) — рисует стол' % е,
               file=sys.stderr, flush=True)

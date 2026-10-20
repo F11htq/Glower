@@ -258,7 +258,7 @@ apt-get install -y --no-install-recommends \
   bluez bluez-tools \
   cups cups-filters cups-browsed cups-pdf avahi-daemon printer-driver-gutenprint \
   locales language-pack-ru language-pack-gnome-ru \
-  python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 \
+  python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 libgtk-layer-shell0 \
   xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   openbox wmctrl xdotool x11-utils \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
@@ -383,6 +383,20 @@ install -m 755 "$SRC/linux/glower-menu" "$ROOTFS/usr/bin/glower-menu"
 # И такой же — для рабочих столов: Win с Page Up/Down, как в GNOME
 install -m 755 "$SRC/linux/glower-desk" "$ROOTFS/usr/bin/glower-desk"
 install -m 755 "$SRC/linux/glower-exe" "$ROOTFS/usr/bin/glower-exe"
+# Панель — своя программа на Rust, без браузерного движка (panel/). Её
+# собирает шаг до образа в .github/workflows/build-iso.yml: внутри chroot
+# Rust не нужен. Собираем и здесь, если её ещё нет, а cargo под рукой. Не
+# вышло — образ всё равно годится: оболочка покажет страничную панель.
+PANEL_BIN="$SRC/panel/target/release/glower-panel"
+if [ ! -x "$PANEL_BIN" ] && command -v cargo >/dev/null 2>&1; then
+  (cd "$SRC/panel" && cargo build --release --locked) || true
+fi
+if [ -x "$PANEL_BIN" ]; then
+  install -m 755 "$PANEL_BIN" "$ROOTFS/usr/bin/glower-panel"
+  echo "  панель: нативная, $(du -k "$PANEL_BIN" | cut -f1) КБ"
+else
+  echo "  панель: нативной нет — будет страничная"
+fi
 # Приёмник значков лотка. Разговор с шиной разобран в нём руками, поэтому
 # ничего, кроме самого Python, ему не нужно — ни python3-dbus, ни python3-gi.
 install -m 755 "$SRC/linux/glower-tray" "$ROOTFS/usr/bin/glower-tray"
