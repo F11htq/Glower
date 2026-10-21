@@ -59,7 +59,8 @@ OUR_DIRS="usr/share/glower usr/share/plymouth/themes/glower"
 OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/glower-shell usr/bin/glower-open-package usr/bin/glower-shot
             usr/bin/glower-menu usr/bin/glower-desk usr/bin/glower-exe
-            usr/bin/glower-tray usr/bin/glower-greeter usr/bin/glower-panel usr/bin/врач
+            usr/bin/glower-tray usr/bin/glower-greeter usr/bin/glower-panel
+            usr/bin/glower-lock usr/bin/glower-login etc/pam.d/glower-lock usr/bin/врач
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
             usr/share/applications/glower-exe.desktop
@@ -88,7 +89,7 @@ ARCH=all
 DEPS_EXTRA=
 if [ -e "$BUILD/usr/bin/glower-panel" ]; then
   ARCH=amd64
-  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0"
+  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g"
 fi
 
 # Размер пакета apt показывает человеку — считаем честно.

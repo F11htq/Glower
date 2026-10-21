@@ -14,6 +14,11 @@ serde_json = "1"
 ureq = { version = "2", default-features = false, features = ["json"] }
 base64 = "0.22"
 async-channel = "2"
+# Экран блокировки: протокол «запереть ввод» оконного сервера (labwc его
+# понимает) поверх того же соединения с экраном, что у GTK
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
 [profile.release]
 opt-level = "s"

@@ -383,6 +383,10 @@ install -m 755 "$SRC/linux/glower-menu" "$ROOTFS/usr/bin/glower-menu"
 # И такой же — для рабочих столов: Win с Page Up/Down, как в GNOME
 install -m 755 "$SRC/linux/glower-desk" "$ROOTFS/usr/bin/glower-desk"
 install -m 755 "$SRC/linux/glower-exe" "$ROOTFS/usr/bin/glower-exe"
+# Пароль на замке (glower-lock) проверяет PAM своей службой — той же
+# проверкой, что и вход в систему
+install -d "$ROOTFS/etc/pam.d"
+install -m 644 "$SRC/linux/pam-glower-lock" "$ROOTFS/etc/pam.d/glower-lock"
 # Панель — своя программа на Rust, без браузерного движка (panel/). Её
 # собирает шаг до образа в .github/workflows/build-iso.yml: внутри chroot
 # Rust не нужен. Собираем и здесь, если её ещё нет, а cargo под рукой. Не
@@ -393,6 +397,9 @@ if [ ! -x "$PANEL_BIN" ] && command -v cargo >/dev/null 2>&1; then
 fi
 if [ -x "$PANEL_BIN" ]; then
   install -m 755 "$PANEL_BIN" "$ROOTFS/usr/bin/glower-panel"
+  # Та же программа под другими именами: экран блокировки и экран входа
+  ln -sf glower-panel "$ROOTFS/usr/bin/glower-lock"
+  ln -sf glower-panel "$ROOTFS/usr/bin/glower-login"
   echo "  панель: нативная, $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "  панель: нативной нет — будет страничная"

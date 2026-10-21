@@ -81,7 +81,7 @@ fn отладка() -> bool {
 // ------------------------------------------------------------- обои
 
 /// GTK3 не знает восьмизначных цветов (#rrggbbaa) — переводим в rgba().
-fn цвета_для_gtk(css: &str) -> String {
+pub(crate) fn цвета_для_gtk(css: &str) -> String {
     let mut итог = String::with_capacity(css.len());
     let знаки: Vec<char> = css.chars().collect();
     let mut i = 0;

@@ -55,7 +55,7 @@ jobs:
       # всё: без этого шага образ тихо вышел бы со старой панелью.
       - name: Собрать панель
         run: |
-          sudo apt-get install -y --no-install-recommends libgtk-3-dev libgtk-layer-shell-dev
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libgtk-layer-shell-dev libpam0g-dev
           cargo test --release --locked --manifest-path glower/panel/Cargo.toml
           cargo build --release --locked --manifest-path glower/panel/Cargo.toml
           ls -la glower/panel/target/release/glower-panel

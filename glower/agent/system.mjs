@@ -112,7 +112,10 @@ export function power(allowPower){
            вспыхивает на каждой нажатой букве, убрано по просьбе человека
            (-u), а белый экран swaylock заменён тёмным — тем же, что у
            загрузки. Пароль печатается вслепую, как на экране входа. */
-        const ключи = { swaylock:['-f', '-u', '-c', '0b0d1a'], waylock:[], gtklock:['-d'],
+        /* Свой замок (glower-lock, panel/src/lock.rs) — тот же экран, что
+           встречает при включении: люди, часы, пароль. Он первый, если есть;
+           чужие остаются запасными. */
+        const ключи = { 'glower-lock':[], swaylock:['-f', '-u', '-c', '0b0d1a'], waylock:[], gtklock:['-d'],
                         i3lock:['-c', '0b0d1a', '-u'], xsecurelock:[] };
         /* Если замок уже висит, второй не нужен. Просьб может прийти две:
            человек запер экран сам, а потом машина уснула и проснулась — и
@@ -123,7 +126,7 @@ export function power(allowPower){
           catch(e){ /* не запущен — и хорошо */ }
         }
         const порядок = среда.WAYLAND_DISPLAY
-          ? ['swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock']
+          ? ['glower-lock', 'swaylock', 'waylock', 'gtklock', 'i3lock', 'xsecurelock']
           : ['i3lock', 'xsecurelock', 'gtklock', 'swaylock'];
         for (const прог of порядок){
           if (!await has(прог)) continue;

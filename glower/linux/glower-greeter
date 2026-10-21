@@ -45,8 +45,22 @@ done
 
 # Оболочка в режиме входа. Полосу под панель не отводим: панели здесь нет.
 mkdir -p "$HOMEDIR/.local/share/glower"
+# Экран входа — свой, на Rust (glower-login): тот же экран, что и замок по
+# Win+L. Если он не поднялся (упал сразу или оконный сервер не умеет слоёв)
+# — показываем прежний, страничный: войти в систему человек должен при
+# любой беде с новым экраном.
 cat > "$HOMEDIR/пуск.sh" <<STARTUP
 #!/bin/sh
+if [ -x /usr/bin/glower-login ]; then
+  START=\$(date +%s)
+  GLOWER_URL="http://localhost:$PORT/" /usr/bin/glower-login
+  CODE=\$?
+  if [ "\$CODE" -eq 0 ] || [ \$(( \$(date +%s) - START )) -ge 5 ]; then
+    labwc -e >/dev/null 2>&1 || true
+    exit 0
+  fi
+  echo "glower-login не поднялся (код \$CODE) — показываю страничный вход" >&2
+fi
 GLOWER_URL="http://localhost:$PORT/" \
 GLOWER_QUERY="login=1" \
 GLOWER_PANEL_H=0 \

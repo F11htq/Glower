@@ -19,6 +19,7 @@ mod agent;
 mod desktop;
 mod dock;
 mod icons;
+mod lock;
 mod menus;
 mod overview;
 mod popup;
@@ -246,6 +247,16 @@ fn кнопка_со_значком(вид: Вид, подсказка: &str) ->
 }
 
 fn main() {
+    // Та же программа под другими именами: glower-lock — экран блокировки,
+    // glower-login — экран входа. Это один и тот же экран
+    let имя = std::env::args().next().unwrap_or_default();
+    let имя = имя.rsplit('/').next().unwrap_or("");
+    if имя == "glower-lock" || std::env::args().any(|д| д == "--lock") {
+        lock::запусти(lock::Режим::Замок);
+    }
+    if имя == "glower-login" || std::env::args().any(|д| д == "--login") {
+        lock::запусти(lock::Режим::Вход);
+    }
     if gtk::init().is_err() {
         eprintln!("glower-panel: нет экрана — панель показывать негде");
         std::process::exit(1);

@@ -1463,6 +1463,26 @@ try {
           && /set_layer\(Layer::Background\)/.test(стол_) && /"значки-дело"/.test(стол_)
           && /def сквозь_пустое/.test(оболочка2) && /glowerDesk/.test(оболочка2)
           && /input_shape_combine_region\(область/.test(оболочка2) && /сквозь_пустое\(окно, в\)/.test(оболочка2));
+      /* Замок по Win+L и вход при включении — один нативный экран */
+      {
+        const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');
+        const сис2 = await readFile(join(root, 'agent', 'system.mjs'), 'utf8');
+        const вход = await readFile(join(root, 'linux', 'glower-greeter'), 'utf8');
+        check('замок настоящий: ввод заперт у оконного сервера, пароль проверяет PAM',
+          /get_inhibitor/.test(замок) && /pam_authenticate/.test(замок) && /Layer::Overlay/.test(замок)
+            && /KeyboardMode::Exclusive/.test(замок) && /glower-lock" \} else \{ "login"/.test(замок));
+        check('Win+L запускает свой замок, чужие — запасными',
+          /'glower-lock':\[\]/.test(сис2) && /\['glower-lock', 'swaylock'/.test(сис2)
+            && /имя == "glower-lock"/.test(главная) && /имя == "glower-login"/.test(главная));
+        check('при включении — тот же экран, а не поднялся — страничный',
+          /\/usr\/bin\/glower-login/.test(вход) && /-ge 5/.test(вход) && /GLOWER_QUERY="login=1"/.test(вход)
+            && /Режим::Вход => позови\("login\.users"/.test(замок) && /позови\("login\.enter"/.test(замок));
+        check('замок и вход попадают в образ и пакет, PAM — со своей службой',
+          /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-lock"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-login"/.test(образ2)
+            && /pam-glower-lock/.test(образ2) && existsSync(join(root, 'linux', 'pam-glower-lock'))
+            && пакет.includes('usr/bin/glower-lock') && пакет.includes('etc/pam.d/glower-lock') && /libpam0g/.test(пакет)
+            && /libpam0g-dev/.test(сборка));
+      }
       check('Win при нативном меню не поднимает стол поверх программ',
         /"тема":"обзор-свой"/.test(меню3) && /\*'"что":true'\*\) ;;/.test(меню3));
       check('нативная панель слушает те же темы шины, что страничная',
