@@ -115,15 +115,26 @@ fn создай() -> Rc<RefCell<Меню>> {
     }
     окно.style_context().add_class("overview");
     окно.init_layer_shell();
-    окно.set_layer(Layer::Top);
+    // Поверх всего, вместе с панелью — как Launchpad в macOS: меню
+    // занимает экран целиком, и ничто не спорит с ним за внимание.
+    // Закрывают его Win, Escape или щелчок по пустому месту.
+    окно.set_layer(Layer::Overlay);
     окно.set_namespace("glower-overview");
     for край in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
         окно.set_anchor(край, true);
     }
-    // Ноль: меню ложится под панелью, а сама панель остаётся видна и
-    // нажимаема — «Программы» закрывает меню тем же нажатием
-    окно.set_exclusive_zone(0);
+    // −1: не уступать места ничьей полосе, в том числе нашей же панели
+    окно.set_exclusive_zone(-1);
     окно.set_keyboard_mode(KeyboardMode::Exclusive);
+    // Фон заливаем сами. Окно объявлено самоотрисовываемым (иначе нет
+    // прозрачности), и GTK его фон не рисует вовсе: меню выходило
+    // совсем прозрачным, и значки терялись на пёстрых обоях
+    окно.connect_draw(|_, к| {
+        к.set_operator(gtk::cairo::Operator::Source);
+        к.set_source_rgba(0.04, 0.047, 0.08, 0.86);
+        let _ = к.paint();
+        glib::Propagation::Proceed
+    });
     окно.connect_key_press_event(|_, с| {
         if с.keyval() == gtk::gdk::keys::constants::Escape {
             закрой();
@@ -143,7 +154,7 @@ fn создай() -> Rc<RefCell<Меню>> {
     });
 
     let колонка = gtk::Box::new(gtk::Orientation::Vertical, 16);
-    колонка.set_margin_top(22);
+    колонка.set_margin_top(52);
     колонка.set_margin_bottom(18);
     колонка.set_margin_start(40);
     колонка.set_margin_end(40);

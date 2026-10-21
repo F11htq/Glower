@@ -122,7 +122,7 @@ window.bar button.updates { color: #8cc8ff; }
 .menu calendar:selected { background-color: #3d7bf0; border-radius: 6px; }
 .menu calendar.header { border: none; background: none; }
 .menu calendar:indeterminate { color: rgba(255, 255, 255, 0.3); }
-window.overview { background-color: rgba(12, 14, 22, 0.80); }
+window.overview { background-color: rgba(10, 12, 20, 0.86); }
 .overview, .overview * {
   color: rgba(255, 255, 255, 0.95);
   font-family: sans-serif;
