@@ -776,6 +776,49 @@ const Shell = {
     this.ctx(e.clientX, e.clientY, пункты);
   },
 
+  /* Что человек сделал в нативном меню программ (glower-panel): то же,
+     что делают щелчки в страничном обзоре и пункты меню выше. Меню
+     показывает другая программа, а столы, окна и док — здесь. */
+  делоПрограммы(что, д){
+    const п = { id:д.id, 'имя':д['имя'] || д.id, 'вид':д['вид'] || 'приложение' };
+    const машина = п['вид'] === 'машина';
+    const запусти = () => {
+      if (машина){ if (window.OS && OS.запустиПоЯрлыку) OS.запустиПоЯрлыку(п.id); }
+      else this.launch(п.id);
+    };
+    switch (что){
+      case 'запусти': запусти(); break;
+      case 'стол': WM.gotoDesk(clamp(+д.n || 0, 0, WM.desks - 1)); break;
+      case 'стол-добавь': WM.добавьСтол(); break;
+      case 'стол-убери': WM.убериСтол(+д.n || 0); break;
+      case 'окно': {
+        const w = WM.wins.find(x => x.node && x.node.id === д.id);
+        if (w){ if (w.minimized) WM.restore(w); else WM.focus(w); }
+        break;
+      }
+      case 'на-новый-стол': {
+        const куда = WM.добавьСтол();
+        if (машина){ WM.gotoDesk(куда); запусти(); }
+        else { const w = WM.open(п.id); if (w) WM.наСтол(w, куда); }
+        break;
+      }
+      case 'вынеси':
+        if (машина && window.OS && OS.наСтол) OS.наСтол({ id:п.id, name:п['имя'], 'значок':'' });
+        else if (window.Link && Link.toDesktop) Link.toDesktop({ app:п.id }, п['имя']);
+        break;
+      case 'док': {
+        if (машина || !APPS[п.id]) break;
+        const вДоке = (S.dockApps || []).includes(п.id);
+        S.dockApps = вДоке ? S.dockApps.filter(x => x !== п.id) : [...(S.dockApps || []), п.id];
+        Store.save(); this.renderDock();
+        this.toast('Док', вДоке ? 'Убрано из дока' : 'Закреплено в доке', '📌');
+        break;
+      }
+      case 'магазин': WM.open('store', { найти:String(п['имя'] || '').split(' ')[0] }); break;
+      case 'удали': if (машина && window.OS && OS.удалиПрограмму) OS.удалиПрограмму({ id:п.id, name:п['имя'] }); break;
+    }
+  },
+
   обзор(on){
     const узел = $('#обзор');
     if (!узел) return;

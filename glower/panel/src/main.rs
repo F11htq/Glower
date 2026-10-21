@@ -13,6 +13,7 @@
 mod agent;
 mod icons;
 mod menus;
+mod overview;
 mod popup;
 mod tray;
 
@@ -121,6 +122,60 @@ window.bar button.updates { color: #8cc8ff; }
 .menu calendar:selected { background-color: #3d7bf0; border-radius: 6px; }
 .menu calendar.header { border: none; background: none; }
 .menu calendar:indeterminate { color: rgba(255, 255, 255, 0.3); }
+window.overview { background-color: rgba(12, 14, 22, 0.80); }
+.overview, .overview * {
+  color: rgba(255, 255, 255, 0.95);
+  font-family: sans-serif;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+.overview scrolledwindow, .overview viewport, .overview flowbox, .overview flowboxchild {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.overview entry.search {
+  background-color: rgba(255, 255, 255, 0.10);
+  border: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 9px 14px;
+  font-size: 15px;
+  caret-color: #ffffff;
+}
+.overview entry.search:focus { box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.8); }
+.overview button {
+  background: none;
+  border: none;
+  box-shadow: none;
+  border-radius: 14px;
+  padding: 8px;
+  transition: background-color 150ms ease-out;
+}
+.overview button:hover { background-color: rgba(255, 255, 255, 0.10); }
+.overview button.app { min-width: 104px; padding: 10px 6px; }
+.overview .app-name { font-size: 12px; }
+.overview .glyph {
+  font-size: 28px;
+  border-radius: 14px;
+  min-width: 52px;
+  min-height: 52px;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.overview .glyph.small { font-size: 14px; border-radius: 7px; min-width: 24px; min-height: 24px; }
+.overview button.desk {
+  background-color: rgba(255, 255, 255, 0.08);
+  min-width: 128px;
+  min-height: 72px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+.overview button.desk:hover { background-color: rgba(255, 255, 255, 0.14); }
+.overview button.desk.on { box-shadow: inset 0 0 0 2px #5b93f5; }
+.overview button.desk-plus { min-width: 72px; font-size: 22px; }
+.overview button.desk-x { padding: 0 7px; margin: 4px; border-radius: 9px; font-size: 13px; }
+.overview button.win { background-color: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 6px 12px; }
+.overview .empty { opacity: 0.6; padding: 30px; }
 window.curtain { background-color: #000000; }
 window.curtain label { color: rgba(255, 255, 255, 0.8); font-size: 18px; }
 "#;
@@ -254,7 +309,8 @@ fn main() {
 
     // ---------- что говорит стол ----------
     let вести = слушай(
-        &["раскладка", "часы", "батарея", "обновления", "настройки", "стол-занят", "затемни"],
+        &["раскладка", "часы", "батарея", "обновления", "настройки", "стол-занят", "затемни",
+          "программы", "обзор-данные"],
         &["открой-пуск"],
     );
     {
@@ -326,6 +382,7 @@ fn main() {
                     "стол-занят" => {
                         if правда(что) {
                             popup::закрой();
+                            overview::закрой();
                             окно.set_exclusive_zone(0);
                             окно.hide();
                         } else {
@@ -342,12 +399,16 @@ fn main() {
                             полоса.style_context().remove_class("dim");
                         }
                     }
-                    // Меню программ открыл стол — своё закрываем
+                    // Клавиша Win, кнопка «Программы» или просьба стола: меню
+                    // программ теперь наше. Пока стол занят — мастером,
+                    // приветствием, программой во весь экран — не открываем
                     "открой-пуск" => {
-                        if что.as_bool() != Some(false) {
-                            popup::закрой();
+                        if окно.is_visible() || что.as_bool() == Some(false) {
+                            overview::переключи(что);
                         }
                     }
+                    "программы" => overview::программы(что),
+                    "обзор-данные" => overview::данные(что),
                     _ => {}
                 }
             }
@@ -358,6 +419,10 @@ fn main() {
     // наш рост — на сколько опускать развёрнутые окна
     скажи("панель-готова", json!(true));
     скажи("полоса-высота", json!(ВЫСОТА));
+    // Меню программ показываем мы, а не страница стола: она, услышав это,
+    // перестаёт открывать своё (страничная панель при запуске говорит
+    // обратное — на случай, если оболочка вернулась к ней)
+    скажи("обзор-свой", json!(true));
 
     gtk::main();
 }

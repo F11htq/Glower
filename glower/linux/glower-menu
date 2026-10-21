@@ -70,9 +70,18 @@ sleep 0.25
 # Меню рисует оболочка, а её окно лежит под чужими: открой браузер во весь
 # экран — и меню откроется за ним. Человек нажал Win и не увидел ничего.
 # Поэтому сперва поднимаем оболочку, как это делает Win+D.
-if command -v wlrctl >/dev/null 2>&1; then
-  wlrctl toplevel focus app_id:glowershell >/dev/null 2>&1 || true
-fi
+#
+# Нативному меню (glower-panel) это не нужно: оно своё, поверх всех окон.
+# Поднять стол тогда значило бы спрятать за ним программу, в которой
+# человек работал, — закрыл меню, а она уже позади.
+NATIVE=$(curl -sf -m 2 -X POST -H 'Content-Type: application/json' \
+  -d '{"method":"ui.last","params":{"тема":"обзор-свой"}}' "$URL" 2>/dev/null || true)
+case "$NATIVE" in
+  *'"что":true'*) ;;
+  *) if command -v wlrctl >/dev/null 2>&1; then
+       wlrctl toplevel focus app_id:glowershell >/dev/null 2>&1 || true
+     fi ;;
+esac
 
 command -v curl >/dev/null 2>&1 || { echo "в системе нет curl" >&2; exit 1; }
 curl -sf -m 5 -X POST -H 'Content-Type: application/json' -d "$BODY" "$URL" >/dev/null || {
