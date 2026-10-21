@@ -1049,3 +1049,7 @@ body.reduced .ms-hero-art,body.эконом .ms-hero-art{animation:none}
   box-shadow:0 14px 40px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.08)}
 [data-theme="light"] .работа-зн,[data-theme="light"] .работа-отмена,[data-theme="light"] .работа-полоса{background:rgba(0,0,0,.06)}
 body.reduced .работа.неточно .работа-полоса i{animation:none;width:100% !important;opacity:.5}
+
+/* Нативный док (glower-panel) рисуется поверх окон сам — свой прячем
+   целиком, вместе с его местом и подводом курсора. */
+body.док-нативный .dock-wrap{display:none}

@@ -11,6 +11,7 @@
 //! она падает — возвращается к страничной.
 
 mod agent;
+mod dock;
 mod icons;
 mod menus;
 mod overview;
@@ -177,6 +178,35 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
 .overview button.desk-x { padding: 0 7px; margin: 4px; border-radius: 9px; font-size: 13px; }
 .overview button.win { background-color: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 6px 12px; }
 .overview .empty { opacity: 0.6; padding: 30px; }
+window.dock, window.dock * {
+  color: rgba(255, 255, 255, 0.95);
+  font-family: sans-serif;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+window.dock button.dock-item {
+  background: none;
+  border: none;
+  box-shadow: none;
+  border-radius: 12px;
+  padding: 4px 5px 0;
+  min-width: 0;
+  min-height: 0;
+  transition: background-color 150ms ease-out;
+}
+window.dock button.dock-item:hover { background-color: rgba(255, 255, 255, 0.12); }
+window.dock button.dock-item.active { background-color: rgba(255, 255, 255, 0.16); }
+window.dock button.dock-item.minimized .dock-ico { opacity: 0.55; }
+window.dock .glyph {
+  font-size: 22px;
+  border-radius: 11px;
+  min-width: 40px;
+  min-height: 40px;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+window.dock .dot { background-color: rgba(255, 255, 255, 0.85); border-radius: 3px; min-width: 5px; min-height: 5px; }
+window.dock .no-dot { min-width: 5px; min-height: 5px; }
+window.dock separator.dock-sep { background-color: rgba(255, 255, 255, 0.16); min-width: 1px; margin: 8px 5px 10px; }
 window.curtain { background-color: #000000; }
 window.curtain label { color: rgba(255, 255, 255, 0.8); font-size: 18px; }
 "#;
@@ -307,11 +337,12 @@ fn main() {
     полоса.pack_end(&tray::лоток(), false, false, 2);
 
     окно.show_all();
+    dock::создай();
 
     // ---------- что говорит стол ----------
     let вести = слушай(
         &["раскладка", "часы", "батарея", "обновления", "настройки", "стол-занят", "затемни",
-          "программы", "обзор-данные"],
+          "программы", "обзор-данные", "док"],
         &["открой-пуск"],
     );
     {
@@ -384,11 +415,13 @@ fn main() {
                         if правда(что) {
                             popup::закрой();
                             overview::закрой();
+                            dock::занят(true);
                             окно.set_exclusive_zone(0);
                             окно.hide();
                         } else {
                             окно.show();
                             окно.set_exclusive_zone(ВЫСОТА);
+                            dock::занят(false);
                         }
                     }
                     // Пока стол ждёт выделения области для снимка, темнеем и
@@ -410,6 +443,7 @@ fn main() {
                     }
                     "программы" => overview::программы(что),
                     "обзор-данные" => overview::данные(что),
+                    "док" => dock::данные(что),
                     _ => {}
                 }
             }
@@ -424,6 +458,8 @@ fn main() {
     // перестаёт открывать своё (страничная панель при запуске говорит
     // обратное — на случай, если оболочка вернулась к ней)
     скажи("обзор-свой", json!(true));
+    // То же с доком: внизу теперь наш, а свой стол прячет
+    скажи("док-свой", json!(true));
 
     gtk::main();
 }

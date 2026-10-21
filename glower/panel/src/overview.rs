@@ -246,7 +246,7 @@ fn создай() -> Rc<RefCell<Меню>> {
 
 /// Значок нашей программы: знак на цветной плашке — тот же, что у
 /// страницы. Фон приходит готовой строкой CSS, её и отдаём GTK.
-fn наш_значок(знак: &str, фон: &str) -> gtk::Widget {
+pub(crate) fn наш_значок(знак: &str, фон: &str) -> gtk::Widget {
     let з = gtk::Label::new(Some(if знак.is_empty() { "▢" } else { знак }));
     з.style_context().add_class("glyph");
     let стиль = gtk::CssProvider::new();

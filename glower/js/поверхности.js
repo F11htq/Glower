@@ -346,7 +346,48 @@ const Поверхности = {
          всегда и отъедал полосу внизу у каждого окна.
 
          Кнопку Пуска из дока мы при этом убрали: меню программ живёт на
-         панели, и вторая такая же кнопка внизу только путала. */
+         панели, и вторая такая же кнопка внизу только путала.
+
+         Док бывает и нативным — его рисует программа панели поверх окон
+         (glower-panel). Тогда свой мы прячем и только рассказываем ей, что
+         у нас закреплено, запущено и открыто («док»); нажатия она
+         присылает тем же путём, что и меню программ («обзор-дело»). */
+      this.следи('док-свой', что => {
+        document.body.classList.toggle('док-нативный', что === true);
+      });
+      let доксказано = '';
+      const расскажиДоку = () => {
+        /* S и APPS объявлены через const и в window не попадают —
+           спрашиваем через typeof, иначе проверка молча отвечает «нет» */
+        if (!window.WM || typeof S === 'undefined' || typeof APPS === 'undefined') return;
+        const сведения = id => {
+          const а = APPS[id];
+          return а ? { id, 'имя':а.name || id, 'знак':а.glyph || '', 'фон':а.bg || '' } : null;
+        };
+        const запущены = [...new Set(WM.wins.map(w => w.appId))];
+        const активное = WM.wins.find(w => w.node.classList.contains('focus') && !w.minimized);
+        const весть = {
+          'закреплены':(S.dockApps || []).map(сведения).filter(Boolean),
+          'сведения':запущены.filter(id => !(S.dockApps || []).includes(id)).map(сведения).filter(Boolean),
+          'запущены':запущены,
+          'активное':активное ? активное.appId : '',
+          'окон':WM.wins.filter(w => !w.minimized && w.desk === WM.desk).length
+        };
+        const строкой = JSON.stringify(весть);
+        if (строкой === доксказано) return;
+        доксказано = строкой;
+        this.скажи('док', весть);
+      };
+      if (window.Shell && Shell.syncDock){
+        const прежний = Shell.syncDock.bind(Shell);
+        Shell.syncDock = function(){ const r = прежний(); расскажиДоку(); return r; };
+      }
+      /* Стол переключают и сворачивают окна не только через syncDock —
+         раз в секунду сверяемся, а одинаковое не повторяем */
+      setInterval(расскажиДоку, 1000);
+      расскажиДоку();
+      this.слушай(['дай-док'], м => { if (м.тема === 'дай-док'){ доксказано = ''; расскажиДоку(); } });
+
       const док = document.querySelector('#dock-wrap');
       const пуск = document.querySelector('#start-btn');
       /* Вместе с кнопкой уходит и черта за ней: одна она оставляла в начале

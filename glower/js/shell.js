@@ -841,6 +841,12 @@ const Shell = {
         break;
       }
       case 'магазин': WM.open('store', { найти:String(п['имя'] || '').split(' ')[0] }); break;
+      /* Из нативного дока */
+      case 'закрой-все': WM.wins.filter(w => w.appId === п.id).forEach(w => WM.close(w)); break;
+      case 'очисти-корзину':
+        KV.set('trash', []); this.renderIcons();
+        this.toast('Корзина', 'Очищена', '🗑️');
+        break;
       case 'удали': if (машина && window.OS && OS.удалиПрограмму) OS.удалиПрограмму({ id:п.id, name:п['имя'] }); break;
     }
   },
