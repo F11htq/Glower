@@ -41,6 +41,12 @@
       <action name="Execute" command="wlrctl toplevel focus app_id:glowershell" />
       <action name="Execute" command="glower-menu клавиша W-d" />
     </keybind>
+    <!-- Win+L запирает экран из любой программы, а не только со стола:
+         раньше его ловила страница, и в Firefox или терминале оно не
+         делало ничего -->
+    <keybind key="W-l">
+      <action name="Execute" command="glower-menu замок" />
+    </keybind>
     <!-- Тем, кто знает, зачем он нужен: настоящий терминал -->
     <keybind key="W-Return">
       <action name="Execute" command="glower-menu отмени" />

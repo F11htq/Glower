@@ -1240,6 +1240,15 @@ try {
       });
       check('на столе сочетания уходят странице, в чужих окнах — как прежде', !не_так.length,
         'не так: ' + не_так.join(', '));
+      /* Win+L — из любой программы, а замок — без анимации кольца */
+      {
+        const меню_ = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
+        const сис = await readFile(join(root, 'agent', 'system.mjs'), 'utf8');
+        check('Win+L запирает из любой программы, замок без кольца и белого экрана',
+          привязка('W-l').includes('glower-menu замок') && /"\$\{1:-\}" = "замок"/.test(меню_)
+            && /"action":"lock"/.test(меню_)
+            && /swaylock:\['-f', '-u', '-c', '0b0d1a'\]/.test(сис) && /i3lock:\['-c', '0b0d1a', '-u'\]/.test(сис));
+      }
       check('Alt со стрелками остаётся программам («назад» в браузере)',
         ['A-Left', 'A-Right', 'A-Up', 'A-Down'].every(к => привязка(к).trim() === '<action name="None" />'));
       const меню = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
