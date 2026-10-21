@@ -16,11 +16,14 @@
 #![allow(confusable_idents)]
 
 mod agent;
+mod apps;
+mod calc;
 mod desktop;
 mod dock;
 mod icons;
 mod lock;
 mod menus;
+mod notepad;
 mod overview;
 mod popup;
 mod tray;
@@ -256,6 +259,13 @@ fn main() {
     }
     if имя == "glower-login" || std::env::args().any(|д| д == "--login") {
         lock::запусти(lock::Режим::Вход);
+    }
+    // Программы системы — тоже эта программа, своими именами
+    if имя == "glower-notepad" {
+        notepad::запусти(std::env::args().skip(1).collect());
+    }
+    if имя == "glower-calc" {
+        calc::запусти();
     }
     if gtk::init().is_err() {
         eprintln!("glower-panel: нет экрана — панель показывать негде");

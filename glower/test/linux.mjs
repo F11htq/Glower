@@ -1483,6 +1483,31 @@ try {
             && пакет.includes('usr/bin/glower-lock') && пакет.includes('etc/pam.d/glower-lock') && /libpam0g/.test(пакет)
             && /libpam0g-dev/.test(сборка));
       }
+      /* Блокнот и Калькулятор — нативные окна, та же программа под своим именем */
+      {
+        const блокнот = await readFile(join(root, 'panel', 'src', 'notepad.rs'), 'utf8');
+        const счёт = await readFile(join(root, 'panel', 'src', 'calc.rs'), 'utf8');
+        const общее = await readFile(join(root, 'panel', 'src', 'apps.rs'), 'utf8');
+        const агент2 = await readFile(join(root, 'agent', 'server.mjs'), 'utf8');
+        const ос2 = await readFile(join(root, 'js', 'os.js'), 'utf8');
+        const сис3 = await readFile(join(root, 'js', 'system.js'), 'utf8');
+        check('Блокнот и Калькулятор на Rust: своё имя окна, вкладки, сохранение, счёт',
+          /имя == "glower-notepad"/.test(главная) && /имя == "glower-calc"/.test(главная)
+            && /set_prgname/.test(общее) && /gtk::Notebook/.test(блокнот) && /Сохранить как/.test(блокнот)
+            && /fn нажми/.test(счёт) && /считает_как_страничный/.test(счёт));
+        check('агент запускает родные программы, страница отдаёт им свои окна',
+          /'sys\.native\.list'/.test(агент2) && /'sys\.native'/.test(агент2) && /glower-notepad/.test(агент2)
+            && /function wireNativeSystemApps/.test(ос2) && /wireNativeSystemApps\(\)/.test(ос2)
+            && /прежнее\(id, opts\)\)/.test(ос2));
+        check('восстановление сеанса не плодит пустые Блокноты при входе',
+          /OS\.нативные\.includes\(s\.app\)/.test(сис3) && /'восстановление':true/.test(сис3)
+            && /opts\['восстановление'\]\) return null/.test(ос2));
+        check('в доке окна родных программ — точкой под их значком, не чужим',
+          /"glower-notepad", "notepad"/.test(док_) && /"glower-calc", "calc"/.test(док_) && /родные_для/.test(док_));
+        check('Блокнот и Калькулятор попадают в образ и пакет',
+          /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-notepad"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-calc"/.test(образ2)
+            && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc'));
+      }
       check('Win при нативном меню не поднимает стол поверх программ',
         /"тема":"обзор-свой"/.test(меню3) && /\*'"что":true'\*\) ;;/.test(меню3));
       check('нативная панель слушает те же темы шины, что страничная',
@@ -2236,6 +2261,53 @@ try {
       !r.блокнот && r.отказ, JSON.stringify(r));
     check('в Параметрах → Приложения есть «Программы Windows» с состоянием Wine',
       r.карта && /Wine/.test(r.карта) && !/Проверяю/.test(r.карта), JSON.stringify(r));
+  }
+
+  /* Куда уходит WM.open, когда на машине есть родные программы */
+  {
+    const r = await page.evaluate(async () => {
+      const было = { rpc: Platform.rpc, open: WM.open, нат: OS.нативные };
+      const вызовы = [];
+      let нетФайла = false;
+      Platform.rpc = async (м, п) => {
+        вызовы.push([м, п]);
+        if (м === 'sys.native.list') return { list:['notepad', 'calc'] };
+        if (м === 'fs.stat' && нетФайла) throw new Error('нет');
+        if (м === 'sys.windows') return { list:[{ appId:'glower-calc', title:'Калькулятор' }] };
+        return {};
+      };
+      try {
+        await wireNativeSystemApps();
+        const ждём = () => new Promise(r2 => setTimeout(r2, 60));
+        const итог = {};
+        итог.файл = WM.open('notepad', { file:{ path:['Документы'], name:'а.txt' } });
+        await ждём();
+        итог.путь = (вызовы.find(в => в[0] === 'sys.native') || [])[1];
+        вызовы.length = 0;
+        итог.сеанс = WM.open('notepad', { x:1, y:1, w:300, h:200, 'восстановление':true });
+        await ждём();
+        итог.сеансЗвал = вызовы.length;
+        WM.open('calc');
+        await ждём();
+        итог.калк = вызовы.map(в => в[0] + (в[1] && в[1].action ? ':' + в[1].action : ''));
+        вызовы.length = 0;
+        нетФайла = true;
+        WM.open('notepad', { file:{ path:['Документы'], name:'нет.txt', content:'x' } });
+        await new Promise(r2 => setTimeout(r2, 300));
+        const своё = WM.wins.find(w => w.appId === 'notepad');
+        итог.запасной = !!своё;
+        if (своё) WM.close(своё);
+        return итог;
+      } finally {
+        Platform.rpc = было.rpc; WM.open = было.open; OS.нативные = было.нат;
+      }
+    });
+    check('Блокнот открывает файл нативным окном, с путём файла',
+      r.файл === null && r.путь && r.путь['программа'] === 'notepad' && JSON.stringify(r.путь['путь']) === JSON.stringify(['Документы', 'а.txt']),
+      JSON.stringify(r));
+    check('восстановление сеанса нативных не запускает', r.сеанс === null && r.сеансЗвал === 0, JSON.stringify(r));
+    check('Калькулятор один: открыт — переходим к нему', r.калк.includes('sys.window:focus') && !r.калк.includes('sys.native'), JSON.stringify(r));
+    check('не вышло нативно — открывается своё окно, как раньше', r.запасной, JSON.stringify(r));
   }
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));

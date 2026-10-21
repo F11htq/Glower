@@ -257,7 +257,10 @@ const Session = {
     setTimeout(() => { this.восстановлено = true; }, 250 + list.length * 160 + 200);
     list.forEach((s, i) => setTimeout(() => {
       if (!APPS[s.app]) return;
-      const win = WM.open(s.app, { x:s.x, y:s.y, w:s.w, h:s.h });
+      /* Блокнот и Калькулятор теперь настоящие программы: пустой Блокнот
+         при каждом входе никому не нужен — их сеанс не возвращаем */
+      if (window.OS && OS.нативные && OS.нативные.includes(s.app)) return;
+      const win = WM.open(s.app, { x:s.x, y:s.y, w:s.w, h:s.h, 'восстановление':true });
       if (!win) return;
       win.desk = s.desk || 0;
       if (s.max) WM.toggleMax(win);

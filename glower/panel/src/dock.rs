@@ -243,7 +243,38 @@ fn обнови_видимость() {
 
 /// Значок окна программы машины: ярлык с тем же именем, затем значок из
 /// темы по имени окна (у многих программ они совпадают), затем наш знак.
+/// Программы системы на Rust: имя окна → программа страницы и её знак.
+/// Их окна — настоящие, но для человека это тот же Блокнот, что закреплён
+/// в доке: точка под его значком, а не ещё одно безликое окно рядом.
+const РОДНЫЕ: [(&str, &str, &str, &str); 2] = [
+    ("glower-notepad", "notepad", "📝", "linear-gradient(140deg,#7dd3fc,#3b82f6)"),
+    ("glower-calc", "calc", "🧮", "linear-gradient(140deg,#a5b4fc,#6366f1)"),
+];
+
+fn родное(app_id: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    РОДНЫЕ.iter().find(|(окно, ..)| *окно == app_id).map(|(_, id, знак, фон)| (*id, *знак, *фон))
+}
+
+/// Переключить настоящее окно, как в любой панели задач: в работе —
+/// свернуть, свёрнутое — достать, иначе — перейти к нему.
+fn переключи_окно(w: &Value) {
+    let с = &w["состояние"];
+    let действие = if с["свёрнуто"].as_bool() == Some(true) {
+        "restore"
+    } else if с["активно"].as_bool() == Some(true) {
+        "minimize"
+    } else {
+        "focus"
+    };
+    позови("sys.window", json!({ "action": действие, "appId": w["appId"], "title": w["title"] }), |_| {
+        glib::timeout_add_local_once(Duration::from_millis(250), опроси_чужие);
+    });
+}
+
 fn значок_чужого(app_id: &str) -> gtk::Widget {
+    if let Some((_, знак, фон)) = родное(app_id) {
+        return overview::наш_значок(знак, фон);
+    }
     let нижнее = app_id.to_lowercase();
     for имя in [format!("{app_id}.desktop"), format!("{нижнее}.desktop")] {
         if let Some(ярлык) = gio::DesktopAppInfo::new(&имя) {
@@ -354,9 +385,14 @@ fn перерисуй() {
         let закреплены = стол["закреплены"].as_array().cloned().unwrap_or_default();
         let ids: Vec<String> = закреплены.iter().filter_map(|п| п["id"].as_str().map(String::from)).collect();
 
+        // Окна программ системы на Rust — по программе страницы
+        let родные_для = |id: &str| -> Vec<Value> {
+            чужие.iter().filter(|w| w["appId"].as_str().and_then(родное).is_some_and(|(р, ..)| р == id)).cloned().collect()
+        };
         // Закреплённые программы системы
         for п in &закреплены {
-            добавь_своё(&ряд, п, true, &запущены, &активное);
+            let id = п["id"].as_str().unwrap_or("");
+            добавь_своё(&ряд, п, true, &запущены, &активное, родные_для(id));
         }
         // Запущенные, но не закреплённые
         let лишние: Vec<Value> = стол["сведения"]
@@ -368,14 +404,21 @@ fn перерисуй() {
                     .collect()
             })
             .unwrap_or_default();
-        if !лишние.is_empty() || !чужие.is_empty() {
+        // Окна программ машины. Родные, чей значок уже стоит выше, второй
+        // раз не показываем
+        let показаны: Vec<String> = ids.iter().cloned().chain(лишние.iter().filter_map(|п| п["id"].as_str().map(String::from))).collect();
+        let свои_окна: Vec<&Value> = чужие
+            .iter()
+            .filter(|w| !w["appId"].as_str().and_then(родное).is_some_and(|(р, ..)| показаны.iter().any(|x| x == р)))
+            .collect();
+        if !лишние.is_empty() || !свои_окна.is_empty() {
             черта(&ряд);
         }
         for п in &лишние {
-            добавь_своё(&ряд, п, false, &запущены, &активное);
+            let id = п["id"].as_str().unwrap_or("");
+            добавь_своё(&ряд, п, false, &запущены, &активное, родные_для(id));
         }
-        // Окна программ машины
-        for w in &чужие {
+        for w in свои_окна {
             добавь_чужое(&ряд, w);
         }
         черта(&ряд);
@@ -397,24 +440,32 @@ fn перерисуй() {
     обнови_видимость();
 }
 
-fn добавь_своё(ряд: &gtk::Box, п: &Value, закреплена: bool, запущены: &[String], активное: &str) {
+fn добавь_своё(ряд: &gtk::Box, п: &Value, закреплена: bool, запущены: &[String], активное: &str, родные: Vec<Value>) {
     let id = п["id"].as_str().unwrap_or("").to_string();
     if id.is_empty() {
         return;
     }
     let имя = п["имя"].as_str().unwrap_or(&id).to_string();
-    let идёт = запущены.iter().any(|x| x == &id);
+    let на_странице = запущены.iter().any(|x| x == &id);
+    let идёт = на_странице || !родные.is_empty();
+    let в_работе = (на_странице && активное == id)
+        || родные.iter().any(|w| w["состояние"]["активно"].as_bool() == Some(true));
     let б = кнопка(
         overview::наш_значок(п["знак"].as_str().unwrap_or(""), п["фон"].as_str().unwrap_or("")),
         &имя,
         идёт,
-        идёт && активное == id,
+        в_работе,
     );
     {
         let id = id.clone();
+        let первое = (!на_странице).then(|| родные.first().cloned()).flatten();
         // Как и прежде: не запущена — открыть, единственное окно в работе —
-        // свернуть, иначе — показать. Решает стол (Shell.launch)
-        б.connect_clicked(move |_| дело_стола("запусти", json!({ "id": id, "вид": "приложение" })));
+        // свернуть, иначе — показать. Окно на странице решает стол
+        // (Shell.launch), настоящее окно — мы, как любое окно машины
+        б.connect_clicked(move |_| match &первое {
+            Some(w) => переключи_окно(w),
+            None => дело_стола("запусти", json!({ "id": id, "вид": "приложение" })),
+        });
     }
     по_правой(&б, move |к, с| {
         let mut пункты: Vec<(String, Box<dyn Fn()>)> = Vec::new();
@@ -422,7 +473,16 @@ fn добавь_своё(ряд: &gtk::Box, п: &Value, закреплена: bo
         пункты.push(("Открыть".into(), Box::new(move || дело_стола("запусти", json!({ "id": i1, "вид": "приложение" })))));
         if идёт {
             let i2 = id.clone();
-            пункты.push(("Закрыть все окна".into(), Box::new(move || дело_стола("закрой-все", json!({ "id": i2 })))));
+            let родные = родные.clone();
+            пункты.push((
+                "Закрыть все окна".into(),
+                Box::new(move || {
+                    дело_стола("закрой-все", json!({ "id": i2 }));
+                    for w in &родные {
+                        позови("sys.window", json!({ "action": "close", "appId": w["appId"], "title": w["title"] }), |_| {});
+                    }
+                }),
+            ));
         }
         let i3 = id.clone();
         пункты.push((

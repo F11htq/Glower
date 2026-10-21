@@ -44,6 +44,9 @@ const MIME = { html:'text/html', js:'text/javascript', css:'text/css', json:'app
   /* обои дистрибутивов бывают и такими */
   jpeg:'image/jpeg', webp:'image/webp', avif:'image/avif' };
 
+/* Программы системы, переписанные на Rust: id страницы → имя программы */
+const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc' };
+
 /* ---------- защита: наружу корня не выходим ---------- */
 function safe(parts){
   const p = resolve(ROOT, ...(Array.isArray(parts) ? parts : String(parts || '').split('/')).filter(Boolean));
@@ -201,6 +204,33 @@ const API = {
               : process.platform === 'win32' ? 'explorer' : 'xdg-open';
     spawn(cmd, [p], { detached:true, stdio:'ignore' }).unref();
     return { ok:true, opened:p, via:cmd };
+  },
+  /* Программы системы на Rust (glower-notepad, glower-calc): страница
+     открывает их настоящими окнами, а не своими. Путь к файлу — внутри
+     рабочей папки, как у всех вызовов страницы. Какие из них есть на
+     машине, страница спрашивает один раз: нет — открывает свои. */
+  async 'sys.native.list'(){
+    if (!ALLOW_LAUNCH) return { list:[] };
+    const каталоги = String(process.env.PATH || '').split(':').filter(Boolean);
+    const есть = имя => каталоги.some(к => existsSync(join(к, имя)));
+    return { list:Object.keys(НАТИВНЫЕ).filter(id => есть(НАТИВНЫЕ[id])) };
+  },
+  async 'sys.native'({ программа, путь }){
+    if (!ALLOW_LAUNCH) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
+    const имя = НАТИВНЫЕ[программа];
+    if (!имя) throw new Error('нет такой программы: ' + программа);
+    const доводы = путь ? [safe(путь)] : [];
+    const { spawn } = await import('node:child_process');
+    /* Агент поднимается раньше оконного сервера — окружение экрана берём
+       у системного слоя, иначе окно не увидит экрана */
+    const env = SYSTEM ? await (await import('./system.mjs')).средаЭкрана() : process.env;
+    await new Promise((готово, беда) => {
+      const п = spawn(имя, доводы, { detached:true, stdio:'ignore', env });
+      п.once('error', беда);
+      п.once('spawn', готово);
+      п.unref();
+    });
+    return { ok:true, программа:имя };
   },
   ...SYS,
   /* Программа Windows из Проводника: путь у него свой, от корня файлов

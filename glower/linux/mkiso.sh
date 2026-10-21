@@ -400,6 +400,9 @@ if [ -x "$PANEL_BIN" ]; then
   # Та же программа под другими именами: экран блокировки и экран входа
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-lock"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-login"
+  # …и программы системы, переписанные на Rust
+  ln -sf glower-panel "$ROOTFS/usr/bin/glower-notepad"
+  ln -sf glower-panel "$ROOTFS/usr/bin/glower-calc"
   echo "  панель: нативная, $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "  панель: нативной нет — будет страничная"

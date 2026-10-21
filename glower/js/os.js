@@ -211,6 +211,7 @@ window.OS = OS;
   wireNotifications();
   wireDrives();
   wireTray();
+  wireNativeSystemApps();
   /* Пароль на входе — системный: спрашиваем у машины, задан ли он */
   if (window.Profiles && Profiles.узнайПроПароль) Profiles.узнайПроПароль();
 })();
@@ -1052,6 +1053,43 @@ async function wireRealApps(){
    Человек втыкает флешку и ждёт, что она появится сама. Система замечает
    новый носитель, говорит о нём и предлагает открыть — одним нажатием. */
 let носителиБыли = null;
+
+/* ---------- программы системы на Rust ----------
+
+   Блокнот и Калькулятор переписаны на Rust и открываются настоящими
+   окнами (glower-notepad, glower-calc): их видит Alt+Tab, закрывает Alt+F4,
+   сворачивает оконный сервер. Отовсюду, где страница открывала свои —
+   меню, док, двойной щелчок по файлу на столе и в Проводнике, — теперь
+   открываются они, с тем же файлом.
+
+   Чего на машине нет или что не запустилось — открываем своим окном, как
+   раньше: человек должен получить Блокнот при любой беде с новым. */
+async function wireNativeSystemApps(){
+  let есть = [];
+  try { есть = (await Platform.rpc('sys.native.list')).list || []; } catch(e){ return; }
+  if (!есть.length) return;
+  OS.нативные = есть;
+  const прежнее = WM.open.bind(WM);
+  WM.open = function(id, opts){
+    if (!есть.includes(id)) return прежнее(id, opts);
+    if (opts && opts['восстановление']) return null;
+    const файл = opts && opts.file;
+    /* Файл, которого нет на диске (его содержимое пришло прямо в просьбе),
+       нативному Блокноту не передать — такой открываем у себя */
+    const путь = файл && Array.isArray(файл.path) && файл.name ? [...файл.path, файл.name] : null;
+    (async () => {
+      if (путь) await Platform.rpc('fs.stat', { path:путь });
+      /* Калькулятор, как и прежний, — одним окном: открыт — переходим к нему */
+      if (id === 'calc'){
+        const окна = ((await Platform.rpc('sys.windows').catch(() => ({}))).list || []);
+        const уже = окна.find(o => o.appId === 'glower-calc');
+        if (уже) return Platform.rpc('sys.window', { action:'focus', appId:уже.appId, title:уже.title });
+      }
+      await Platform.rpc('sys.native', { 'программа':id, 'путь':путь || undefined });
+    })().catch(() => прежнее(id, opts));
+    return null;
+  };
+}
 
 function wireDrives(){
   if (Platform.mode !== 'native') return;
