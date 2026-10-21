@@ -264,6 +264,79 @@ fn значок_машины(id: &str, знак: &str) -> gtk::Widget {
     наш_значок(if знак.is_empty() { "🐧" } else { знак }, "rgba(255,255,255,0.12)")
 }
 
+// ------------------------------------------------------------- перетаскивание
+//
+// Программу из сетки можно бросить на рабочий стол наверху — она там и
+// откроется; на «+» — заведётся новый стол, и откроется на нём. Открытое
+// окно переезжает на другой стол так же. Так это устроено в GNOME, и так
+// было в страничном меню: открыть программу не там, где стоишь, — одно
+// движение вместо трёх (уйти на стол, открыть, вернуться).
+
+const ГРУЗ: &str = "application/x-glower-drag";
+
+fn цель() -> gtk::TargetEntry {
+    // Только внутри своей программы: чужим окнам наш груз ни к чему
+    gtk::TargetEntry::new(ГРУЗ, gtk::TargetFlags::SAME_APP, 0)
+}
+
+/// Сделать виджет источником груза. `картинка` — что тянется за курсором:
+/// значок программы, а не безликий значок GTK.
+fn тащи(кто: &gtk::Button, груз: Value, картинка: &gtk::Widget) {
+    кто.drag_source_set(gtk::gdk::ModifierType::BUTTON1_MASK, &[цель()], gtk::gdk::DragAction::MOVE);
+    let картинка = картинка.clone();
+    кто.connect_drag_begin(move |_, ход| {
+        let (ш, в) = (картинка.allocated_width(), картинка.allocated_height());
+        if ш > 1 && в > 1 {
+            if let Ok(холст) = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, ш, в) {
+                if let Ok(кисть) = gtk::cairo::Context::new(&холст) {
+                    картинка.draw(&кисть);
+                }
+                холст.set_device_offset(-(ш as f64) / 2.0, -(в as f64) / 2.0);
+                ход.drag_set_icon_surface(&холст);
+            }
+        }
+    });
+    let строка = груз.to_string();
+    кто.connect_drag_data_get(move |_, _, данные, _, _| {
+        данные.set(&данные.target(), 8, строка.as_bytes());
+    });
+}
+
+/// Сделать виджет местом, куда бросают. `дело` получает груз.
+fn прими<F: Fn(Value) + 'static>(куда: &gtk::Button, дело_: F) {
+    куда.drag_dest_set(gtk::DestDefaults::ALL, &[цель()], gtk::gdk::DragAction::MOVE);
+    // Стол под курсором подсвечиваем — видно, куда упадёт
+    куда.connect_drag_motion(|к, _, _, _, _| {
+        к.style_context().add_class("drop");
+        false
+    });
+    куда.connect_drag_leave(|к, _, _| к.style_context().remove_class("drop"));
+    куда.connect_drag_data_received(move |к, _, _, _, данные, _, _| {
+        к.style_context().remove_class("drop");
+        if let Ok(груз) = serde_json::from_slice::<Value>(&данные.data()) {
+            дело_(груз);
+        }
+    });
+}
+
+/// Что сделать, когда груз упал на стол `n` (None — на «+», новый стол).
+fn брошено(груз: Value, n: Option<u64>) {
+    if let Some(окно) = груз["окно"].as_str() {
+        // Окно переезжает, меню остаётся: человек видит, что оно уехало
+        match n {
+            Some(n) => дело("окно-на-стол", json!({ "id": окно, "n": n })),
+            None => дело("окно-на-новый-стол", json!({ "id": окно })),
+        }
+        return;
+    }
+    let (id, вид, имя) = (груз["id"].clone(), груз["вид"].clone(), груз["имя"].clone());
+    закрой();
+    match n {
+        Some(n) => дело("на-стол", json!({ "id": id, "вид": вид, "имя": имя, "n": n })),
+        None => дело("на-новый-стол", json!({ "id": id, "вид": вид, "имя": имя })),
+    }
+}
+
 // ------------------------------------------------------------- сетка
 
 fn наполни_сетку(м: &Rc<RefCell<Меню>>) {
@@ -301,6 +374,7 @@ fn наполни_сетку(м: &Rc<RefCell<Меню>>) {
         ящик.add(&подпись);
         б.add(&ящик);
         б.set_tooltip_text(Some(&имя));
+        тащи(&б, json!({ "id": id, "вид": вид, "имя": имя }), &значок);
 
         {
             let (id, вид) = (id.clone(), вид.clone());
@@ -405,6 +479,7 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
             б.style_context().add_class("on");
         }
         б.connect_clicked(move |_| дело("стол", json!({ "n": i })));
+        прими(&б, move |груз| брошено(груз, Some(i)));
         стол.add(&б);
         // Пустой стол можно убрать: иначе заведённые столы только копятся
         if окон == 0 && сколько > 1 {
@@ -424,6 +499,7 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
         плюс.style_context().add_class("desk-plus");
         плюс.set_tooltip_text(Some("Новый рабочий стол"));
         плюс.connect_clicked(|_| дело("стол-добавь", json!({})));
+        прими(&плюс, |груз| брошено(груз, None));
         столы.add(&плюс);
     }
 
@@ -443,6 +519,7 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
         имя.set_ellipsize(gtk::pango::EllipsizeMode::End);
         ряд.add(&имя);
         б.add(&ряд);
+        тащи(&б, json!({ "окно": id }), &з);
         б.connect_clicked(move |_| {
             закрой();
             дело("окно", json!({ "id": id }));

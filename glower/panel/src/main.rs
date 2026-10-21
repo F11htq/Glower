@@ -172,6 +172,7 @@ window.overview { background-color: rgba(12, 14, 22, 0.80); }
 }
 .overview button.desk:hover { background-color: rgba(255, 255, 255, 0.14); }
 .overview button.desk.on { box-shadow: inset 0 0 0 2px #5b93f5; }
+.overview button.desk.drop { background-color: rgba(91, 147, 245, 0.35); box-shadow: inset 0 0 0 2px #8fb6ff; }
 .overview button.desk-plus { min-width: 72px; font-size: 22px; }
 .overview button.desk-x { padding: 0 7px; margin: 4px; border-radius: 9px; font-size: 13px; }
 .overview button.win { background-color: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 6px 12px; }

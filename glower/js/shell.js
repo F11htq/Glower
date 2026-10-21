@@ -796,6 +796,32 @@ const Shell = {
         if (w){ if (w.minimized) WM.restore(w); else WM.focus(w); }
         break;
       }
+      /* Брошено на стол в нативном меню — как ondrop страничного обзора */
+      case 'на-стол': {
+        const n = clamp(+д.n || 0, 0, WM.desks - 1);
+        if (машина){
+          /* Программа машины открывается своим окном, а оконный сервер
+             про наши столы ничего не знает: уходим туда сами и открываем */
+          if (n !== WM.desk) WM.gotoDesk(n);
+          запусти();
+        } else {
+          /* WM.open, а не launch: тот умеет ещё и свернуть уже открытое,
+             а брошенная на стол программа должна открыться */
+          const w = WM.open(п.id);
+          if (w && n !== WM.desk) WM.наСтол(w, n);
+        }
+        break;
+      }
+      case 'окно-на-стол': {
+        const w = WM.wins.find(x => x.node && x.node.id === д.id);
+        if (w) WM.наСтол(w, clamp(+д.n || 0, 0, WM.desks - 1));
+        break;
+      }
+      case 'окно-на-новый-стол': {
+        const w = WM.wins.find(x => x.node && x.node.id === д.id);
+        if (w) WM.наСтол(w, WM.добавьСтол());
+        break;
+      }
       case 'на-новый-стол': {
         const куда = WM.добавьСтол();
         if (машина){ WM.gotoDesk(куда); запусти(); }
