@@ -58,7 +58,17 @@ const boot = async () => {
 };
 
 try {
-  /* --- загрузка --- */
+  /* --- загрузка ---
+     Заставки при входе нет: стол открывается, как только готов, а не
+     через 1,9 секунды, которые прежде доигрывал вихрь. */
+  {
+    await page.goto(URL_APP);
+    await page.waitForTimeout(900);
+    const р = await page.evaluate(() => ({ заставка:!!document.querySelector('#boot'),
+      стол:$('#desktop').classList.contains('on'),
+      сцена:!!document.querySelector('.boot-сцена, .boot-рой, .boot-вихрь') }));
+    check('стол открывается сразу, без заставки', !р.заставка && р.стол && !р.сцена, JSON.stringify(р));
+  }
   await boot();
   check('система загружается и разблокируется',
     await page.evaluate(() => $('#desktop').classList.contains('on')));

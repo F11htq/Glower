@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=GlowerOS
-Description=Заставка загрузки GlowerOS: вихрь, рой частиц и полоса хода
+Description=Заставка загрузки GlowerOS: логотип на тёмном фоне, без анимации
 ModuleName=script
 
 [script]

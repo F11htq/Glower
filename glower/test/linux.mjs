@@ -1300,10 +1300,16 @@ try {
       const зовёт = [...сцен.matchAll(/Image\("([^"]+)"\)/g)].map(m => m[1]);
       const есть = await readdir(join(root, 'linux', 'plymouth'));
       const нет = зовёт.filter(ф => ф !== 'logo.png' && !есть.includes(ф));
-      check('заставка: все картинки сценария есть в теме', зовёт.length >= 4 && !нет.length,
+      check('заставка: все картинки сценария есть в теме', зовёт.includes('logo.png') && !нет.length,
         JSON.stringify({ зовёт, нет }));
       check('заставка: сборка кладёт все картинки темы, а пакет пересобирает initramfs',
-        /linux\/plymouth\/\*\.png/.test(образ2) && /activate-noawait update-initramfs/.test(пакет));
+        /linux\/plymouth\/\*\.png/.test(образ2) && /\[ -e "\$img" \] \|\| continue/.test(образ2)
+          && /activate-noawait update-initramfs/.test(пакет));
+      /* Анимации при включении, выключении и входе убраны по просьбе
+         человека — осталось одно приветствие после первой настройки. */
+      check('заставка загрузки неподвижна: без обновления кадров',
+        !/SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /Plymouth\.GetMode/.test(сцен)
+          && /SetDisplayPasswordFunction/.test(сцен));
     }
 
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет

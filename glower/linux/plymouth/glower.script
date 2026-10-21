@@ -1,24 +1,13 @@
-# Заставка загрузки GlowerOS.
+# Заставка загрузки GlowerOS — неподвижная.
 #
-# Прежняя была честной, но скучной: логотип и пять мигающих точек. Эта
-# рассказывает то же самое — система грузится и жива, — но живее:
-#   — логотип-вихрь появляется вспышкой, докручиваясь на место, и дальше
-#     медленно вращается, как и положено вихрю;
-#   — за ним дышит мягкое свечение;
-#   — вокруг по наклонной орбите ходят светящиеся частицы: позади логотипа
-#     они тусклее и мельче, впереди — ярче, и кольцо выглядит объёмным;
-#   — под логотипом надпись GlowerOS и тонкая полоса настоящего хода
-#     загрузки (его считает сам Plymouth), по которой бежит блик.
-# При выключении и перезагрузке вместо полосы — слово о том, что происходит.
+# Прежде здесь крутился вихрь, вокруг ходил рой частиц, дышало свечение и
+# бежал блик по полосе хода. Человек попросил убрать анимации при включении
+# и выключении: осталось одно приветствие после первой настройки. Теперь
+# здесь логотип на тёмном фоне, а при выключении и перезагрузке — ещё и
+# слово о том, что происходит. Ничего не движется, и каждый кадр ничего не
+# пересчитывает — машине в эту секунду и без нас есть чем заняться.
 #
-# Всё тяжёлое считается один раз, при старте: размеры частиц, полоса.
-# Каждый кадр только двигает готовое — заставку показывает и слабая машина,
-# у которой ядро в эту секунду занято совсем другим.
-#
-# Язык заставки простой и понимает только латинские имена, поэтому имена
-# здесь английские, а поясняем по-русски. Всё, что меняется внутри функций,
-# пишется через global. — иначе язык заводит местную переменную с тем же
-# именем, и значение теряется к следующему кадру.
+# Язык заставки понимает только латинские имена — поясняем по-русски.
 
 Window.SetBackgroundTopColor(0.035, 0.04, 0.085);
 Window.SetBackgroundBottomColor(0.01, 0.01, 0.03);
@@ -28,173 +17,32 @@ screen_h = Window.GetHeight();
 cx = screen_w / 2;
 cy = screen_h / 2 - screen_h / 22;
 
-fun clamp01(v){
-  if (v < 0) return 0;
-  if (v > 1) return 1;
-  return v;
-}
-# Плавный выход: быстро в начале, мягко в конце
-fun ease_out(v){
-  v = clamp01(v);
-  return 1 - (1 - v) * (1 - v) * (1 - v);
-}
-
-# ---------- логотип и свечение ----------
 size = Math.Int(screen_h / 5.2);
-logo_src = Image("logo.png");
-logo_img = logo_src.Scale(size, size);
+logo_img = Image("logo.png").Scale(size, size);
 logo = Sprite(logo_img);
+logo.SetX(cx - size / 2);
+logo.SetY(cy - size / 2);
 logo.SetZ(20);
-logo.SetOpacity(0);
 
-glow_size = Math.Int(size * 2.6);
-glow = Sprite(Image("glow.png").Scale(glow_size, glow_size));
-glow.SetX(cx - glow_size / 2);
-glow.SetY(cy - glow_size / 2);
-glow.SetZ(5);
-glow.SetOpacity(0);
-
-# ---------- частицы на орбите ----------
-# Три заранее уменьшенных размера: масштабировать картинку каждый кадр
-# дорого, а выбрать готовую — даром.
-p_src = Image("particle.png");
-p_big = p_src.Scale(Math.Int(size / 5.5), Math.Int(size / 5.5));
-p_mid = p_src.Scale(Math.Int(size / 8), Math.Int(size / 8));
-p_small = p_src.Scale(Math.Int(size / 12), Math.Int(size / 12));
-
-count = 22;
-orbit_rx = size * 1.05;
-orbit_ry = size * 0.34;
-i = 0;
-while (i < count){
-  global.parts[i] = Sprite(p_mid);
-  global.parts[i].SetOpacity(0);
-  # Частицы не на равных местах: так кольцо похоже на рой, а не на часы
-  global.phase[i] = i * (2 * Math.Pi / count) + Math.Sin(i * 1.7) * 0.25;
-  global.speed[i] = 0.55 + (i % 3) * 0.08;
-  i++;
-}
-
-# ---------- надпись ----------
 word_img = Image.Text("GlowerOS", 1, 1, 1, 1, "Sans Bold " + Math.Int(size / 6.5));
 word = Sprite(word_img);
 word.SetX(cx - word_img.GetWidth() / 2);
 word_y = cy + size / 2 + size * 0.42;
 word.SetY(word_y);
 word.SetZ(20);
-word.SetOpacity(0);
-
-# ---------- полоса хода ----------
-bar_w = Math.Int(size * 1.35);
-bar_y = word_y + word_img.GetHeight() + size * 0.22;
-track = Sprite(Image("track.png").Scale(bar_w, 6));
-track.SetX(cx - bar_w / 2);
-track.SetY(bar_y);
-track.SetZ(20);
-track.SetOpacity(0);
-bar_src = Image("bar.png");
-bar = Sprite();
-bar.SetX(cx - bar_w / 2);
-bar.SetY(bar_y);
-bar.SetZ(21);
-shine = Sprite(p_big);
-shine.SetZ(22);
-shine.SetOpacity(0);
+text_y = word_y + word_img.GetHeight() + size * 0.22;
 
 # Что сейчас: загрузка, выключение или перезагрузка
 mode = Plymouth.GetMode();
-status = Sprite();
-status.SetZ(20);
 if (mode == "shutdown" || mode == "reboot"){
   if (mode == "reboot") st = "Перезагрузка…";
   else st = "Выключение…";
   st_img = Image.Text(st, 1, 1, 1, 0.7, "Sans " + Math.Int(size / 10));
-  status.SetImage(st_img);
+  status = Sprite(st_img);
   status.SetX(cx - st_img.GetWidth() / 2);
-  status.SetY(bar_y - st_img.GetHeight() / 3);
-  status.SetOpacity(0);
+  status.SetY(text_y);
+  status.SetZ(20);
 }
-
-global.tick = 0;
-global.progress = 0;     # что сказал Plymouth
-global.shown = 0;        # что показываем: догоняет плавно, а не прыжками
-
-fun boot_progress_callback(duration, progress){
-  global.progress = progress;
-}
-Plymouth.SetBootProgressFunction(boot_progress_callback);
-
-fun refresh_callback(){
-  global.tick++;
-  t = global.tick / 50;           # секунды: Plymouth зовёт нас 50 раз в секунду
-
-  # Появление: вспышка свечения, логотип докручивается на место
-  intro = ease_out(t / 1.3);
-  logo.SetOpacity(intro);
-
-  # Угол: в начале быстрый доворот, дальше медленное вращение — один
-  # оборот за полминуты. Поворачиваем не каждый кадр, а через кадр: глазу
-  # хватает, а машине вдвое легче.
-  angle = (1 - intro) * (1 - intro) * 2.6 + t * 0.21;
-  if (global.tick % 2 == 0 || intro < 1){
-    rotated = logo_img.Rotate(-angle);
-    logo.SetImage(rotated);
-    logo.SetX(cx - rotated.GetWidth() / 2);
-    logo.SetY(cy - rotated.GetHeight() / 2);
-  }
-
-  # Свечение: вспышка на появлении, потом спокойное дыхание
-  flash = 0;
-  if (t < 1.6) flash = Math.Sin(clamp01(t / 1.6) * Math.Pi) * 0.35;
-  breath = 0.55 + 0.2 * Math.Sin(t * 1.9);
-  glow.SetOpacity(clamp01((breath + flash) * ease_out(t / 0.9)));
-
-  # Частицы: выходят на орбиту из центра, дальше кружат
-  spread = ease_out((t - 0.25) / 1.4);
-  i = 0;
-  while (i < count){
-    a = global.phase[i] + t * global.speed[i];
-    sx = Math.Cos(a);
-    sy = Math.Sin(a);
-    # Впереди (sy > 0) — крупнее, ярче и поверх логотипа; позади — наоборот
-    p = global.parts[i];
-    if (sy > 0.35) p.SetImage(p_big);
-    else if (sy > -0.35) p.SetImage(p_mid);
-    else p.SetImage(p_small);
-    if (sy > 0) p.SetZ(30); else p.SetZ(10);
-    px = cx + sx * orbit_rx * spread;
-    py = cy + sy * orbit_ry * spread - sx * orbit_ry * 0.35 * spread;
-    p.SetX(px - p.GetImage().GetWidth() / 2);
-    p.SetY(py - p.GetImage().GetHeight() / 2);
-    twinkle = 0.75 + 0.25 * Math.Sin(t * 3.1 + i * 1.3);
-    p.SetOpacity(spread * twinkle * (0.55 + 0.45 * (sy + 1) / 2));
-    i++;
-  }
-
-  # Надпись: всплывает следом за логотипом
-  w = ease_out((t - 0.6) / 0.9);
-  word.SetOpacity(w);
-  word.SetY(word_y + (1 - w) * size * 0.12);
-
-  if (mode == "shutdown" || mode == "reboot"){
-    status.SetOpacity(ease_out((t - 0.9) / 0.8) * (0.75 + 0.25 * Math.Sin(t * 2.4)));
-    return;
-  }
-
-  # Полоса: догоняет настоящий ход, а блик бежит по заполненному
-  b = ease_out((t - 0.9) / 0.8);
-  track.SetOpacity(b);
-  global.shown = global.shown + (global.progress - global.shown) * 0.08;
-  fill = Math.Int(bar_w * clamp01(global.shown));
-  if (fill < 2) fill = 2;
-  bar.SetImage(bar_src.Scale(fill, 6));
-  bar.SetOpacity(b);
-  run = (t * 0.6) - Math.Int(t * 0.6);
-  shine.SetX(cx - bar_w / 2 + fill * run - shine.GetImage().GetWidth() / 2);
-  shine.SetY(bar_y + 3 - shine.GetImage().GetHeight() / 2);
-  shine.SetOpacity(b * Math.Sin(run * Math.Pi) * 0.9);
-}
-Plymouth.SetRefreshFunction(refresh_callback);
 
 # ---------- пароль зашифрованного диска ----------
 #
@@ -218,7 +66,7 @@ fun display_password_callback(prompt, bullets){
   text = Image.Text(prompt, 1, 1, 1);
   prompt_sprite.SetImage(text);
   prompt_sprite.SetX(cx - text.GetWidth() / 2);
-  prompt_sprite.SetY(bar_y + size * 0.25);
+  prompt_sprite.SetY(text_y);
   prompt_sprite.SetOpacity(1);
 
   # Сколько букв набрано, столько и точек: человек должен видеть, что
@@ -233,7 +81,7 @@ fun display_password_callback(prompt, bullets){
     marks = Image.Text(str, 1, 1, 1);
     bullet_sprite.SetImage(marks);
     bullet_sprite.SetX(cx - marks.GetWidth() / 2);
-    bullet_sprite.SetY(bar_y + size * 0.25 + text.GetHeight() + 10);
+    bullet_sprite.SetY(text_y + text.GetHeight() + 10);
     bullet_sprite.SetOpacity(1);
   } else {
     bullet_sprite.SetOpacity(0);
