@@ -275,6 +275,165 @@ const Поверхности = {
       .filter(п => п['имя']).sort((a, b) => a['имя'].localeCompare(b['имя'], 'ru'));
   },
 
+  /* ---------- обои и значки рисует нативный стол ----------
+
+     Когда работает нативный стол (glower-panel), обои и значки на столе
+     рисует он, под этой страницей, а она становится прозрачной. Её
+     дело тогда — окна системы, меню, диалоги, мастер.
+
+     Щелчки страница ловит только там, где у неё что-то есть: остальное
+     достаётся столу под ней. Где именно — считаем здесь и отдаём оболочке
+     прямоугольниками (linux/glower-shell, сквозь_пустое). Считаем от
+     обратного: всё видимое, что не фон, — её. Так новое окошко, о котором
+     этот список не знает, всё равно окажется нажимаемым: забытое стоит
+     дешевле, чем мёртвая кнопка.
+
+     Сами значки — данные страницы, как и прежде: что лежит на столе, где
+     стоит, как открывается, какое у него меню. Стол их только рисует,
+     двигает и выделяет, а за действием приходит сюда («значки-дело»): так
+     остаются на месте все прежние меню — создать файл, виджеты, обои. */
+  начниНативныйСтол(){
+    let нативный = false, выбор = [];
+    const ФОН = '#wallpaper, #wallpaper-next, .wall-grain, #desktop-icons, script, style, link';
+    const СКВОЗНЫЕ = '#desktop, #windows, #desk-widgets, #toasts, .toasts, .dock-wrap';
+    const собери = (эл, куда) => {
+      if (!(эл instanceof Element) || эл.matches(ФОН)) return;
+      const с = getComputedStyle(эл);
+      if (с.display === 'none' || с.visibility === 'hidden' || parseFloat(с.opacity) === 0) return;
+      /* Обёртки во весь экран, которые сами щелчков не ловят, — смотрим
+         внутрь: нажимается то, что в них лежит */
+      if (эл.matches(СКВОЗНЫЕ) || с.pointerEvents === 'none'){
+        [...эл.children].forEach(р => собери(р, куда));
+        return;
+      }
+      const r = эл.getBoundingClientRect();
+      const x = Math.max(0, Math.floor(r.left)), y = Math.max(0, Math.floor(r.top));
+      const ш = Math.min(innerWidth, Math.ceil(r.right)) - x, в = Math.min(innerHeight, Math.ceil(r.bottom)) - y;
+      if (ш > 0 && в > 0) куда.push([x, y, ш, в]);
+    };
+    let сказано = '', ждёт = false;
+    const отдай = () => {
+      ждёт = false;
+      let весть;
+      if (!нативный) весть = { 'вся':true };
+      else {
+        const области = [];
+        [...document.body.children].forEach(р => собери(р, области));
+        весть = { 'области':области };
+      }
+      const строкой = JSON.stringify(весть);
+      if (строкой === сказано) return;
+      сказано = строкой;
+      window.__областиСтола = весть;
+      try { window.webkit.messageHandlers.glowerDesk.postMessage(строкой); }
+      catch(e){ /* не в своей оболочке — отдавать некому */ }
+    };
+    const обнови = () => { if (!ждёт){ ждёт = true; requestAnimationFrame(отдай); } };
+    new MutationObserver(обнови).observe(document.body,
+      { childList:true, subtree:true, attributes:true, attributeFilter:['class', 'style', 'hidden'] });
+    addEventListener('resize', обнови);
+    /* Подстраховка: переходы CSS меняют видимость без единой правки
+       разметки, и наблюдатель их не замечает */
+    setInterval(обнови, 400);
+
+    /* Значки — что лежит на столе и где */
+    let значкиСказано = '';
+    const расскажиЗначки = () => {
+      if (!нативный) return;
+      const список = $$('#desktop-icons .di').map(d => {
+        const it = d._it || {};
+        const знак = d.querySelector('.glyph');
+        return { n:d.dataset.name, g:знак ? знак.textContent.trim() : '',
+          x:Math.round(parseFloat(d.style.left) || 0), y:Math.round(parseFloat(d.style.top) || 0),
+          'ярлык':it.машина || it.ярлык || '', 'значок':it.значок || '',
+          'вид':it.машина ? 'машина' : it.приложение ? 'приложение'
+            : it.file ? (it.file.type === 'dir' ? 'папка' : 'файл') : 'система' };
+      });
+      const строкой = JSON.stringify(список);
+      if (строкой === значкиСказано) return;
+      значкиСказано = строкой;
+      this.скажи('значки', список);
+    };
+    let обоиСказаны = '';
+    const расскажиОбои = () => {
+      if (!нативный || typeof обоиФоном !== 'function') return;
+      const css = обоиФоном();
+      if (css === обоиСказаны) return;
+      обоиСказаны = css;
+      this.скажи('обои', { css });
+    };
+    const значки = document.querySelector('#desktop-icons');
+    if (значки) new MutationObserver(расскажиЗначки).observe(значки,
+      { childList:true, subtree:true, attributes:true, attributeFilter:['style'] });
+    /* Раз в пятнадцать секунд повторяем и без перемен: агент мог
+       перезапуститься (после обновления), и его шина помнит пустоту —
+       нативный стол, поднятый после этого, не узнал бы, что рисовать */
+    let повтор = Date.now();
+    setInterval(() => {
+      if (Date.now() - повтор > 15000){ повтор = Date.now(); значкиСказано = ''; обоиСказаны = ''; }
+      расскажиЗначки(); расскажиОбои();
+    }, 1000);
+
+    this.следи('стол-свой', что => {
+      нативный = что === true;
+      document.body.classList.toggle('стол-нативный', нативный);
+      значкиСказано = ''; обоиСказаны = '';
+      расскажиЗначки(); расскажиОбои(); обнови();
+    });
+
+    /* Что человек сделал на нативном столе */
+    const узел = n => $$('#desktop-icons .di').find(x => x.dataset.name === n);
+    this.слушай(['значки-дело'], м => {
+      const д = м.что;
+      if (м.тема !== 'значки-дело' || !д) return;
+      switch (д['что']){
+        case 'открой': { const у = узел(д.n); if (у && у._it && у._it.open) у._it.open(); break; }
+        /* Меню — прежние, страничные: показываем их там, где щёлкнули */
+        case 'меню': {
+          const у = узел(д.n);
+          if (у) у.dispatchEvent(new MouseEvent('contextmenu',
+            { bubbles:true, cancelable:true, clientX:+д.x || 0, clientY:+д.y || 0 }));
+          break;
+        }
+        case 'меню-стола': {
+          const стол = document.querySelector('#desktop');
+          if (стол) стол.dispatchEvent(new MouseEvent('contextmenu',
+            { bubbles:true, cancelable:true, clientX:+д.x || 0, clientY:+д.y || 0 }));
+          break;
+        }
+        case 'выбор':
+          выбор = Array.isArray(д['имена']) ? д['имена'] : [];
+          $$('#desktop-icons .di').forEach(x => x.classList.toggle('sel', выбор.includes(x.dataset.name)));
+          break;
+        case 'позиции': {
+          const P = KV.get('iconPos', {});
+          Object.entries(д['позиции'] || {}).forEach(([n, p]) => {
+            if (p && Number.isFinite(+p.x) && Number.isFinite(+p.y)) P[n] = { x:+p.x, y:+p.y };
+          });
+          KV.set('iconPos', P);
+          if (window.Shell && Shell.renderIcons) Shell.renderIcons();
+          break;
+        }
+      }
+    });
+    /* Клавиши для выделенного на нативном столе: у него самого клавиатуры
+       нет, и после щелчка по столу она остаётся у этой страницы */
+    addEventListener('keydown', e => {
+      /* Delete и F2 для выделенного уже ловит прежний обработчик стола
+         (realism.js) — второй раз их не отдаём, иначе вопрос «удалить?»
+         выходил дважды */
+      if (e.defaultPrevented) return;
+      if (!нативный || !выбор.length || !['Enter', 'F2', 'Delete'].includes(e.key)) return;
+      const где = document.activeElement;
+      if (где && где !== document.body && где.closest('input, textarea, [contenteditable], .win, .ctx, .dlg')) return;
+      const у = узел(выбор[0]);
+      if (!у) return;
+      e.preventDefault();
+      у.dispatchEvent(new KeyboardEvent('keydown', { key:e.key, bubbles:true }));
+    });
+    обнови();
+  },
+
   начниСтол(){
     this.когдаСобрано(() => {
       /* Просьбы панели: открыть программу у себя. */
@@ -387,6 +546,8 @@ const Поверхности = {
       setInterval(расскажиДоку, 1000);
       расскажиДоку();
       this.слушай(['дай-док'], м => { if (м.тема === 'дай-док'){ доксказано = ''; расскажиДоку(); } });
+
+      this.начниНативныйСтол();
 
       const док = document.querySelector('#dock-wrap');
       const пуск = document.querySelector('#start-btn');

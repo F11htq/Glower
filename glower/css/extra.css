@@ -1053,3 +1053,9 @@ body.reduced .работа.неточно .работа-полоса i{animation
 /* Нативный док (glower-panel) рисуется поверх окон сам — свой прячем
    целиком, вместе с его местом и подводом курсора. */
 body.док-нативный .dock-wrap{display:none}
+
+/* Нативный стол (glower-panel) рисует обои и значки под этой страницей —
+   здесь их не рисуем, и сама страница прозрачна: видно то, что под ней. */
+body.стол-нативный, html:has(body.стол-нативный){background:transparent !important}
+body.стол-нативный #wallpaper, body.стол-нативный #wallpaper-next,
+body.стол-нативный .wall-grain, body.стол-нативный #desktop-icons{display:none}

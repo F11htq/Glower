@@ -252,7 +252,11 @@ window.Clip2 = Clip2;
           if (e.key === 'Escape'){ closed = true; Shell.renderIcons(); } };
       };
       n.addEventListener('keydown', e => {
-        if (e.key === 'F2'){ e.preventDefault(); e.stopImmediatePropagation(); rename(); }
+        /* При нативном столе подписи значков рисует он, а здешние скрыты —
+           поле правки в подписи было бы невидимым. Тогда имя спрашивает
+           окошко (realism.js, renameIcon) */
+        if (e.key === 'F2' && !document.body.classList.contains('стол-нативный')){
+          e.preventDefault(); e.stopImmediatePropagation(); rename(); }
         if (e.altKey && e.key === 'Enter'){ e.preventDefault();
           WM.open('props', { node:it.file, path:['Рабочий стол'] }); }
       }, true);

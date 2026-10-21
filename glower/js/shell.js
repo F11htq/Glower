@@ -916,7 +916,10 @@ const Shell = {
     c.classList.add('on');
     const r = c.getBoundingClientRect();
     c.style.left = Math.min(x, innerWidth - r.width - 10) + 'px';
-    c.style.top = Math.min(y, innerHeight - r.height - 10) + 'px';
+    /* Нативный док лежит над страницей, и низ экрана за ним не виден:
+       меню, упёршееся в край, пряталось под доком последними пунктами */
+    const снизу = document.body.classList.contains('док-нативный') ? 84 : 10;
+    c.style.top = Math.max(0, Math.min(y, innerHeight - r.height - снизу)) + 'px';
   },
 
   bindDesktop(){

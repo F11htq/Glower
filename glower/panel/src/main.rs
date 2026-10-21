@@ -10,7 +10,13 @@
 //! над ним. Оболочка (linux/glower-shell) запускает эту, а если её нет или
 //! она падает — возвращается к страничной.
 
+// Имена здесь русские, как во всей системе, а у GTK и Rust — латинские.
+// Буквы «а», «с», «х», «у» в них неизбежно встречаются рядом с «a», «c»,
+// «x», «y» — это не опечатки, и предупреждение о похожих буквах только шумит.
+#![allow(confusable_idents)]
+
 mod agent;
+mod desktop;
 mod dock;
 mod icons;
 mod menus;
@@ -207,6 +213,15 @@ window.dock .glyph {
 window.dock .dot { background-color: rgba(255, 255, 255, 0.85); border-radius: 3px; min-width: 5px; min-height: 5px; }
 window.dock .no-dot { min-width: 5px; min-height: 5px; }
 window.dock separator.dock-sep { background-color: rgba(255, 255, 255, 0.16); min-width: 1px; margin: 8px 5px 10px; }
+window.desktop .di { border-radius: 10px; padding: 6px 4px; }
+window.desktop .di.sel { background-color: rgba(120, 160, 255, 0.28); box-shadow: inset 0 0 0 1px rgba(160, 190, 255, 0.55); }
+window.desktop .di-glyph { font-size: 40px; min-height: 48px; }
+window.desktop .di-label {
+  color: #ffffff;
+  font-family: sans-serif;
+  font-size: 12px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
 window.curtain { background-color: #000000; }
 window.curtain label { color: rgba(255, 255, 255, 0.8); font-size: 18px; }
 "#;
@@ -252,6 +267,10 @@ fn main() {
         &стиль,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+
+    // Стол — первым: он в самом низу, и пока его нет, под прозрачной
+    // страницей стола был бы виден пустой экран
+    desktop::создай();
 
     // ---------- полоса ----------
     let окно = gtk::Window::new(gtk::WindowType::Toplevel);
@@ -342,7 +361,7 @@ fn main() {
     // ---------- что говорит стол ----------
     let вести = слушай(
         &["раскладка", "часы", "батарея", "обновления", "настройки", "стол-занят", "затемни",
-          "программы", "обзор-данные", "док"],
+          "программы", "обзор-данные", "док", "значки", "обои"],
         &["открой-пуск"],
     );
     {
@@ -444,6 +463,8 @@ fn main() {
                     "программы" => overview::программы(что),
                     "обзор-данные" => overview::данные(что),
                     "док" => dock::данные(что),
+                    "значки" => desktop::значки(что),
+                    "обои" => desktop::обои(что),
                     _ => {}
                 }
             }
@@ -460,6 +481,8 @@ fn main() {
     скажи("обзор-свой", json!(true));
     // То же с доком: внизу теперь наш, а свой стол прячет
     скажи("док-свой", json!(true));
+    // И стол: обои и значки рисуем мы, страница становится прозрачной
+    скажи("стол-свой", json!(true));
 
     gtk::main();
 }
