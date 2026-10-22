@@ -21,7 +21,7 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use serde_json::{json, Value};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
 struct Док {
@@ -40,6 +40,8 @@ struct Док {
 
 thread_local! {
     static ДОК: RefCell<Option<Док>> = const { RefCell::new(None) };
+    /// Насколько док показан (0 — спрятан, 1 — на месте), куда идёт, идёт ли
+    static ПОКАЗ: (Cell<f64>, Cell<f64>, Cell<bool>) = const { (Cell::new(0.0), Cell::new(0.0), Cell::new(false)) };
     /// Кому сказать, что окна появились или ушли (верхней полосе)
     static О_ОКНАХ: RefCell<Option<(bool, Box<dyn Fn(bool)>)>> = const { RefCell::new(None) };
 }
@@ -102,9 +104,10 @@ pub fn создай() {
         к.arc(р, в - р, р, std::f64::consts::FRAC_PI_2, std::f64::consts::PI);
         к.arc(р, р, р, std::f64::consts::PI, 1.5 * std::f64::consts::PI);
         к.close_path();
-        к.set_source_rgba(0.08, 0.09, 0.12, 0.84);
+        let п = 1.0 - (1.0 - ПОКАЗ.with(|п| п.0.get())).powi(3);
+        к.set_source_rgba(0.08, 0.09, 0.12, 0.84 * п);
         let _ = к.fill_preserve();
-        к.set_source_rgba(1.0, 1.0, 1.0, 0.10);
+        к.set_source_rgba(1.0, 1.0, 1.0, 0.10 * п);
         к.set_line_width(1.0);
         let _ = к.stroke();
         glib::Propagation::Proceed
@@ -250,16 +253,51 @@ fn обнови_видимость() {
     }) else {
         return;
     };
-    if видно {
-        окно.show_all();
-    } else {
-        окно.hide();
-    }
+    покажи(&окно, видно);
     if ловить {
         полоска.show_all();
     } else {
         полоска.hide();
     }
+}
+
+/// Док выезжает снизу и проявляется, уезжает — тает: за пятую долю
+/// секунды, как прежний страничный. Рывком появляться он не должен
+fn покажи(окно: &gtk::Window, видно: bool) {
+    let цель = if видно { 1.0 } else { 0.0 };
+    ПОКАЗ.with(|п| п.1.set(цель));
+    if видно && !окно.is_visible() {
+        применить_показ(окно, ПОКАЗ.with(|п| п.0.get()));
+        окно.show_all();
+    }
+    if ПОКАЗ.with(|п| п.2.replace(true)) {
+        return;
+    }
+    let окно = окно.clone();
+    glib::timeout_add_local(Duration::from_millis(16), move || {
+        let (сейчас, цель) = ПОКАЗ.with(|п| (п.0.get(), п.1.get()));
+        let новое = сейчас + (цель - сейчас).clamp(-0.09, 0.09);
+        ПОКАЗ.with(|п| п.0.set(новое));
+        применить_показ(&окно, новое);
+        if (цель - новое).abs() > 1e-3 {
+            return glib::ControlFlow::Continue;
+        }
+        ПОКАЗ.with(|п| п.2.set(false));
+        if цель == 0.0 {
+            окно.hide();
+        }
+        glib::ControlFlow::Break
+    });
+}
+
+fn применить_показ(окно: &gtk::Window, п: f64) {
+    // Плавно, а не по прямой: в конце замедляется
+    let плавно = 1.0 - (1.0 - п).powi(3);
+    окно.set_layer_shell_margin(Edge::Bottom, (10.0 - (1.0 - плавно) * 28.0).round() as i32);
+    if let Some(р) = окно.child() {
+        р.set_opacity(плавно);
+    }
+    окно.queue_draw();
 }
 
 // ------------------------------------------------------------- значки
