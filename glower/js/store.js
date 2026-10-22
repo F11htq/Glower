@@ -71,7 +71,6 @@ const AppStore = {
     S.dockApps = S.dockApps.filter(x => x !== id);
     Store.save();
     Shell.renderStart(); Shell.renderDock();
-    Shell.toast('Магазин', 'Приложение удалено', '🗑️');
   },
 
   isInstalled(id){ return !!APPS[id]; },
@@ -1157,7 +1156,7 @@ APPS.store = {
         };
         f.click();
       };
-      c.appendChild(row('🖥', 'Установить с диска', 'Настоящий файл с вашего компьютера', fromDisk));
+      c.appendChild(row('🖥', 'Установить с диска', '', fromDisk));
       body.appendChild(c);
 
       const w = card('Как это работает');
@@ -1183,8 +1182,8 @@ APPS.store = {
       }
       if (!Array.isArray(поискСписок) || поискСтрока !== набрано){
         body.appendChild(el('div', 'set-note', набрано.length < 2
-          ? 'Наберите хотя бы две буквы и нажмите Enter'
-          : 'Нажмите Enter, чтобы поискать это в репозиториях Ubuntu и Flathub'));
+          ? 'Хотя бы две буквы'
+          : 'Enter — искать в Ubuntu и Flathub'));
         return;
       }
       if (!поискСписок.length){

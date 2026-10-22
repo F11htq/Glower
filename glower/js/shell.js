@@ -135,7 +135,7 @@ const Shell = {
             const было = (S.deskApps || []).includes(id);
             S.deskApps = было ? S.deskApps.filter(x => x !== id) : [...(S.deskApps || []), id];
             Store.save(); this.renderIcons();
-            this.toast('Рабочий стол', было ? 'Убрано со стола' : 'Вынесено на стол', '🖥'); } }
+            } }
       ]); };
       g.appendChild(b);
     });
@@ -228,7 +228,7 @@ const Shell = {
               const было = (S.deskApps || []).includes(id);
               S.deskApps = было ? S.deskApps.filter(x => x !== id) : [...(S.deskApps || []), id];
               Store.save(); this.renderIcons(); this.allApps(true);
-              this.toast('Рабочий стол', было ? 'Убрано со стола' : 'Вынесено на стол', '🖥'); } }
+              } }
         ]);
       };
       res.appendChild(b);
@@ -753,7 +753,6 @@ const Shell = {
       пункты.push({ i:'📌', t:вДоке ? 'Убрать из дока' : 'Закрепить в доке', f:() => {
         S.dockApps = вДоке ? S.dockApps.filter(x => x !== п.id) : [...S.dockApps, п.id];
         Store.save(); this.renderDock();
-        this.toast('Док', вДоке ? 'Убрано из дока' : 'Закреплено в доке', '📌');
       } });
     }
 
@@ -837,7 +836,6 @@ const Shell = {
         const вДоке = (S.dockApps || []).includes(п.id);
         S.dockApps = вДоке ? S.dockApps.filter(x => x !== п.id) : [...(S.dockApps || []), п.id];
         Store.save(); this.renderDock();
-        this.toast('Док', вДоке ? 'Убрано из дока' : 'Закреплено в доке', '📌');
         break;
       }
       case 'магазин': WM.open('store', { найти:String(п['имя'] || '').split(' ')[0] }); break;
@@ -845,7 +843,6 @@ const Shell = {
       case 'закрой-все': WM.wins.filter(w => w.appId === п.id).forEach(w => WM.close(w)); break;
       case 'очисти-корзину':
         KV.set('trash', []); this.renderIcons();
-        this.toast('Корзина', 'Очищена', '🗑️');
         break;
       case 'удали': if (машина && window.OS && OS.удалиПрограмму) OS.удалиПрограмму({ id:п.id, name:п['имя'] }); break;
     }

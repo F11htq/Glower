@@ -119,7 +119,6 @@ const Link = {
     };
     FS.save();
     Shell.renderIcons();
-    Shell.toast('Ярлык создан', name, '🔗');
   },
   open(node){
     const l = node.link;

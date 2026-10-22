@@ -82,7 +82,7 @@ APPS.trash = {
           <div class="nm">${esc(it.name)}<div class="from">из /${esc(it.path.join('/'))} · ${new Date(it.ts).toLocaleString('ru-RU')}</div></div>`;
         const rb = el('button', 'btn', '↩ Восстановить');
         const db = el('button', 'btn', '✖');
-        rb.onclick = () => { if (restore(it)){ t.splice(i, 1); KV.set('trash', t); draw(); Shell.renderIcons(); Shell.toast('Восстановлено', it.name, '↩'); } };
+        rb.onclick = () => { if (restore(it)){ t.splice(i, 1); KV.set('trash', t); draw(); Shell.renderIcons(); } };
         db.onclick = () => { t.splice(i, 1); KV.set('trash', t); draw(); };
         r.append(rb, db);
         list.appendChild(r);
@@ -104,7 +104,7 @@ dockTrash.onclick = () => WM.open('trash');
 dockTrash.oncontextmenu = e => { e.preventDefault();
   Shell.ctx(e.clientX, e.clientY, [
     { i:'📂', t:'Открыть корзину', f:() => WM.open('trash') },
-    { i:'🧹', t:'Очистить корзину', f:() => { KV.set('trash', []); Shell.renderIcons(); Shell.toast('Корзина', 'Очищена', '🗑️'); } }]); };
+    { i:'🧹', t:'Очистить корзину', f:() => { KV.set('trash', []); Shell.renderIcons(); } }]); };
 
 /* ==========================================================================
    3. Значки рабочего стола: свободное размещение, рамка выделения, клавиши
@@ -206,7 +206,7 @@ Shell.renderIcons = function(){
         ...(it.машина ? [{ i:'🚫', t:'Убрать с рабочего стола', f:() => {
           S.deskNative = (S.deskNative || []).filter(x => x.id !== it.машина);
           Store.save(); Shell.renderIcons(); } }] : []),
-        ...(it.n === 'Корзина' ? [{ i:'🧹', t:'Очистить корзину', f:() => { KV.set('trash', []); Shell.renderIcons(); Shell.toast('Корзина', 'Очищена', '🗑️'); } }] : []),
+        ...(it.n === 'Корзина' ? [{ i:'🧹', t:'Очистить корзину', f:() => { KV.set('trash', []); Shell.renderIcons(); } }] : []),
         ...(it.file ? [
           { i:'✏️', t:'Переименовать', f:() => renameIcon(it), k:'F2' },
           { i:'🗑️', t:'Удалить', f:() => delIcon(it), k:'Del' }] : []),
@@ -227,7 +227,6 @@ Shell.renderIcons = function(){
   }
   function delIcon(it){
     FS.rm(['Рабочий стол'], it.n);
-    Shell.toast('Удалено', it.n + ' перемещён в корзину', '🗑️');
     Shell.renderIcons();
   }
 };
@@ -410,7 +409,7 @@ addEventListener('mousemove', e => {
       shake.n = 0;
       const keep = WM.wins.find(w => w.node.classList.contains('dragging'));
       const others = WM.wins.filter(w => w !== keep && !w.minimized && w.desk === WM.desk);
-      if (others.length){ others.forEach(w => WM.minimize(w)); Shell.toast('Aero Shake', 'Остальные окна свёрнуты', '🫨'); }
+      if (others.length){ others.forEach(w => WM.minimize(w)); }
     }
   }
 });

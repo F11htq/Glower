@@ -29,7 +29,6 @@ const Assoc = {
   set(ext, appId){
     const m = KV.get(this.KEY, {});
     m[ext] = appId; KV.set(this.KEY, m);
-    Shell.toast('Приложения', `.${ext} теперь открывается в «${APPS[appId].name}»`, APPS[appId].glyph);
   },
 
   /* чем вообще можно открыть файл */
@@ -294,7 +293,7 @@ window.Menu = Menu;
         { i:'⬇️', t:'Скачать PNG', f:() => {
             const a = el('a'); a.setAttribute('download', 'Рисунок.png');
             a.href = cv.toDataURL(); document.body.appendChild(a); a.click(); a.remove();
-            Shell.toast('Paint', 'Изображение сохранено на компьютер', '⬇️'); } },
+            } },
         'hr',
         { i:'✖', t:'Закрыть', f:() => win.close() }
       ]},

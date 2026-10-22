@@ -275,7 +275,6 @@ function addWidget(t){
   S.deskWidgets.push({ t, x:innerWidth - 260, y:96 + S.deskWidgets.length * 140 });
   if (!S.showDeskWidgets) S.showDeskWidgets = true;
   Store.save(); Shell.renderDeskWidgets();
-  Shell.toast('Виджеты', WIDGETS[t].n + ' добавлен на рабочий стол', WIDGETS[t].e);
 }
 function removeWidget(i){ S.deskWidgets.splice(i, 1); Store.save(); Shell.renderDeskWidgets(); }
 window.addWidget = addWidget;
@@ -630,7 +629,6 @@ APPS.music = {
       }
       KV.set('music.files', meta);
       await loadUserTracks();
-      Shell.toast('Музыка', 'Аудио добавлено в библиотеку', '🎧');
     }
     win.data.addFiles = addFiles;
 
@@ -710,9 +708,6 @@ APPS.music = {
         n.onclick = e => { if (e.target.classList.contains('td-del')) return; i = k; load(); play(true); };
         list.appendChild(n);
       });
-      const hint = el('div', 'tiny muted', 'Перетащите сюда аудиофайлы или нажмите «Добавить аудио»');
-      hint.style.padding = '8px 4px';
-      list.appendChild(hint);
     }
 
     win.onClose = () => { clearInterval(timer); clearInterval(progTimer); audio.pause(); Shell.nowPlaying = null; };

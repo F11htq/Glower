@@ -170,7 +170,6 @@ APPS.notepad = {
       }
       FS.write(t.path, t.name, area.value);
       save(); load();
-      Shell.toast('Сохранено', '/' + t.path.join('/') + '/' + t.name, '💾');
     };
 
     bar.querySelector('[data-a="new"]').onclick = () => { tabs.push({ name:'Безымянный.txt', path:[], body:'' }); cur = tabs.length - 1; save(); renderTabs(); load(); };
@@ -454,7 +453,7 @@ APPS.photos = {
         const p = el('div', 'ph'); p.style.backgroundImage = w.css; p.title = w.name;
         p.onclick = () => view(w.css, w.name);
         p.oncontextmenu = e => { e.preventDefault(); Shell.ctx(e.clientX, e.clientY, [
-          { i:'🖥️', t:'Сделать обоями', f:() => { Store.set('wallpaper', w.id); Shell.toast('Обои изменены', w.name, '🖼️'); } }]); };
+          { i:'🖥️', t:'Сделать обоями', f:() => { Store.set('wallpaper', w.id); } }]); };
         grid.appendChild(p);
       });
       const dir = FS.node(['Изображения']);
@@ -1044,9 +1043,9 @@ APPS.settings = {
       m.appendChild(row('🖥️', 'Виртуальные рабочие столы', 'Ctrl + Alt + ← / →',
         seg([{ n:'2', v:2 }, { n:'3', v:3 }, { n:'4', v:4 }], () => WM.desks, v => { WM.desks = v; Shell.renderTaskview(); })));
       const tb = el('button', 'btn', 'Разложить окна'); tb.onclick = () => WM.tile();
-      m.appendChild(row('▦', 'Мозаика окон', 'Разложить все окна плиткой', tb));
+      m.appendChild(row('▦', 'Мозаика окон', '', tb));
       const cb = el('button', 'btn', 'Каскад'); cb.onclick = () => WM.cascade();
-      m.appendChild(row('🗂', 'Каскад', 'Расположить окна лесенкой', cb));
+      m.appendChild(row('🗂', 'Каскад', '', cb));
       main.appendChild(m);
 
       /* Как оболочка добралась до диска — кухня прототипа. В настоящей
@@ -1058,7 +1057,7 @@ APPS.settings = {
           el('div', 'muted tiny', d2.ok ? 'настоящий диск' : 'браузер')));
         if (d2.ok){
           const rb = el('button', 'btn', 'Перечитать диск');
-          rb.onclick = () => Platform.mount().then(() => Shell.toast('Система', 'Дерево файлов обновлено', '🖴'));
+          rb.onclick = () => Platform.mount();
           pl2.appendChild(row('🔄', 'Синхронизация', 'Заново прочитать рабочую папку с диска', rb));
         } else {
           pl2.appendChild(row('▶️', 'Как включить',
@@ -1113,7 +1112,6 @@ APPS.settings = {
           await IDB.put('wallpaper', f.files[0]);
           window.__customWall = URL.createObjectURL(f.files[0]);
           set('wallpaper', 'custom'); drawMain();
-          Shell.toast('Обои', 'Своё изображение установлено', '🖼');
         };
         f.click();
       };
@@ -1148,7 +1146,6 @@ APPS.settings = {
               б.textContent = 'Ставлю ' + подпись + '…';
               await new Promise(r => setTimeout(r, 1500));
             }
-            Shell.toast('Обои', подпись + ' — готово', '🖼️');
           } catch(e){
             Dlg.alert('Не вышло поставить обои', String(e.message || e), '⚠️');
           }
@@ -1223,7 +1220,7 @@ APPS.settings = {
       }
 
       const t = card('Цвета и тема');
-      t.appendChild(row('🌗', 'Режим', 'Светлая или тёмная тема',
+      t.appendChild(row('🌗', 'Режим', '',
         seg([{ n:'Тёмная', v:'dark' }, { n:'Светлая', v:'light' }],
             () => S.theme, v => { set('theme', v); drawMain(); })));
       const swWrap = el('div', 'swatches');
@@ -1233,17 +1230,17 @@ APPS.settings = {
         s.onclick = () => { S.accentCustom = null; set('accent', i); $$('.sw', swWrap).forEach(x => x.classList.remove('on')); s.classList.add('on'); };
         swWrap.appendChild(s);
       });
-      t.appendChild(row('🎯', 'Цвет акцента', 'Используется в кнопках и подсветке', swWrap));
+      t.appendChild(row('🎯', 'Цвет акцента', '', swWrap));
       const cp = el('input'); cp.type = 'color'; cp.className = 'inp'; cp.style.cssText = 'width:48px;padding:2px';
       cp.value = S.accentCustom || accentPair().a;
       cp.oninput = () => { S.accentCustom = cp.value; Store.save(); applySettings(); };
-      t.appendChild(row('🖌️', 'Свой цвет', 'Задать акцент вручную', cp));
+      t.appendChild(row('🖌️', 'Свой цвет', '', cp));
       main.appendChild(t);
 
       pGlass();                       // материал интерфейса живёт здесь, отдельного раздела нет
 
       const f = card('Шрифт и текст');
-      f.appendChild(row('🔤', 'Системный шрифт', 'Гарнитура интерфейса',
+      f.appendChild(row('🔤', 'Системный шрифт', '',
         sel([{ n:'Системный', v:"system-ui,'Inter','Segoe UI Variable',sans-serif" },
              { n:'SF Pro (macOS)', v:"-apple-system,'SF Pro Display','Helvetica Neue',sans-serif" },
              { n:'Inter / системный', v:"Inter,system-ui,sans-serif" },
@@ -1263,12 +1260,12 @@ APPS.settings = {
         };
         pinBox.appendChild(b);
       });
-      st.appendChild(row('📌', 'Закреплённые приложения', 'Нажмите, чтобы закрепить или открепить', el('span')));
+      st.appendChild(row('📌', 'Закреплённые приложения', '', el('span')));
       st.appendChild(pinBox);
       main.appendChild(st);
 
       const wd = card('Виджеты рабочего стола');
-      wd.appendChild(row('🧩', 'Показывать виджеты', 'Перетаскиваются мышью, удаляются крестиком',
+      wd.appendChild(row('🧩', 'Показывать виджеты', '',
         toggle(() => S.showDeskWidgets, v => { set('showDeskWidgets', v); Shell.renderDeskWidgets(); })));
       const wdBox = el('div'); wdBox.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:4px 16px 14px';
       Object.entries(WIDGETS).forEach(([k, d]) => {
@@ -1322,7 +1319,7 @@ APPS.settings = {
         c.appendChild(row('↩️', 'Вернуть расчёт по экрану',
           'Размер снова будет подбираться под экран', вернуть));
       }
-      c.appendChild(row('👻', 'Автоскрытие', 'Док появляется при наведении к низу экрана', toggle(() => S.dockAutohide, v => set('dockAutohide', v))));
+      c.appendChild(row('👻', 'Автоскрытие', '', toggle(() => S.dockAutohide, v => set('dockAutohide', v))));
       main.appendChild(c);
 
       const a = card('Приложения в доке');
@@ -1347,7 +1344,7 @@ APPS.settings = {
         ? 'Размытие и анимации выключены: система не увидела видеоускорения. Кадров в секунду при замере: ' + KV.get('perf.fps', '—')
         : 'Выключает размытие и анимации на слабом железе. Система включает его сама, если кадров меньше 20 в секунду',
         toggle(() => KV.get('perf.lite', false), v => { KV.set('perf.userChoice', true); Perf.lite(v, true); drawMain(); })));
-      d.appendChild(row('🎛', 'Кнопки окна', 'Прямые или круглые',
+      d.appendChild(row('🎛', 'Кнопки окна', '',
         seg([{ n:'Прямые', v:'win' }, { n:'Круглые', v:'mac' }], () => S.wctl, v => set('wctl', v))));
       d.appendChild(row('📍', 'Активные углы', 'Правый верхний угол — просмотр задач', toggle(() => S.hotcorners, v => set('hotcorners', v))));
       d.appendChild(row('⬆️', 'Скрывать верхнюю панель', 'Панель и виджеты уходят, когда открыто окно',
@@ -1369,7 +1366,7 @@ APPS.settings = {
       const c = card('Плавность');
       c.appendChild(row('⚡', 'Скорость анимаций', '1× — стандарт, меньше — быстрее',
         slider(() => S.speed * 100, v => set('speed', v / 100), 30, 250, 5, v => (v / 100).toFixed(2) + '×')));
-      c.appendChild(row('♿', 'Уменьшить движение', 'Почти мгновенные переходы', toggle(() => S.reduceMotion, v => set('reduceMotion', v))));
+      c.appendChild(row('♿', 'Уменьшить движение', '', toggle(() => S.reduceMotion, v => set('reduceMotion', v))));
       main.appendChild(c);
       const d = card('Демонстрация');
       const b = el('button', 'btn pri', 'Показать');
@@ -1381,16 +1378,16 @@ APPS.settings = {
     /* --- Звук --- */
     function pSound(){
       const c = card('Громкость и звуки системы');
-      c.appendChild(row('🔊', 'Общая громкость', 'Влияет на звуки системы и приложение Музыка',
+      c.appendChild(row('🔊', 'Общая громкость', '',
         slider(() => S.volume, v => set('volume', v), 0, 100, 1, v => v + '%')));
       c.appendChild(row('🎚', 'Звуки интерфейса', 'Открытие и закрытие окон', toggle(() => S.sounds, v => set('sounds', v))));
-      c.appendChild(row('🔔', 'Звук уведомлений', 'Короткий сигнал у баннеров',
+      c.appendChild(row('🔔', 'Звук уведомлений', '',
         toggle(() => S.soundNotif !== false, v => set('soundNotif', v))));
       const t = el('button', 'btn', '▶ Проиграть');
       t.onclick = () => { const o = S.sounds; S.sounds = true;
         [0,1,2,3].forEach(k => setTimeout(() => Snd.blip(440 * Math.pow(1.26, k), .18, 'triangle', .07), k * 150));
         setTimeout(() => S.sounds = o, 800); };
-      c.appendChild(row('🎵', 'Проверить вывод', 'Четыре тона через WebAudio', t));
+      c.appendChild(row('🎵', 'Проверить вывод', '', t));
       main.appendChild(c);
 
       const d2 = card('Аудиоустройства системы');
@@ -1456,8 +1453,7 @@ APPS.settings = {
                  { n:'175%', v:1.75 }, { n:'200%', v:2 }],
                 () => экр['масштаб'],
                 v => Platform.rpc('sys.screen.scale', { 'экран':экр['имя'], 'масштаб':v })
-                  .then(() => { Shell.toast('Экран', 'Масштаб ' + Math.round(v * 100) + '%', '🔎');
-                                setTimeout(рисуй, 1200); })
+                  .then(() => setTimeout(рисуй, 1200))
                   .catch(e => Dlg.alert('Не вышло изменить масштаб', String(e.message || e), '⚠️')));
               место.appendChild(row('🖥️', экр['описание'] || экр['имя'],
                 [экр['ширина'] ? экр['ширина'] + '×' + экр['высота'] : '',
@@ -1465,9 +1461,6 @@ APPS.settings = {
                  'масштаб ' + Math.round(экр['масштаб'] * 100) + '%'].filter(Boolean).join(' · '),
                 выбор));
             });
-            место.appendChild(el('div', 'set-note',
-              'Масштаб увеличивает всё сразу — и оболочку, и окна программ. ' +
-              'Отдельно ниже есть масштаб текста самой оболочки.'));
           }).catch(e => {
             место.innerHTML = '';
             место.appendChild(row('🖥️', 'Система не ответила про экраны', String(e.message || e), el('span')));
@@ -1479,8 +1472,8 @@ APPS.settings = {
       const c = card('Яркость и цвет');
       c.appendChild(row('☀️', 'Яркость', 'Программное затемнение картинки, не аппаратная подсветка',
         slider(() => S.brightness, v => set('brightness', v), 30, 100, 1, v => v + '%')));
-      c.appendChild(row('🌙', 'Ночной свет', 'Тёплые тона', toggle(() => S.nightLight, v => set('nightLight', v))));
-      c.appendChild(row('🌗', 'Тема по времени суток', 'Светлая днём, тёмная ночью',
+      c.appendChild(row('🌙', 'Ночной свет', '', toggle(() => S.nightLight, v => set('nightLight', v))));
+      c.appendChild(row('🌗', 'Тема по времени суток', '',
         toggle(() => S.autoTheme, v => { set('autoTheme', v); Shell.autoTheme(); })));
       c.appendChild(row('🔤', 'Масштаб текста оболочки', 'Только наши окна; масштаб всей системы — выше',
         seg([{ n:'90%', v:.9 }, { n:'100%', v:1 }, { n:'110%', v:1.1 }, { n:'125%', v:1.25 }],
@@ -1497,7 +1490,7 @@ APPS.settings = {
        ['✨','Расширенный диапазон (HDR)', d.hdr ? 'поддерживается' : 'нет']
       ].forEach(([e, n, v]) => m.appendChild(row(e, n, '', el('div', 'muted tiny', v))));
       const hz = el('div', 'muted tiny', 'измеряю…');
-      m.appendChild(row('⚡', 'Частота обновления', 'Замер по кадрам анимации', hz));
+      m.appendChild(row('⚡', 'Частота обновления', '', hz));
       Real.refreshRate().then(v => hz.textContent = v + ' Гц');
       main.appendChild(m);
 
@@ -1507,7 +1500,7 @@ APPS.settings = {
       const ap = el('button', 'btn', 'Применить');
       ap.onclick = () => { set('theme', d.dark ? 'dark' : 'light'); drawMain(); };
       p.appendChild(row('🎯', 'Подстроить под окружение', 'Переключить тему под эту настройку', ap));
-      p.appendChild(row('🌀', 'Уменьшенное движение', 'Системная настройка доступности',
+      p.appendChild(row('🌀', 'Уменьшенное движение', '',
         el('div', 'muted tiny', d.reduce ? 'включено' : 'выключено')));
       p.appendChild(row('◐', 'Повышенный контраст', '', el('div', 'muted tiny', d.contrast ? 'включён' : 'выключен')));
       main.appendChild(p);
@@ -1572,7 +1565,7 @@ APPS.settings = {
         if (cur){
           const off = el('button', 'btn', 'Отключиться');
           off.onclick = async () => {
-            try { await OS.wifiDisconnect(cur.device); Shell.toast('Wi-Fi', 'Отключено', '📴'); await draw(); }
+            try { await OS.wifiDisconnect(cur.device); await draw(); }
             catch(e){ Dlg.alert('Wi-Fi', String(e.message || e), '⚠️'); }
           };
           head.appendChild(row('✅', cur.name, 'Подключено · ' + cur.device, off));
@@ -1582,7 +1575,7 @@ APPS.settings = {
 
         const scan = el('button', 'btn', '🔄 Искать сети');
         scan.onclick = () => fill(true);
-        head.appendChild(row('🔎', 'Доступные сети', 'Список обновляется по запросу', scan));
+        head.appendChild(row('🔎', 'Доступные сети', '', scan));
         fill(false);
       };
 
@@ -1595,7 +1588,7 @@ APPS.settings = {
         try { r = await OS.wifiScan(rescan); }
         catch(e){ list.innerHTML = ''; list.appendChild(row('⚠️', 'Не удалось получить список', String(e.message || e), el('span'))); return; }
         list.innerHTML = '';
-        if (!r.list.length) return list.appendChild(row('📭', 'Сетей не найдено', 'Поблизости ничего не видно', el('span')));
+        if (!r.list.length) return list.appendChild(row('📭', 'Сетей не найдено', '', el('span')));
 
         r.list.forEach(x => {
           const b = el('button', 'btn' + (x.active ? '' : ' pri'), x.active ? 'Подключено' : 'Подключиться');
@@ -1610,7 +1603,6 @@ APPS.settings = {
             b.textContent = 'подключаюсь…'; b.disabled = true;
             try {
               await OS.wifiConnect(x.ssid, pass);
-              Shell.toast('Wi-Fi', 'Подключено к ' + x.ssid, '📶');
               draw();
             } catch(e){
               b.textContent = 'Подключиться'; b.disabled = false;
@@ -1696,7 +1688,6 @@ APPS.settings = {
           const п = toggle(() => вкл, async v => {
             try {
               await Platform.rpc('sys.ipv6.set', { включить:v });
-              Shell.toast('Сеть', v ? 'IPv6 включён' : 'IPv6 выключен', '🌐');
             } catch(e){ Dlg.alert('Не вышло переключить IPv6', String(e.message || e), '⚠️'); }
             рисуйIPv6();
           });
@@ -1726,18 +1717,18 @@ APPS.settings = {
         : 'Сеть недоступна — показывается заглушка', wst));
       const ci = el('input', 'inp'); ci.value = S.city; ci.style.width = '150px';
       ci.onchange = () => { set('city', ci.value); Weather.load(true).then(drawMain); };
-      w.appendChild(row('🏙', 'Город', 'Ищется по названию через геокодер Open-Meteo', ci));
+      w.appendChild(row('🏙', 'Город', '', ci));
       const up = el('button', 'btn', '🔄 Обновить');
       up.onclick = () => { up.textContent = 'загрузка…';
         Weather.load(true).then(() => { drawMain(); Shell.renderDeskWidgets(); }); };
-      w.appendChild(row('♻️', 'Обновить прогноз', 'Запрос выполняется прямо сейчас', up));
+      w.appendChild(row('♻️', 'Обновить прогноз', '', up));
       const geo = el('button', 'btn', '📍 Определить');
       geo.onclick = () => Real.askGeo().then(p => {
         if (!p) return Shell.toast('Геолокация', 'Доступ отклонён или недоступен', '🚫');
         Shell.toast('Геолокация', 'Координаты: ' + p.lat.toFixed(3) + ', ' + p.lon.toFixed(3) +
           ' (±' + Math.round(p.acc) + ' м)', '📍');
       });
-      w.appendChild(row('🛰', 'Моё местоположение', 'Настоящий запрос координат', geo));
+      w.appendChild(row('🛰', 'Моё местоположение', '', geo));
       main.appendChild(w);
 
       const sy = Real.system();
@@ -1829,7 +1820,7 @@ APPS.settings = {
             const кнопки = el('div', 'row');
             const открыть = el('button', 'btn pri', н['где'] ? 'Открыть' : 'Подключить и открыть');
             открыть.onclick = () => Platform.rpc('sys.drive', { action:'open', dev:н.dev })
-              .then(о => { Shell.toast('Носитель', 'Открываю ' + (о['где'] || ''), '📂'); setTimeout(рисуй, 800); })
+              .then(о => { setTimeout(рисуй, 800); })
               .catch(e => Dlg.alert('Не удалось открыть', String(e.message || e), '⚠️'));
             кнопки.appendChild(открыть);
             if (н['где']){
@@ -1880,7 +1871,6 @@ APPS.settings = {
           const список = d.list || [];
           const открыть = el('button', 'btn pri', 'Открыть сканирование');
           открыть.onclick = () => Platform.rpc('sys.scan.open')
-            .then(() => Shell.toast('Сканирование', 'Открываю программу', '🖼️'))
             .catch(e => Dlg.alert('Не вышло открыть', String(e.message || e), '⚠️'));
           if (!список.length){
             см.appendChild(row('🖼️', 'Сканеров не найдено',
@@ -1918,7 +1908,6 @@ APPS.settings = {
           }
           const добавить = el('button', 'btn pri', 'Добавить принтер');
           добавить.onclick = () => Platform.rpc('sys.printer', { action:'настройка' })
-            .then(() => Shell.toast('Печать', 'Открываю настройку принтеров', '🖨️'))
             .catch(e => Dlg.alert('Не вышло открыть настройку', String(e.message || e), '⚠️'));
           место.appendChild(row('➕', 'Добавить или настроить принтер',
             'Откроется страница настройки CUPS — та же, что во всех Linux', добавить));
@@ -1938,7 +1927,7 @@ APPS.settings = {
             if (d['поумолчанию'] !== п['имя']){
               const глав = el('button', 'btn pri', 'По умолчанию');
               глав.onclick = () => Platform.rpc('sys.printer', { action:'умолчание', 'принтер':п['имя'] })
-                .then(() => { Shell.toast('Печать', п['имя'] + ' — основной принтер', '🖨️'); рисуй(); })
+                .then(() => { рисуй(); })
                 .catch(e => Dlg.alert('Не вышло', String(e.message || e), '⚠️'));
               кн.appendChild(глав);
             }
@@ -1951,7 +1940,7 @@ APPS.settings = {
           (d['задания'] || []).forEach(з => {
             const снять = el('button', 'btn', 'Снять');
             снять.onclick = () => Platform.rpc('sys.printer', { action:'снять', 'задание':з['задание'] })
-              .then(() => { Shell.toast('Печать', 'Задание снято', '🛑'); setTimeout(рисуй, 800); })
+              .then(() => { setTimeout(рисуй, 800); })
               .catch(e => Dlg.alert('Не вышло снять', String(e.message || e), '⚠️'));
             место.appendChild(row('📄', 'В очереди: ' + з['задание'],
               [з['кто'], з['размер']].filter(Boolean).join(' · '), снять));
@@ -2088,7 +2077,7 @@ APPS.settings = {
 
       const inp = Real.input(), sy = Real.system();
       const c = card('Ввод');
-      c.appendChild(row('🖱', 'Указатель', 'Мышь или трекпад',
+      c.appendChild(row('🖱', 'Указатель', '',
         el('div', 'muted tiny', inp.fine ? 'подключён' : 'не найден')));
       c.appendChild(row('👆', 'Сенсорный экран', 'Максимум точек касания',
         el('div', 'muted tiny', inp.touch ? inp.points + ' точек' : 'не обнаружен')));
@@ -2130,7 +2119,7 @@ APPS.settings = {
           pick.onclick = async () => { res.textContent = 'открываю системный диалог…';
             const r = await Real.btPick();
             res.textContent = r.error ? r.error : 'выбрано: ' + r.name; };
-          const rr = row('🎧', 'Подключить по Bluetooth', 'Откроется настоящий системный список устройств', pick);
+          const rr = row('🎧', 'Подключить по Bluetooth', '', pick);
           rr.querySelector('.ctl').appendChild(res);
           btl.appendChild(rr);
         } else {
@@ -2207,9 +2196,8 @@ APPS.settings = {
     function pNotif(){
       const c = card('Уведомления');
       c.appendChild(row('🔔', 'Уведомления', 'Выключенные баннеры не появляются, но остаются в центре уведомлений',
-        toggle(() => KV.get('notif', true), v => { KV.set('notif', v);
-          if (v) Shell.toast('Уведомления', 'Баннеры снова включены', '🔔'); })));
-      c.appendChild(row('🌙', 'Не беспокоить', 'Скрывать баннеры и звуки', toggle(() => S.dnd, v => { set('dnd', v); Shell.updateCC(); })));
+        toggle(() => KV.get('notif', true), v => KV.set('notif', v))));
+      c.appendChild(row('🌙', 'Не беспокоить', '', toggle(() => S.dnd, v => { set('dnd', v); Shell.updateCC(); })));
       const fs = el('div', 'row');
       const fsel = sel([{ n:'25 минут', v:'25' }, { n:'50 минут', v:'50' }, { n:'90 минут', v:'90' }],
         () => KV.get('focusLen', '25'), v => KV.set('focusLen', v));
@@ -2227,12 +2215,11 @@ APPS.settings = {
           if (--left <= 0){ stopFocus(); Shell.toast('Фокусировка', 'Сессия завершена', '🎯'); Snd.note(); return; }
           fout.textContent = Math.floor(left / 60) + ':' + pad2(left % 60);
         }, 1000);
-        Shell.toast('Фокусировка', 'Уведомления выключены на ' + fsel.value + ' мин', '🎯');
       };
       fs.append(fsel, fbtn, fout);
-      c.appendChild(row('🎯', 'Фокусировка', 'Реально включает «Не беспокоить» на заданное время', fs));
+      c.appendChild(row('🎯', 'Фокусировка', '', fs));
       const t = el('button', 'btn', 'Показать'); t.onclick = () => Shell.toast('Тестовое уведомление', 'Так выглядят баннеры ' + Brand.name, '🔔');
-      c.appendChild(row('🧪', 'Проверить', 'Показать пример уведомления', t));
+      c.appendChild(row('🧪', 'Проверить', '', t));
       main.appendChild(c);
     }
 
@@ -2342,7 +2329,7 @@ APPS.settings = {
         };
         auBox.appendChild(b);
       });
-      au.appendChild(row('🚀', 'Запускать при входе', 'Отмеченные приложения откроются сразу после загрузки', el('span')));
+      au.appendChild(row('🚀', 'Запускать при входе', '', el('span')));
       au.appendChild(auBox);
       main.appendChild(au);
 
@@ -2358,14 +2345,13 @@ APPS.settings = {
         const cur = Assoc.map()[exts[0]] || 'notepad';
         const s2 = sel(openers, () => cur, v => {
           exts.forEach(x => { const m = KV.get(Assoc.KEY, {}); m[x] = v; KV.set(Assoc.KEY, m); });
-          Shell.toast('Приложения', `${name} теперь открываются в «${APPS[v].name}»`, APPS[v].glyph);
           drawMain();
         });
         d.appendChild(row(e, name, exts.map(x => '.' + x).join(' '), s2));
       });
       const rst = el('button', 'btn', 'Сбросить');
-      rst.onclick = () => { KV.set(Assoc.KEY, {}); drawMain(); Shell.toast('Приложения', 'Ассоциации возвращены к исходным', '↩️'); };
-      d.appendChild(row('↩️', 'Вернуть по умолчанию', 'Как было при установке системы', rst));
+      rst.onclick = () => { KV.set(Assoc.KEY, {}); drawMain(); };
+      d.appendChild(row('↩️', 'Вернуть по умолчанию', '', rst));
       main.appendChild(d);
     }
 
@@ -2450,7 +2436,6 @@ APPS.settings = {
               try {
                 await Platform.rpc('sys.user', { action:'завести', 'имя':имя,
                   'пароль':пароль, 'полное':полное, 'хозяин':хозяин });
-                Shell.toast('Учётные записи', 'Человек добавлен: ' + имя, '👤');
                 рисуй();
               } catch(e){ Dlg.alert('Не вышло завести', String(e.message || e), '⚠️'); }
             };
@@ -2474,7 +2459,7 @@ APPS.settings = {
               const прав = el('button', 'btn', ч['хозяин'] ? 'Снять права' : 'Сделать хозяином');
               прав.onclick = () => Platform.rpc('sys.user',
                   { action:'хозяин', 'имя':ч['имя'], 'хозяин':!ч['хозяин'] })
-                .then(() => { Shell.toast('Учётные записи', 'Права изменены', '🛡️'); рисуй(); })
+                .then(() => { рисуй(); })
                 .catch(e => Dlg.alert('Не вышло', String(e.message || e), '⚠️'));
               кн.appendChild(прав);
 
@@ -2492,7 +2477,7 @@ APPS.settings = {
                     'Если нет — папка останется на диске.',
                     { okText:'Удалить файлы', cancelText:'Оставить файлы', danger:true, icon:'📁' });
                   Platform.rpc('sys.user', { action:'удалить', 'имя':ч['имя'], 'сФайлами':сФайлами })
-                    .then(() => { Shell.toast('Учётные записи', 'Учётная запись удалена', '🗑️'); рисуй(); })
+                    .then(() => { рисуй(); })
                     .catch(e => Dlg.alert('Не вышло удалить', String(e.message || e), '⚠️'));
                 };
                 кн.appendChild(уд);
@@ -2526,22 +2511,20 @@ APPS.settings = {
         p.name = ni.value || 'Пользователь'; Profiles.save(l);
         set('userName', p.name); Shell.renderShell(); drawMain();
       };
-      c.appendChild(row('👤', 'Имя', 'Показывается в Пуске и при смене пользователя', ni));
+      c.appendChild(row('👤', 'Имя', '', ni));
 
-      c.appendChild(row('🔒', 'Блокировать при бездействии', 'Система запрёт экран сама, если машиной не пользуются',
+      c.appendChild(row('🔒', 'Блокировать при бездействии', '',
         sel([{ n:'Никогда', v:'0' }, { n:'1 минута', v:'1' }, { n:'5 минут', v:'5' },
              { n:'10 минут', v:'10' }, { n:'30 минут', v:'30' }],
             () => String(KV.get('autoLock', 0)),
-            v => { KV.set('autoLock', +v); AutoLock.touch();
-              Shell.toast('Учётные записи', +v ? `Блокировка через ${v} мин бездействия` : 'Автоблокировка выключена', '🔒'); })));
+            v => { KV.set('autoLock', +v); AutoLock.touch(); })));
 
       /* Пароль после сна — как в любой другой системе. Показываем только
          тем, у кого пароль есть: без пароля замок не открыть, и
          переключатель обещал бы то, чего сделать нельзя. */
       if (Profiles.системныйПароль)
-        c.appendChild(row('🌙', 'Пароль после пробуждения', 'Когда машина выходит из спящего режима, экран заперт',
-          toggle(() => S.lockOnWake !== false, v => { set('lockOnWake', v);
-            Shell.toast('Учётные записи', v ? 'После пробуждения — пароль' : 'После пробуждения пароль не спрашивается', '🌙'); })));
+        c.appendChild(row('🌙', 'Пароль после пробуждения', '',
+          toggle(() => S.lockOnWake !== false, v => { set('lockOnWake', v); })));
 
       const ei = el('input', 'inp'); ei.value = me.emoji || me.name[0]; ei.style.width = '64px'; ei.maxLength = 2;
       ei.onchange = () => {
@@ -2576,7 +2559,7 @@ APPS.settings = {
           await Profiles.setPassword(me.id, null); drawMain();
           Shell.toast('Учётная запись', 'Пароль удалён', '🔓');
         };
-        pw.appendChild(row('🔓', 'Убрать пароль', 'Переход в этот профиль перестанет спрашивать', del));
+        pw.appendChild(row('🔓', 'Убрать пароль', '', del));
       }
       pw.appendChild(row('ℹ️', 'Что даёт пароль честно',
         'Это пароль профиля оболочки: хеш SHA-256 хранится локально, сами данные при этом не шифруются. Он разделяет профили между своими, а не защищает от того, у кого есть полный доступ к машине. Экран машины запирает система — паролем учётной записи.', el('span')));
@@ -2593,7 +2576,6 @@ APPS.settings = {
               `«${o.name}» будет удалён вместе со своими файлами, настройками и заметками.`,
               { icon:'🗑️', okText:'Удалить', danger:true })) return;
           Profiles.remove(o.id); drawMain();
-          Shell.toast('Учётные записи', 'Профиль удалён', '🗑️');
         };
         const r2 = row(o.emoji || '👤', o.name, (o.hash ? '🔒 с паролем' : 'без пароля') +
           ' · свои файлы и настройки', go);
@@ -2610,9 +2592,8 @@ APPS.settings = {
         if (!nn.value.trim()) return Shell.toast('Учётные записи', 'Введите имя', '⚠️');
         const id = await Profiles.add(nn.value.trim(), ne.value.trim(), np.value);
         drawMain();
-        Shell.toast('Учётные записи', 'Профиль создан. Переключиться можно через меню Пуск', '👥');
       };
-      const ar = row('➕', 'Новый профиль', 'Отдельные файловая система, обои и параметры', el('span'));
+      const ar = row('➕', 'Новый профиль', '', el('span'));
       ar.querySelector('.ctl').append(nn, ne, np, add);
       u.appendChild(ar);
       main.appendChild(u);
@@ -2631,7 +2612,7 @@ APPS.settings = {
     function pTime(){
       const c = card('Дата и время');
       c.appendChild(row('🕐', '24-часовой формат', '', toggle(() => S.clock24, v => set('clock24', v))));
-      c.appendChild(row('⏱', 'Показывать секунды', 'В часах на панели', toggle(() => S.showSeconds, v => set('showSeconds', v))));
+      c.appendChild(row('⏱', 'Показывать секунды', '', toggle(() => S.showSeconds, v => set('showSeconds', v))));
 
       /* Часовой пояс: берём весь список, который знает система, и добавляем
          пункт «как на машине». Смена пояса сразу двигает все часы. */
@@ -2662,7 +2643,7 @@ APPS.settings = {
       const showNow = () => tzNow.textContent = 'сейчас ' + new Date().toLocaleTimeString('ru-RU',
         { hour:'2-digit', minute:'2-digit', timeZone:S.tz || here });
       showNow();
-      const tzRow = row('🌍', 'Часовой пояс', 'Влияет на часы, календарь и время в файлах', tsel);
+      const tzRow = row('🌍', 'Часовой пояс', '', tsel);
       tzRow.querySelector('.ctl').insertBefore(tzNow, tsel);
       c.appendChild(tzRow);
       main.appendChild(c);
@@ -2676,7 +2657,7 @@ APPS.settings = {
         lsel));
       const ci = el('input', 'inp'); ci.value = S.city;
       ci.onchange = () => { set('city', ci.value); Shell.renderShell(); };
-      l.appendChild(row('🏙', 'Город для погоды', 'Влияет на виджет погоды', ci));
+      l.appendChild(row('🏙', 'Город для погоды', '', ci));
       main.appendChild(l);
 
       const kb = card('Клавиатура');
@@ -2740,12 +2721,10 @@ APPS.settings = {
         document.body.style.cursor = v ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\'%3E%3Cpath d=\'M6 2l22 12-10 2-4 10z\' fill=\'white\' stroke=\'black\'/%3E%3C/svg%3E"), auto' : ''; })));
       main.appendChild(c);
       const s = card('Слух и ввод');
-      s.appendChild(row('🔉', 'Моно-звук', 'Оба канала сводятся в один — звук системы и музыки',
-        toggle(() => KV.get('mono', false), v => { A11Y.applyMono(v);
-          Shell.toast('Специальные возможности', v ? 'Звук сведён в моно' : 'Звук снова стерео', '🔉'); })));
+      s.appendChild(row('🔉', 'Моно-звук', '',
+        toggle(() => KV.get('mono', false), v => { A11Y.applyMono(v); })));
       s.appendChild(row('⌨️', 'Залипание клавиш', 'Нажмите Shift, Ctrl, Alt или Win отдельно — модификатор дождётся следующей клавиши',
-        toggle(() => KV.get('sticky', false), v => { KV.set('sticky', v); A11Y.latched = {}; A11Y.badge();
-          Shell.toast('Специальные возможности', v ? 'Залипание клавиш включено' : 'Залипание клавиш выключено', '⌨️'); })));
+        toggle(() => KV.get('sticky', false), v => { KV.set('sticky', v); A11Y.latched = {}; A11Y.badge(); })));
       main.appendChild(s);
     }
 
@@ -2946,8 +2925,7 @@ APPS.settings = {
             const всего = d['всего'] || 0;
             if (d['когда'])
               место.appendChild(el('div', 'set-note',
-                'Списки программ читались ' + new Date(d['когда']).toLocaleString('ru-RU') +
-                '. Чтобы узнать о самом новом, обновите их кнопкой выше.'));
+                'Списки программ читались ' + new Date(d['когда']).toLocaleString('ru-RU')));
 
             /* Придержанное показываем всегда, даже когда обновлять
                больше нечего: иначе человек видит «система обновлена» при

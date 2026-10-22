@@ -417,7 +417,6 @@ OS.наСтол = a => {
     : [...(S.deskNative || []), { id:a.id, name:a.name, значок:a.значок || a.icon || '' }];
   Store.save();
   Shell.renderIcons();
-  Shell.toast('Рабочий стол', было ? 'Убрано со стола' : 'Вынесено на стол', '🖥');
 };
 /* ---------- удалить программу ----------
 
@@ -487,7 +486,6 @@ OS.удалиПрограмму = async a => {
   if (ответ['удалено']) return готово(ответ['толькоЯрлык'] ? 'Ярлык убран, файлы остались в папке Windows' : '');
 
   if (вид === 'windows'){
-    Shell.toast(имя, 'Открываю удаление программы', '🪟', 5000);
     const часы = setInterval(async () => {
       let з;
       try { з = await Platform.rpc('pkg.uninstall.windows', { id:a.id }); }
@@ -500,7 +498,6 @@ OS.удалиПрограмму = async a => {
     return;
   }
 
-  Shell.toast(имя, 'Удаляю', '🗑️', 4000);
   const часы = setInterval(async () => {
     let ход;
     try { ход = await Platform.rpc('pkg.job'); }
@@ -562,7 +559,6 @@ async function запустиПрограмму(a){
       await Platform.rpc('sys.fix', { что:беда.что });
       await OS.launch(a.id);
       скажи();
-      Shell.toast('Готово', 'Больше эта беда не повторится', '🔧');
     } catch(e2){
       const ещё = await Dlg.open({ type:'confirm', icon:'⚠️', title:'Починить не вышло',
         text:String(e2.message || e2), okText:'Закрыть', cancelText:'Подробности' });
@@ -761,7 +757,6 @@ function wireTaskManager(){
               'Несохранённое в нём может пропасть.', { okText:'Снять', danger:true })) return;
           try {
             await Platform.rpc('sys.stop', { pid:п.pid });
-            Shell.toast('Диспетчер задач', 'Задача снята', '🛑');
           } catch(e){ Dlg.alert('Не вышло снять задачу', String(e.message || e), '⚠️'); }
           setTimeout(нарисуй, 700);
         };
@@ -1122,7 +1117,6 @@ async function проверьНосители(){
 async function открытьНоситель(н){
   try {
     const о = await Platform.rpc('sys.drive', { action:'open', dev:н.dev });
-    Shell.toast(н['метка'] || н.dev, 'Открываю ' + (о['где'] || ''), '📂');
   } catch(e){
     Dlg.alert('Не удалось открыть носитель', String(e.message || e), '⚠️');
   }
@@ -1195,7 +1189,6 @@ async function спросиПроУстановку(что){
     if (!пуск) return;
     try {
       await Platform.rpc('sys.appimage', { путь });
-      Shell.toast(имя, 'Запускаю', '🚀');
     } catch(e){ Dlg.alert('Не удалось запустить', String(e.message || e), '⚠️'); }
     return;
   }

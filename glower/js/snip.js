@@ -138,7 +138,6 @@ APPS.snip = {
         if (о && о['отменено']) return;
         if (!о || !о.dataUrl) throw new Error('система не вернула снимок');
         await новыйКадр(о.dataUrl);
-        Shell.toast('Ножницы', 'Снимок готов — можно подписать и сохранить', '✂️');
       } catch(e){
         Dlg.alert('Не вышло снять экран', String(e.message || e), '⚠️');
       } finally {
@@ -185,7 +184,6 @@ APPS.snip = {
           const бинарь = await (await fetch(dataUrl)).blob();
           await navigator.clipboard.write([new ClipboardItem({ 'image/png':бинарь })]);
         }
-        Shell.toast('Ножницы', 'Снимок в буфере — вставьте куда нужно', '📋');
       } catch(e){ Dlg.alert('Не вышло скопировать', String(e.message || e), '⚠️'); }
     };
 
@@ -256,8 +254,7 @@ APPS.snip = {
 
     /* ---------- обновление вида ---------- */
     const пусто = el('div', 'snip-empty',
-      'Снимка пока нет.<br><span class="muted">Нажмите «Область» или «Весь экран» сверху. ' +
-      'Быстрые клавиши: PrintScreen — весь экран, Win+Shift+S — область.</span>');
+      'Снимка пока нет.<br><span class="muted">PrintScreen — весь экран, Win+Shift+S — область</span>');
     место.appendChild(пусто);
 
     function обнови(){
@@ -451,14 +448,14 @@ const Снимки = {
         document.body.classList.remove('ждём-область');
         /* Отмену проговариваем: молчание в ответ на нажатие человек читает
            как поломку, а не как «я же сам отменил». */
-        if (!кусок){ Shell.toast('Ножницы', 'Снимок отменён', '✂️', 3000); return; }
+        if (!кусок){ return; }
         о.dataUrl = кусок;
       }
       /* Как в Windows: снимок сразу в буфере, а окно открывается, чтобы его
          можно было подписать или сохранить. */
       Platform.rpc('sys.shot.вбуфер', { dataUrl:о.dataUrl }).catch(() => {});
       WM.open('snip', { dataUrl:о.dataUrl });
-      Shell.toast('Ножницы', 'Снимок сделан и уже в буфере обмена', '✂️');
+      Shell.toast('Ножницы', 'Снимок в буфере обмена', '✂️');
     } catch(e){
       const текст = String(e.message || e);
       /* Не хватает программы — случай особый и поправимый.

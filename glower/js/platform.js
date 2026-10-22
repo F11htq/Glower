@@ -178,7 +178,6 @@ Platform.подключение = (async function boot(){
     await Platform.mount();
     Platform.badge();
     Platform.watch();
-    Shell.toast('Система', 'Подключено к настоящему диску: ' + Platform.info.root, '🖴', 5000);
   } catch(e){
     Shell.toast('Агент', 'Не удалось прочитать диск: ' + e.message, '⚠️');
   }

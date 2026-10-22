@@ -81,8 +81,6 @@ const Web = {
       try {
         await c.send('Browser.setDownloadBehavior',
           { behavior:'allow', downloadPath:Platform.info.root || '/tmp', eventsEnabled:true });
-        c.on('Browser.downloadWillBegin', p =>
-          Shell.toast('Загрузка', 'Началась: ' + (p.suggestedFilename || p.url), '⬇️'));
         c.on('Browser.downloadProgress', p => {
           if (p.state !== 'completed') return;
           Shell.toast('Загрузка', 'Файл сохранён в рабочую папку', '✅');
@@ -369,7 +367,6 @@ APPS.browser = {
       catch(е){
         if (await машинныйБраузер()){
           try { WM.close(win); } catch(_){}
-          Shell.toast('Браузер', 'Открываю браузер машины', '🌐', 4000);
         }
       }
     })();
@@ -552,7 +549,6 @@ APPS.browser = {
         if (i >= 0) l.splice(i, 1);
         else if (t.url && t.url !== 'glower://start') l.push({ t:t.title || t.url, u:t.url });
         Web.saveBookmarks(l); drawBar();
-        Shell.toast('Браузер', i >= 0 ? 'Закладка убрана' : 'Добавлено в закладки', i >= 0 ? '☆' : '★');
       }
       if (a === 'menu'){
         const r = b.getBoundingClientRect();
@@ -563,9 +559,9 @@ APPS.browser = {
           'hr',
           ...Object.entries(Web.SEARCH).map(([k, v]) => ({
             i:eng === k ? '◉' : '○', t:'Поиск: ' + v[0],
-            f:() => { KV.set('web.search', k); Shell.toast('Браузер', 'Поиск через ' + v[0], '🔎'); } })),
+            f:() => { KV.set('web.search', k); } })),
           'hr',
-          { i:'🧹', t:'Очистить историю', f:() => { KV.set('web.history', []); Shell.toast('Браузер', 'История очищена', '🧹'); } }
+          { i:'🧹', t:'Очистить историю', f:() => { KV.set('web.history', []); } }
         ]);
       }
     };

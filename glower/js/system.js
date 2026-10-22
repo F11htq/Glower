@@ -364,7 +364,7 @@ window.OSD = OSD;
         } else if (e.key === 'Delete'){
           if (await Dlg.confirm('Удалить в корзину', `«${it.n}» будет перемещён в корзину.`,
               { icon:'🗑️', okText:'Удалить', danger:true })){
-            FS.rm(['Рабочий стол'], it.n); Shell.toast('Удалено', it.n + ' в корзине', '🗑️'); Shell.renderIcons();
+            FS.rm(['Рабочий стол'], it.n); Shell.renderIcons();
           }
         }
       };
@@ -385,7 +385,7 @@ window.OSD = OSD;
       if (/^Очистить корзину$/.test(label)) return { ...it, f: async () => {
         if (await Dlg.confirm('Очистить корзину', 'Все элементы будут удалены безвозвратно.',
             { icon:'🧹', okText:'Очистить', danger:true })){
-          KV.set('trash', []); Shell.renderIcons(); Shell.toast('Корзина', 'Очищена', '🗑️'); } } };
+          KV.set('trash', []); Shell.renderIcons(); } } };
       return it;
     });
     return ctxOrig(x, y, wrapped);
@@ -410,7 +410,6 @@ window.OSD = OSD;
       FS.write(path.length ? path : ['Документы'], name, area.value);
       win.setTitle(name + ' — Блокнот');
       win.setSub('/' + (path.length ? path.join('/') : 'Документы') + '/' + name);
-      Shell.toast('Сохранено', name, '💾');
       Shell.renderIcons();
     };
   };

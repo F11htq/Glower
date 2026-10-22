@@ -110,15 +110,14 @@ window.Clip2 = Clip2;
     const refresh = () => win.data.refresh && win.data.refresh();
 
     const report = r => {
-      if (!status) return;
-      const t = `Вставлено: ${r.done}${r.skipped ? ' · пропущено: ' + r.skipped : ''}`;
-      Shell.toast('Проводник', t, '📋');
+      if (!status || !r.skipped) return;
+      Shell.toast('Проводник', `Вставлено: ${r.done} · пропущено: ${r.skipped}`, '📋');
     };
 
     const doCopy  = () => { const s = sel(); if (s.length){ Clip2.copy(path(), s);
-      Shell.toast('Буфер обмена', `Скопировано: ${s.length}`, '⧉', 1600); } };
+      } };
     const doCut   = () => { const s = sel(); if (s.length){ Clip2.take(path(), s);
-      Shell.toast('Буфер обмена', `Вырезано: ${s.length}`, '✂', 1600); } };
+      } };
     const doPaste = async () => { if (!Clip2.has()) return;
       const r = await Clip2.paste(path()); refresh(); Shell.renderIcons(); report(r); };
 

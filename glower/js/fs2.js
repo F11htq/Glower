@@ -87,7 +87,6 @@ async function download(node){
       const w = await h.createWritable();
       await w.write(node.img ? await (await fetch(node.img)).blob() : new Blob([node.body || ''], { type:'text/plain;charset=utf-8' }));
       await w.close();
-      Shell.toast('Сохранено', node.name + ' записан на диск', '💾');
       return;
     } catch(e){ if (e && e.name === 'AbortError') return; }   // пользователь отменил
   }
@@ -99,7 +98,6 @@ async function download(node){
   a.style.display = 'none';
   document.body.appendChild(a); a.click();
   setTimeout(() => a.remove(), 1000);
-  Shell.toast('Выгружено', node.name + ' сохранён на ваш компьютер', '⬇️');
 }
 
 /* ---------- импорт настоящих файлов ---------- */
@@ -115,7 +113,6 @@ function importFiles(fileList, path){
       node.ctime = f.lastModified; node.mtime = f.lastModified;
       FS.put(path, node);
       if (++done === files.length){
-        Shell.toast('Импортировано', `${files.length} ф. → /${path.join('/')}`, '📥');
         Shell.renderIcons();
         WM.wins.filter(w => w.appId === 'files' && w.data.refresh).forEach(w => w.data.refresh());
       }
@@ -349,9 +346,9 @@ APPS.files = {
           if (n){ FS.mkdir(path, FS.uniqueName(path, n)); draw(); } break; }
         case 'nt': { const n = await Dlg.prompt('Создать файл', 'Имя нового файла', 'Новый.txt', '📄');
           if (n){ FS.write(path, FS.uniqueName(path, n), ''); draw(); } break; }
-        case 'copy': if (sel.length){ Clip.copy(path, sel); paint(); Shell.toast('Скопировано', sel.length + ' эл. в буфере', '⧉'); } break;
+        case 'copy': if (sel.length){ Clip.copy(path, sel); paint(); } break;
         case 'cut':  if (sel.length){ Clip.take(path, sel); paint(); } break;
-        case 'paste': { const k = Clip.paste(path); if (k){ draw(); Shell.toast('Вставлено', k + ' эл.', '📋'); } break; }
+        case 'paste': { const k = Clip.paste(path); if (k){ draw(); } break; }
         case 'ren': { if (sel.length !== 1) return;
           const nn = await Dlg.prompt('Переименовать', 'Новое имя', sel[0], '✏️');
           if (nn && nn !== sel[0]){ FS.rename(path, sel[0], nn); sel = [nn]; draw(); } break; }
