@@ -107,7 +107,8 @@ const Platform = {
     const rm = FS.rm.bind(FS);
     FS.rm = function(path, name, permanent){
       const r = rm(path, name, permanent);
-      if (r !== false) push('fs.remove', { path:[...path, name] });
+      /* Не насовсем — значит, в системную корзину, как у любой программы */
+      if (r !== false) push(permanent ? 'fs.remove' : 'fs.trash', { path:[...path, name] });
       return r;
     };
     const rename = FS.rename.bind(FS);

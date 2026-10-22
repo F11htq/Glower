@@ -1066,6 +1066,11 @@ async function wireNativeSystemApps(){
   OS.нативные = есть;
   const прежнее = WM.open.bind(WM);
   WM.open = function(id, opts){
+    /* Корзина на машине — системная, её показывает Проводник */
+    if (id === 'trash' && есть.includes('files')){
+      Platform.rpc('sys.native', { 'программа':'files', 'раздел':'trash' }).catch(() => прежнее(id, opts));
+      return null;
+    }
     if (!есть.includes(id)) return прежнее(id, opts);
     if (opts && opts['восстановление']) return null;
     const файл = opts && opts.file;
@@ -1078,16 +1083,21 @@ async function wireNativeSystemApps(){
       /* Калькулятор, как и прежний, — одним окном: открыт — переходим к нему */
       /* Калькулятор и Параметры, как и прежние, — одним окном: открыт —
          переходим к нему, а Параметрам ещё и говорим, какой раздел нужен */
-      if (id === 'calc' || id === 'settings'){
+      /* Вкладка Магазина — латиницей: так её проще проверить на входе */
+      const вкладка = id === 'store' && opts
+        ? ({ 'обновления':'updates', 'установленные':'installed' })[opts['вкладка']] : undefined;
+      const найти = id === 'store' && opts && opts['найти'] ? String(opts['найти']) : undefined;
+      if (id === 'calc' || id === 'settings' || id === 'store'){
         const окна = ((await Platform.rpc('sys.windows').catch(() => ({}))).list || []);
         const уже = окна.find(o => o.appId === 'glower-' + id);
         if (уже){
           if (id === 'settings' && opts && opts.section) Поверхности.скажи('параметры-раздел', opts.section);
+          if (id === 'store' && (вкладка || найти)) Поверхности.скажи('магазин-открой', { 'вкладка':вкладка || '', 'найти':найти || '' });
           return Platform.rpc('sys.window', { action:'focus', appId:уже.appId, title:уже.title });
         }
       }
       await Platform.rpc('sys.native', { 'программа':id, 'путь':путь || undefined,
-        'раздел':id === 'settings' && opts && opts.section || undefined });
+        'раздел':(id === 'settings' && opts && opts.section) || вкладка || undefined, 'найти':найти });
     })().catch(() => прежнее(id, opts));
     return null;
   };

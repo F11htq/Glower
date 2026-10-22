@@ -39,10 +39,12 @@ const WS = await mkdtemp(join(tmpdir(), 'glower-'));
    делаем то же самое. Раньше этого не было, и проверки встроенного браузера
    падали не из-за системы, а из-за того, что в проверочной машине нет
    команды chromium в путях. */
+/* Корзина — своя, проверочная: настоящую корзину машины не трогаем */
+const КОРЗИНА = await mkdtemp(join(tmpdir(), 'glower-trash-'));
 const agent = spawn(process.execPath,
   [join(root, 'agent/server.mjs'), '--port', String(PORT), '--root', WS, '--system'],
   { stdio:['ignore', 'pipe', 'pipe'],
-    env:{ ...process.env, GLOWER_BROWSER:process.env.GLOWER_BROWSER || exe || '' } });
+    env:{ ...process.env, GLOWER_BROWSER:process.env.GLOWER_BROWSER || exe || '', GLOWER_TRASH:КОРЗИНА } });
 let agentLog = '';
 agent.stdout.on('data', d => agentLog += d);
 await new Promise(r => setTimeout(r, 1300));
@@ -1522,10 +1524,36 @@ try {
             && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
             && /'параметры-раздел'/.test(ос2) && /"glower-settings", "settings"/.test(док_)
             && /Поверхности\.слушай\(\['параметры-дело'\]/.test(мост) && /js\/параметры\.js/.test(await readFile(join(root, 'index.html'), 'utf8')));
-        check('Блокнот, Калькулятор, Проводник и Параметры попадают в образ и пакет',
+        const магазин = await readFile(join(root, 'panel', 'src', 'store.rs'), 'utf8');
+        const каталог = JSON.parse(await readFile(join(root, 'panel', 'src', 'store-catalog.json'), 'utf8'));
+        /* Подборки страничного и нативного Магазина — одни и те же */
+        const магазинСтр = await readFile(join(root, 'js', 'store.js'), 'utf8');
+        const достань = (имя, откр, закр) => {
+          const i = магазинСтр.indexOf('const ' + имя + ' = ' + откр);
+          let d = 0; const j = магазинСтр.indexOf(откр, i);
+          for (let k = j; k < магазинСтр.length; k++){
+            if (магазинСтр[k] === откр) d++;
+            else if (магазинСтр[k] === закр && --d === 0) return Function('return ' + магазинСтр.slice(j, k + 1))();
+          }
+        };
+        check('Магазин на Rust: витрина, разделы, поиск, установка, обновления, «Моё»',
+          /имя == "glower-store"/.test(главная) && ['"pkg.install"', '"pkg.remove"', '"pkg.search"', '"pkg.info"', '"pkg.job"', '"pkg.flathub"', '"pkg.upgrade.check"', '"sys.apps"', '"store.icon"']
+              .every(м => магазин.includes(м))
+            && /store:'glower-store'/.test(агент2) && /'store\.icon'/.test(агент2) && /'--find=' \+/.test(агент2)
+            && /'магазин-открой'/.test(ос2) && /"glower-store", "store"/.test(док_) && /steam-devices/.test(магазин));
+        check('подборки нативного Магазина совпадают со страничными',
+          JSON.stringify(каталог['подборки']) === JSON.stringify(достань('ПОДБОРКИ', '{', '}'))
+            && JSON.stringify(каталог['витрина']) === JSON.stringify(достань('ВИТРИНА', '[', ']'))
+            && JSON.stringify(каталог['разделы']) === JSON.stringify(достань('РАЗДЕЛЫ', '[', ']')));
+        check('корзина одна: стол и Проводник кладут в системную, док открывает её Проводником',
+          /'fs\.trash'/.test(агент2) && /'fs\.trash\.empty'/.test(агент2) && /GLOWER_TRASH/.test(агент2)
+            && /permanent \? 'fs\.remove' : 'fs\.trash'/.test(await readFile(join(root, 'js', 'platform.js'), 'utf8'))
+            && /"--trash"/.test(проводник) && /fn открой_корзину/.test(док_) && /id === 'trash' && есть\.includes\('files'\)/.test(ос2));
+        check('Блокнот, Калькулятор, Проводник, Параметры и Магазин попадают в образ и пакет',
           /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-notepad"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-calc"/.test(образ2)
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-files"/.test(образ2)
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-settings"/.test(образ2) && пакет.includes('usr/bin/glower-settings')
+            && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-store"/.test(образ2) && пакет.includes('usr/bin/glower-store')
             && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc') && пакет.includes('usr/bin/glower-files'));
       }
       check('Win при нативном меню не поднимает стол поверх программ',
@@ -2291,7 +2319,7 @@ try {
       let нетФайла = false;
       Platform.rpc = async (м, п) => {
         вызовы.push([м, п]);
-        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files', 'settings'] };
+        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files', 'settings', 'store'] };
         if (м === 'fs.stat' && нетФайла) throw new Error('нет');
         if (м === 'sys.windows') return { list:[{ appId:'glower-calc', title:'Калькулятор' }] };
         return {};
@@ -2311,6 +2339,13 @@ try {
         WM.open('settings', { section:'net' });
         await ждём();
         итог.параметры = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
+        вызовы.length = 0;
+        WM.open('store', { 'вкладка':'обновления' });
+        await ждём();
+        итог.магазин = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
+        WM.open('trash');
+        await ждём();
+        итог.корзина = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
         вызовы.length = 0;
         итог.сеанс = WM.open('notepad', { x:1, y:1, w:300, h:200, 'восстановление':true });
         await ждём();
@@ -2338,9 +2373,34 @@ try {
       JSON.stringify(r));
     check('Параметры открываются нативными, сразу на нужном разделе',
       r.параметры && r.параметры['программа'] === 'settings' && r.параметры['раздел'] === 'net', JSON.stringify(r));
+    check('Магазин открывается нативным, сразу на нужной вкладке',
+      r.магазин && r.магазин['программа'] === 'store' && r.магазин['раздел'] === 'updates', JSON.stringify(r));
+    check('корзину на машине показывает Проводник',
+      r.корзина && r.корзина['программа'] === 'files' && r.корзина['раздел'] === 'trash', JSON.stringify(r));
     check('восстановление сеанса нативных не запускает', r.сеанс === null && r.сеансЗвал === 0, JSON.stringify(r));
     check('Калькулятор один: открыт — переходим к нему', r.калк.includes('sys.window:focus') && !r.калк.includes('sys.native'), JSON.stringify(r));
     check('не вышло нативно — открывается своё окно, как раньше', r.запасной, JSON.stringify(r));
+  }
+
+  /* Удалённое со стола — в системную корзину, а не в память страницы */
+  {
+    const r = await page.evaluate(async () => {
+      const было = (KV.get('trash', []) || []).length;
+      FS.write(['Документы'], 'в-корзину.txt', 'мусор');
+      await new Promise(r2 => setTimeout(r2, 400));
+      FS.rm(['Документы'], 'в-корзину.txt');
+      await new Promise(r2 => setTimeout(r2, 700));
+      const сколько = (await Platform.rpc('fs.trash.count'))['сколько'];
+      const вПамяти = (KV.get('trash', []) || []).length - было;
+      Shell.делоПрограммы('очисти-корзину', {});
+      await new Promise(r2 => setTimeout(r2, 500));
+      const после = (await Platform.rpc('fs.trash.count'))['сколько'];
+      return { сколько, вПамяти, после };
+    });
+    const { readdir: rd } = await import('node:fs/promises');
+    check('удалённое со стола ложится в системную корзину и очищается оттуда',
+      r.сколько === 1 && r.вПамяти === 0 && r.после === 0, JSON.stringify(r));
+    check('сам файл с диска ушёл', !existsSync(join(WS, 'Документы', 'в-корзину.txt')), (await rd(join(WS, 'Документы')).catch(() => [])).join(','));
   }
 
   /* Мост нативных Параметров: страница рассказывает и слушается */

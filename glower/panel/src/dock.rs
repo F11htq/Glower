@@ -46,6 +46,13 @@ fn с_доком<R>(дело: impl FnOnce(&mut Док) -> R) -> Option<R> {
     ДОК.with(|д| д.borrow_mut().as_mut().map(дело))
 }
 
+/// Корзина — системная: её показывает Проводник. Нет его — просим стол
+fn открой_корзину() {
+    if std::process::Command::new("glower-files").arg("--trash").spawn().is_err() {
+        дело_стола("запусти", json!({ "id": "trash", "вид": "приложение" }));
+    }
+}
+
 fn дело_стола(что: &str, доводы: Value) {
     let mut тело = доводы;
     тело["что"] = json!(что);
@@ -246,11 +253,12 @@ fn обнови_видимость() {
 /// Программы системы на Rust: имя окна → программа страницы и её знак.
 /// Их окна — настоящие, но для человека это тот же Блокнот, что закреплён
 /// в доке: точка под его значком, а не ещё одно безликое окно рядом.
-const РОДНЫЕ: [(&str, &str, &str, &str); 4] = [
+const РОДНЫЕ: [(&str, &str, &str, &str); 5] = [
     ("glower-notepad", "notepad", "📝", "linear-gradient(140deg,#7dd3fc,#3b82f6)"),
     ("glower-calc", "calc", "🧮", "linear-gradient(140deg,#a5b4fc,#6366f1)"),
     ("glower-files", "files", "📁", "linear-gradient(140deg,#fcd34d,#f59e0b)"),
     ("glower-settings", "settings", "⚙️", "linear-gradient(140deg,#94a3b8,#334155)"),
+    ("glower-store", "store", "🛍️", "linear-gradient(140deg,#c4b5fd,#7c3aed)"),
 ];
 
 fn родное(app_id: &str) -> Option<(&'static str, &'static str, &'static str)> {
@@ -425,11 +433,11 @@ fn перерисуй() {
         }
         черта(&ряд);
         let корзина = кнопка(overview::наш_значок("🗑️", "rgba(255,255,255,0.10)"), "Корзина", false, false);
-        корзина.connect_clicked(|_| дело_стола("запусти", json!({ "id": "trash", "вид": "приложение" })));
+        корзина.connect_clicked(|_| открой_корзину());
         по_правой(&корзина, |к, с| {
             меню(
                 vec![
-                    ("Открыть корзину".into(), Box::new(|| дело_стола("запусти", json!({ "id": "trash", "вид": "приложение" })))),
+                    ("Открыть корзину".into(), Box::new(открой_корзину)),
                     ("Очистить корзину".into(), Box::new(|| дело_стола("очисти-корзину", json!({})))),
                 ],
                 к,

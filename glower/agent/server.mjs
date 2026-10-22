@@ -45,7 +45,15 @@ const MIME = { html:'text/html', js:'text/javascript', css:'text/css', json:'app
   jpeg:'image/jpeg', webp:'image/webp', avif:'image/avif' };
 
 /* Программы системы, переписанные на Rust: id страницы → имя программы */
-const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files', settings:'glower-settings' };
+const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files', settings:'glower-settings', store:'glower-store' };
+
+/* Системная корзина. GLOWER_TRASH — для проверок: им незачем трогать
+   настоящую корзину машины */
+function корзина(){
+  const корень = process.env.GLOWER_TRASH
+    || join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'Trash');
+  return { files:join(корень, 'files'), info:join(корень, 'info') };
+}
 
 /* ---------- защита: наружу корня не выходим ---------- */
 function safe(parts){
@@ -191,6 +199,46 @@ const API = {
   },
   async 'fs.mkdir'({ path }){ await mkdir(safe(path), { recursive:true }); bump(); return { ok:true }; },
   async 'fs.remove'({ path }){ await rm(safe(path), { recursive:true, force:true }); bump(); return { ok:true }; },
+  /* Корзина — системная, по стандарту freedesktop: та же, что у
+     Проводника и у любой программы Linux. Удалённое со стола не пропадает
+     и не прячется в памяти страницы, а лежит в ~/.local/share/Trash,
+     откуда его видно и можно вернуть. */
+  async 'fs.trash'({ path }){
+    const p = safe(path);
+    const { files, info } = корзина();
+    await mkdir(files, { recursive:true }); await mkdir(info, { recursive:true });
+    const имя = p.split(sep).pop();
+    let куда = имя, n = 1;
+    while (existsSync(join(files, куда)) || existsSync(join(info, куда + '.trashinfo'))){
+      n++;
+      const т = имя.lastIndexOf('.');
+      куда = т > 0 ? `${имя.slice(0, т)} (${n})${имя.slice(т)}` : `${имя} (${n})`;
+    }
+    const когда = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+    await writeFile(join(info, куда + '.trashinfo'),
+      `[Trash Info]\nPath=${encodeURI(p).replace(/%2F/gi, '/')}\nDeletionDate=${когда}\n`);
+    try { await rename(p, join(files, куда)); }
+    catch(e){
+      /* Другой диск: переименованием не перенести — копируем и убираем */
+      if (e.code !== 'EXDEV') { await rm(join(info, куда + '.trashinfo'), { force:true }); throw e; }
+      const { cp } = await import('node:fs/promises');
+      await cp(p, join(files, куда), { recursive:true });
+      await rm(p, { recursive:true, force:true });
+    }
+    bump(); return { ok:true, 'имя':куда };
+  },
+  async 'fs.trash.count'(){
+    try { return { 'сколько':(await readdir(корзина().files)).length }; } catch(e){ return { 'сколько':0 }; }
+  },
+  async 'fs.trash.empty'(){
+    const { files, info } = корзина();
+    for (const д of [files, info]){
+      let список = [];
+      try { список = await readdir(д); } catch(e){}
+      for (const ф of список) await rm(join(д, ф), { recursive:true, force:true });
+    }
+    return { ok:true };
+  },
   async 'fs.rename'({ from, to }){ await rename(safe(from), safe(to)); bump(); return { ok:true }; },
   async 'fs.stat'({ path }){
     const st = await stat(safe(path));
@@ -209,20 +257,53 @@ const API = {
      открывает их настоящими окнами, а не своими. Путь к файлу — внутри
      рабочей папки, как у всех вызовов страницы. Какие из них есть на
      машине, страница спрашивает один раз: нет — открывает свои. */
+  /* Значок программы с Flathub — для нативного Магазина: у него самого
+     нет HTTPS. Берём простой адрес, а нет там — спрашиваем Flathub, где
+     лежит. Скачанное храним на диске: значок не меняется. */
+  async 'store.icon'({ ид }){
+    const id = String(ид || '');
+    if (!/^[A-Za-z0-9._-]{3,120}$/.test(id)) return { 'есть':false };
+    const папка = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'glower', 'магазин');
+    const файл = join(папка, id + '.png');
+    const отдай = б => ({ 'есть':true, 'данные':'data:image/png;base64,' + б.toString('base64') });
+    try { return отдай(await readFile(файл)); } catch(e){}
+    const возьми = async адрес => {
+      try {
+        const о = await fetch(адрес, { signal:AbortSignal.timeout(8000) });
+        return о.ok ? Buffer.from(await о.arrayBuffer()) : null;
+      } catch(e){ return null; }
+    };
+    let б = await возьми('https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/' + id + '.png');
+    if (!б){
+      try {
+        const о = await fetch('https://flathub.org/api/v2/appstream/' + encodeURIComponent(id),
+          { signal:AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : null);
+        const адрес = о && (о.icon || (Array.isArray(о.icons) && о.icons.length
+          ? (о.icons.find(x => x.height === 128) || о.icons[0]).url : ''));
+        if (адрес) б = await возьми(адрес);
+      } catch(e){}
+    }
+    if (!б) return { 'есть':false };
+    try { await mkdir(папка, { recursive:true }); await writeFile(файл, б); } catch(e){}
+    return отдай(б);
+  },
   async 'sys.native.list'(){
     if (!ALLOW_LAUNCH) return { list:[] };
     const каталоги = String(process.env.PATH || '').split(':').filter(Boolean);
     const есть = имя => каталоги.some(к => existsSync(join(к, имя)));
     return { list:Object.keys(НАТИВНЫЕ).filter(id => есть(НАТИВНЫЕ[id])) };
   },
-  async 'sys.native'({ программа, путь, раздел }){
+  async 'sys.native'({ программа, путь, раздел, найти }){
     if (!ALLOW_LAUNCH) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
     const имя = НАТИВНЫЕ[программа];
     if (!имя) throw new Error('нет такой программы: ' + программа);
     /* Параметрам — раздел, который открыть: только латиница, иначе это
        уже не раздел, а что-то подсунутое */
     const доводы = путь ? [safe(путь)]
+      : программа === 'files' && раздел === 'trash' ? ['--trash']
       : раздел && /^[a-z0-9]{1,20}$/.test(String(раздел)) ? [String(раздел)] : [];
+    /* Магазину — что искать: те же знаки, что пропускает сам поиск */
+    if (найти && /^[\w+.\- а-яё]{2,60}$/i.test(String(найти))) доводы.push('--find=' + String(найти));
     const { spawn } = await import('node:child_process');
     /* Агент поднимается раньше оконного сервера — окружение экрана берём
        у системного слоя, иначе окно не увидит экрана */

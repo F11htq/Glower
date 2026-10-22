@@ -46,7 +46,9 @@ addEventListener('mousemove', e => {
 const rmOrig = FS.rm.bind(FS);
 FS.rm = function(path, name, permanent){
   const d = this.node(path), it = d && d.children[name];
-  if (it && !permanent){
+  /* На машине удалённое уходит в системную корзину (см. platform.js), и
+     держать вторую копию в памяти страницы незачем */
+  if (it && !permanent && !(window.Platform && Platform.mode === 'native')){
     const t = KV.get('trash', []);
     t.unshift({ name, path:path.slice(), node:JSON.parse(JSON.stringify(it)), ts:Date.now() });
     KV.set('trash', t.slice(0, 50));

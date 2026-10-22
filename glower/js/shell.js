@@ -843,6 +843,7 @@ const Shell = {
       case 'закрой-все': WM.wins.filter(w => w.appId === п.id).forEach(w => WM.close(w)); break;
       case 'очисти-корзину':
         KV.set('trash', []); this.renderIcons();
+        if (window.Platform && Platform.mode === 'native') Platform.rpc('fs.trash.empty').catch(() => {});
         break;
       case 'удали': if (машина && window.OS && OS.удалиПрограмму) OS.удалиПрограмму({ id:п.id, name:п['имя'] }); break;
     }
