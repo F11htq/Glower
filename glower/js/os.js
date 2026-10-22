@@ -1076,12 +1076,18 @@ async function wireNativeSystemApps(){
     (async () => {
       if (путь) await Platform.rpc('fs.stat', { path:путь });
       /* Калькулятор, как и прежний, — одним окном: открыт — переходим к нему */
-      if (id === 'calc'){
+      /* Калькулятор и Параметры, как и прежние, — одним окном: открыт —
+         переходим к нему, а Параметрам ещё и говорим, какой раздел нужен */
+      if (id === 'calc' || id === 'settings'){
         const окна = ((await Platform.rpc('sys.windows').catch(() => ({}))).list || []);
-        const уже = окна.find(o => o.appId === 'glower-calc');
-        if (уже) return Platform.rpc('sys.window', { action:'focus', appId:уже.appId, title:уже.title });
+        const уже = окна.find(o => o.appId === 'glower-' + id);
+        if (уже){
+          if (id === 'settings' && opts && opts.section) Поверхности.скажи('параметры-раздел', opts.section);
+          return Platform.rpc('sys.window', { action:'focus', appId:уже.appId, title:уже.title });
+        }
       }
-      await Platform.rpc('sys.native', { 'программа':id, 'путь':путь || undefined });
+      await Platform.rpc('sys.native', { 'программа':id, 'путь':путь || undefined,
+        'раздел':id === 'settings' && opts && opts.section || undefined });
     })().catch(() => прежнее(id, opts));
     return null;
   };

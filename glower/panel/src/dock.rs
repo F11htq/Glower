@@ -246,10 +246,11 @@ fn обнови_видимость() {
 /// Программы системы на Rust: имя окна → программа страницы и её знак.
 /// Их окна — настоящие, но для человека это тот же Блокнот, что закреплён
 /// в доке: точка под его значком, а не ещё одно безликое окно рядом.
-const РОДНЫЕ: [(&str, &str, &str, &str); 3] = [
+const РОДНЫЕ: [(&str, &str, &str, &str); 4] = [
     ("glower-notepad", "notepad", "📝", "linear-gradient(140deg,#7dd3fc,#3b82f6)"),
     ("glower-calc", "calc", "🧮", "linear-gradient(140deg,#a5b4fc,#6366f1)"),
     ("glower-files", "files", "📁", "linear-gradient(140deg,#fcd34d,#f59e0b)"),
+    ("glower-settings", "settings", "⚙️", "linear-gradient(140deg,#94a3b8,#334155)"),
 ];
 
 fn родное(app_id: &str) -> Option<(&'static str, &'static str, &'static str)> {

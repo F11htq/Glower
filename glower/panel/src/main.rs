@@ -27,6 +27,7 @@ mod menus;
 mod notepad;
 mod overview;
 mod popup;
+mod settings;
 mod tray;
 
 use agent::{скажи, слушай};
@@ -267,6 +268,9 @@ fn main() {
     }
     if имя == "glower-calc" {
         calc::запусти();
+    }
+    if имя == "glower-settings" {
+        settings::запусти(std::env::args().skip(1).collect());
     }
     if имя == "glower-files" {
         explorer::запусти(std::env::args().skip(1).collect());

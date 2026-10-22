@@ -45,7 +45,7 @@ const MIME = { html:'text/html', js:'text/javascript', css:'text/css', json:'app
   jpeg:'image/jpeg', webp:'image/webp', avif:'image/avif' };
 
 /* Программы системы, переписанные на Rust: id страницы → имя программы */
-const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files' };
+const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files', settings:'glower-settings' };
 
 /* ---------- защита: наружу корня не выходим ---------- */
 function safe(parts){
@@ -215,11 +215,14 @@ const API = {
     const есть = имя => каталоги.some(к => existsSync(join(к, имя)));
     return { list:Object.keys(НАТИВНЫЕ).filter(id => есть(НАТИВНЫЕ[id])) };
   },
-  async 'sys.native'({ программа, путь }){
+  async 'sys.native'({ программа, путь, раздел }){
     if (!ALLOW_LAUNCH) throw new Error('запуск программ выключен: запустите агент с ключом --allow-launch');
     const имя = НАТИВНЫЕ[программа];
     if (!имя) throw new Error('нет такой программы: ' + программа);
-    const доводы = путь ? [safe(путь)] : [];
+    /* Параметрам — раздел, который открыть: только латиница, иначе это
+       уже не раздел, а что-то подсунутое */
+    const доводы = путь ? [safe(путь)]
+      : раздел && /^[a-z0-9]{1,20}$/.test(String(раздел)) ? [String(раздел)] : [];
     const { spawn } = await import('node:child_process');
     /* Агент поднимается раньше оконного сервера — окружение экрана берём
        у системного слоя, иначе окно не увидит экрана */

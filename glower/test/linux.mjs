@@ -1512,9 +1512,20 @@ try {
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
             && /id === 'files' && opts && Array\.isArray\(opts\.path\)/.test(ос2)
             && /"glower-files", "files"/.test(док_) && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
-        check('Блокнот, Калькулятор и Проводник попадают в образ и пакет',
+        const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+        const мост = await readFile(join(root, 'js', 'параметры.js'), 'utf8');
+        check('Параметры на Rust: все двадцать разделов, системное — у агента, оболочечное — через страницу',
+          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 20
+            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware']
+                 .every(м => параметры.includes('"' + м + '"'))
+            && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
+            && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
+            && /'параметры-раздел'/.test(ос2) && /"glower-settings", "settings"/.test(док_)
+            && /Поверхности\.слушай\(\['параметры-дело'\]/.test(мост) && /js\/параметры\.js/.test(await readFile(join(root, 'index.html'), 'utf8')));
+        check('Блокнот, Калькулятор, Проводник и Параметры попадают в образ и пакет',
           /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-notepad"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-calc"/.test(образ2)
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-files"/.test(образ2)
+            && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-settings"/.test(образ2) && пакет.includes('usr/bin/glower-settings')
             && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc') && пакет.includes('usr/bin/glower-files'));
       }
       check('Win при нативном меню не поднимает стол поверх программ',
@@ -2280,7 +2291,7 @@ try {
       let нетФайла = false;
       Platform.rpc = async (м, п) => {
         вызовы.push([м, п]);
-        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files'] };
+        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files', 'settings'] };
         if (м === 'fs.stat' && нетФайла) throw new Error('нет');
         if (м === 'sys.windows') return { list:[{ appId:'glower-calc', title:'Калькулятор' }] };
         return {};
@@ -2296,6 +2307,10 @@ try {
         WM.open('files', { path:['Документы', 'Отчёты'] });
         await ждём();
         итог.папка = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
+        вызовы.length = 0;
+        WM.open('settings', { section:'net' });
+        await ждём();
+        итог.параметры = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
         вызовы.length = 0;
         итог.сеанс = WM.open('notepad', { x:1, y:1, w:300, h:200, 'восстановление':true });
         await ждём();
@@ -2321,9 +2336,31 @@ try {
     check('папка открывается нативным Проводником, с путём папки',
       r.папка && r.папка['программа'] === 'files' && JSON.stringify(r.папка['путь']) === JSON.stringify(['Документы', 'Отчёты']),
       JSON.stringify(r));
+    check('Параметры открываются нативными, сразу на нужном разделе',
+      r.параметры && r.параметры['программа'] === 'settings' && r.параметры['раздел'] === 'net', JSON.stringify(r));
     check('восстановление сеанса нативных не запускает', r.сеанс === null && r.сеансЗвал === 0, JSON.stringify(r));
     check('Калькулятор один: открыт — переходим к нему', r.калк.includes('sys.window:focus') && !r.калк.includes('sys.native'), JSON.stringify(r));
     check('не вышло нативно — открывается своё окно, как раньше', r.запасной, JSON.stringify(r));
+  }
+
+  /* Мост нативных Параметров: страница рассказывает и слушается */
+  {
+    const r = await page.evaluate(async () => {
+      const с = МостПараметров.состояние();
+      const было = S.wctl;
+      await МостПараметров.дело({ 'что':'set', k:'wctl', v:'mac' });
+      const стало = S.wctl;
+      await МостПараметров.дело({ 'что':'set', k:'wctl', v:было });
+      const вДоке = S.dockApps.includes('calc');
+      await МостПараметров.дело({ 'что':'список', k:'dockApps', id:'calc' });
+      const переключилось = S.dockApps.includes('calc') !== вДоке;
+      await МостПараметров.дело({ 'что':'список', k:'dockApps', id:'calc' });
+      return { обоев:с['обои'].length, акцентов:с['акценты'].length, программ:с['программы'].length,
+               раскладок:с['все_раскладки'].length, стало, переключилось, вернулось:S.dockApps.includes('calc') === вДоке };
+    });
+    check('страница рассказывает Параметрам обои, акценты, программы и раскладки',
+      r.обоев > 10 && r.акцентов === 10 && r.программ > 10 && r.раскладок > 5, JSON.stringify(r));
+    check('просьбы Параметров меняют настройки оболочки', r.стало === 'mac' && r.переключилось && r.вернулось, JSON.stringify(r));
   }
 
   check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));
