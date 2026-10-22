@@ -45,7 +45,7 @@ const MIME = { html:'text/html', js:'text/javascript', css:'text/css', json:'app
   jpeg:'image/jpeg', webp:'image/webp', avif:'image/avif' };
 
 /* Программы системы, переписанные на Rust: id страницы → имя программы */
-const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc' };
+const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files' };
 
 /* ---------- защита: наружу корня не выходим ---------- */
 function safe(parts){
@@ -223,7 +223,7 @@ const API = {
     const { spawn } = await import('node:child_process');
     /* Агент поднимается раньше оконного сервера — окружение экрана берём
        у системного слоя, иначе окно не увидит экрана */
-    const env = SYSTEM ? await (await import('./system.mjs')).средаЭкрана() : process.env;
+    const env = { ...(SYSTEM ? await (await import('./system.mjs')).средаЭкрана() : process.env), GLOWER_ROOT:ROOT };
     await new Promise((готово, беда) => {
       const п = spawn(имя, доводы, { detached:true, stdio:'ignore', env });
       п.once('error', беда);

@@ -651,7 +651,7 @@ pub fn запусти(файлы: Vec<String>) -> ! {
 }
 
 /// Латинская буква физической клавиши — для сочетаний при любой раскладке.
-fn латинская(е: &gtk::gdk::EventKey) -> String {
+pub(crate) fn латинская(е: &gtk::gdk::EventKey) -> String {
     let карта = gtk::gdk::Keymap::for_display(&gtk::gdk::Display::default().expect("экран"));
     if let Some(карта) = карта {
         for (место, значение) in карта.entries_for_keycode(е.hardware_keycode() as u32) {

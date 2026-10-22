@@ -20,6 +20,7 @@ mod apps;
 mod calc;
 mod desktop;
 mod dock;
+mod explorer;
 mod icons;
 mod lock;
 mod menus;
@@ -266,6 +267,9 @@ fn main() {
     }
     if имя == "glower-calc" {
         calc::запусти();
+    }
+    if имя == "glower-files" {
+        explorer::запусти(std::env::args().skip(1).collect());
     }
     if gtk::init().is_err() {
         eprintln!("glower-panel: нет экрана — панель показывать негде");

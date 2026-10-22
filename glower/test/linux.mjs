@@ -1504,9 +1504,18 @@ try {
             && /opts\['восстановление'\]\) return null/.test(ос2));
         check('в доке окна родных программ — точкой под их значком, не чужим',
           /"glower-notepad", "notepad"/.test(док_) && /"glower-calc", "calc"/.test(док_) && /родные_для/.test(док_));
-        check('Блокнот и Калькулятор попадают в образ и пакет',
+        const проводник = await readFile(join(root, 'panel', 'src', 'explorer.rs'), 'utf8');
+        check('Проводник на Rust: вкладки, сетка и таблица, корзина системы, флешки сбоку',
+          /имя == "glower-files"/.test(главная) && /gtk::IconView/.test(проводник) && /gtk::TreeView/.test(проводник)
+            && /Место::Корзина/.test(проводник) && /\.trash\(/.test(проводник) && /VolumeMonitor/.test(проводник)
+            && /monitor_directory/.test(проводник) && /text\/uri-list/.test(проводник) && /GLOWER_ROOT/.test(проводник)
+            && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
+            && /id === 'files' && opts && Array\.isArray\(opts\.path\)/.test(ос2)
+            && /"glower-files", "files"/.test(док_) && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
+        check('Блокнот, Калькулятор и Проводник попадают в образ и пакет',
           /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-notepad"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-calc"/.test(образ2)
-            && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc'));
+            && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-files"/.test(образ2)
+            && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc') && пакет.includes('usr/bin/glower-files'));
       }
       check('Win при нативном меню не поднимает стол поверх программ',
         /"тема":"обзор-свой"/.test(меню3) && /\*'"что":true'\*\) ;;/.test(меню3));
@@ -2271,7 +2280,7 @@ try {
       let нетФайла = false;
       Platform.rpc = async (м, п) => {
         вызовы.push([м, п]);
-        if (м === 'sys.native.list') return { list:['notepad', 'calc'] };
+        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files'] };
         if (м === 'fs.stat' && нетФайла) throw new Error('нет');
         if (м === 'sys.windows') return { list:[{ appId:'glower-calc', title:'Калькулятор' }] };
         return {};
@@ -2283,6 +2292,10 @@ try {
         итог.файл = WM.open('notepad', { file:{ path:['Документы'], name:'а.txt' } });
         await ждём();
         итог.путь = (вызовы.find(в => в[0] === 'sys.native') || [])[1];
+        вызовы.length = 0;
+        WM.open('files', { path:['Документы', 'Отчёты'] });
+        await ждём();
+        итог.папка = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
         вызовы.length = 0;
         итог.сеанс = WM.open('notepad', { x:1, y:1, w:300, h:200, 'восстановление':true });
         await ждём();
@@ -2304,6 +2317,9 @@ try {
     });
     check('Блокнот открывает файл нативным окном, с путём файла',
       r.файл === null && r.путь && r.путь['программа'] === 'notepad' && JSON.stringify(r.путь['путь']) === JSON.stringify(['Документы', 'а.txt']),
+      JSON.stringify(r));
+    check('папка открывается нативным Проводником, с путём папки',
+      r.папка && r.папка['программа'] === 'files' && JSON.stringify(r.папка['путь']) === JSON.stringify(['Документы', 'Отчёты']),
       JSON.stringify(r));
     check('восстановление сеанса нативных не запускает', r.сеанс === null && r.сеансЗвал === 0, JSON.stringify(r));
     check('Калькулятор один: открыт — переходим к нему', r.калк.includes('sys.window:focus') && !r.калк.includes('sys.native'), JSON.stringify(r));

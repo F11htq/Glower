@@ -1071,7 +1071,8 @@ async function wireNativeSystemApps(){
     const файл = opts && opts.file;
     /* Файл, которого нет на диске (его содержимое пришло прямо в просьбе),
        нативному Блокноту не передать — такой открываем у себя */
-    const путь = файл && Array.isArray(файл.path) && файл.name ? [...файл.path, файл.name] : null;
+    const путь = файл && Array.isArray(файл.path) && файл.name ? [...файл.path, файл.name]
+      : id === 'files' && opts && Array.isArray(opts.path) ? opts.path : null;
     (async () => {
       if (путь) await Platform.rpc('fs.stat', { path:путь });
       /* Калькулятор, как и прежний, — одним окном: открыт — переходим к нему */
