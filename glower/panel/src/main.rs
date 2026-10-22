@@ -40,6 +40,8 @@ use gtk::prelude::*;
 use gtk_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use icons::{Вид, Заряд, Значок};
 use serde_json::{json, Value};
+use std::cell::Cell;
+use std::rc::Rc;
 use std::time::Duration;
 
 /// Высота полосы — та же, что у страничной (--полоса-высота).
@@ -335,6 +337,45 @@ fn main() {
     окно.set_exclusive_zone(ВЫСОТА);
     // Клавиатура полосе не нужна: печатать в ней негде
     окно.set_keyboard_mode(KeyboardMode::None);
+
+    // Пока на столе нет окон, полоса прозрачна и обои видны целиком. Открыли
+    // программу — полоса темнеет, как строка меню в macOS: текст над окном
+    // читается, а не теряется в чужих цветах
+    let темнота = Rc::new(Cell::new(0.0f64));
+    {
+        let темнота = темнота.clone();
+        окно.connect_draw(move |_, к| {
+            к.set_operator(gtk::cairo::Operator::Source);
+            к.set_source_rgba(0.055, 0.063, 0.086, 0.94 * темнота.get());
+            let _ = к.paint();
+            glib::Propagation::Proceed
+        });
+    }
+    {
+        // Одни часы на всё: окна могут прийти и уйти быстрее, чем полоса
+        // дотемнеет, — тогда она просто поворачивает к новой цели
+        let (окно2, темнота) = (окно.clone(), темнота.clone());
+        let цель = Rc::new(Cell::new(0.0f64));
+        let идёт = Rc::new(Cell::new(false));
+        dock::следи_за_окнами(move |есть| {
+            цель.set(if есть { 1.0 } else { 0.0 });
+            if идёт.replace(true) {
+                return;
+            }
+            let (окно3, темнота2, цель2, идёт2) = (окно2.clone(), темнота.clone(), цель.clone(), идёт.clone());
+            glib::timeout_add_local(Duration::from_millis(16), move || {
+                let было = темнота2.get();
+                темнота2.set(было + (цель2.get() - было).clamp(-0.08, 0.08));
+                окно3.queue_draw();
+                if (цель2.get() - темнота2.get()).abs() < 1e-3 {
+                    идёт2.set(false);
+                    glib::ControlFlow::Break
+                } else {
+                    glib::ControlFlow::Continue
+                }
+            });
+        });
+    }
 
     let полоса = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     полоса.style_context().add_class("bar-box");

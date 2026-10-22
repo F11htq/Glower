@@ -1561,6 +1561,10 @@ try {
             && /taskmgr:'glower-taskmgr', photos:'glower-photos', snip:'glower-snip'/.test(агент2)
             && /exec glower-snip "\$MODE"/.test(снимок) && /"glower-photos"\)\.arg/.test(проводник)
             && /"glower-taskmgr", "taskmgr"/.test(док_) && /"glower-snip", "snip"/.test(док_));
+        const меню_ = await readFile(join(root, 'panel', 'src', 'menus.rs'), 'utf8');
+        check('верхняя полоса темнеет, пока открыто окно; питание предупреждает стол',
+          /следи_за_окнами/.test(главная) && /fn следи_за_окнами/.test(док_) && /set_source_rgba\(0\.055, 0\.063, 0\.086/.test(главная)
+            && /скажи\("питание", json!\(id\)\)/.test(меню_));
         check('нативные программы системы попадают в образ и пакет',
           /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-notepad"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-calc"/.test(образ2)
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-files"/.test(образ2)
@@ -2423,6 +2427,23 @@ try {
     check('удалённое со стола ложится в системную корзину и очищается оттуда',
       r.сколько === 1 && r.вПамяти === 0 && r.после === 0, JSON.stringify(r));
     check('сам файл с диска ушёл', !existsSync(join(WS, 'Документы', 'в-корзину.txt')), (await rd(join(WS, 'Документы')).catch(() => [])).join(','));
+  }
+
+  /* Перезагрузка — с чистого листа: окна после неё сами не открываются */
+  {
+    const r = await page.evaluate(async () => {
+      const было = KV.get(Session.KEY, []);
+      KV.set(Session.KEY, [{ app:'calc', x:1, y:1, w:300, h:300 }]);
+      await Поверхности.скажи('питание', 'reboot');
+      await new Promise(r2 => setTimeout(r2, 2500));
+      const после = KV.get(Session.KEY, []).length;
+      Session.save('проверка');
+      const иСнова = KV.get(Session.KEY, []).length;
+      Session.уходим = false; KV.set(Session.KEY, было);
+      return { после, иСнова };
+    });
+    check('перед перезагрузкой стол забывает окна и больше их не записывает',
+      r.после === 0 && r.иСнова === 0, JSON.stringify(r));
   }
 
   /* Мост нативных Параметров: страница рассказывает и слушается */

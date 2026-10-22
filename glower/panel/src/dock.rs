@@ -40,6 +40,13 @@ struct Док {
 
 thread_local! {
     static ДОК: RefCell<Option<Док>> = const { RefCell::new(None) };
+    /// Кому сказать, что окна появились или ушли (верхней полосе)
+    static О_ОКНАХ: RefCell<Option<(bool, Box<dyn Fn(bool)>)>> = const { RefCell::new(None) };
+}
+
+/// Открыты ли окна: полоса сверху темнеет, пока на столе есть программа
+pub fn следи_за_окнами(дело: impl Fn(bool) + 'static) {
+    О_ОКНАХ.with(|о| *о.borrow_mut() = Some((false, Box::new(дело))));
 }
 
 fn с_доком<R>(дело: impl FnOnce(&mut Док) -> R) -> Option<R> {
@@ -230,6 +237,15 @@ fn обнови_видимость() {
         let чужих = д.чужие.iter().any(|w| w["состояние"]["свёрнуто"].as_bool() != Some(true));
         let можно = !д.занят && !д.вовесь;
         let видно = можно && (!(своих || чужих) || д.у_курсора || д.меню_открыто);
+        let есть = своих || чужих;
+        О_ОКНАХ.with(|о| {
+            if let Some((было, дело)) = о.borrow_mut().as_mut() {
+                if *было != есть {
+                    *было = есть;
+                    дело(есть);
+                }
+            }
+        });
         (д.окно.clone(), д.полоска.clone(), видно, можно && !видно)
     }) else {
         return;

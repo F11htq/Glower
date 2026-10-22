@@ -551,7 +551,16 @@ fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static s
         _ => "Завершение работы…",
     });
     let к = кнопка.clone();
-    позови("sys.power", json!({ "action": id }), move |о| {
+    // Перезагрузка и выключение — с чистого листа: стол забывает окна,
+    // чтобы после включения ничего не открылось само. Ему хватает
+    // полсекунды
+    let задержка = if matches!(id, "reboot" | "poweroff") {
+        скажи("питание", json!(id));
+        500
+    } else {
+        0
+    };
+    glib::timeout_add_local_once(Duration::from_millis(задержка), move || позови("sys.power", json!({ "action": id }), move |о| {
         // Сон кончится, и человек должен увидеть стол, а не занавес
         if id == "suspend" {
             glib::timeout_add_local_once(Duration::from_secs(2), move || unsafe { з.destroy() });
@@ -569,7 +578,7 @@ fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static s
                 popup::тихо(м, &е);
             });
         }
-    });
+    }));
 }
 
 /// Чёрный экран с надписью — поверх всего, вместе с самой полосой.

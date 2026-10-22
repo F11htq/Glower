@@ -244,6 +244,7 @@ function wirePower(){
        выбрал именно это, а выключить без обновления можно и обычным
        пунктом рядом. */
     if (act === 'update-reboot' || act === 'update-poweroff'){
+      Session.забудь();
       const ov = $('#power-overlay'); if (ov) ov.classList.remove('on');
       return OS.обновиИ(act === 'update-reboot' ? 'reboot' : 'poweroff');
     }
@@ -260,6 +261,7 @@ function wirePower(){
     const хвост = act === 'logout' ? '' : ' Это действие затронет всю машину, а не только оболочку.';
     if (!await Dlg.confirm(m[1], m[2] + хвост,
         { icon:act === 'logout' ? '🚪' : '⏻', okText:m[1], danger:true })) return;
+    if (act === 'shutdown' || act === 'restart') Session.забудь();
 
     /* Экран гаснет сразу, как в настоящей системе. Но если машина откажется
        выключаться, занавес надо убрать и сказать почему — иначе человек
