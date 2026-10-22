@@ -1549,11 +1549,24 @@ try {
           /'fs\.trash'/.test(агент2) && /'fs\.trash\.empty'/.test(агент2) && /GLOWER_TRASH/.test(агент2)
             && /permanent \? 'fs\.remove' : 'fs\.trash'/.test(await readFile(join(root, 'js', 'platform.js'), 'utf8'))
             && /"--trash"/.test(проводник) && /fn открой_корзину/.test(док_) && /id === 'trash' && есть\.includes\('files'\)/.test(ос2));
-        check('Блокнот, Калькулятор, Проводник, Параметры и Магазин попадают в образ и пакет',
+        const диспетчер = await readFile(join(root, 'panel', 'src', 'taskmgr.rs'), 'utf8');
+        const фото = await readFile(join(root, 'panel', 'src', 'photos.rs'), 'utf8');
+        const ножницы = await readFile(join(root, 'panel', 'src', 'snip.rs'), 'utf8');
+        const снимок = await readFile(join(root, 'linux', 'glower-shot'), 'utf8');
+        check('Диспетчер задач, Фото и Ножницы на Rust',
+          /имя == "glower-taskmgr"/.test(главная) && /имя == "glower-photos"/.test(главная) && /имя == "glower-snip"/.test(главная)
+            && /\/proc/.test(диспетчер) && /fn kill/.test(диспетчер) && /СИСТЕМНОЕ/.test(диспетчер)
+            && /apply_embedded_orientation/.test(фото) && /\.trash\(/.test(фото) && /"wallpaper"/.test(фото)
+            && /"grim"/.test(ножницы) && /wl-copy/.test(ножницы) && /Layer::Overlay/.test(ножницы) && /Замазать/.test(ножницы)
+            && /taskmgr:'glower-taskmgr', photos:'glower-photos', snip:'glower-snip'/.test(агент2)
+            && /exec glower-snip "\$MODE"/.test(снимок) && /"glower-photos"\)\.arg/.test(проводник)
+            && /"glower-taskmgr", "taskmgr"/.test(док_) && /"glower-snip", "snip"/.test(док_));
+        check('нативные программы системы попадают в образ и пакет',
           /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-notepad"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-calc"/.test(образ2)
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-files"/.test(образ2)
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-settings"/.test(образ2) && пакет.includes('usr/bin/glower-settings')
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-store"/.test(образ2) && пакет.includes('usr/bin/glower-store')
+            && /for prog in glower-taskmgr glower-photos glower-snip/.test(образ2) && пакет.includes('usr/bin/glower-snip')
             && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc') && пакет.includes('usr/bin/glower-files'));
       }
       check('Win при нативном меню не поднимает стол поверх программ',
@@ -2317,9 +2330,13 @@ try {
       const было = { rpc: Platform.rpc, open: WM.open, нат: OS.нативные };
       const вызовы = [];
       let нетФайла = false;
-      Platform.rpc = async (м, п) => {
+      /* Подменяем только то, о чём спрашивает переходник; остальное —
+         опрос панелей и открытых окон — идёт к настоящему агенту */
+      const НАШИ = ['sys.native.list', 'sys.native', 'fs.stat', 'sys.windows', 'sys.window'];
+      Platform.rpc = async (м, п, ...ещё) => {
+        if (!НАШИ.includes(м)) return было.rpc(м, п, ...ещё);
         вызовы.push([м, п]);
-        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files', 'settings', 'store'] };
+        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files', 'settings', 'store', 'photos', 'taskmgr', 'snip'] };
         if (м === 'fs.stat' && нетФайла) throw new Error('нет');
         if (м === 'sys.windows') return { list:[{ appId:'glower-calc', title:'Калькулятор' }] };
         return {};
@@ -2343,6 +2360,9 @@ try {
         WM.open('store', { 'вкладка':'обновления' });
         await ждём();
         итог.магазин = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
+        WM.open('photos', { file:{ path:['Изображения'], name:'кот.png' } });
+        await ждём();
+        итог.фото = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
         WM.open('trash');
         await ждём();
         итог.корзина = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
@@ -2375,6 +2395,8 @@ try {
       r.параметры && r.параметры['программа'] === 'settings' && r.параметры['раздел'] === 'net', JSON.stringify(r));
     check('Магазин открывается нативным, сразу на нужной вкладке',
       r.магазин && r.магазин['программа'] === 'store' && r.магазин['раздел'] === 'updates', JSON.stringify(r));
+    check('картинки открываются нативными Фото',
+      r.фото && r.фото['программа'] === 'photos' && JSON.stringify(r.фото['путь']) === JSON.stringify(['Изображения', 'кот.png']), JSON.stringify(r));
     check('корзину на машине показывает Проводник',
       r.корзина && r.корзина['программа'] === 'files' && r.корзина['раздел'] === 'trash', JSON.stringify(r));
     check('восстановление сеанса нативных не запускает', r.сеанс === null && r.сеансЗвал === 0, JSON.stringify(r));

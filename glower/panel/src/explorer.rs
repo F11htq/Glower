@@ -771,8 +771,12 @@ fn открой(п: &П, з: &Запись, в_новой: bool) {
         return;
     }
     let тип = угадай_тип(&з.путь.to_string_lossy());
-    // Текст — своим Блокнотом, остальное — тем, что назначено в системе
+    // Текст — своим Блокнотом, картинки — своими Фото, остальное — тем,
+    // что назначено в системе
     if gio::content_type_is_a(&тип, "text/plain") && std::process::Command::new("glower-notepad").arg(&з.путь).spawn().is_ok() {
+        return;
+    }
+    if тип.starts_with("image/") && std::process::Command::new("glower-photos").arg(&з.путь).spawn().is_ok() {
         return;
     }
     let uri = gio::File::for_path(&з.путь).uri();

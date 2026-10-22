@@ -29,6 +29,9 @@ mod overview;
 mod popup;
 mod settings;
 mod store;
+mod snip;
+mod taskmgr;
+mod photos;
 mod tray;
 
 use agent::{скажи, слушай};
@@ -269,6 +272,15 @@ fn main() {
     }
     if имя == "glower-calc" {
         calc::запусти();
+    }
+    if имя == "glower-taskmgr" {
+        taskmgr::запусти();
+    }
+    if имя == "glower-photos" {
+        photos::запусти(std::env::args().skip(1).collect());
+    }
+    if имя == "glower-snip" {
+        snip::запусти(std::env::args().skip(1).collect());
     }
     if имя == "glower-store" {
         store::запусти(std::env::args().skip(1).collect());

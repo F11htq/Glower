@@ -45,7 +45,8 @@ const MIME = { html:'text/html', js:'text/javascript', css:'text/css', json:'app
   jpeg:'image/jpeg', webp:'image/webp', avif:'image/avif' };
 
 /* Программы системы, переписанные на Rust: id страницы → имя программы */
-const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files', settings:'glower-settings', store:'glower-store' };
+const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'glower-files', settings:'glower-settings', store:'glower-store',
+  taskmgr:'glower-taskmgr', photos:'glower-photos', snip:'glower-snip' };
 
 /* Системная корзина. GLOWER_TRASH — для проверок: им незачем трогать
    настоящую корзину машины */

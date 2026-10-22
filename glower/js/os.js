@@ -1087,7 +1087,7 @@ async function wireNativeSystemApps(){
       const вкладка = id === 'store' && opts
         ? ({ 'обновления':'updates', 'установленные':'installed' })[opts['вкладка']] : undefined;
       const найти = id === 'store' && opts && opts['найти'] ? String(opts['найти']) : undefined;
-      if (id === 'calc' || id === 'settings' || id === 'store'){
+      if (['calc', 'settings', 'store', 'taskmgr', 'snip'].includes(id)){
         const окна = ((await Platform.rpc('sys.windows').catch(() => ({}))).list || []);
         const уже = окна.find(o => o.appId === 'glower-' + id);
         if (уже){

@@ -17,6 +17,11 @@ case "$MODE" in
   *) echo "как звать: glower-shot [область|экран]" >&2; exit 2 ;;
 esac
 
+# Свои Ножницы снимают сами — без оболочки и без шины
+if command -v glower-snip >/dev/null 2>&1; then
+  exec glower-snip "$MODE"
+fi
+
 PORT="${GLOWER_PORT:-8123}"
 URL="http://127.0.0.1:$PORT/rpc"
 

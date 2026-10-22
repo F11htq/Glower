@@ -406,6 +406,7 @@ if [ -x "$PANEL_BIN" ]; then
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-files"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-settings"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-store"
+  for prog in glower-taskmgr glower-photos glower-snip; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
   echo "  панель: нативная, $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "  панель: нативной нет — будет страничная"
