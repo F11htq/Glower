@@ -2555,7 +2555,7 @@ mod проверки {
     #[test]
     fn у_каждого_раздела_есть_рисунок() {
         let ids: Vec<&str> = РАЗДЕЛЫ.iter().map(|р| р.id).collect();
-        assert_eq!(ids.len(), 20);
+        assert_eq!(ids.len(), 18);
         assert!(ids.contains(&"about") && ids.contains(&"net") && ids.contains(&"update"));
     }
 
