@@ -1,15 +1,17 @@
 #!/bin/sh
 # ==========================================================================
-#  Сеанс GlowerOS: агент + оболочка в режиме киоска.
+#  Сеанс GlowerOS: агент, оконный сервер labwc и панель.
 #
-#  Пробует по очереди, пока что-нибудь не заработает:
-#    1) labwc — настоящий оконный сервер: чужие окна живут рядом с оболочкой;
-#    2) cage, киоск на одно окно — если labwc на этой машине не пошёл;
-#    3) X-сервер с ускорением;
-#    4) X-сервер на программной отрисовке — виртуалки и старое железо.
-#  Отказ одного способа не хоронит сеанс: он просто берётся за следующий.
-#  Если не вышло ничего — на экране остаётся понятное объяснение,
-#  а не мигающий курсор.
+#  Весь рабочий стол — одна своя программа, glower-panel: стол с обоями и
+#  значками, полоса наверху, док, меню, уведомления. Браузерного движка в
+#  сеансе нет вовсе.
+#
+#  labwc поднимается одним из двух способов:
+#    1) прямо на видеокарте — обычный путь;
+#    2) внутри X-сервера с программной отрисовкой — для старых машин, где
+#       ядро не берёт на себя видеокарту и узла /dev/dri нет.
+#  Если не вышло ничего — на экране остаётся понятное объяснение, а не
+#  мигающий курсор.
 # ==========================================================================
 set -e
 
@@ -96,28 +98,6 @@ say(){
   [ -n "${GLOWER_DEBUG:-}" ] && printf '%s\n' "$1"
   printf '%s\n' "$1" >> "$LOG" 2>/dev/null || true
 }
-
-# Оболочку показывает своя программа на WebKit. Сборка Chromium нужна лишь
-# как запасной способ на машинах, где WebKit недоступен, и встроенной
-# смотрелке страниц. Требовать её всегда нельзя: в образе её нет, и сеанс
-# из-за этого не поднимался вовсе.
-BROWSER="${GLOWER_BROWSER:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}"
-
-# Браузер норовит показать поверх оболочки свои предложения — например,
-# «перевести страницу». Ключа мало: часть таких подсказок читается из
-# настроек профиля, поэтому заводим профиль сразу с выключенным переводом.
-PROFILE="$HOME/.local/share/glower/browser"
-if [ -n "$BROWSER" ] && [ ! -f "$PROFILE/Default/Preferences" ]; then
-  mkdir -p "$PROFILE/Default"
-  cat > "$PROFILE/Default/Preferences" <<'PREFS'
-{"translate":{"enabled":false},
- "translate_site_blacklist":[],
- "profile":{"default_content_setting_values":{"notifications":2}},
- "bookmark_bar":{"show_on_all_tabs":false},
- "credentials_enable_service":false,
- "credentials_enable_autosignin":false}
-PREFS
-fi
 
 # --- хранилище паролей ---
 # Если вход не отпер его сам (живой носитель, где пароля ни у кого нет),
@@ -218,10 +198,8 @@ application/x-ms-shortcut=glower-exe.desktop'
   say "GlowerOS: программы Windows открываются через glower-exe"
 fi
 
-# --- агент: мост между оболочкой и машиной ---
-# GLOWER_BROWSER передаём и агенту: тем же движком он рисует страницы
-# во встроенном браузере системы.
-GLOWER_BROWSER="$BROWSER" node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS >>"$LOG" 2>&1 &
+# --- агент: мост между панелью и машиной ---
+node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS >>"$LOG" 2>&1 &
 AGENT=$!
 trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
 
@@ -231,53 +209,42 @@ while [ $i -lt 50 ]; do
   i=$((i+1)); sleep 0.2
 done
 
-# Пункт меню «Установить GlowerOS» передаёт ядру glower.install=1 —
-# оболочка по этому признаку открывает мастер установки сразу.
-QUERY_EXTRA=""
-grep -q 'glower.install=1' /proc/cmdline 2>/dev/null && QUERY_EXTRA="&install=1"
-grep -q 'glower.repair=1' /proc/cmdline 2>/dev/null && QUERY_EXTRA="$QUERY_EXTRA&repair=1"
-
-# --- на чём рисовать ---
-# Набор ключей собираем на каждую попытку заново: если ускоренный запуск
-# не удался, следующая попытка идёт уже начисто, на программной отрисовке.
-cmdline(){   # $1 — режим: gpu | soft
-  if [ "$1" = "soft" ]; then
-    q="session=1&lite=1$QUERY_EXTRA"; g="--disable-gpu --disable-gpu-compositing --disable-features=VizDisplayCompositor"
-  else
-    q="session=1$QUERY_EXTRA"; g="--enable-features=VaapiVideoDecoder"
-  fi
-  printf '%s' "--kiosk http://localhost:$PORT/?$q
---no-first-run --no-default-browser-check --disable-search-engine-choice-screen
---disable-sync --password-store=basic --use-mock-keychain
---deny-permission-prompts --noerrdialogs --disable-infobars
---disable-session-crashed-bubble --disable-features=Translate,TranslateUI,MediaRouter
---disable-background-timer-throttling --disable-backgrounding-occluded-windows
---disable-renderer-backgrounding --autoplay-policy=no-user-gesture-required
---user-data-dir=$HOME/.local/share/glower/browser --class=glowershell $g"
-}
-
 HAVE_DRI=no
 ls /dev/dri/card* >/dev/null 2>&1 && HAVE_DRI=yes
 [ "$HAVE_DRI" = yes ] || say "GlowerOS: видеоускорения нет — облегчённый режим"
 
-# Ни cage, ни X не запускаем через exec: если способ не заведётся именно на
-# этой машине, сеанс должен пережить отказ и попробовать следующий, а не
-# умереть вместе с ним. Раньше из-за этого приходилось вручную выбирать
-# в меню загрузки «безопасную графику».
-# labwc — оконный сервер. Оболочка запускается его же средствами и лежит в
-# самом низу стопки: чужие окна встают поверх неё, как и положено окнам, но
-# в отличие от киоска остаются переключаемыми — и клавишами, и панелью задач.
-# Есть ли на машине всё для настоящего рабочего стола: движок WebKit и
-# протокол слоёв. Если да, оболочку показывает своя программа, а не браузер.
-have_webkit(){
-  command -v glower-shell >/dev/null || return 1
-  python3 - >/dev/null 2>&1 <<'PYCHECK'
-import gi
-gi.require_version('Gtk', '3.0')
-gi.require_version('WebKit2', '4.1')
-gi.require_version('GtkLayerShell', '0.1')
-from gi.repository import Gtk, WebKit2, GtkLayerShell
-PYCHECK
+# Ни один способ не запускаем через exec: если он не заведётся именно на
+# этой машине, сеанс должен пережить отказ и попробовать следующий.
+
+# Что запускает оконный сервер: панель, а упадёт — поднимает её снова.
+# Пять падений за полминуты — это уже не случайность: тогда сеанс
+# заканчивается, и служба входа показывает экран входа, а не пустоту.
+# $1 — что сделать перед панелью (размер вложенного экрана под X).
+write_start(){
+  mkdir -p "$HOME/.local/share/glower"
+  START_SH="$HOME/.local/share/glower/shell.sh"
+  cat > "$START_SH" <<STARTUP
+#!/bin/sh
+$1
+# окно с вопросом «разрешить?» показывает он — без него запросы прав
+# проваливаются молча
+[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
+GLOWER_URL="http://localhost:$PORT/"
+GLOWER_PORT="$PORT"
+export GLOWER_URL GLOWER_PORT
+falls=0
+since=\$(date +%s)
+while :; do
+  /usr/bin/glower-panel
+  now=\$(date +%s)
+  if [ \$((now - since)) -gt 30 ]; then falls=0; since=\$now; fi
+  falls=\$((falls + 1))
+  [ \$falls -ge 5 ] && break
+  sleep 1
+done
+labwc -e >/dev/null 2>&1 || true
+STARTUP
+  chmod +x "$START_SH"
 }
 
 # Гасит повторяющиеся сообщения. Считать «подряд идущие» здесь мало: в
@@ -335,40 +302,7 @@ run_labwc(){
   MOZ_ENABLE_WAYLAND=1
   export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM MOZ_ENABLE_WAYLAND
 
-  mkdir -p "$HOME/.local/share/glower"
-  START_SH="$HOME/.local/share/glower/shell.sh"
-
-  if have_webkit; then
-    # Рабочий стол — настоящая поверхность нижнего слоя, а под панель задач
-    # отводится полоса экрана, которую оконный сервер вычитает из рабочей
-    # области: развёрнутое окно её не закроет.
-    say "GlowerOS: оболочку показывает своя программа на WebKit"
-    cat > "$START_SH" <<STARTUP
-#!/bin/sh
-# окно с вопросом «разрешить?» показывает он — без него запросы прав
-# проваливаются молча
-[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
-GLOWER_URL="http://localhost:$PORT/" \
-GLOWER_QUERY="session=1$QUERY_EXTRA" \
-GLOWER_PANEL_H="${GLOWER_PANEL_H:-48}" \
-  /usr/bin/glower-shell
-# оболочку закрыли — значит, закончился и сеанс
-labwc -e >/dev/null 2>&1 || true
-STARTUP
-  elif [ -z "$BROWSER" ]; then
-    say "GlowerOS: нет ни WebKit, ни сборки Chromium — оболочку нечем показать"
-    return 1
-  else
-    say "GlowerOS: WebKit недоступен — показываю оболочку браузером"
-    cat > "$START_SH" <<STARTUP
-#!/bin/sh
-[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
-"$BROWSER" $(cmdline gpu) --ozone-platform=wayland
-labwc -e >/dev/null 2>&1 || true
-STARTUP
-  fi
-
-  chmod +x "$START_SH"
+  write_start ""
 
   # Экран этой машины labwc отдаёт не с первого раза: на старых Intel с
   # матрицей LVDS атомарная установка режима возвращает EBUSY, wlroots
@@ -418,63 +352,32 @@ STARTUP
   return "$code"
 }
 
-run_cage(){
-  command -v cage >/dev/null || return 1
-  [ -n "$BROWSER" ] || return 1
-  [ "$HAVE_DRI" = yes ] || return 1
-  say "GlowerOS: пробую cage (Wayland)"
-  cage -- "$BROWSER" $(cmdline gpu) --ozone-platform=wayland >>"$LOG" 2>&1
-  code=$?
-  say "GlowerOS: cage завершился с кодом $code"
-  return $code
-}
-
-run_x(){   # $1 — режим отрисовки
+# Старые машины часто не дают ядру управлять видеокартой: узла /dev/dri нет,
+# и прямо на видеокарте Wayland не поднимется. X-сервер работает и там —
+# простым способом, который понимает почти любое железо. Внутри него тот же
+# labwc, на программной отрисовке, окном во весь экран: рабочий стол тот же
+# самый, слои и панель на месте.
+run_x(){
   command -v Xorg >/dev/null || command -v X >/dev/null || return 1
-  say "GlowerOS: пробую X-сервер ($1)"
+  command -v labwc >/dev/null || return 1
+  say "GlowerOS: пробую labwc внутри X-сервера"
 
-  # Сюда мы попадаем, в том числе не сумев поднять labwc, — а он успел
-  # объявить сеанс вейландовским. Возвращаем правду: под X это X, и Qt
-  # должен идти прямым путём, а не искать несуществующий Wayland.
-  XDG_SESSION_TYPE=x11
-  XDG_CURRENT_DESKTOP=openbox
-  QT_QPA_PLATFORM=xcb
-  MOZ_ENABLE_WAYLAND=0
+  XDG_SESSION_TYPE=wayland
+  XDG_CURRENT_DESKTOP=labwc
+  QT_QPA_PLATFORM='wayland;xcb'
+  MOZ_ENABLE_WAYLAND=1
   export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM MOZ_ENABLE_WAYLAND
 
-  # Старые машины часто не дают ядру управлять видеокартой: узла /dev/dri нет,
-  # и Wayland на такой машине не поднимется вовсе. Но X-сервер работает и там —
-  # простым способом, который понимает почти любое железо. Оболочку в нём
-  # показывает та же своя программа, что и обычно: браузер для этого не нужен.
-  if have_webkit; then
-    say "GlowerOS: оболочку показывает своя программа (X-сервер)"
-    # Оконный менеджер нужен и здесь: без него у чужих программ нет ни
-    # заголовков, ни перетаскивания, а окна валятся друг на друга.
-    cat > "$HOME/.xinitrc" <<XRC
-if command -v openbox >/dev/null; then openbox --sm-disable & fi
-# X-сервер переменных XKB_DEFAULT_* не знает: там раскладку ставят командой.
-command -v setxkbmap >/dev/null && \
-  setxkbmap -layout "$XKB_DEFAULT_LAYOUT" -option "$XKB_DEFAULT_OPTIONS" 2>/dev/null
-# без него запросы прав проваливаются молча
-[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
-GDK_BACKEND=x11 \
-GLOWER_SURFACE=окно \
-GLOWER_PANEL_H="\${GLOWER_PANEL_H:-48}" \
-GLOWER_URL="http://localhost:$PORT/" \
-GLOWER_QUERY="session=1$QUERY_EXTRA" \
-  exec /usr/bin/glower-shell
+  # Вложенный экран labwc открывает окном своего размера; растягиваем его
+  # на весь экран X-сервера, как только поднялся
+  write_start 'command -v wlr-randr >/dev/null && [ -n "$GLOWER_X_SIZE" ] && wlr-randr --output X11-1 --custom-mode "$GLOWER_X_SIZE" >/dev/null 2>&1'
+  cat > "$HOME/.xinitrc" <<XRC
+# X-сервер переменных XKB_DEFAULT_* не знает, а labwc внутри него — знает
+GLOWER_X_SIZE=\$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { print \$2; exit }')
+export GLOWER_X_SIZE
+WLR_BACKENDS=x11 WLR_RENDERER=pixman WLR_RENDERER_ALLOW_SOFTWARE=1 \\
+  exec labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc}" -s "$START_SH"
 XRC
-  elif [ -n "$BROWSER" ]; then
-    say "GlowerOS: WebKit недоступен — показываю оболочку браузером (X-сервер)"
-    cat > "$HOME/.xinitrc" <<XRC
-[ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
-exec "$BROWSER" $(cmdline "$1")
-XRC
-  else
-    say "GlowerOS: нет ни WebKit, ни сборки Chromium — оболочку нечем показать"
-    return 1
-  fi
-
   startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp >>"$LOG" 2>&1
   code=$?
   say "GlowerOS: X-сервер завершился с кодом $code"
@@ -484,22 +387,17 @@ XRC
 # Успешный выход — это конец сеанса (оболочку закрыли), а не повод
 # перезапускаться следующим способом.
 [ "$HAVE_DRI" = yes ] && { run_labwc && exit 0; }
-[ "$HAVE_DRI" = yes ] && { run_cage && exit 0; }
-[ "$HAVE_DRI" = yes ] && { run_x gpu && exit 0; }
-# Видеоузла нет — идём сразу через X-сервер: так старые машины, где ядро не
-# берёт на себя видеокарту, всё равно показывают рабочий стол, а не чёрный
-# экран.
-run_x soft && exit 0
+# Видеоузла нет или labwc на нём не пошёл — через X-сервер: так старые
+# машины всё равно показывают рабочий стол, а не чёрный экран.
+run_x && exit 0
 
 # --- сюда попадаем, только если ничего не вышло ---
 say ""
 say "  GlowerOS не смог показать оболочку на этой машине."
 say "  Что известно:"
 say "    графический узел: $(ls /dev/dri 2>/dev/null | tr '\n' ' ' || echo 'нет')"
-say "    своя программа:   $(command -v glower-shell || echo 'нет')"
-say "    браузер:          ${BROWSER:-нет}"
+say "    панель:           $(command -v glower-panel || echo 'нет')"
 say "    labwc:            $(command -v labwc || echo 'нет')"
-say "    cage:             $(command -v cage || echo 'нет')"
 say "    X-сервер:         $(command -v Xorg || command -v X || echo 'нет')"
 say "  Подробности: $LOG"
 say "  Войти в систему можно на другой консоли: Ctrl+Alt+F2, пользователь glower"

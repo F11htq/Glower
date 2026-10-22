@@ -3,8 +3,8 @@
 #  Экран входа GlowerOS
 #
 #  Запускается службой greetd до всякого рабочего стола и от имени особого
-#  пользователя без прав. Показывает ту же оболочку, что и система, но в
-#  режиме входа: список людей и вопрос о пароле.
+#  пользователя без прав. Показывает свой экран входа (glower-login) —
+#  тот же, что замок по Win+L: список людей и вопрос о пароле.
 #
 #  Пароль проверяет не он: ответ уходит greetd, а тот спрашивает саму
 #  систему через PAM и заводит настоящий сеанс. Так и должно быть — экран
@@ -43,30 +43,25 @@ while [ $i -lt 50 ]; do
   i=$((i+1)); sleep 0.2
 done
 
-# Оболочка в режиме входа. Полосу под панель не отводим: панели здесь нет.
 mkdir -p "$HOMEDIR/.local/share/glower"
-# Экран входа — свой, на Rust (glower-login): тот же экран, что и замок по
-# Win+L. Если он не поднялся (упал сразу или оконный сервер не умеет слоёв)
-# — показываем прежний, страничный: войти в систему человек должен при
-# любой беде с новым экраном.
+# Экран входа живёт, пока человек не вошёл. Упал — поднимаем снова: войти
+# в систему человек должен при любой беде. Пять падений за полминуты — это
+# уже не случайность, тогда сдаёмся, и служба входа начнёт всё сначала.
+# $GLOWER_X_SIZE — только под X-сервером: растянуть вложенный экран.
 cat > "$HOMEDIR/пуск.sh" <<STARTUP
 #!/bin/sh
-if [ -x /usr/bin/glower-login ]; then
-  START=\$(date +%s)
-  GLOWER_URL="http://localhost:$PORT/" /usr/bin/glower-login
-  CODE=\$?
-  if [ "\$CODE" -eq 0 ] || [ \$(( \$(date +%s) - START )) -ge 5 ]; then
-    labwc -e >/dev/null 2>&1 || true
-    exit 0
-  fi
-  echo "glower-login не поднялся (код \$CODE) — показываю страничный вход" >&2
-fi
-GLOWER_URL="http://localhost:$PORT/" \
-GLOWER_QUERY="login=1" \
-GLOWER_PANEL_H=0 \
-GLOWER_SURFACE=окно \
-  /usr/bin/glower-shell
-# оболочка закрылась — значит, вход состоялся или отменён
+command -v wlr-randr >/dev/null && [ -n "\$GLOWER_X_SIZE" ] && \\
+  wlr-randr --output X11-1 --custom-mode "\$GLOWER_X_SIZE" >/dev/null 2>&1
+falls=0
+since=\$(date +%s)
+while :; do
+  GLOWER_URL="http://localhost:$PORT/" /usr/bin/glower-login && break
+  now=\$(date +%s)
+  if [ \$((now - since)) -gt 30 ]; then falls=0; since=\$now; fi
+  falls=\$((falls + 1))
+  [ \$falls -ge 5 ] && break
+  sleep 1
+done
 labwc -e >/dev/null 2>&1 || true
 STARTUP
 chmod +x "$HOMEDIR/пуск.sh"
@@ -82,22 +77,19 @@ export WLR_RENDERER_ALLOW_SOFTWARE=1
 # сеанса — человек вводил пароль и продолжал смотреть на тот же экран.
 # Ожидание сигнала прерывает, обработчик снимает и сервер, и агента.
 
-# На машине, где ядро не управляет видеокартой, Wayland не поднимется вовсе:
-# ему нужен узел /dev/dri, а его там нет. Раньше экран входа на такой машине
-# просто не появлялся — система доходила до пустоты. Здесь тот же запасной
-# путь, что и у сеанса: X-сервер, который рисует простым способом.
+# На машине, где ядро не управляет видеокартой, Wayland прямо на ней не
+# поднимется: ему нужен узел /dev/dri, а его там нет. Тогда тот же labwc
+# идёт внутри X-сервера, который рисует простым способом.
+LABWC_CFG="${GLOWER_LABWC:-/usr/share/glower/labwc-вход}"
 if ls /dev/dri/card* >/dev/null 2>&1; then
-  HOME="$HOMEDIR" labwc -C "${GLOWER_LABWC:-/usr/share/glower/labwc-вход}" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
+  HOME="$HOMEDIR" labwc -C "$LABWC_CFG" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
 else
   cat > "$HOMEDIR/.xinitrc" <<XRC
 #!/bin/sh
-if command -v openbox >/dev/null; then openbox --sm-disable & fi
-GDK_BACKEND=x11 \
-GLOWER_URL="http://localhost:$PORT/" \
-GLOWER_QUERY="login=1" \
-GLOWER_PANEL_H=0 \
-GLOWER_SURFACE=окно \
-  exec /usr/bin/glower-shell
+GLOWER_X_SIZE=\$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { print \$2; exit }')
+export GLOWER_X_SIZE
+WLR_BACKENDS=x11 WLR_RENDERER=pixman \\
+  exec labwc -C "$LABWC_CFG" -s "$HOMEDIR/пуск.sh"
 XRC
   chmod +x "$HOMEDIR/.xinitrc"
   HOME="$HOMEDIR" startx "$HOMEDIR/.xinitrc" -- :0 vt1 -nolisten tcp >>"$LOG" 2>&1 &

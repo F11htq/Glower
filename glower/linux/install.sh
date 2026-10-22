@@ -3,7 +3,8 @@
 #  Установка GlowerOS как сеанса рабочего стола на уже работающий Linux.
 #
 #  Что делает:
-#    1. кладёт оболочку и агент в /usr/share/glower/ui
+#    1. кладёт агент в /usr/share/glower/ui, а рабочий стол (glower-panel,
+#       собранный из panel/) и его программы — в /usr/bin
 #    2. ставит скрипт сеанса /usr/bin/glower-session
 #    3. регистрирует сеанс в списке дисплей-менеджера
 #    4. по желанию включает автозапуск агента через systemd --user
@@ -28,31 +29,36 @@ echo
 
 # --- зависимости ---
 MISSING=""
-for c in node curl; do command -v "$c" >/dev/null 2>&1 || MISSING="$MISSING $c"; done
-if [ -z "$GLOWER_BROWSER" ]; then
-  command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
-    || command -v google-chrome >/dev/null 2>&1 || MISSING="$MISSING chromium"
-fi
+for c in node curl labwc; do command -v "$c" >/dev/null 2>&1 || MISSING="$MISSING $c"; done
+PANEL_BIN="$SRC/panel/target/release/glower-panel"
+[ -x "$PANEL_BIN" ] || MISSING="$MISSING glower-panel"
 if [ -n "$MISSING" ]; then
   say "не хватает:$MISSING"
   say "поставьте их и повторите, например:"
-  say "  apt install nodejs curl chromium        (Debian, Ubuntu)"
-  say "  dnf install nodejs curl chromium        (Fedora)"
-  say "  pacman -S nodejs curl chromium          (Arch)"
-  say "если браузер лежит не в PATH, укажите его: GLOWER_BROWSER=/путь/к/chromium"
+  say "  apt install nodejs curl labwc wtype wlsunset swayidle libgtk-layer-shell0   (Debian, Ubuntu)"
+  say "рабочий стол собирается так:  cd panel && cargo build --release --locked"
   exit 1
 fi
 
-# --- файлы оболочки ---
+# --- агент и рабочий стол ---
 install -d "$SHARE"
-for d in css js agent assets; do
+for d in agent assets linux; do
   [ -d "$SRC/$d" ] && cp -r "$SRC/$d" "$SHARE/"
 done
-cp "$SRC/index.html" "$SHARE/"
-say "оболочка: $SHARE"
+say "агент: $SHARE"
+install -d "$PREFIX/bin" "$PREFIX/share/glower/labwc"
+install -m 755 "$PANEL_BIN" "$PREFIX/bin/glower-panel"
+for prog in glower-lock glower-login glower-notepad glower-calc glower-files glower-settings \
+            glower-store glower-taskmgr glower-photos glower-snip glower-installer glower-music; do
+  ln -sf glower-panel "$PREFIX/bin/$prog"
+done
+for prog in glower-menu glower-desk glower-shot glower-open-package glower-exe glower-tray; do
+  install -m 755 "$SRC/linux/$prog" "$PREFIX/bin/$prog"
+done
+install -m 644 "$SRC/linux/labwc/rc.xml" "$PREFIX/share/glower/labwc/rc.xml"
+say "рабочий стол: $PREFIX/bin/glower-panel"
 
 # --- сеанс ---
-install -d "$PREFIX/bin"
 install -m 755 "$SRC/linux/glower-session" "$PREFIX/bin/glower-session"
 install -d "$PREFIX/share/wayland-sessions" "$PREFIX/share/xsessions"
 install -m 644 "$SRC/linux/glower.desktop" "$PREFIX/share/wayland-sessions/glower.desktop"

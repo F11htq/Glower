@@ -2,12 +2,12 @@
 # ==========================================================================
 #  Сборка загрузочного образа GlowerOS
 #
-#  Делает live-ISO: ядро, systemd, киоск-компоновщик и оболочка, которая
-#  стартует сама. Образ грузится с флешки или в виртуальной машине, а из
+#  Делает live-ISO: ядро, systemd, оконный сервер labwc и рабочий стол
+#  (glower-panel), который стартует сам. Образ грузится с флешки или в виртуальной машине, а из
 #  него систему можно установить на диск — мастером внутри самой оболочки.
 #
 #  Запуск (нужен root):
-#     sudo bash linux/mkiso.sh [--out glower.iso] [--chromium /путь/к/chrome-linux]
+#     sudo bash linux/mkiso.sh [--out glower.iso]
 #
 #  Чего образ НЕ делает: не переписывает ядро и драйверы — они берутся у
 #  Ubuntu. GlowerOS здесь оболочка и сеанс, а не своя система с нуля.
@@ -57,13 +57,11 @@ else
 fi
 WORK="${WORK:-/var/tmp/glower-build}"
 OUT="glower.iso"
-CHROMIUM=""
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
-    --chromium) CHROMIUM="$2"; shift 2 ;;
     --work) WORK="$2"; shift 2 ;;
     *) echo "неизвестный ключ: $1"; exit 1 ;;
   esac
@@ -247,7 +245,7 @@ apt-get install -y --no-install-recommends \
   linux-firmware \
   pciutils usbutils \
   plymouth plymouth-label plymouth-themes \
-  labwc wlrctl wlr-randr foot cage seatd greetd swaylock i3lock libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
+  labwc wlrctl wlr-randr wtype wlsunset swayidle foot seatd greetd swaylock i3lock libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
   udisks2 ntfs-3g exfatprogs dosfstools \
@@ -258,9 +256,9 @@ apt-get install -y --no-install-recommends \
   bluez bluez-tools \
   cups cups-filters cups-browsed cups-pdf avahi-daemon printer-driver-gutenprint \
   locales language-pack-ru language-pack-gnome-ru \
-  python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 gir1.2-gtklayershell-0.1 libgtk-layer-shell0 adwaita-icon-theme \
+  libgtk-3-0t64 libgtk-layer-shell0 adwaita-icon-theme \
   xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
-  openbox wmctrl xdotool x11-utils \
+  x11-utils \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
   sudo \
   fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core fontconfig \
@@ -343,13 +341,12 @@ INCHROOT
 # --------------------------------------------------------------------------
 step "3/6 оболочка GlowerOS"
 install -d "$ROOTFS/usr/share/glower/ui"
-for d in css js agent assets linux; do
+# Агент, знак системы и сценарии. Страниц прежней оболочки (css, js,
+# index.html) в системе больше нет: показывать их нечем и незачем —
+# рабочий стол и все программы системы теперь свои, без браузерного движка.
+for d in agent assets linux; do
   [ -d "$SRC/$d" ] && cp -r "$SRC/$d" "$ROOTFS/usr/share/glower/ui/"
 done
-cp "$SRC/index.html" "$ROOTFS/usr/share/glower/ui/"
-# Страница панели лежит рядом: она отдельная, и забыть её — значит
-# получить систему без верхней полосы вовсе.
-cp "$SRC/панель.html" "$ROOTFS/usr/share/glower/ui/"
 
 # Версия сборки — в саму систему.
 #
@@ -363,16 +360,11 @@ cp "$SRC/панель.html" "$ROOTFS/usr/share/glower/ui/"
 RELEASE=$(git -C "$SRC/.." describe --tags --always --dirty 2>/dev/null \
           || date -u +%Y-%m-%d)
 printf '%s\n' "$RELEASE" > "$ROOTFS/etc/glower-release"
-# Та же строка — в «О системе»: человеку её видно без терминала.
-sed -i "s/build:'[^']*'/build:'$RELEASE'/" \
-  "$ROOTFS/usr/share/glower/ui/js/brand.js" 2>/dev/null || true
 echo "  версия сборки: $RELEASE"
 install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
-# своя программа-оболочка: рабочий стол и полоса под панель задач
-install -m 755 "$SRC/linux/glower-shell" "$ROOTFS/usr/bin/glower-shell"
 # открыть скачанный файл-установщик: передаёт его оболочке, а та спрашивает
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
 # Посредник для снимков экрана: его зовёт оконный сервер по сочетанию клавиш
@@ -387,10 +379,10 @@ install -m 755 "$SRC/linux/glower-exe" "$ROOTFS/usr/bin/glower-exe"
 # проверкой, что и вход в систему
 install -d "$ROOTFS/etc/pam.d"
 install -m 644 "$SRC/linux/pam-glower-lock" "$ROOTFS/etc/pam.d/glower-lock"
-# Панель — своя программа на Rust, без браузерного движка (panel/). Её
-# собирает шаг до образа в .github/workflows/build-iso.yml: внутри chroot
-# Rust не нужен. Собираем и здесь, если её ещё нет, а cargo под рукой. Не
-# вышло — образ всё равно годится: оболочка покажет страничную панель.
+# Рабочий стол — своя программа на Rust, без браузерного движка (panel/).
+# Её собирает шаг до образа в .github/workflows/build-iso.yml: внутри chroot
+# Rust не нужен. Собираем и здесь, если её ещё нет, а cargo под рукой. Без
+# неё рабочего стола нет вовсе — тогда сборка останавливается.
 PANEL_BIN="$SRC/panel/target/release/glower-panel"
 if [ ! -x "$PANEL_BIN" ] && command -v cargo >/dev/null 2>&1; then
   (cd "$SRC/panel" && cargo build --release --locked) || true
@@ -406,10 +398,11 @@ if [ -x "$PANEL_BIN" ]; then
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-files"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-settings"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-store"
-  for prog in glower-taskmgr glower-photos glower-snip; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
-  echo "  панель: нативная, $(du -k "$PANEL_BIN" | cut -f1) КБ"
+  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
+  echo "  рабочий стол: $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
-  echo "  панель: нативной нет — будет страничная"
+  echo "нет panel/target/release/glower-panel — рабочий стол собрать не из чего"
+  exit 1
 fi
 # Приёмник значков лотка. Разговор с шиной разобран в нём руками, поэтому
 # ничего, кроме самого Python, ему не нужно — ни python3-dbus, ни python3-gi.
@@ -551,29 +544,13 @@ else
   echo "  хранилище Mozilla недоступно"
 fi
 
-# Firefox мог не поставиться: нет сети до Mozilla, отказ хранилища. Образ без
-# браузера человеку не годится — тогда кладём GNOME Web (epiphany) из обычного
-# хранилища Ubuntu. Это настоящий браузер на движке WebKit, свободный, и он
-# говорит по-русски. Лучше так, чем «ссылки не работают».
-if [ ! -x /usr/bin/firefox ]; then
-  rm -f /etc/apt/sources.list.d/mozilla.list /etc/apt/preferences.d/mozilla
-  apt-get update -qq
-  apt-get install -y --no-install-recommends epiphany-browser 2>&1 | tail -1
-fi
-
+# Firefox мог не поставиться: нет сети до Mozilla, отказ хранилища. Тогда
+# браузера в образе нет — «Браузер» в доке откроет Магазин на Firefox, и
+# машина скачает его сама, как только появится сеть.
 if [ -x /usr/bin/firefox ]; then echo "  браузер: Firefox"
-elif [ -x /usr/bin/epiphany-browser ]; then echo "  браузер: GNOME Web"
-else echo "  ВНИМАНИЕ: браузер в образ не попал"; fi
+else echo "  ВНИМАНИЕ: браузер в образ не попал — его предложит Магазин"; fi
 INBROWSER
 
-# Сборку Chromium кладём, только если её дали ключом: она нужна лишь
-# встроенной смотрелке страниц, а на живой машине браузер настоящий.
-if [ -n "$CHROMIUM" ]; then
-  install -d "$ROOTFS/opt/chromium"
-  cp -r "$CHROMIUM/." "$ROOTFS/opt/chromium/"
-  ln -sf /opt/chromium/chrome "$ROOTFS/usr/bin/chromium"
-  echo "  дополнительно положен Chromium из $CHROMIUM"
-fi
 
 # --------------------------------------------------------------------------
 # Чем открывать: ссылки, картинки, тексты, музыку и папки.
@@ -614,7 +591,7 @@ EXE
 
 # Ссылки отдаём тому браузеру, который на самом деле лежит в образе.
 BROWSER_DESKTOP=""
-for cand in firefox.desktop org.gnome.Epiphany.desktop epiphany-browser.desktop; do
+for cand in firefox.desktop; do
   if [ -f "$ROOTFS/usr/share/applications/$cand" ]; then BROWSER_DESKTOP="$cand"; break; fi
 done
 [ -n "$BROWSER_DESKTOP" ] || BROWSER_DESKTOP=firefox.desktop
@@ -816,10 +793,8 @@ ExecStartPre=/bin/chown glower:glower /run/user/1000
 # делает то же самое при загрузке, но полагаться на один путь не будем:
 # знак «+» означает, что строка выполняется с правами root.
 ExecStartPre=+/bin/sh -c '/sbin/sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true'
-# Оконный сервер выбирает сам сеанс: сначала labwc — настоящий, с окнами и
-# слоями; если он на этой машине не пошёл, остаются cage и X-сервер. Раньше
-# здесь стоял cage, и всё происходило внутри киоска: labwc поднимался вложенно
-# и настоящим оконным сервером системы так и не становился.
+# Оконный сервер выбирает сам сеанс: labwc прямо на видеокарте, а где её
+# ядро не берёт — тот же labwc внутри X-сервера.
 ExecStart=/usr/bin/glower-session
 # Три неудачи подряд — и systemd останавливается: на экране остаётся
 # объяснение, а не мигающий курсор.

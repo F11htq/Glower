@@ -57,7 +57,7 @@ fn с_доком<R>(дело: impl FnOnce(&mut Док) -> R) -> Option<R> {
 
 /// Корзина — системная: её показывает Проводник. Нет его — просим стол
 fn открой_корзину() {
-    if std::process::Command::new("glower-files").arg("--trash").spawn().is_err() {
+    if !crate::core::запусти_команду("glower-files", &["--trash"]) {
         дело_стола("запусти", json!({ "id": "trash", "вид": "приложение" }));
     }
 }
@@ -207,7 +207,13 @@ fn опроси_чужие() {
         let Ok(о) = о else { return };
         let чужие: Vec<Value> = о["list"]
             .as_array()
-            .map(|с| с.iter().filter(|w| w["оболочка"].as_bool() != Some(true)).cloned().collect())
+            .map(|с| {
+                // Окна других рабочих столов скрыты — для дока их нет
+                с.iter()
+                    .filter(|w| w["оболочка"].as_bool() != Some(true) && w["appId"].as_str() != Some("glower-panel") && crate::core::на_этом_столе(w))
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default();
         let вовесь = о["вовесьЭкран"].as_bool() == Some(true);
         let менялось = с_доком(|д| {

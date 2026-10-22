@@ -25,9 +25,9 @@ const СТИЛЬ: &str = r#"
 
 /// Наши части и службы системы: человеку они нужны редко
 const СИСТЕМНОЕ: &[&str] = &[
-    "glower-", "server.mjs", "labwc", "WebKit", "Xwayland", "greetd", "systemd", "dbus", "polkit", "udisks", "upower",
+    "glower-", "server.mjs", "labwc", "Xwayland", "greetd", "systemd", "dbus", "polkit", "udisks", "upower",
     "NetworkManager", "wpa_supplicant", "ModemManager", "pipewire", "wireplumber", "avahi", "bluetoothd", "cups",
-    "rsyslog", "cron", "agetty", "plymouth", "accounts-daemon", "gvfs", "at-spi", "xdg-desktop-portal", "glower-shell",
+    "rsyslog", "cron", "agetty", "plymouth", "accounts-daemon", "gvfs", "at-spi", "xdg-desktop-portal", "swayidle", "wlsunset",
 ];
 
 #[derive(Clone, Debug, PartialEq)]

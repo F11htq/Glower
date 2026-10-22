@@ -2,13 +2,12 @@
 <!--
   Настройки оконного сервера GlowerOS.
 
-  Раньше сеанс держался на cage: он показывает одно окно за раз, и любая
-  чужая программа закрывала собой всё, не оставляя пути назад. labwc — это
-  настоящий оконный сервер: чужие окна живут рядом с оболочкой, попадают в
-  панель задач и переключаются как везде.
-
-  Оболочка — окно с именем glowershell. Оно всегда внизу стопки, без рамки
-  и не показывается в чужих переключателях: это рабочий стол, а не окно.
+  Рабочий стол, панель, док и меню — поверхности слоёв одной программы,
+  glower-panel: оконный сервер ставит их ниже и выше окон сам, и окном
+  среди окон ни одна из них не числится. Поэтому сочетания здесь простые:
+  закрыть, перебрать, прижать к краю — обычные действия labwc над
+  обычными окнами. Окна системы (Параметры, Проводник, Магазин) — тоже
+  настоящие окна, и Alt+F4 закрывает их так же, как любые другие.
 -->
 <labwc_config>
 
@@ -21,11 +20,23 @@
     <font name="sans" size="10" />
   </theme>
 
+  <!-- Рабочие столы — настоящие, оконного сервера: окна других столов он
+       прячет сам. Столов четыре, сколько из них видно — решает человек в
+       Параметрах. Табличку с именем стола при переходе не показываем:
+       панель и так знает, где мы. -->
+  <desktops>
+    <popupTime>0</popupTime>
+    <names>
+      <name>1</name>
+      <name>2</name>
+      <name>3</name>
+      <name>4</name>
+    </names>
+  </desktops>
+
   <keyboard>
     <default />
     <!-- Одна клавиша Win — меню программ, как в любой другой системе.
-         Ловит её оконный сервер: страница получает клавиши только пока
-         она в фокусе, и стоило открыть браузер, как Win уходил ему.
 
          Эта сборка оконного сервера умеет ловить клавишу только на
          нажатии, а Win приходит первой и в Win+Shift+S, и в Win+D. Чтобы
@@ -34,104 +45,62 @@
     <keybind key="Super_L">
       <action name="Execute" command="glower-menu" />
     </keybind>
-    <!-- Super и D возвращают на рабочий стол из любой программы, а окна
-         самой системы на столе сворачивают — как в Windows -->
+    <!-- Просмотр задач: все окна крупно и рабочие столы -->
+    <keybind key="W-Tab">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-menu задачи" />
+    </keybind>
+    <!-- Super и D — на рабочий стол из любой программы, второй раз —
+         окна обратно, как в Windows -->
     <keybind key="W-d">
       <action name="Execute" command="glower-menu отмени" />
-      <action name="Execute" command="wlrctl toplevel focus app_id:glowershell" />
       <action name="Execute" command="glower-menu клавиша W-d" />
     </keybind>
-    <!-- Win+L запирает экран из любой программы, а не только со стола:
-         раньше его ловила страница, и в Firefox или терминале оно не
-         делало ничего -->
     <keybind key="W-l">
       <action name="Execute" command="glower-menu замок" />
     </keybind>
-    <!-- Тем, кто знает, зачем он нужен: настоящий терминал -->
+    <!-- Программы системы — привычными сочетаниями -->
+    <keybind key="W-e">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-files" />
+    </keybind>
+    <keybind key="W-i">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-settings" />
+    </keybind>
+    <keybind key="C-S-Escape">
+      <action name="Execute" command="glower-taskmgr" />
+    </keybind>
     <keybind key="W-Return">
       <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="foot" />
     </keybind>
-    <!-- Сочетания, которые нужны и окнам самой системы.
-
-         Параметры, Магазин, Проводник — окна внутри страницы рабочего
-         стола, и для оконного сервера все они одно окно, glowershell.
-         Стандартные Alt+F4 и Alt+Tab он забирал себе раньше страницы:
-         Alt+F4 просил закрыться весь стол (стол отказывается), Alt+Tab
-         перебирал только чужие окна. Человек жал Alt+F4 на открытых
-         Параметрах — и ничего не происходило.
-
-         Теперь на столе сервер передаёт сочетание странице, а она решает,
-         какое из её окон закрыть или поднять. В чужих окнах всё как
-         прежде. -->
+    <!-- Окна -->
     <keybind key="A-F4">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша A-F4" /></then>
-        <else>
-          <action name="Execute" command="glower-menu отмени" />
-          <action name="Close" />
-        </else>
-      </action>
+      <action name="Close" />
     </keybind>
     <keybind key="W-q">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша W-q" /></then>
-        <else>
-          <action name="Execute" command="glower-menu отмени" />
-          <action name="Close" />
-        </else>
-      </action>
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Close" />
     </keybind>
     <keybind key="A-Tab">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша A-Tab" /></then>
-        <else>
-          <action name="NextWindow" />
-        </else>
-      </action>
+      <action name="NextWindow" />
     </keybind>
     <keybind key="W-Left">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша W-Left" /></then>
-        <else>
-          <action name="Execute" command="glower-menu отмени" />
-          <action name="SnapToEdge" direction="left" />
-        </else>
-      </action>
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="SnapToEdge" direction="left" />
     </keybind>
     <keybind key="W-Right">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша W-Right" /></then>
-        <else>
-          <action name="Execute" command="glower-menu отмени" />
-          <action name="SnapToEdge" direction="right" />
-        </else>
-      </action>
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="SnapToEdge" direction="right" />
     </keybind>
     <keybind key="W-Up">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша W-Up" /></then>
-        <else>
-          <action name="Execute" command="glower-menu отмени" />
-          <action name="SnapToEdge" direction="up" />
-        </else>
-      </action>
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="ToggleMaximize" />
     </keybind>
     <keybind key="W-Down">
-      <action name="If">
-        <query identifier="glowershell" />
-        <then><action name="Execute" command="glower-menu клавиша W-Down" /></then>
-        <else>
-          <action name="Execute" command="glower-menu отмени" />
-          <action name="SnapToEdge" direction="down" />
-        </else>
-      </action>
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Iconify" />
     </keybind>
     <!-- Alt со стрелками по умолчанию двигает окно к краю экрана. Но это
          же сочетание в любом браузере и в Проводнике значит «назад» и
@@ -143,9 +112,8 @@
     <keybind key="A-Down"><action name="None" /></keybind>
     <keybind key="A-F3"><action name="None" /></keybind>
     <!-- Рабочие столы с клавиатуры — теми же сочетаниями, что в GNOME:
-         Win с Page Up / Page Down и Ctrl+Alt со стрелками. Первым
-         действием всюду отметка: иначе Win, пришедшая первой в сочетании,
-         успеет открыть меню программ. -->
+         Win с Page Up / Page Down и Ctrl+Alt со стрелками. Решает панель:
+         она знает, сколько столов заведено. -->
     <keybind key="W-Prior">
       <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="glower-desk назад" />
@@ -160,9 +128,19 @@
     <keybind key="C-A-Right">
       <action name="Execute" command="glower-desk вперёд" />
     </keybind>
-    <!-- Снимок экрана. Сочетания держит оконный сервер, а не оболочка:
-         страница получает клавиши, только пока она в фокусе, и стоило
-         открыть любую программу, как Win+Shift+S уходил ей. -->
+    <!-- Служебные сочетания: ими панель просит оконный сервер перейти на
+         стол или отправить туда окно. Других способов попросить об этом
+         снаружи у этой сборки labwc нет. Руками их никто не нажмёт. -->
+    <keybind key="W-C-A-F1"><action name="GoToDesktop" to="1" /></keybind>
+    <keybind key="W-C-A-F2"><action name="GoToDesktop" to="2" /></keybind>
+    <keybind key="W-C-A-F3"><action name="GoToDesktop" to="3" /></keybind>
+    <keybind key="W-C-A-F4"><action name="GoToDesktop" to="4" /></keybind>
+    <keybind key="W-C-A-S-F1"><action name="SendToDesktop" to="1" follow="no" /></keybind>
+    <keybind key="W-C-A-S-F2"><action name="SendToDesktop" to="2" follow="no" /></keybind>
+    <keybind key="W-C-A-S-F3"><action name="SendToDesktop" to="3" follow="no" /></keybind>
+    <keybind key="W-C-A-S-F4"><action name="SendToDesktop" to="4" follow="no" /></keybind>
+    <!-- Снимок экрана. Сочетания держит оконный сервер: клавиши достаются
+         окну в фокусе, и иначе Win+Shift+S уходил бы любой программе. -->
     <keybind key="W-S-s">
       <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="glower-shot область" />
@@ -179,15 +157,5 @@
   <mouse>
     <default />
   </mouse>
-
-  <windowRules>
-    <windowRule identifier="glowershell">
-      <!-- Оболочку намеренно не прячем от протокола управления окнами:
-           иначе к ней нельзя вернуться ни клавишами, ни панелью задач.
-           Из списка окон её убирает сама оболочка — она знает своё имя. -->
-      <serverDecoration>no</serverDecoration>
-      <action name="ToggleAlwaysOnBottom" />
-    </windowRule>
-  </windowRules>
 
 </labwc_config>

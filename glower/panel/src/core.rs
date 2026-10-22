@@ -1,0 +1,1430 @@
+//! Ядро оболочки — то, что прежде делала страница рабочего стола.
+//!
+//! Страница на браузерном движке была мозгом системы: она хранила
+//! настройки, знала, что лежит на столе и что закреплено в доке, считала
+//! рабочие столы, проверяла обновления, следила за флешками и зарядом и
+//! выполняла просьбы панели, дока, меню и Параметров. Всё это теперь здесь,
+//! в той же программе, что панель.
+//!
+//! Говорим тем же языком, что говорила страница, — теми же темами шины.
+//! Поэтому док, меню программ, стол и Параметры переезда не заметили:
+//! они слышат «док», «значки», «программы», «параметры» как и прежде, а
+//! просьбы шлют туда же — «обзор-дело», «значки-дело», «параметры-дело».
+//!
+//! Настройки лежат в ~/.config/glower/settings.json. Пишет их только ядро:
+//! остальные просят.
+
+use crate::agent::{зов, позови, скажи, слушай};
+use crate::notify;
+use gtk::gio;
+use gtk::glib;
+use gtk::prelude::*;
+use serde_json::{json, Map, Value};
+use std::cell::{Cell, RefCell};
+use std::path::PathBuf;
+use std::time::Duration;
+
+const ДАННЫЕ: &str = include_str!("shell-data.json");
+
+/// Программы системы. Окна у них настоящие, имя окна — app_id
+pub struct Наша {
+    pub id: &'static str,
+    pub имя: &'static str,
+    pub знак: &'static str,
+    pub фон: &'static str,
+    pub окно: &'static str,
+    pub одна: bool,
+}
+
+pub const НАШИ: &[Наша] = &[
+    Наша { id: "files", имя: "Проводник", знак: "📁", фон: "linear-gradient(140deg,#fcd34d,#f59e0b)", окно: "glower-files", одна: false },
+    Наша { id: "browser", имя: "Браузер", знак: "🌐", фон: "linear-gradient(140deg,#38bdf8,#2563eb)", окно: "", одна: false },
+    Наша { id: "notepad", имя: "Блокнот", знак: "📝", фон: "linear-gradient(140deg,#7dd3fc,#3b82f6)", окно: "glower-notepad", одна: false },
+    Наша { id: "settings", имя: "Параметры", знак: "⚙️", фон: "linear-gradient(140deg,#94a3b8,#334155)", окно: "glower-settings", одна: true },
+    Наша { id: "store", имя: "Магазин", знак: "🛍️", фон: "linear-gradient(140deg,#c4b5fd,#7c3aed)", окно: "glower-store", одна: true },
+    Наша { id: "music", имя: "Музыка", знак: "🎵", фон: "linear-gradient(140deg,#f472b6,#a855f7)", окно: "glower-music", одна: true },
+    Наша { id: "term", имя: "Терминал", знак: "⌨️", фон: "linear-gradient(140deg,#334155,#0f172a)", окно: "foot", одна: false },
+    Наша { id: "calc", имя: "Калькулятор", знак: "🧮", фон: "linear-gradient(140deg,#a5b4fc,#6366f1)", окно: "glower-calc", одна: true },
+    Наша { id: "photos", имя: "Фотографии", знак: "🖼️", фон: "linear-gradient(140deg,#6ee7b7,#0ea5e9)", окно: "glower-photos", одна: false },
+    Наша { id: "taskmgr", имя: "Диспетчер задач", знак: "📊", фон: "linear-gradient(140deg,#cbd5e1,#475569)", окно: "glower-taskmgr", одна: true },
+    Наша { id: "snip", имя: "Ножницы", знак: "✂️", фон: "linear-gradient(140deg,#7dd3fc,#0ea5e9)", окно: "glower-snip", одна: true },
+    Наша { id: "installer", имя: "Установка GlowerOS", знак: "💽", фон: "linear-gradient(140deg,#a78bfa,#4c1d95)", окно: "glower-installer", одна: true },
+];
+
+pub fn наша(id: &str) -> Option<&'static Наша> {
+    НАШИ.iter().find(|н| н.id == id)
+}
+
+/// Браузеры машины — в порядке, в каком их предлагаем
+const БРАУЗЕРЫ: &[&str] = &[
+    "firefox.desktop", "firefox-esr.desktop", "org.mozilla.firefox.desktop", "chromium.desktop", "chromium-browser.desktop",
+    "org.chromium.Chromium.desktop", "google-chrome.desktop", "org.gnome.Epiphany.desktop", "epiphany-browser.desktop",
+];
+
+/// Языки системы: что пишем в ~/.config/glower/locale
+pub const ЯЗЫКИ: &[(&str, &str, &str)] = &[
+    ("ru", "Русский", "ru_RU.UTF-8"),
+    ("en", "English", "en_US.UTF-8"),
+    ("uk", "Українська", "uk_UA.UTF-8"),
+    ("be", "Беларуская", "be_BY.UTF-8"),
+    ("kk", "Қазақша", "kk_KZ.UTF-8"),
+    ("de", "Deutsch", "de_DE.UTF-8"),
+    ("fr", "Français", "fr_FR.UTF-8"),
+    ("es", "Español", "es_ES.UTF-8"),
+    ("it", "Italiano", "it_IT.UTF-8"),
+    ("pt", "Português", "pt_BR.UTF-8"),
+    ("pl", "Polski", "pl_PL.UTF-8"),
+    ("tr", "Türkçe", "tr_TR.UTF-8"),
+];
+
+pub const ВИДЖЕТЫ: &[(&str, &str, &str)] = &[
+    ("clock", "Часы", "🕐"),
+    ("weather", "Погода", "🌤"),
+    ("calendar", "Календарь", "📅"),
+    ("system", "Система", "📊"),
+    ("note", "Заметка", "📝"),
+];
+
+pub fn умолчания() -> Value {
+    json!({
+        "theme": "dark", "accent": 0, "accentCustom": null,
+        "wallpaper": "gora", "wallShuffle": false,
+        "clock24": true, "showSeconds": false, "tz": "", "city": "Москва",
+        "dockApps": ["browser", "files", "notepad", "settings", "store", "music", "term", "calc"],
+        "showDesktopIcons": true, "showDeskWidgets": true,
+        "deskWidgets": [{ "t": "clock" }, { "t": "weather" }],
+        "deskApps": [], "deskNative": [], "iconPos": {},
+        "dnd": false, "notif": true, "soundNotif": true, "nightLight": false,
+        "autoLock": 0, "lockOnWake": true, "autostart": [], "focusLen": "25",
+        "userName": "", "userEmoji": "", "desks": 2, "note": "",
+        "setupDone": false, "updatesAsked": 0
+    })
+}
+
+/* ---------- состояние ---------- */
+
+#[derive(Default)]
+struct Ядро {
+    s: Value,
+    данные: Value,
+    машина: Vec<Value>,
+    окна: Vec<Value>,
+    стол: u64,
+    раскладки: (Vec<String>, Vec<Value>),
+    фокус_до: Option<i64>,
+    носители: Option<Vec<String>>,
+    заряд_сказан: u8,
+    обновления: Value,
+    свёрнутые: Vec<(String, String)>,
+    погода: Value,
+    можно_ставить: bool,
+    /// На каком столе какое окно. Оконный сервер этого не говорит, поэтому
+    /// помним сами: окно живёт на том столе, где появилось, пока его не
+    /// отправили на другой
+    где_окно: std::collections::HashMap<String, u64>,
+}
+
+thread_local! {
+    static Я: RefCell<Option<Ядро>> = const { RefCell::new(None) };
+    static ЖДЁТ: Cell<bool> = const { Cell::new(false) };
+}
+
+fn с_ядром<R>(дело: impl FnOnce(&mut Ядро) -> R) -> Option<R> {
+    Я.with(|я| я.borrow_mut().as_mut().map(дело))
+}
+
+pub fn настройка(k: &str) -> Value {
+    с_ядром(|я| я.s[k].clone()).unwrap_or(Value::Null)
+}
+
+fn путь_настроек() -> PathBuf {
+    glib::user_config_dir().join("glower").join("settings.json")
+}
+
+pub fn корень() -> PathBuf {
+    std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| glib::home_dir().join("GlowerOS"))
+}
+
+pub fn папка_стола() -> PathBuf {
+    корень().join("Рабочий стол")
+}
+
+fn загрузи() -> Value {
+    let mut s = умолчания();
+    let прочитано = std::fs::read_to_string(путь_настроек()).ok().and_then(|т| serde_json::from_str::<Value>(&т).ok());
+    match прочитано {
+        Some(Value::Object(свои)) => {
+            for (к, в) in свои {
+                s[&к] = в;
+            }
+        }
+        _ => {
+            // Настроек ещё нет. Если система уже жила здесь при странице —
+            // мастер второй раз не нужен: человек его проходил
+            let жил = glib::user_config_dir().join("glower").join("keyboard").exists()
+                || glib::user_data_dir().join("glower").join("browser").exists()
+                || glib::user_config_dir().join("glower").join("locale").exists();
+            s["setupDone"] = json!(жил);
+        }
+    }
+    if s["userName"].as_str().unwrap_or("").is_empty() {
+        let имя = glib::real_name().to_string_lossy().to_string();
+        s["userName"] = json!(if имя.is_empty() || имя == "Unknown" { glib::user_name().to_string_lossy().to_string() } else { имя });
+    }
+    s
+}
+
+fn сохрани() {
+    let Some(s) = с_ядром(|я| я.s.clone()) else { return };
+    let путь = путь_настроек();
+    if let Some(р) = путь.parent() {
+        let _ = std::fs::create_dir_all(р);
+    }
+    // Сперва во временный файл, потом подменой: выключение посреди записи
+    // не должно оставить пустые настройки
+    let временный = путь.with_extension("json.new");
+    if std::fs::write(&временный, serde_json::to_vec_pretty(&s).unwrap_or_default()).is_ok() {
+        let _ = std::fs::rename(&временный, &путь);
+    }
+}
+
+pub fn задай(k: &str, v: Value) {
+    с_ядром(|я| я.s[k] = v);
+    сохрани();
+    после(k);
+    расскажи_скоро();
+}
+
+/// Сохранить без рассылки: заметка на виджете пишется на каждый знак
+pub fn задай_тихо(k: &str, v: Value) {
+    с_ядром(|я| я.s[k] = v);
+    сохрани();
+}
+
+/// Убрать значок программы со стола
+pub fn убери_со_стола(id: &str, вид: &str) {
+    if вид == "машина" {
+        let с: Vec<Value> = настройка("deskNative").as_array().cloned().unwrap_or_default().into_iter().filter(|п| п["id"].as_str() != Some(id)).collect();
+        задай("deskNative", Value::Array(с));
+    } else {
+        let с: Vec<Value> = настройка("deskApps").as_array().cloned().unwrap_or_default().into_iter().filter(|п| п.as_str() != Some(id)).collect();
+        задай("deskApps", Value::Array(с));
+    }
+}
+
+/// Что ещё сделать, когда сменилась настройка
+fn после(k: &str) {
+    match k {
+        "nightLight" => ночной_свет(),
+        "autoLock" => авто_замок(),
+        "desks" => {}
+        _ => {}
+    }
+}
+
+/// Рассказать всем — один раз на пачку перемен
+fn расскажи_скоро() {
+    if ЖДЁТ.with(|ж| ж.replace(true)) {
+        return;
+    }
+    glib::timeout_add_local_once(Duration::from_millis(120), || {
+        ЖДЁТ.with(|ж| ж.set(false));
+        расскажи_всё();
+    });
+}
+
+/* ---------- что рассказываем ---------- */
+
+fn обои_css(id: &str, данные: &Value) -> String {
+    if let Some(путь) = id.strip_prefix("файл:") {
+        return format!("url(\"file://{}\")", путь.replace('"', "%22"));
+    }
+    данные["обои"]
+        .as_array()
+        .and_then(|о| о.iter().find(|в| в["id"].as_str() == Some(id)).or(о.first()))
+        .and_then(|в| в["css"].as_str())
+        .unwrap_or("linear-gradient(#0b0d1a, #05060c)")
+        .to_string()
+}
+
+fn сведения_нашей(н: &Наша) -> Value {
+    json!({ "id": н.id, "имя": н.имя, "знак": н.знак, "фон": н.фон, "вид": "приложение" })
+}
+
+fn программы_меню(я: &Ядро) -> Vec<Value> {
+    let mut список: Vec<Value> = НАШИ
+        .iter()
+        .filter(|н| н.id != "installer" || я.можно_ставить)
+        .map(сведения_нашей)
+        .collect();
+    let mut машина: Vec<Value> = я
+        .машина
+        .iter()
+        .map(|а| json!({ "id": а["id"], "имя": а["name"], "знак": "", "фон": "", "вид": "машина", "значок": а["icon"] }))
+        .collect();
+    машина.sort_by_key(|а| а["имя"].as_str().unwrap_or("").to_lowercase());
+    список.extend(машина);
+    список
+}
+
+fn значки_стола(я: &Ядро) -> Vec<Value> {
+    if я.s["showDesktopIcons"].as_bool() == Some(false) {
+        return Vec::new();
+    }
+    let места = я.s["iconPos"].clone();
+    let mut значки: Vec<Value> = vec![json!({ "n": "Этот компьютер", "g": "💻", "вид": "система" })];
+    for id in я.s["deskApps"].as_array().cloned().unwrap_or_default() {
+        if let Some(н) = id.as_str().and_then(наша) {
+            значки.push(json!({ "n": н.имя, "g": н.знак, "вид": "приложение", "ярлык": н.id }));
+        }
+    }
+    for п in я.s["deskNative"].as_array().cloned().unwrap_or_default() {
+        let id = п["id"].as_str().unwrap_or("").to_string();
+        let имя = п["имя"].as_str().map(String::from).or_else(|| gio::DesktopAppInfo::new(&id).map(|д| д.name().to_string())).unwrap_or_else(|| id.clone());
+        значки.push(json!({ "n": имя, "g": "", "вид": "машина", "ярлык": id }));
+    }
+    let mut файлы: Vec<(String, bool)> = std::fs::read_dir(папка_стола())
+        .map(|ч| {
+            ч.filter_map(|з| з.ok())
+                .filter_map(|з| {
+                    let имя = з.file_name().to_string_lossy().to_string();
+                    (!имя.starts_with('.')).then(|| (имя, з.path().is_dir()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    файлы.sort_by_key(|(и, папка)| (!*папка, и.to_lowercase()));
+    for (имя, папка) in файлы {
+        let тип = if папка { "inode/directory".into() } else { gio::content_type_guess(Some(&имя), &[]).0.to_string() };
+        let значок = gio::content_type_get_icon(&тип).downcast::<gio::ThemedIcon>().ok().and_then(|т| т.names().first().map(|н| н.to_string())).unwrap_or_default();
+        значки.push(json!({ "n": имя, "g": if папка { "📁" } else { знак_файла(&тип) }, "вид": if папка { "папка" } else { "файл" }, "значок": значок }));
+    }
+    // Места: запомненные — как есть, остальные — столбиками сверху вниз
+    let высота = gtk::gdk::Display::default()
+        .and_then(|д| д.primary_monitor().or_else(|| д.monitor(0)))
+        .map(|м| м.geometry().height())
+        .unwrap_or(800) as i64;
+    let в_столбце = ((высота - 140) / 104).max(3);
+    let mut занято: Vec<(i64, i64)> = Vec::new();
+    for з in &значки {
+        if let Some(м) = места.get(з["n"].as_str().unwrap_or("")) {
+            занято.push((м["x"].as_i64().unwrap_or(0), м["y"].as_i64().unwrap_or(0)));
+        }
+    }
+    let mut номер = 0i64;
+    for з in значки.iter_mut() {
+        let имя = з["n"].as_str().unwrap_or("").to_string();
+        if let Some(м) = места.get(&имя) {
+            з["x"] = м["x"].clone();
+            з["y"] = м["y"].clone();
+            continue;
+        }
+        loop {
+            let (x, y) = (16 + (номер / в_столбце) * 100, 44 + (номер % в_столбце) * 104);
+            номер += 1;
+            if !занято.iter().any(|(зx, зy)| (зx - x).abs() < 60 && (зy - y).abs() < 60) {
+                з["x"] = json!(x);
+                з["y"] = json!(y);
+                break;
+            }
+        }
+    }
+    значки
+}
+
+fn знак_файла(тип: &str) -> &'static str {
+    match тип {
+        т if т.starts_with("image/") => "🖼️",
+        т if т.starts_with("audio/") => "🎵",
+        т if т.starts_with("video/") => "🎬",
+        т if т.contains("zip") || т.contains("tar") || т.contains("compressed") || т.contains("x-7z") => "🗜️",
+        т if т.contains("pdf") => "📕",
+        т if т.contains("x-ms-dos-executable") || т.contains("msdownload") || т.contains("msi") => "🪟",
+        т if т.contains("debian") || т.contains("x-deb") => "📦",
+        _ => "📄",
+    }
+}
+
+fn расскажи_всё() {
+    let Some((s, данные, программы, значки, стол, раскладки, фокус, можно)) = с_ядром(|я| {
+        (я.s.clone(), я.данные.clone(), программы_меню(я), значки_стола(я), я.стол, я.раскладки.clone(), я.фокус_до, я.можно_ставить)
+    }) else {
+        return;
+    };
+    let _ = можно;
+    crate::desktop::обнови_виджеты();
+    скажи("программы", Value::Array(программы.clone()));
+    скажи("значки", Value::Array(значки));
+    скажи("обои", json!({ "css": обои_css(s["wallpaper"].as_str().unwrap_or(""), &данные) }));
+    скажи("часы", json!({ "пояс": s["tz"], "ч24": s["clock24"] }));
+    скажи("настройки", json!({ "dnd": s["dnd"], "nightLight": s["nightLight"], "эконом": false }));
+    let закреплены: Vec<Value> = s["dockApps"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|id| id.as_str().and_then(наша))
+        .map(сведения_нашей)
+        .collect();
+    скажи("док", json!({ "закреплены": закреплены, "сведения": [], "запущены": [], "активное": "", "окон": 0 }));
+    скажи("обзор-данные", данные_обзора(&s, стол));
+    let коды: Vec<String> = раскладки.0.iter().map(|к| if к == "us" { "EN".into() } else { к.to_uppercase() }).collect();
+    if !коды.is_empty() {
+        скажи("раскладка", json!(коды.join("·")));
+    }
+    // Параметрам — в том виде, в каком им рассказывала страница
+    let осталось = фокус.map(|до| ((до - glib::real_time() / 1_000_000).max(0)) as u64).unwrap_or(0);
+    let mut kv = Map::new();
+    for к in ["notif", "autoLock", "focusLen"] {
+        kv.insert(к.into(), s[к].clone());
+    }
+    скажи(
+        "параметры",
+        json!({
+            "s": s,
+            "kv": kv,
+            "обои": данные["обои"],
+            "акценты": данные["акценты"],
+            "программы": НАШИ.iter().filter(|н| н.id != "installer").map(сведения_нашей).collect::<Vec<_>>(),
+            "виджеты": ВИДЖЕТЫ.iter().map(|(t, и, з)| json!({ "t": t, "имя": и, "знак": з })).collect::<Vec<_>>(),
+            "столов": s["desks"],
+            "языки": ЯЗЫКИ.iter().map(|(k, и, _)| json!({ "k": k, "имя": и })).collect::<Vec<_>>(),
+            "язык": язык_сейчас(),
+            "раскладки": раскладки.0,
+            "все_раскладки": раскладки.1,
+            "бренд": { "имя": "GlowerOS", "полное": бренд_полное(), "версия": версия() },
+            "профиль": { "имя": s["userName"], "знак": s["userEmoji"] },
+            "фокус": осталось,
+            "нативно": true
+        }),
+    );
+    let _ = программы;
+}
+
+fn данные_обзора(s: &Value, стол: u64) -> Value {
+    let окна = окна_этого_стола();
+    let столов = s["desks"].as_u64().unwrap_or(2).clamp(1, 4);
+    let на_столах: Vec<u64> = с_ядром(|я| {
+        (0..столов).map(|n| я.окна.iter().filter(|о| я.где_окно.get(&ключ_окна(о)).copied().unwrap_or(я.стол) == n).count() as u64).collect()
+    })
+    .unwrap_or_default();
+    let окна: Vec<Value> = окна
+        .iter()
+        .map(|о| {
+            let app = о["appId"].as_str().unwrap_or("");
+            let наша = НАШИ.iter().find(|н| !н.окно.is_empty() && н.окно == app);
+            json!({
+                "id": format!("{}\t{}", app, о["title"].as_str().unwrap_or("")),
+                "имя": о["title"],
+                "знак": наша.map(|н| н.знак).unwrap_or(""),
+                "фон": наша.map(|н| н.фон).unwrap_or(""),
+                "приложение": app,
+                "свёрнуто": о["состояние"]["свёрнуто"].as_bool() == Some(true),
+            })
+        })
+        .collect();
+    let на_столе: Vec<Value> = s["deskNative"].as_array().cloned().unwrap_or_default().iter().map(|п| п["id"].clone()).collect();
+    json!({
+        "столы": s["desks"].as_u64().unwrap_or(2).clamp(1, 4),
+        "текущий": стол,
+        "можно-ещё": s["desks"].as_u64().unwrap_or(2) < 4,
+        "можно-убрать": false,
+        "на-столах": на_столах,
+        "окна": окна,
+        "на-столе": на_столе,
+        "в-доке": s["dockApps"],
+    })
+}
+
+fn бренд_полное() -> String {
+    format!("GlowerOS {}", версия())
+}
+
+pub fn версия() -> String {
+    // Версию системы знает пакет: dpkg пишет её в свою базу
+    std::process::Command::new("dpkg-query")
+        .args(["-W", "-f=${Version}", "glower"])
+        .output()
+        .ok()
+        .filter(|в| в.status.success())
+        .map(|в| String::from_utf8_lossy(&в.stdout).trim().to_string())
+        .filter(|в| !в.is_empty())
+        .unwrap_or_else(|| "12".into())
+}
+
+pub(crate) fn язык_сейчас() -> String {
+    let файл = std::fs::read_to_string(glib::user_config_dir().join("glower").join("locale")).unwrap_or_default();
+    let локаль = if файл.trim().is_empty() { std::env::var("LANG").unwrap_or_default() } else { файл.trim().to_string() };
+    ЯЗЫКИ.iter().find(|(_, _, л)| локаль.starts_with(&л[..5])).map(|(k, _, _)| k.to_string()).unwrap_or_else(|| "ru".into())
+}
+
+/* ---------- запуск программ ---------- */
+
+/// Запустить и забыть. Ждём выхода в стороне, иначе панель, которая живёт
+/// весь сеанс, копила бы зомби от каждой открытой программы
+pub fn запусти_команду(команда: &str, доводы: &[&str]) -> bool {
+    match std::process::Command::new(команда).args(доводы).spawn() {
+        Ok(mut ребёнок) => {
+            std::thread::spawn(move || ребёнок.wait());
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn окно_есть(app: &str) -> Option<Value> {
+    с_ядром(|я| я.окна.iter().find(|о| о["appId"].as_str() == Some(app)).cloned()).flatten()
+}
+
+fn к_окну(о: &Value) {
+    позови("sys.window", json!({ "action": "focus", "appId": о["appId"], "title": о["title"] }), |_| {});
+}
+
+/// Параметры на нужном разделе: уже открытые просто листаем туда
+pub fn открой_параметры(раздел: &str) {
+    match окно_есть("glower-settings") {
+        Some(о) => {
+            скажи("параметры-раздел", json!(раздел));
+            к_окну(&о);
+        }
+        None => {
+            запусти_команду("glower-settings", &[раздел]);
+        }
+    }
+}
+
+/// Открыть программу: свою, машины или по имени ярлыка
+pub fn запусти(id: &str, вид: &str) {
+    if вид == "машина" {
+        match gio::DesktopAppInfo::new(id) {
+            Some(д) => {
+                if let Err(е) = д.launch(&[], None::<&gio::AppLaunchContext>) {
+                    notify::покажи(&д.name(), &format!("Не запустилась: {е}"), "⚠️");
+                }
+            }
+            None => notify::покажи("Программы машины", "Такой программы на машине больше нет", "⚠️"),
+        }
+        return;
+    }
+    let Some(н) = наша(id) else {
+        if id == "trash" {
+            запусти_команду("glower-files", &["--trash"]);
+        }
+        return;
+    };
+    if н.одна {
+        if let Some(о) = окно_есть(н.окно) {
+            return к_окну(&о);
+        }
+    }
+    let удалось = match id {
+        "term" => {
+            позови("sys.terminal", json!({}), |о| {
+                if о.is_err() && !запусти_команду("foot", &[]) {
+                    notify::покажи("Терминал", "На машине нет программы терминала", "⚠️");
+                }
+            });
+            true
+        }
+        "browser" => match БРАУЗЕРЫ.iter().find_map(|я| gio::DesktopAppInfo::new(я)) {
+            Some(д) => д.launch(&[], None::<&gio::AppLaunchContext>).is_ok(),
+            // Браузера на машине нет — Магазин сразу на нём
+            None => запусти_команду("glower-store", &["--find=firefox"]),
+        },
+        _ => запусти_команду(н.окно, &[]),
+    };
+    if !удалось {
+        notify::покажи(н.имя, "Не запустилась", "⚠️");
+    }
+}
+
+/// Открыть файл тем, чем его открывает система
+pub fn открой_путь(путь: &std::path::Path) {
+    if путь.is_dir() {
+        запусти_команду("glower-files", &[&путь.to_string_lossy()]);
+        return;
+    }
+    let тип = gio::content_type_guess(Some(путь), &[]).0;
+    let строка = путь.to_string_lossy();
+    if gio::content_type_is_a(&тип, "text/plain") && запусти_команду("glower-notepad", &[&строка]) {
+        return;
+    }
+    if тип.starts_with("image/") && запусти_команду("glower-photos", &[&строка]) {
+        return;
+    }
+    if тип.starts_with("audio/") && запусти_команду("glower-music", &[&строка]) {
+        return;
+    }
+    if (тип.contains("debian") || строка.ends_with(".deb") || строка.ends_with(".flatpakref") || строка.ends_with(".AppImage")) && запусти_команду("glower-open-package", &[&строка]) {
+        return;
+    }
+    let uri = gio::File::for_path(путь).uri();
+    if gio::AppInfo::launch_default_for_uri(&uri, None::<&gio::AppLaunchContext>).is_err() {
+        notify::покажи(&путь.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default(), "Нечем открыть такой файл", "⚠️");
+    }
+}
+
+/* ---------- рабочие столы ----------
+
+   Столы — настоящие, оконного сервера: окна других столов он прячет сам.
+   Попросить его перейти можно только сочетанием клавиш, поэтому в rc.xml
+   на Win+Ctrl+Alt+F1…F4 висят «перейти на стол», а с Shift — «отправить
+   окно на стол», и мы нажимаем их через wtype. */
+
+fn клавиши(доводы: &[&str]) -> bool {
+    std::process::Command::new("wtype").args(доводы).status().map(|с| с.success()).unwrap_or(false)
+}
+
+pub fn на_стол(n: u64) {
+    let всего = настройка("desks").as_u64().unwrap_or(2).clamp(1, 4);
+    if n >= всего {
+        return;
+    }
+    let f = format!("F{}", n + 1);
+    if клавиши(&["-M", "logo", "-M", "ctrl", "-M", "alt", "-k", &f, "-m", "alt", "-m", "ctrl", "-m", "logo"]) {
+        с_ядром(|я| я.стол = n);
+        расскажи_скоро();
+    }
+}
+
+fn ключ_окна(о: &Value) -> String {
+    format!("{}\t{}", о["appId"].as_str().unwrap_or(""), о["title"].as_str().unwrap_or(""))
+}
+
+/// Стоит ли окно на текущем столе. Окна, которых ядро ещё не видело, —
+/// здесь: они только что открылись
+pub fn на_этом_столе(о: &Value) -> bool {
+    с_ядром(|я| я.где_окно.get(&ключ_окна(о)).map_or(true, |n| *n == я.стол)).unwrap_or(true)
+}
+
+/// Окна текущего стола — их видят док, полоса и просмотр задач
+pub fn окна_этого_стола() -> Vec<Value> {
+    с_ядром(|я| {
+        let стол = я.стол;
+        я.окна.iter().filter(|о| я.где_окно.get(&ключ_окна(о)).copied().unwrap_or(стол) == стол).cloned().collect()
+    })
+    .unwrap_or_default()
+}
+
+fn окно_на_стол(id: &str, n: u64) {
+    с_ядром(|я| {
+        я.где_окно.insert(id.to_string(), n);
+    });
+    расскажи_скоро();
+    let (app, title) = id.split_once('\t').unwrap_or((id, ""));
+    let (app, title, f) = (app.to_string(), title.to_string(), format!("F{}", n + 1));
+    // Отправить можно только окно в фокусе: сперва переходим к нему
+    позови("sys.window", json!({ "action": "focus", "appId": app, "title": title }), move |_| {
+        glib::timeout_add_local_once(Duration::from_millis(150), move || {
+            клавиши(&["-M", "logo", "-M", "ctrl", "-M", "alt", "-M", "shift", "-k", &f, "-m", "shift", "-m", "alt", "-m", "ctrl", "-m", "logo"]);
+        });
+    });
+}
+
+/* ---------- просьбы ---------- */
+
+fn переключи_в_списке(k: &str, id: &str) {
+    let mut с: Vec<Value> = настройка(k).as_array().cloned().unwrap_or_default();
+    if let Some(i) = с.iter().position(|х| х.as_str() == Some(id)) {
+        с.remove(i);
+    } else {
+        с.push(json!(id));
+    }
+    задай(k, Value::Array(с));
+}
+
+fn обзор_дело(д: &Value) {
+    let id = д["id"].as_str().unwrap_or("");
+    let вид = д["вид"].as_str().unwrap_or("приложение");
+    match д["что"].as_str().unwrap_or("") {
+        "запусти" => запусти(id, вид),
+        "стол" => на_стол(д["n"].as_u64().unwrap_or(0)),
+        "стол-добавь" => {
+            let n = (настройка("desks").as_u64().unwrap_or(2) + 1).min(4);
+            задай("desks", json!(n));
+        }
+        "окно" => {
+            let (app, title) = id.split_once('\t').unwrap_or((id, ""));
+            let свёрнуто = с_ядром(|я| я.окна.iter().any(|о| о["appId"].as_str() == Some(app) && о["title"].as_str() == Some(title) && о["состояние"]["свёрнуто"].as_bool() == Some(true))).unwrap_or(false);
+            позови("sys.window", json!({ "action": if свёрнуто { "restore" } else { "focus" }, "appId": app, "title": title }), |_| {});
+        }
+        "окно-закрой" => {
+            let (app, title) = id.split_once('\t').unwrap_or((id, ""));
+            позови("sys.window", json!({ "action": "close", "appId": app, "title": title }), |_| {});
+            glib::timeout_add_local_once(Duration::from_millis(400), опроси_окна);
+        }
+        "окно-на-стол" => окно_на_стол(id, д["n"].as_u64().unwrap_or(0)),
+        "окно-на-новый-стол" => {
+            let n = настройка("desks").as_u64().unwrap_or(2);
+            if n < 4 {
+                задай("desks", json!(n + 1));
+                окно_на_стол(id, n);
+            }
+        }
+        "на-стол" | "на-новый-стол" => {
+            let n = if д["что"] == "на-стол" {
+                д["n"].as_u64().unwrap_or(0)
+            } else {
+                let n = настройка("desks").as_u64().unwrap_or(2);
+                if n >= 4 {
+                    return;
+                }
+                задай("desks", json!(n + 1));
+                n
+            };
+            на_стол(n);
+            let (id, вид) = (id.to_string(), вид.to_string());
+            glib::timeout_add_local_once(Duration::from_millis(250), move || запусти(&id, &вид));
+        }
+        "вынеси" => {
+            if вид == "машина" {
+                let mut с: Vec<Value> = настройка("deskNative").as_array().cloned().unwrap_or_default();
+                if let Some(i) = с.iter().position(|п| п["id"].as_str() == Some(id)) {
+                    с.remove(i);
+                } else {
+                    с.push(json!({ "id": id, "имя": д["имя"] }));
+                }
+                задай("deskNative", Value::Array(с));
+            } else {
+                переключи_в_списке("deskApps", id);
+            }
+        }
+        "док" => переключи_в_списке("dockApps", id),
+        "магазин" => {
+            let имя = д["имя"].as_str().unwrap_or(id).to_string();
+            запусти_команду("glower-store", &[&format!("--find={имя}")]);
+        }
+        "закрой-все" => {
+            if let Some(н) = наша(id) {
+                let окна = с_ядром(|я| я.окна.clone()).unwrap_or_default();
+                for о in окна.iter().filter(|о| о["appId"].as_str() == Some(н.окно)) {
+                    позови("sys.window", json!({ "action": "close", "appId": о["appId"], "title": о["title"] }), |_| {});
+                }
+            }
+        }
+        "очисти-корзину" => позови("fs.trash.empty", json!({}), |_| {}),
+        "удали" => удали_программу(id, д["имя"].as_str().unwrap_or(id)),
+        _ => {}
+    }
+    скажи("обзор-данные", данные_обзора(&с_ядром(|я| я.s.clone()).unwrap_or_default(), с_ядром(|я| я.стол).unwrap_or(0)));
+}
+
+fn мегабайты(б: f64) -> String {
+    if б >= 1073741824.0 { format!("{:.1} ГБ", б / 1073741824.0).replace('.', ",") } else { format!("{} МБ", (б / 1048576.0).round().max(1.0)) }
+}
+
+/// Удалить программу машины. Агент сам выясняет, кто её хозяин и что уйдёт
+/// вместе с ней, — человек видит это словами до того, как согласится
+fn удали_программу(id: &str, имя: &str) {
+    let (id, имя) = (id.to_string(), имя.to_string());
+    позови("pkg.owner", json!({ "id": id }), move |о| {
+        let о = match о {
+            Ok(о) => о,
+            Err(е) => return notify::покажи(&имя, &format!("Не удалось удалить: {е}"), "⚠️"),
+        };
+        if о["можно"].as_bool() != Some(true) {
+            return notify::покажи(&format!("«{имя}» удалить нельзя"), о["почему"].as_str().unwrap_or(""), "🔒");
+        }
+        if о["разрешено"].as_bool() != Some(true) {
+            return notify::покажи("Удаление выключено", "Системе не дали права ставить и удалять программы.", "🔒");
+        }
+        let пакет = о["пакет"].as_str().unwrap_or("").to_string();
+        let (текст, кнопка) = match о["вид"].as_str().unwrap_or("") {
+            "apt" => {
+                let ещё = о["уйдёт"].as_array().map(|у| у.iter().filter(|п| п.as_str() != Some(&пакет)).count()).unwrap_or(0);
+                let mut т = format!("Будет удалён пакет «{пакет}»{}.", if ещё > 0 { format!(" и ещё {ещё}, которые были нужны только ему") } else { String::new() });
+                if let Some(б) = о["освободит"].as_f64() {
+                    т.push_str(&format!("\nОсвободится около {}.", мегабайты(б)));
+                }
+                т.push_str("\n\nНастройки программы в вашей папке останутся.");
+                (т, "Удалить")
+            }
+            "flatpak" => ("Программа из Flathub будет удалена. Её настройки в вашей папке останутся.".into(), "Удалить"),
+            "windows" if о["ключ"].is_string() => ("Откроется окно удаления самой программы — как в Windows. Следуйте ему.".into(), "Открыть удаление"),
+            "windows" => ("Эту программу ставили без установщика. Можно убрать её из меню — файлы останутся в папке Windows.".into(), "Убрать ярлык"),
+            "appimage" => (format!("Программа одним файлом будет удалена вместе с ярлыком:\n{}", о["образ"].as_str().unwrap_or("")), "Удалить"),
+            _ => ("За этим ярлыком нет пакета — будет удалён только сам ярлык.".into(), "Убрать ярлык"),
+        };
+        let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Question, gtk::ButtonsType::None, &format!("Удалить «{имя}»?"));
+        д.set_secondary_text(Some(&текст));
+        д.add_button("Отмена", gtk::ResponseType::Cancel);
+        д.add_button(кнопка, gtk::ResponseType::Accept);
+        let ответ = д.run();
+        unsafe { д.destroy() };
+        if ответ != gtk::ResponseType::Accept {
+            return;
+        }
+        let windows = о["вид"].as_str() == Some("windows");
+        let (id2, имя2) = (id.clone(), имя.clone());
+        позови("pkg.uninstall", json!({ "id": id }), move |о| match о {
+            Err(е) => notify::покажи(&имя2, &format!("Не удалось удалить: {е}"), "⚠️"),
+            Ok(о) if о["удалено"].as_bool() == Some(true) => удалено(&id2, &имя2),
+            Ok(_) => следи_за_удалением(id2, имя2, windows),
+        });
+    });
+}
+
+fn удалено(id: &str, имя: &str) {
+    // Программы больше нет — нет и её значков: на столе, в меню, в поиске
+    let с: Vec<Value> = настройка("deskNative").as_array().cloned().unwrap_or_default().into_iter().filter(|п| п["id"].as_str() != Some(id)).collect();
+    задай("deskNative", Value::Array(с));
+    notify::покажи(имя, "Удалено", "🗑️");
+    обнови_программы();
+}
+
+fn следи_за_удалением(id: String, имя: String, windows: bool) {
+    let кончено = std::rc::Rc::new(Cell::new(false));
+    glib::timeout_add_local(Duration::from_millis(if windows { 3000 } else { 1500 }), move || {
+        if кончено.get() {
+            return glib::ControlFlow::Break;
+        }
+        let (id2, имя2) = (id.clone(), имя.clone());
+        let к2 = кончено.clone();
+        let (метод, доводы) = if windows { ("pkg.uninstall.windows", json!({ "id": id2 })) } else { ("pkg.job", json!({})) };
+        позови(метод, доводы, move |о| {
+            let Ok(с) = о else { return };
+            if с["идёт"].as_bool() == Some(true) || с["running"].as_bool() == Some(true) {
+                return;
+            }
+            к2.set(true);
+            if с["удалено"].as_bool() == Some(true) || с["ok"].as_bool() == Some(true) {
+                удалено(&id2, &имя2);
+            } else {
+                let почему = [с["почему"].as_str(), с["error"].as_str()].into_iter().flatten().next().unwrap_or("система не сказала, что пошло не так").to_string();
+                notify::покажи(&имя2, &format!("Не удалено: {почему}"), "⚠️");
+            }
+        });
+        // Ответ придёт после этого шага; следующий шаг его увидит
+        glib::ControlFlow::Continue
+    });
+}
+
+fn параметры_дело(д: &Value) {
+    let k = д["k"].as_str().unwrap_or("");
+    match д["что"].as_str().unwrap_or("") {
+        "set" | "kv" => задай(k, д["v"].clone()),
+        "список" => переключи_в_списке(k, д["id"].as_str().unwrap_or("")),
+        "акцент" => {
+            с_ядром(|я| я.s["accentCustom"] = Value::Null);
+            задай("accent", д["i"].clone());
+        }
+        "акцент-свой" => задай("accentCustom", д["цвет"].clone()),
+        "виджет+" => {
+            let mut с: Vec<Value> = настройка("deskWidgets").as_array().cloned().unwrap_or_default();
+            с.push(json!({ "t": д["t"] }));
+            задай("deskWidgets", Value::Array(с));
+        }
+        "виджет-" => {
+            let mut с: Vec<Value> = настройка("deskWidgets").as_array().cloned().unwrap_or_default();
+            let i = д["i"].as_u64().unwrap_or(u64::MAX) as usize;
+            if i < с.len() {
+                с.remove(i);
+            }
+            задай("deskWidgets", Value::Array(с));
+        }
+        "столы" => задай("desks", json!(д["n"].as_u64().unwrap_or(2).clamp(1, 4))),
+        "уведомление" => notify::покажи("Тестовое уведомление", "Так выглядят уведомления GlowerOS", "🔔"),
+        "фокус" => фокус(д["минут"].as_u64().unwrap_or(0)),
+        "имя" => {
+            if let Some(и) = д["имя"].as_str().filter(|и| !и.trim().is_empty()) {
+                задай("userName", json!(и.trim()));
+            }
+            if let Some(з) = д["знак"].as_str() {
+                задай("userEmoji", json!(з));
+            }
+        }
+        "язык" => {
+            if let Some((_, _, л)) = ЯЗЫКИ.iter().find(|(k, _, _)| Some(*k) == д["k"].as_str()) {
+                let _ = л;
+                позови("sys.locale.set", json!({ "язык": д["k"] }), |о| {
+                    if let Err(е) = о {
+                        notify::покажи("Язык", &format!("Не вышло сменить язык: {е}"), "⚠️");
+                    } else {
+                        notify::покажи("Язык", "Язык сменится со следующего входа в систему", "🗣");
+                    }
+                });
+                расскажи_скоро();
+            }
+        }
+        "раскладки" => {
+            let список: Vec<String> = д["список"].as_array().map(|а| а.iter().filter_map(|х| х.as_str().map(String::from)).collect()).unwrap_or_default();
+            let список2 = список.clone();
+            позови("sys.kb.set", json!({ "раскладки": список }), move |о| {
+                let (ошибка, сразу) = match &о {
+                    Ok(в) => (String::new(), в["сразу"].as_bool() == Some(true)),
+                    Err(е) => (е.clone(), false),
+                };
+                if о.is_ok() {
+                    с_ядром(|я| я.раскладки.0 = список2.clone());
+                    расскажи_скоро();
+                }
+                скажи("параметры-итог", json!({ "что": "раскладки", "ошибка": ошибка, "сразу": сразу }));
+            });
+        }
+        "питание" => {
+            let действие = д["action"].as_str().unwrap_or("").to_string();
+            позови("sys.power", json!({ "action": действие }), |_| {});
+        }
+        "погода" => обнови_погоду(),
+        "настройка" => crate::setup::покажи(),
+        "сброс" => {
+            let сохранить = ["setupDone", "userName", "iconPos", "deskApps", "deskNative"];
+            let mut новые = умолчания();
+            for к in сохранить {
+                новые[к] = настройка(к);
+            }
+            с_ядром(|я| я.s = новые);
+            сохрани();
+            ночной_свет();
+            расскажи_скоро();
+        }
+        _ => {}
+    }
+}
+
+/// Фокусировка: «Не беспокоить» на заданное время
+fn фокус(минут: u64) {
+    if минут == 0 {
+        с_ядром(|я| я.фокус_до = None);
+        задай("dnd", json!(false));
+        return;
+    }
+    let до = glib::real_time() / 1_000_000 + минут as i64 * 60;
+    с_ядром(|я| я.фокус_до = Some(до));
+    задай("dnd", json!(true));
+    glib::timeout_add_local(Duration::from_secs(5), move || {
+        let сейчас = glib::real_time() / 1_000_000;
+        match с_ядром(|я| я.фокус_до).flatten() {
+            Some(д) if д == до && сейчас >= д => {
+                с_ядром(|я| я.фокус_до = None);
+                задай("dnd", json!(false));
+                notify::покажи("Фокусировка", "Сессия завершена", "🎯");
+                glib::ControlFlow::Break
+            }
+            Some(д) if д == до => glib::ControlFlow::Continue,
+            _ => glib::ControlFlow::Break,
+        }
+    });
+}
+
+/// Ночной свет — тёплые тона на весь день: wlsunset с одинаковым днём
+fn ночной_свет() {
+    let вкл = настройка("nightLight").as_bool() == Some(true);
+    let _ = std::process::Command::new("pkill").args(["-x", "wlsunset"]).status();
+    if вкл && !запусти_команду("wlsunset", &["-S", "00:00", "-s", "23:59", "-T", "4000", "-t", "3999"]) {
+        notify::покажи("Ночной свет", "На машине нет wlsunset — тёплые тона включить нечем", "⚠️");
+    }
+}
+
+/// Замок после N минут без дела. Бездействие видит оконный сервер, а не
+/// мы: swayidle спрашивает его и сам зовёт замок, когда время вышло
+fn авто_замок() {
+    let _ = std::process::Command::new("pkill").args(["-x", "swayidle"]).status();
+    let минут = настройка("autoLock").as_u64().or_else(|| настройка("autoLock").as_str().and_then(|т| т.parse().ok())).unwrap_or(0);
+    if минут > 0 {
+        запусти_команду("swayidle", &["-w", "timeout", &(минут * 60).to_string(), "glower-menu замок"]);
+    }
+}
+
+/// Win+D: свернуть всё, второй раз — вернуть
+fn покажи_стол() {
+    let свёрнутые = с_ядром(|я| я.свёрнутые.clone()).unwrap_or_default();
+    let окна = окна_этого_стола();
+    let открытые: Vec<(String, String)> = окна
+        .iter()
+        .filter(|о| о["оболочка"].as_bool() != Some(true) && о["состояние"]["свёрнуто"].as_bool() != Some(true))
+        .map(|о| (о["appId"].as_str().unwrap_or("").to_string(), о["title"].as_str().unwrap_or("").to_string()))
+        .collect();
+    if открытые.is_empty() {
+        for (app, title) in &свёрнутые {
+            позови("sys.window", json!({ "action": "restore", "appId": app, "title": title }), |_| {});
+        }
+        с_ядром(|я| я.свёрнутые.clear());
+        return;
+    }
+    for (app, title) in &открытые {
+        позови("sys.window", json!({ "action": "minimize", "appId": app, "title": title }), |_| {});
+    }
+    с_ядром(|я| я.свёрнутые = открытые);
+}
+
+/* ---------- опросы ---------- */
+
+pub fn обнови_программы() {
+    позови("sys.apps", json!({}), |о| {
+        if let Ok(о) = о {
+            let список: Vec<Value> = о["list"].as_array().cloned().unwrap_or_default();
+            с_ядром(|я| я.машина = список);
+            расскажи_скоро();
+        }
+    });
+    позови("install.can", json!({}), |о| {
+        let можно = о.map(|о| о["allowed"].as_bool() == Some(true) && о["reason"].is_null()).unwrap_or(false);
+        с_ядром(|я| я.можно_ставить = можно);
+        расскажи_скоро();
+    });
+}
+
+fn опроси_окна() {
+    позови("sys.windows", json!({}), |о| {
+        if let Ok(о) = о {
+            // Свои диалоги панели (имя для папки и т. п.) — не программы
+            let список: Vec<Value> = о["list"].as_array().cloned().unwrap_or_default().into_iter().filter(|w| w["appId"].as_str() != Some("glower-panel")).collect();
+            let менялось = с_ядром(|я| {
+                let было = std::mem::replace(&mut я.окна, список);
+                let стол = я.стол;
+                let есть: std::collections::HashSet<String> = я.окна.iter().map(ключ_окна).collect();
+                я.где_окно.retain(|к, _| есть.contains(к));
+                for к in есть {
+                    я.где_окно.entry(к).or_insert(стол);
+                }
+                было != я.окна
+            });
+            if менялось == Some(true) {
+                let (s, стол) = с_ядром(|я| (я.s.clone(), я.стол)).unwrap_or_default();
+                скажи("обзор-данные", данные_обзора(&s, стол));
+            }
+        }
+    });
+}
+
+fn проверь_обновления(читать: bool) {
+    let (куда, откуда) = async_channel::bounded::<Option<Value>>(1);
+    std::thread::spawn(move || {
+        if читать && зов("pkg.update", json!({}), 30).is_ok() {
+            for _ in 0..60 {
+                std::thread::sleep(Duration::from_secs(3));
+                match зов("pkg.job", json!({}), 10) {
+                    Ok(j) if j["running"].as_bool() == Some(true) => continue,
+                    _ => break,
+                }
+            }
+        }
+        let _ = куда.send_blocking(зов("pkg.upgrade.check", json!({}), 120).ok());
+    });
+    glib::MainContext::default().spawn_local(async move {
+        let Ok(Some(д)) = откуда.recv().await else { return };
+        let список = д["list"].as_array().cloned().unwrap_or_default();
+        let наш = список.iter().find(|х| х["name"].as_str() == Some("glower")).cloned();
+        let итог = json!({ "система": список.len(), "приложения": д["flathub"].as_array().map(|а| а.len()).unwrap_or(0), "наш": наш });
+        let было = с_ядром(|я| std::mem::replace(&mut я.обновления, итог.clone())).unwrap_or_default();
+        скажи("обновления", итог);
+        if let Some(н) = &наш {
+            if было["наш"]["станет"] != н["станет"] {
+                notify::покажи(
+                    "Новая версия системы",
+                    &format!("GlowerOS {} установится при перезагрузке: меню питания → «Обновить и перезагрузить»", н["станет"].as_str().unwrap_or("")),
+                    "✨",
+                );
+            }
+        }
+    });
+}
+
+fn опроси_носители() {
+    позови("sys.drives", json!({}), |о| {
+        let Ok(д) = о else { return };
+        if д["есть"].as_bool() != Some(true) {
+            return;
+        }
+        let список = д["list"].as_array().cloned().unwrap_or_default();
+        let сейчас: Vec<String> = список.iter().filter_map(|н| н["dev"].as_str().map(String::from)).collect();
+        let было = с_ядром(|я| я.носители.replace(сейчас.clone())).flatten();
+        // При запуске не тревожим: флешка могла торчать и раньше
+        let Some(было) = было else { return };
+        for н in список.iter().filter(|н| !было.iter().any(|б| Some(б.as_str()) == н["dev"].as_str())) {
+            let имя = [н["метка"].as_str(), н["модель"].as_str(), н["dev"].as_str()].into_iter().flatten().find(|с| !с.is_empty()).unwrap_or("Носитель").to_string();
+            let dev = н["dev"].as_str().unwrap_or("").to_string();
+            let гб = н["размер"].as_f64().unwrap_or(0.0) / 1073741824.0;
+            notify::покажи_с_делом(
+                "Носитель подключён",
+                &format!("{имя} · {:.1} ГБ", гб).replace('.', ","),
+                "💾",
+                "Открыть",
+                Box::new(move || {
+                    позови("sys.drive", json!({ "action": "open", "dev": dev }), |о| {
+                        if let Ok(о) = о {
+                            if let Some(где) = о["где"].as_str() {
+                                запусти_команду("glower-files", &[где]);
+                            }
+                        }
+                    });
+                }),
+            );
+        }
+    });
+}
+
+fn опроси_заряд() {
+    позови("sys.battery", json!({}), |о| {
+        let Ok(б) = о else { return };
+        let есть = б["present"].as_bool() == Some(true);
+        let уровень = б["battery"]["level"].as_f64();
+        let заряжается = б["charging"].as_bool() == Some(true);
+        let сеть = б["ac"]["online"].as_bool() == Some(true);
+        скажи("батарея", json!({ "есть": есть, "уровень": уровень, "заряжается": заряжается, "сеть": сеть }));
+        if !есть || заряжается {
+            с_ядром(|я| я.заряд_сказан = 0);
+            return;
+        }
+        let Some(у) = уровень else { return };
+        let порог = if у <= 5.0 { 5 } else if у <= 10.0 { 10 } else { 0 };
+        let сказан = с_ядром(|я| я.заряд_сказан).unwrap_or(0);
+        if порог > 0 && (сказан == 0 || порог < сказан) {
+            с_ядром(|я| я.заряд_сказан = порог);
+            notify::покажи(
+                if порог <= 5 { "Заряд почти кончился" } else { "Низкий заряд" },
+                &format!("Осталось {у:.0}% — подключите зарядку"),
+                "🪫",
+            );
+        }
+    });
+}
+
+pub fn обнови_погоду() {
+    let город = настройка("city").as_str().unwrap_or("Москва").to_string();
+    позови("weather", json!({ "город": город }), |о| {
+        if let Ok(п) = о {
+            с_ядром(|я| я.погода = п.clone());
+            скажи("погода", п);
+            crate::desktop::обнови_виджеты();
+        }
+    });
+}
+
+pub fn погода() -> Value {
+    с_ядром(|я| я.погода.clone()).unwrap_or(Value::Null)
+}
+
+fn смени_обои() {
+    if настройка("wallShuffle").as_bool() != Some(true) {
+        return;
+    }
+    let данные = с_ядром(|я| я.данные.clone()).unwrap_or_default();
+    let обои = данные["обои"].as_array().cloned().unwrap_or_default();
+    let сейчас = настройка("wallpaper");
+    let i = обои.iter().position(|в| в["id"] == сейчас).map(|i| i + 1).unwrap_or(0) % обои.len().max(1);
+    if let Some(в) = обои.get(i) {
+        задай("wallpaper", в["id"].clone());
+    }
+}
+
+/* ---------- установка из файла и программы Windows ---------- */
+
+fn спроси(заголовок: &str, текст: &str, да: &str) -> bool {
+    let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Question, gtk::ButtonsType::None, заголовок);
+    д.set_secondary_text(Some(текст));
+    д.add_button("Отмена", gtk::ResponseType::Cancel);
+    д.add_button(да, gtk::ResponseType::Accept);
+    д.set_default_response(gtk::ResponseType::Accept);
+    let ответ = д.run();
+    unsafe { д.destroy() };
+    ответ == gtk::ResponseType::Accept
+}
+
+fn имя_файла(путь: &str) -> String {
+    путь.rsplit('/').next().unwrap_or(путь).to_string()
+}
+
+/// Скачанный .deb, .flatpakref или AppImage открыли двойным щелчком —
+/// спрашиваем и ставим
+fn спроси_про_установку(путь: String) {
+    if путь.to_lowercase().ends_with(".appimage") {
+        let имя = имя_файла(&путь);
+        if спроси(&format!("Запустить «{имя}»?"), "Это программа одним файлом: она ничего не ставит в систему, а просто запускается. За то, что внутри, отвечает тот, кто её сделал.", "Запустить") {
+            позови("sys.appimage", json!({ "путь": путь }), move |о| {
+                if let Err(е) = о {
+                    notify::покажи(&имя, &format!("Не запустилась: {е}"), "⚠️");
+                }
+            });
+        }
+        return;
+    }
+    позови("pkg.file.info", json!({ "путь": путь }), move |о| {
+        let про = match о {
+            Ok(п) => п,
+            Err(е) => return notify::покажи("Не удалось прочитать файл", &е, "⚠️"),
+        };
+        let мб = |b: f64| if b >= 1048576.0 { format!("{:.1} МБ", b / 1048576.0) } else if b >= 1024.0 { format!("{} КБ", (b / 1024.0).round()) } else { format!("{b} Б") };
+        let mut строки = vec![
+            format!("Версия: {}", про["версия"].as_str().unwrap_or("не указана")),
+            format!("Размер файла: {}", мб(про["размер"].as_f64().unwrap_or(0.0))),
+        ];
+        if let Some(м) = про["место"].as_f64() {
+            строки.push(format!("Займёт на диске: около {}", мб(м)));
+        }
+        if let Some(о) = про["описание"].as_str().filter(|о| !о.is_empty()) {
+            строки.push(String::new());
+            строки.push(о.to_string());
+        }
+        let откуда = if про["вид"].as_str() == Some("flatpak") {
+            format!("Программу поставит flatpak с {}.", if про["откуда"].is_null() { "Flathub" } else { "указанного в файле хранилища" })
+        } else {
+            "Это программа из файла, а не из Магазина: за то, что внутри, отвечает тот, кто её сделал.".to_string()
+        };
+        let имя = про["имя"].as_str().unwrap_or("программу").to_string();
+        if !спроси(&format!("Поставить «{имя}»?"), &format!("{}\n\n{откуда}", строки.join("\n")), "Поставить") {
+            return;
+        }
+        позови("pkg.file.install", json!({ "путь": путь }), move |о| match о {
+            Err(е) => notify::покажи("Не удалось начать установку", &е, "⚠️"),
+            Ok(_) => {
+                notify::покажи("Установка", &format!("Ставлю «{имя}»"), "📦");
+                следи_за_установкой(имя, None);
+            }
+        });
+    });
+}
+
+/// Ход установки: ждём конца работы агента и говорим, чем кончилось
+fn следи_за_установкой(имя: String, потом: Option<Box<dyn Fn()>>) {
+    let потом = std::rc::Rc::new(потом);
+    let ждём = std::rc::Rc::new(Cell::new(false));
+    let кончено = std::rc::Rc::new(Cell::new(false));
+    glib::timeout_add_local(Duration::from_millis(1500), move || {
+        if кончено.get() {
+            return glib::ControlFlow::Break;
+        }
+        if ждём.replace(true) {
+            return glib::ControlFlow::Continue;
+        }
+        let (имя, потом, ждём, кончено) = (имя.clone(), потом.clone(), ждём.clone(), кончено.clone());
+        позови("pkg.job", json!({}), move |о| {
+            ждём.set(false);
+            let Ok(ход) = о else { return };
+            if ход["running"].as_bool() == Some(true) {
+                return;
+            }
+            кончено.set(true);
+            if ход["ok"].as_bool() == Some(true) {
+                notify::покажи(&имя, "Установлено", "✅");
+                обнови_программы();
+                if let Some(п) = потом.as_ref() {
+                    п();
+                }
+            } else if ход["error"].as_str() != Some("работа остановлена") {
+                notify::покажи(&format!("{имя}: установка не удалась"), ход["error"].as_str().unwrap_or("система не сказала, что пошло не так"), "⚠️");
+            }
+        });
+        glib::ControlFlow::Continue
+    });
+}
+
+/// Вести о программах Windows: «запускаю» и «нет Wine — поставить?»
+fn программа_windows(что: &Value) {
+    let путь = что["путь"].as_str().unwrap_or("").to_string();
+    let имя = имя_файла(&путь);
+    match что["событие"].as_str() {
+        Some("запуск") => notify::покажи(&имя, "Запускаю программу Windows", "🪟"),
+        Some("нет-wine") => {
+            if спроси(
+                "Поставить поддержку программ Windows?",
+                &format!("Чтобы открыть «{имя}», нужен Wine — прослойка, на которой в Linux работают программы для Windows. Он займёт около 700 МБ и поставится один раз. Работает многое, но не всё: тяжёлым программам и играм с защитой от читов Wine часто не подходит."),
+                "Поставить",
+            ) {
+                позови("pkg.windows.install", json!({}), move |о| match о {
+                    Err(е) => notify::покажи("Не удалось начать установку", &е, "⚠️"),
+                    Ok(_) => следи_за_установкой(
+                        "Поддержка программ Windows".into(),
+                        Some(Box::new(move || позови("sys.windows.run", json!({ "путь": путь }), |_| {}))),
+                    ),
+                });
+            }
+        }
+        _ => {}
+    }
+}
+
+/* ---------- начало ---------- */
+
+pub fn начни() {
+    let данные: Value = serde_json::from_str(ДАННЫЕ).unwrap_or_default();
+    Я.with(|я| *я.borrow_mut() = Some(Ядро { s: загрузи(), данные, ..Default::default() }));
+
+    // Слушаем просьбы всех, кто прежде просил страницу
+    let вести = слушай(
+        &[],
+        &[
+            "обзор-дело", "обзор-дай", "значки-дело", "параметры-дело", "дай-док", "открой", "настройка", "клавиша", "стол",
+            "пробуждение", "уведомление", "уведомление-закрыть", "файл-установщик", "windows", "снимок", "покажи",
+        ],
+    );
+    glib::MainContext::default().spawn_local(async move {
+        while let Ok(в) = вести.recv().await {
+            let что = &в.что;
+            match в.тема.as_str() {
+                "обзор-дело" => обзор_дело(что),
+                "обзор-дай" => {
+                    let (s, стол) = с_ядром(|я| (я.s.clone(), я.стол)).unwrap_or_default();
+                    скажи("обзор-данные", данные_обзора(&s, стол));
+                }
+                "значки-дело" => crate::desktop::дело_ядра(что),
+                "параметры-дело" => параметры_дело(что),
+                "дай-док" => расскажи_скоро(),
+                "открой" => {
+                    let вид = что["вид"].as_str().unwrap_or("приложение");
+                    let id = что["id"].as_str().unwrap_or("");
+                    if id == "settings" {
+                        if let Some(раздел) = что["довод"]["section"].as_str() {
+                            открой_параметры(раздел);
+                            continue;
+                        }
+                    }
+                    запусти(id, вид);
+                }
+                "настройка" => {
+                    if let Some(к) = что["ключ"].as_str().filter(|к| ["dnd", "nightLight"].contains(к)) {
+                        задай(к, что["что"].clone());
+                    }
+                }
+                "клавиша" => {
+                    if что.as_str() == Some("W-d") {
+                        покажи_стол();
+                    }
+                }
+                "стол" => {
+                    let текущий = с_ядром(|я| я.стол).unwrap_or(0);
+                    let всего = настройка("desks").as_u64().unwrap_or(2);
+                    let куда = match что.as_str() {
+                        Some("вперёд") => текущий + 1,
+                        Some("назад") => текущий.saturating_sub(1),
+                        Some(н) => н.parse::<u64>().unwrap_or(1).saturating_sub(1),
+                        None => continue,
+                    };
+                    if куда < всего && куда != текущий {
+                        на_стол(куда);
+                    }
+                }
+                "покажи" if что.as_str() == Some("раскладка") => открой_параметры("time"),
+                "пробуждение" => {
+                    if настройка("lockOnWake").as_bool() != Some(false) {
+                        позови("sys.power", json!({ "action": "lock" }), |_| {});
+                    }
+                }
+                "уведомление" => notify::из_шины(что),
+                "уведомление-закрыть" => notify::закрой_номер(что["номер"].as_u64().unwrap_or(0) as u32),
+                "файл-установщик" => {
+                    if let Some(путь) = что["путь"].as_str() {
+                        спроси_про_установку(путь.to_string());
+                    }
+                }
+                "windows" => программа_windows(что),
+                "снимок" => {
+                    let режим = что.as_str().unwrap_or("экран").to_string();
+                    запусти_команду("glower-snip", &[&режим]);
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Раскладки системы — их знает агент
+    позови("sys.kb.list", json!({}), |о| {
+        if let Ok(о) = о {
+            let выбрано: Vec<String> = о["выбрано"].as_array().map(|а| а.iter().filter_map(|х| х.as_str().map(String::from)).collect()).unwrap_or_default();
+            let выбрано = if выбрано.is_empty() { vec!["us".to_string(), "ru".to_string()] } else { выбрано };
+            let все = о["список"].as_array().cloned().unwrap_or_default();
+            с_ядром(|я| я.раскладки = (выбрано, все));
+            расскажи_скоро();
+        }
+    });
+
+    // Стол следит за своей папкой: новый файл — новый значок
+    if let Ok(н) = gio::File::for_path(папка_стола()).monitor_directory(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE) {
+        н.connect_changed(|_, _, _, _| расскажи_скоро());
+        // Наблюдатель живёт, пока живёт программа
+        std::mem::forget(н);
+    }
+
+    обнови_программы();
+    опроси_окна();
+    опроси_заряд();
+    обнови_погоду();
+    ночной_свет();
+    расскажи_всё();
+    glib::timeout_add_local(Duration::from_secs(2), || {
+        опроси_окна();
+        glib::ControlFlow::Continue
+    });
+    glib::timeout_add_local(Duration::from_secs(5), || {
+        опроси_носители();
+        glib::ControlFlow::Continue
+    });
+    glib::timeout_add_local(Duration::from_secs(30), || {
+        опроси_заряд();
+        смени_обои();
+        glib::ControlFlow::Continue
+    });
+    glib::timeout_add_local(Duration::from_secs(1800), || {
+        обнови_погоду();
+        glib::ControlFlow::Continue
+    });
+    glib::timeout_add_local(Duration::from_secs(120), || {
+        обнови_программы();
+        glib::ControlFlow::Continue
+    });
+    // Обновления: раз в шесть часов читаем списки, а в каждом сеансе
+    // хотя бы спрашиваем, что уже известно
+    glib::timeout_add_local_once(Duration::from_secs(40), || {
+        let сейчас = glib::real_time() / 1_000_000;
+        let давно = сейчас - настройка("updatesAsked").as_i64().unwrap_or(0) >= 6 * 3600;
+        if давно {
+            задай("updatesAsked", json!(сейчас));
+        }
+        проверь_обновления(давно);
+    });
+    glib::timeout_add_local(Duration::from_secs(6 * 3600), || {
+        задай("updatesAsked", json!(glib::real_time() / 1_000_000));
+        проверь_обновления(true);
+        glib::ControlFlow::Continue
+    });
+
+    авто_замок();
+
+    // Установочная среда: сразу мастер установки во весь экран. Мастер
+    // первого запуска здесь не нужен — его пройдут на установленной системе
+    let ядро = std::fs::read_to_string("/proc/cmdline").unwrap_or_default();
+    if ядро.split_whitespace().any(|ч| ч == "glower.install=1" || ч == "glower.repair=1") {
+        запусти_команду("glower-installer", &["--install"]);
+    } else if настройка("setupDone").as_bool() != Some(true) {
+        // Первый вход — мастер, а не стол
+        crate::setup::покажи();
+    } else {
+        // Автозапуск — один раз за сеанс
+        for id in настройка("autostart").as_array().cloned().unwrap_or_default() {
+            if let Some(id) = id.as_str() {
+                запусти(id, "приложение");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod проверки {
+    use super::*;
+
+    #[test]
+    fn данные_оболочки_читаются() {
+        let д: Value = serde_json::from_str(ДАННЫЕ).unwrap();
+        assert_eq!(д["обои"].as_array().unwrap().len(), 15);
+        assert_eq!(д["акценты"].as_array().unwrap().len(), 10);
+        assert!(обои_css("gora", &д).contains("radial-gradient"));
+        assert_eq!(обои_css("файл:/x/кот.png", &д), "url(\"file:///x/кот.png\")");
+        // Неизвестные обои — первые, а не пустота
+        assert!(обои_css("нет-таких", &д).contains("gradient"));
+    }
+
+    #[test]
+    fn в_доке_только_свои_программы() {
+        for id in умолчания()["dockApps"].as_array().unwrap() {
+            assert!(наша(id.as_str().unwrap()).is_some(), "{id}");
+        }
+    }
+
+    #[test]
+    fn знаки_файлов() {
+        assert_eq!(знак_файла("image/png"), "🖼️");
+        assert_eq!(знак_файла("application/zip"), "🗜️");
+        assert_eq!(знак_файла("text/plain"), "📄");
+    }
+}

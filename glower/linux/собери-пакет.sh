@@ -57,10 +57,10 @@ trap 'rm -rf "$BUILD"' EXIT
 # вперемешку с системными, и шаблон «всё подряд» унёс бы чужое.
 OUR_DIRS="usr/share/glower usr/share/plymouth/themes/glower"
 OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
-            usr/bin/glower-shell usr/bin/glower-open-package usr/bin/glower-shot
+            usr/bin/glower-open-package usr/bin/glower-shot
             usr/bin/glower-menu usr/bin/glower-desk usr/bin/glower-exe
             usr/bin/glower-tray usr/bin/glower-greeter usr/bin/glower-panel
-            usr/bin/glower-lock usr/bin/glower-login usr/bin/glower-notepad usr/bin/glower-calc usr/bin/glower-files usr/bin/glower-settings usr/bin/glower-store usr/bin/glower-taskmgr usr/bin/glower-photos usr/bin/glower-snip
+            usr/bin/glower-lock usr/bin/glower-login usr/bin/glower-notepad usr/bin/glower-calc usr/bin/glower-files usr/bin/glower-settings usr/bin/glower-store usr/bin/glower-taskmgr usr/bin/glower-photos usr/bin/glower-snip usr/bin/glower-installer usr/bin/glower-music
             etc/pam.d/glower-lock usr/bin/врач
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
@@ -82,15 +82,14 @@ for f in $OUR_FILES; do
 done
 [ "$found" = 1 ] || { echo "в корне образа не нашлось ни одного нашего файла" >&2; exit 1; }
 
-# Нативная панель — настоящая программа под процессор, а не сценарий. С
-# ней пакет перестаёт быть «для всех архитектур»: он для amd64, как и сам
-# образ. Без неё (сборка без Rust) — прежний пакет «all», и машина живёт
-# со страничной панелью.
+# Рабочий стол — настоящая программа под процессор, а не сценарий. С ней
+# пакет перестаёт быть «для всех архитектур»: он для amd64, как и сам
+# образ. Без неё (сборка без Rust) — пакет «all» со сценариями и агентом.
 ARCH=all
 DEPS_EXTRA=
 if [ -e "$BUILD/usr/bin/glower-panel" ]; then
   ARCH=amd64
-  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme"
+  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, wtype, wlsunset, swayidle"
 fi
 
 # Размер пакета apt показывает человеку — считаем честно.
@@ -105,7 +104,7 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: GlowerOS <noreply@glower.local>
 Installed-Size: $SIZE
-Depends: python3, python3-gi, gir1.2-webkit2-4.1, gir1.2-gtklayershell-0.1, nodejs$DEPS_EXTRA
+Depends: python3, nodejs, labwc$DEPS_EXTRA
 Description: GlowerOS — оболочка, агент и сценарии системы
  Всё, что делает из Ubuntu систему GlowerOS: рабочий стол и панель,
  агент, экран входа, установщик, приёмник лотка и вспомогательные

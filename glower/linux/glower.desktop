@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=GlowerOS
-Comment=Оболочка GlowerOS в режиме киоска
+Comment=Рабочий стол GlowerOS
 Exec=/usr/bin/glower-session
 Type=Application
 DesktopNames=GlowerOS

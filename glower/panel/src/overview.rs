@@ -24,6 +24,9 @@ struct Меню {
     окна: gtk::Box,
     сетка: gtk::FlowBox,
     листание: gtk::ScrolledWindow,
+    /// Просмотр задач (Win+Tab): только столы и крупные карточки окон
+    карточки: gtk::FlowBox,
+    задачи: bool,
     программы: Vec<Value>,
     слепок_программ: String,
     данные: Value,
@@ -71,10 +74,15 @@ pub fn закрой() {
 }
 
 /// «Переключи» — от клавиши Win и кнопки «Программы»: второе нажатие
-/// закрывает. true / false — открыть или закрыть явно.
+/// закрывает. true / false — открыть или закрыть явно. «задачи» — Win+Tab:
+/// тот же обзор, но без программ, с окнами во всю ширину
 pub fn переключи(что: &Value) {
+    let задачи = что.as_str() == Some("задачи");
+    let было_задачи = меню_если_есть().is_some_and(|м| м.borrow().задачи);
     let открыть = match что {
         Value::Bool(б) => *б,
+        // Из меню в задачи и обратно — переключаем вид, а не закрываем
+        _ if открыто() && задачи != было_задачи => true,
         _ => !открыто(),
     };
     if !открыть {
@@ -83,6 +91,7 @@ pub fn переключи(что: &Value) {
     }
     popup::закрой();
     let м = меню_если_есть().unwrap_or_else(создай);
+    м.borrow_mut().задачи = задачи;
     {
         let м_ = м.borrow();
         м_.поиск.set_text("");
@@ -95,7 +104,16 @@ pub fn переключи(что: &Value) {
     скажи("обзор-дай", json!(true));
     let окно = м.borrow().окно.clone();
     окно.show_all();
-    м.borrow().поиск.grab_focus();
+    let м_ = м.borrow();
+    м_.поиск.set_visible(!задачи);
+    м_.окна.set_visible(!задачи);
+    м_.листание.set_visible(!задачи);
+    м_.карточки.set_visible(задачи);
+    if задачи {
+        окно.grab_focus();
+    } else {
+        м_.поиск.grab_focus();
+    }
 }
 
 fn дело(что: &str, доводы: Value) {
@@ -186,10 +204,22 @@ fn создай() -> Rc<RefCell<Меню>> {
     листание.set_vexpand(true);
     листание.add(&сетка);
 
+    let карточки = gtk::FlowBox::new();
+    карточки.set_selection_mode(gtk::SelectionMode::None);
+    карточки.set_homogeneous(true);
+    карточки.set_max_children_per_line(4);
+    карточки.set_min_children_per_line(1);
+    карточки.set_row_spacing(18);
+    карточки.set_column_spacing(18);
+    карточки.set_valign(gtk::Align::Center);
+    карточки.set_halign(gtk::Align::Center);
+    карточки.set_vexpand(true);
+
     колонка.pack_start(&столы, false, false, 0);
     колонка.pack_start(&поиск, false, false, 0);
     колонка.pack_start(&окна, false, false, 0);
     колонка.pack_start(&листание, true, true, 0);
+    колонка.pack_start(&карточки, true, true, 0);
     фон.add(&колонка);
     окно.add(&фон);
 
@@ -233,6 +263,8 @@ fn создай() -> Rc<RefCell<Меню>> {
         окна,
         сетка,
         листание,
+        карточки,
+        задачи: false,
         программы: Vec::new(),
         слепок_программ: String::new(),
         данные: Value::Null,
@@ -464,10 +496,13 @@ fn меню_программы(кнопка: &gtk::Button, id: &str, вид: &st
 // ------------------------------------------------------------- столы и окна
 
 fn наполни_столы(м: &Rc<RefCell<Меню>>) {
-    let (столы, окна, д) = {
+    let (столы, окна, карточки, д) = {
         let м_ = м.borrow();
-        (м_.столы.clone(), м_.окна.clone(), м_.данные.clone())
+        (м_.столы.clone(), м_.окна.clone(), м_.карточки.clone(), м_.данные.clone())
     };
+    for р in карточки.children() {
+        карточки.remove(&р);
+    }
     for р in столы.children() {
         столы.remove(&р);
     }
@@ -493,7 +528,7 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
         прими(&б, move |груз| брошено(груз, Some(i)));
         стол.add(&б);
         // Пустой стол можно убрать: иначе заведённые столы только копятся
-        if окон == 0 && сколько > 1 {
+        if окон == 0 && сколько > 1 && д["можно-убрать"].as_bool() != Some(false) {
             let крестик = gtk::Button::with_label("×");
             крестик.style_context().add_class("desk-x");
             крестик.set_halign(gtk::Align::End);
@@ -536,7 +571,72 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
             дело("окно", json!({ "id": id }));
         });
         окна.add(&б);
+        карточки.add(&карточка_окна(&о));
+    }
+    let всего = карточки.children().len() as u32;
+    карточки.set_max_children_per_line(всего.clamp(1, 4));
+    if всего == 0 {
+        let пусто = gtk::Label::new(Some("Открытых окон нет"));
+        пусто.style_context().add_class("task-empty");
+        карточки.add(&пусто);
     }
     столы.show_all();
     окна.show_all();
+    карточки.show_all();
+    let задачи = м.borrow().задачи;
+    окна.set_visible(!задачи);
+    карточки.set_visible(задачи);
+}
+
+/// Карточка окна в просмотре задач: значок, имя, крестик «закрыть»
+fn карточка_окна(о: &Value) -> gtk::Widget {
+    let id = о["id"].as_str().unwrap_or("").to_string();
+    let слой = gtk::Overlay::new();
+    let б = gtk::Button::new();
+    б.style_context().add_class("task");
+    if о["свёрнуто"].as_bool() == Some(true) {
+        б.style_context().add_class("min");
+    }
+    let столбик = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    столбик.set_valign(gtk::Align::Center);
+    let з: gtk::Widget = if о["знак"].as_str().unwrap_or("").is_empty() {
+        let имя_значка = gio::DesktopAppInfo::new(&format!("{}.desktop", о["приложение"].as_str().unwrap_or("")))
+            .and_then(|д| д.icon())
+            .and_then(|и| и.downcast::<gio::ThemedIcon>().ok())
+            .and_then(|т| т.names().first().map(|н| н.to_string()))
+            .unwrap_or_else(|| "application-x-executable".into());
+        gtk::Image::from_icon_name(Some(&имя_значка), gtk::IconSize::Dialog).upcast()
+    } else {
+        наш_значок(о["знак"].as_str().unwrap_or(""), о["фон"].as_str().unwrap_or(""))
+    };
+    з.set_halign(gtk::Align::Center);
+    столбик.add(&з);
+    let имя = gtk::Label::new(о["имя"].as_str());
+    имя.set_max_width_chars(26);
+    имя.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    столбик.add(&имя);
+    б.add(&столбик);
+    тащи(&б, json!({ "окно": id }), &з);
+    {
+        let id = id.clone();
+        б.connect_clicked(move |_| {
+            закрой();
+            дело("окно", json!({ "id": id }));
+        });
+    }
+    слой.add(&б);
+    let крестик = gtk::Button::with_label("×");
+    крестик.style_context().add_class("desk-x");
+    крестик.set_halign(gtk::Align::End);
+    крестик.set_valign(gtk::Align::Start);
+    крестик.set_tooltip_text(Some("Закрыть окно"));
+    крестик.connect_clicked(move |к| {
+        дело("окно-закрой", json!({ "id": id }));
+        // Карточку убираем сразу, не дожидаясь опроса окон
+        if let Some(р) = к.parent().and_then(|с| с.parent()) {
+            р.hide();
+        }
+    });
+    слой.add_overlay(&крестик);
+    слой.upcast()
 }

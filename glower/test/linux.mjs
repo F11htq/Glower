@@ -1243,8 +1243,9 @@ try {
     const выход = await мк(join(tmpdir(), 'glower-пакет-'));
     await катал(join(корень, 'usr/share/glower/ui'), { recursive:true });
     await катал(join(корень, 'usr/bin'), { recursive:true });
-    await пиши(join(корень, 'usr/share/glower/ui/index.html'), '<html>');
-    await пиши(join(корень, 'usr/bin/glower-shell'), '#!/usr/bin/python3\n');
+    await катал(join(корень, 'usr/share/glower/ui/agent'), { recursive:true });
+    await пиши(join(корень, 'usr/share/glower/ui/agent/server.mjs'), '// агент\n');
+    await пиши(join(корень, 'usr/bin/glower-session'), '#!/bin/sh\n');
     await пиши(join(корень, 'etc/glower-release'), 'v9.9\n').catch(async () => {
       await катал(join(корень, 'etc'), { recursive:true });
       await пиши(join(корень, 'etc/glower-release'), 'v9.9\n');
@@ -1258,8 +1259,8 @@ try {
     if (собран){
       const внутри = await new Promise(готово => execFile('dpkg-deb', ['-c', собран],
         { timeout:15000 }, (e, out) => готово(e ? '' : String(out))));
-      check('в пакете лежит оболочка и страницы', /usr\/bin\/glower-shell/.test(внутри)
-        && /usr\/share\/glower\/ui\/index\.html/.test(внутри), внутри.slice(0, 80));
+      check('в пакете лежат сеанс и агент', /usr\/bin\/glower-session/.test(внутри)
+        && /usr\/share\/glower\/ui\/agent\/server\.mjs/.test(внутри), внутри.slice(0, 80));
       /* Чужих файлов в пакете быть не должно: dpkg откажется ставить
          пакет, который лезет на территорию другого. Именно поэтому наши
          настройки терминала переехали из /etc/xdg/foot к нам. */
@@ -1363,10 +1364,15 @@ try {
     const пакет = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
     const зовёт = [...rc.matchAll(/command="(glower-[\w-]+)/g)].map(m => m[1]);
     const наши = [...new Set(зовёт)];
+    /* Программы системы — это glower-panel под своим именем: в дереве
+       сценария нет, есть ветка в main.rs и ссылка в образе */
+    const главная0 = await readFile(join(root, 'panel', 'src', 'main.rs'), 'utf8');
     for (const прог of наши){
+      const своя = главная0.includes('имя == "' + прог + '"');
       check('сочетания зовут ' + прог + ' — она есть в дереве',
-        existsSync(join(root, 'linux', прог)));
-      check('и она попадает в образ', образ2.includes('linux/' + прог));
+        existsSync(join(root, 'linux', прог)) || своя);
+      check('и она попадает в образ', своя ? new RegExp('ln -sf glower-panel "\\$ROOTFS/usr/bin/' + прог + '"|for prog in [^;]*' + прог).test(образ2)
+        : образ2.includes('linux/' + прог));
       check('и в пакет обновления', пакет.includes('usr/bin/' + прог));
     }
 
@@ -1376,13 +1382,21 @@ try {
        открытых Параметрах не делал ничего. */
     {
       const привязка = к => (rc.match(new RegExp('<keybind key="' + к + '">([\\s\\S]*?)</keybind>')) || [])[1] || '';
-      const не_так = ['A-F4', 'A-Tab', 'W-q', 'W-Left', 'W-Right', 'W-Up', 'W-Down'].filter(к => {
-        const п = привязка(к);
-        return !(/<query identifier="glowershell" \/>/.test(п)
-          && п.includes('glower-menu клавиша ' + к) && /<else>[\s\S]*<action name="(Close|NextWindow|SnapToEdge)"/.test(п));
-      });
-      check('на столе сочетания уходят странице, в чужих окнах — как прежде', !не_так.length,
-        'не так: ' + не_так.join(', '));
+      /* Стол, панель и док — слои, а не окно: оконный сервер сам держит
+         их ниже и выше окон. Сочетания — обычные действия labwc над
+         обычными окнами, никакого «окна-оболочки» в правилах нет. */
+      check('сочетания окон — действия оконного сервера',
+        /<action name="Close" \/>/.test(привязка('A-F4')) && /NextWindow/.test(привязка('A-Tab'))
+          && /SnapToEdge/.test(привязка('W-Left')) && /SnapToEdge/.test(привязка('W-Right'))
+          && привязка('W-Tab').includes('glower-menu задачи') && привязка('W-d').includes('glower-menu клавиша W-d')
+          && !/glowershell/.test(rc));
+      {
+        const ядро0 = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+        check('панель переходит по столам служебными сочетаниями — они есть в rc.xml',
+          [1, 2, 3, 4].every(n => new RegExp('<keybind key="W-C-A-F' + n + '"><action name="GoToDesktop" to="' + n + '" />').test(rc)
+            && new RegExp('<keybind key="W-C-A-S-F' + n + '"><action name="SendToDesktop" to="' + n + '" follow="no" />').test(rc))
+            && /"-M", "logo", "-M", "ctrl", "-M", "alt", "-k", &f/.test(ядро0) && /<desktops>/.test(rc));
+      }
       /* Win+L — из любой программы, а замок — без анимации кольца */
       {
         const меню_ = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
@@ -1396,15 +1410,11 @@ try {
         ['A-Left', 'A-Right', 'A-Up', 'A-Down'].every(к => привязка(к).trim() === '<action name="None" />'));
       const меню = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
       const стол = await readFile(join(root, 'js', 'поверхности.js'), 'utf8');
-      check('glower-menu передаёт сочетание странице, а страница его слушает',
+      const ядро1 = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+      check('glower-menu передаёт сочетание панели, а она его слушает',
         /"\$\{1:-\}" = "клавиша"/.test(меню) && /"тема":"клавиша"/.test(меню)
-          && /слушай\(\['клавиша'\]/.test(стол) && /case 'A-F4'/.test(стол) && /case 'A-Tab'/.test(стол));
-      /* WebKit называет Win «Super», и metaKey при ней у страницы ложный:
-         Win+E, Win+R, Win+Tab не работали ни одно. Оболочка вручает их сама. */
-      const оболочка = await readFile(join(root, 'linux', 'glower-shell'), 'utf8');
-      check('оболочка вручает странице сочетания с Win как metaKey',
-        /def win_для_страницы/.test(оболочка) && /metaKey:true/.test(оболочка)
-          && (оболочка.match(/win_для_страницы\(окно, в\)/g) || []).length >= 2);
+          && /"клавиша"/.test(ядро1) && /покажи_стол/.test(ядро1) && /"\$\{1:-\}" = "задачи"/.test(меню));
+      void стол;
     }
 
     /* Нативная панель (panel/, Rust). Она должна доехать и до образа, и до
@@ -1413,7 +1423,6 @@ try {
     {
       const cargo = await readFile(join(root, 'panel', 'Cargo.toml'), 'utf8');
       const сборка = await readFile(join(root, '..', '.github', 'workflows', 'build-iso.yml'), 'utf8');
-      const оболочка = await readFile(join(root, 'linux', 'glower-shell'), 'utf8');
       check('панель на Rust: проект и замок версий на месте',
         /name = "glower-panel"/.test(cargo) && /gtk-layer-shell/.test(cargo)
           && existsSync(join(root, 'panel', 'Cargo.lock')) && existsSync(join(root, 'panel', 'src', 'main.rs')));
@@ -1428,10 +1437,16 @@ try {
         /panel\/target\/release\/glower-panel/.test(образ2) && /usr\/bin\/glower-panel/.test(образ2)
           && пакет.includes('usr/bin/glower-panel') && /ARCH=amd64/.test(пакет)
           && /glower_\$\{DEB_VER\}_\$\{ARCH\}\.deb/.test(пакет) && /libgtk-layer-shell0/.test(пакет));
-      check('оболочка поднимает нативную панель, а при беде — страничную',
-        /shutil\.which\('glower-panel'\)/.test(оболочка) && /def страничная_панель/.test(оболочка)
-          && /падений\['подряд'\] >= 2/.test(оболочка) && /get_exit_status\(\) == 3/.test(оболочка)
-          && /if not нативная_панель\(\):\s*страничная_панель\(\)/.test(оболочка));
+      {
+        const сеанс2 = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+        check('сеанс — labwc и панель, браузерного движка нет',
+          /\/usr\/bin\/glower-panel/.test(сеанс2) && /falls -ge 5/.test(сеанс2)
+            && !/glower-shell|webkit|WebKit2|chromium|BROWSER|cage/.test(сеанс2)
+            && /WLR_BACKENDS=x11 WLR_RENDERER=pixman/.test(сеанс2)
+            && !/gir1\.2-webkit2|python3-gi|chromium|cage /.test(образ2.split('\n').filter(с => !/^\s*#/.test(с)).join('\n'))
+            && !/webkit/.test(пакет)
+            && !existsSync(join(root, 'linux', 'glower-shell')));
+      }
       /* Нативная говорит на той же шине, что страничная: стол ждёт от
          панели «готова» и её рост, и слушает она те же темы. */
       const главная = await readFile(join(root, 'panel', 'src', 'main.rs'), 'utf8');
@@ -1457,14 +1472,12 @@ try {
           && /set_layer\(Layer::Top\)/.test(док_) && /glower-dock-edge/.test(док_)
           && /"sys\.windows"/.test(док_) && /меню_открыто/.test(док_));
       const стол_ = await readFile(join(root, 'panel', 'src', 'desktop.rs'), 'utf8');
-      const оболочка2 = await readFile(join(root, 'linux', 'glower-shell'), 'utf8');
       check('нативный стол: нижний слой, обои и значки, страница над ним сквозная',
         /mod desktop;/.test(главная) && /desktop::создай\(\)/.test(главная)
           && /"значки" => desktop::значки/.test(главная) && /"обои" => desktop::обои/.test(главная)
           && /скажи\("стол-свой", json!\(true\)\)/.test(главная) && /Шина\.скажи\('стол-свой', false\)/.test(страничная)
-          && /set_layer\(Layer::Background\)/.test(стол_) && /"значки-дело"/.test(стол_)
-          && /def сквозь_пустое/.test(оболочка2) && /glowerDesk/.test(оболочка2)
-          && /input_shape_combine_region\(область/.test(оболочка2) && /сквозь_пустое\(окно, в\)/.test(оболочка2));
+          && /set_layer\(Layer::Background\)/.test(стол_)
+          && /fn меню_стола/.test(стол_) && /fn меню_значков/.test(стол_) && /fn обнови_виджеты/.test(стол_));
       /* Замок по Win+L и вход при включении — один нативный экран */
       {
         const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');
@@ -1476,8 +1489,8 @@ try {
         check('Win+L запускает свой замок, чужие — запасными',
           /'glower-lock':\[\]/.test(сис2) && /\['glower-lock', 'swaylock'/.test(сис2)
             && /имя == "glower-lock"/.test(главная) && /имя == "glower-login"/.test(главная));
-        check('при включении — тот же экран, а не поднялся — страничный',
-          /\/usr\/bin\/glower-login/.test(вход) && /-ge 5/.test(вход) && /GLOWER_QUERY="login=1"/.test(вход)
+        check('при включении — тот же экран, упал — поднимается снова',
+          /\/usr\/bin\/glower-login/.test(вход) && /falls -ge 5/.test(вход) && !/glower-shell/.test(вход)
             && /Режим::Вход => позови\("login\.users"/.test(замок) && /позови\("login\.enter"/.test(замок));
         check('замок и вход попадают в образ и пакет, PAM — со своей службой',
           /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-lock"/.test(образ2) && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-login"/.test(образ2)
@@ -1516,8 +1529,8 @@ try {
             && /"glower-files", "files"/.test(док_) && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
         const мост = await readFile(join(root, 'js', 'параметры.js'), 'utf8');
-        check('Параметры на Rust: все двадцать разделов, системное — у агента, оболочечное — через страницу',
-          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 20
+        check('Параметры на Rust: все восемнадцать разделов, системное — у агента, оболочечное — через страницу',
+          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 18
             && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware']
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
@@ -1575,9 +1588,31 @@ try {
             && /ln -sf glower-panel "\$ROOTFS\/usr\/bin\/glower-store"/.test(образ2) && пакет.includes('usr/bin/glower-store')
             && /for prog in glower-taskmgr glower-photos glower-snip/.test(образ2) && пакет.includes('usr/bin/glower-snip')
             && пакет.includes('usr/bin/glower-notepad') && пакет.includes('usr/bin/glower-calc') && пакет.includes('usr/bin/glower-files'));
+        /* Всё, что прежде делала страница, теперь у ядра панели */
+        const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+        const увед = await readFile(join(root, 'panel', 'src', 'notify.rs'), 'utf8');
+        const мастер = await readFile(join(root, 'panel', 'src', 'setup.rs'), 'utf8');
+        const уст = await readFile(join(root, 'panel', 'src', 'installer.rs'), 'utf8');
+        const муз = await readFile(join(root, 'panel', 'src', 'music.rs'), 'utf8');
+        check('ядро хранит настройки и отвечает всем, кого прежде слушала страница',
+          /settings\.json/.test(ядро) && ['"обзор-дело"', '"значки-дело"', '"параметры-дело"', '"файл-установщик"', '"windows"', '"пробуждение"', '"клавиша"', '"стол"']
+            .every(т => ядро.includes(т)) && /"нативно": true/.test(ядро) && /core::начни\(\)/.test(главная)
+            && /fn авто_замок/.test(ядро) && /"swayidle"/.test(ядро) && /fn окна_этого_стола/.test(ядро));
+        check('уведомления: служба freedesktop, всплывающие и центр с «Не беспокоить»',
+          /org\.freedesktop\.Notifications/.test(увед) && /"GetCapabilities"/.test(увед) && /ActionInvoked/.test(увед)
+            && /fn центр/.test(увед) && /Не беспокоить/.test(увед) && /notify::служба\(\)/.test(главная) && /notify::колокол\(\)/.test(главная));
+        check('мастер первого запуска и приветствие из пыли',
+          /Раскладки клавиатуры/.test(мастер) && /"sys\.kb\.set"/.test(мастер) && /"sys\.locale\.set"/.test(мастер)
+            && /"setupDone", json!\(true\)/.test(мастер) && /fn приветствие/.test(мастер) && /FillRule::EvenOdd/.test(мастер)
+            && /setup::покажи\(\)/.test(ядро));
+        check('установщик и Музыка — свои программы, в образе и пакете',
+          /имя == "glower-installer"/.test(главная) && /"install\.start"/.test(уст) && /glower\.install=1/.test(уст) && /"cryptPassword"/.test(уст)
+            && /имя == "glower-music"/.test(главная) && /--input-ipc-server/.test(муз) && /"end-file"/.test(муз)
+            && /glower-installer glower-music/.test(образ2) && пакет.includes('usr/bin/glower-installer') && пакет.includes('usr/bin/glower-music')
+            && /glower\.install=1/.test(ядро));
       }
-      check('Win при нативном меню не поднимает стол поверх программ',
-        /"тема":"обзор-свой"/.test(меню3) && /\*'"что":true'\*\) ;;/.test(меню3));
+      check('Win и Win+Tab просят панель, не поднимая ничего поверх программ',
+        /"тема":"открой-пуск"/.test(меню3) && /WHAT=задачи/.test(меню3) && !/glowershell/.test(меню3));
       check('нативная панель слушает те же темы шины, что страничная',
         темы.every(т => страничная.includes("'" + т + "'") && главная.includes('"' + т + '"'))
           && /скажи\("панель-готова"/.test(главная) && /скажи\("полоса-высота"/.test(главная));

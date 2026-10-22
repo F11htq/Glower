@@ -50,6 +50,8 @@ const НАТИВНЫЕ = { notepad:'glower-notepad', calc:'glower-calc', files:'
 
 /* Системная корзина. GLOWER_TRASH — для проверок: им незачем трогать
    настоящую корзину машины */
+const ПОГОДА = new Map();
+
 function корзина(){
   const корень = process.env.GLOWER_TRASH
     || join(process.env.XDG_DATA_HOME || join(homedir(), '.local/share'), 'Trash');
@@ -287,6 +289,36 @@ const API = {
     if (!б) return { 'есть':false };
     try { await mkdir(папка, { recursive:true }); await writeFile(файл, б); } catch(e){}
     return отдай(б);
+  },
+  /* Погода — для виджета стола и панели. Раньше её спрашивала страница
+     сама; теперь страницы нет, и спрашивает агент: у него есть сеть.
+     Ответ храним полчаса — погода так быстро не меняется. */
+  async 'weather'({ город }){
+    const где = String(город || 'Москва').trim().slice(0, 60);
+    const было = ПОГОДА.get(где);
+    if (было && Date.now() - было.ts < 30 * 60000) return было;
+    const знак = c => c === 0 ? '☀️' : c <= 2 ? '🌤' : c === 3 ? '☁️' : c <= 48 ? '🌫' : c <= 57 ? '🌦'
+      : c <= 67 ? '🌧' : c <= 77 ? '❄️' : c <= 82 ? '🌧' : c <= 86 ? '🌨' : '⛈';
+    const слово = c => c === 0 ? 'Ясно' : c <= 2 ? 'Малооблачно' : c === 3 ? 'Пасмурно' : c <= 48 ? 'Туман'
+      : c <= 57 ? 'Морось' : c <= 67 ? 'Дождь' : c <= 77 ? 'Снег' : c <= 82 ? 'Ливень' : c <= 86 ? 'Снегопад' : 'Гроза';
+    const сигнал = AbortSignal.timeout(10000);
+    const g = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name='
+      + encodeURIComponent(где), { signal:сигнал }).then(r => r.json());
+    const место = g.results && g.results[0];
+    if (!место) throw new Error('город не найден: ' + где);
+    const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${место.latitude}`
+      + `&longitude=${место.longitude}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m`
+      + `&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6`,
+      { signal:AbortSignal.timeout(10000) }).then(r => r.json());
+    const дни = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+    const итог = { ts:Date.now(), 'город':место.name, t:Math.round(w.current.temperature_2m),
+      'знак':знак(w.current.weather_code), 'слово':слово(w.current.weather_code),
+      'влажность':w.current.relative_humidity_2m, 'ветер':w.current.wind_speed_10m,
+      'дни':w.daily.time.slice(1, 6).map((д, i) => ({ 'день':дни[new Date(д).getDay()],
+        'знак':знак(w.daily.weather_code[i + 1]), max:Math.round(w.daily.temperature_2m_max[i + 1]),
+        min:Math.round(w.daily.temperature_2m_min[i + 1]) })) };
+    ПОГОДА.set(где, итог);
+    return итог;
   },
   async 'sys.native.list'(){
     if (!ALLOW_LAUNCH) return { list:[] };

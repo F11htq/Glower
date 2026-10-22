@@ -1,14 +1,14 @@
-//! Панель GlowerOS — полоса наверху экрана, нативная.
+//! Рабочий стол GlowerOS — одна нативная программа.
 //!
-//! Прежде панель была страницей, и её рисовал целый браузерный движок:
-//! сотни мегабайт памяти и отдельные процессы ради полосы в тридцать точек
-//! с часами. Здесь та же панель — с теми же кнопками, словами и разговором
-//! с агентом — нарисована GTK напрямую.
+//! Прежде стол, панель и окна системы были страницей, и рисовал их целый
+//! браузерный движок: сотни мегабайт памяти ради обоев и полосы с часами.
+//! Теперь всё своё: стол с обоями, значками и виджетами (desktop), полоса
+//! наверху, док, меню и просмотр задач, уведомления, а за ними — ядро
+//! (core), которое хранит настройки и отвечает Параметрам. Сеанс
+//! (linux/glower-session) запускает эту программу внутри labwc.
 //!
-//! Устроена она так же, как страничная (js/панель.js), и говорит на той же
-//! шине: стол не знает и не должен знать, какая из двух панелей сейчас
-//! над ним. Оболочка (linux/glower-shell) запускает эту, а если её нет или
-//! она падает — возвращается к страничной.
+//! Та же программа под другими именами — программы системы: Блокнот,
+//! Проводник, Параметры, Магазин и остальные.
 
 // Имена здесь русские, как во всей системе, а у GTK и Rust — латинские.
 // Буквы «а», «с», «х», «у» в них неизбежно встречаются рядом с «a», «c»,
@@ -18,16 +18,21 @@
 mod agent;
 mod apps;
 mod calc;
+mod core;
 mod desktop;
 mod dock;
 mod explorer;
 mod icons;
+mod installer;
 mod lock;
 mod menus;
+mod music;
+mod notify;
 mod notepad;
 mod overview;
 mod popup;
 mod settings;
+mod setup;
 mod store;
 mod snip;
 mod taskmgr;
@@ -196,6 +201,17 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
 .overview button.desk-x { padding: 0 7px; margin: 4px; border-radius: 9px; font-size: 13px; }
 .overview button.win { background-color: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 6px 12px; }
 .overview .empty { opacity: 0.6; padding: 30px; }
+.overview button.task {
+  background-color: rgba(30, 33, 46, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  min-width: 220px;
+  min-height: 150px;
+  padding: 14px;
+}
+.overview button.task:hover { background-color: rgba(42, 46, 62, 0.97); box-shadow: inset 0 0 0 2px #5b93f5; }
+.overview button.task.min { opacity: 0.6; }
+.overview .task-empty { opacity: 0.6; font-size: 15px; }
 window.dock, window.dock * {
   color: rgba(255, 255, 255, 0.95);
   font-family: sans-serif;
@@ -236,6 +252,51 @@ window.desktop .di-label {
 }
 window.curtain { background-color: #000000; }
 window.curtain label { color: rgba(255, 255, 255, 0.8); font-size: 18px; }
+/* уведомления */
+window.toasts, window.toasts * { color: rgba(255,255,255,0.95); font-family: sans-serif; font-size: 13px; }
+.toast {
+  background-color: rgba(24, 26, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  padding: 12px 10px 12px 14px;
+  min-width: 320px;
+  margin: 0;
+}
+.note-row {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.toast-title { font-weight: bold; }
+.toast-text { color: rgba(255, 255, 255, 0.75); }
+.toast-time { color: rgba(255, 255, 255, 0.5); font-size: 11px; }
+.toast-emoji { font-size: 24px; }
+button.toast-action {
+  background-color: rgba(255, 255, 255, 0.10);
+  border: none; border-radius: 8px; padding: 3px 12px; margin-top: 6px; box-shadow: none;
+}
+button.toast-close { background: none; border: none; box-shadow: none; padding: 0 6px; color: rgba(255,255,255,0.5); }
+button.toast-close:hover { color: white; }
+window.bar button.bell .unread {
+  background-color: #e5484d; border-radius: 8px; font-size: 10px; padding: 0 5px; min-width: 8px;
+}
+/* виджеты стола */
+.widgets { margin: 0; }
+.widget {
+  background-color: rgba(16, 18, 28, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+.widget, .widget * { color: rgba(255, 255, 255, 0.95); }
+.widget .title { font-size: 11px; color: rgba(255, 255, 255, 0.6); font-weight: bold; }
+.w-big { font-size: 34px; font-weight: 300; }
+.w-sub { color: rgba(255, 255, 255, 0.7); }
+.w-emoji { font-size: 26px; }
+.w-today { background-color: #4f7cff; border-radius: 6px; color: white; font-weight: bold; }
+textview.w-note, textview.w-note text { background-color: transparent; color: rgba(255,255,255,0.9); }
+.widget levelbar block.filled { background-color: #4f7cff; border-radius: 3px; }
+.widget levelbar block.empty { background-color: rgba(255,255,255,0.12); border-radius: 3px; }
 "#;
 
 /// «Правда» так, как её понимает страница: !!что.
@@ -290,6 +351,12 @@ fn main() {
     if имя == "glower-settings" {
         settings::запусти(std::env::args().skip(1).collect());
     }
+    if имя == "glower-music" {
+        music::запусти(std::env::args().skip(1).collect());
+    }
+    if имя == "glower-installer" {
+        installer::запусти(std::env::args().skip(1).collect());
+    }
     if имя == "glower-files" {
         explorer::запусти(std::env::args().skip(1).collect());
     }
@@ -298,8 +365,8 @@ fn main() {
         std::process::exit(1);
     }
     if !gtk_layer_shell::is_supported() {
-        // Без слоёв панель не встанет над окнами. Оболочка увидит, что мы
-        // вышли, и покажет страничную — она умеет жить и так.
+        // Без слоёв рабочий стол не встанет ни под окнами, ни над ними:
+        // такой оконный сервер нам не годится
         eprintln!("glower-panel: оконный сервер не умеет слоёв");
         std::process::exit(3);
     }
@@ -432,6 +499,7 @@ fn main() {
     let (батарея, значок_батареи) = кнопка_со_значком(Вид::Батарея, "Батарея");
     батарея.connect_clicked(|к| menus::батарея(к));
     полоса.pack_end(&батарея, false, false, 0);
+    полоса.pack_end(&notify::колокол(), false, false, 0);
     let (быстрые, _) = кнопка_со_значком(Вид::Ползунки, "Быстрые настройки");
     быстрые.connect_clicked(|к| menus::быстрые(к));
     полоса.pack_end(&быстрые, false, false, 0);
@@ -443,6 +511,8 @@ fn main() {
 
     окно.show_all();
     dock::создай();
+    notify::служба();
+    core::начни();
 
     // ---------- что говорит стол ----------
     let вести = слушай(
@@ -459,7 +529,7 @@ fn main() {
                 match в.тема.as_str() {
                     "раскладка" => {
                         if let Some(т) = что.as_str() {
-                            let т: String = т.to_uppercase().chars().take(3).collect();
+                            let т: String = т.to_uppercase().chars().take(5).collect();
                             язык.set_label(&т);
                             menus::ЗНАЮ.with(|з| з.borrow_mut().раскладка = т);
                         }

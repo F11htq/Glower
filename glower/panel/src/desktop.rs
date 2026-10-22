@@ -1,30 +1,29 @@
-//! Рабочий стол: обои и значки — нативные, в той же программе, что панель.
+//! Рабочий стол: обои, значки и виджеты — нативные, в той же программе, что
+//! панель. Лежит в самом низу, под всеми окнами.
 //!
-//! Лежит в самом низу, под всеми окнами. Страница стола (окна системы,
-//! меню, диалоги) лежит над нами прозрачной и пропускает к нам щелчки там,
-//! где у неё пусто.
+//! Что лежит на столе и где, рассказывает ядро («значки», «обои»): папка
+//! «Рабочий стол», вынесенные программы и запомненные места. Стол рисует,
+//! выделяет, двигает, ведёт рамку выделения — и сам открывает, показывает
+//! меню, переименовывает, удаляет в корзину, создаёт папки и файлы.
 //!
-//! Что лежит на столе, где стоит и как открывается — знает страница:
-//! она рассказывает («значки», «обои»). Мы рисуем, выделяем, двигаем и
-//! ведём рамку выделения, а за действием — открыть, показать меню, запомнить
-//! новое место — идём к ней («значки-дело»). Так все прежние меню стола —
-//! создать файл и папку, виджеты, обои — остаются на месте как были.
-//!
-//! Устроено нарочно просто: окно, в нём неподвижное поле со значками, и
-//! все нажатия ловит само окно. Какой значок под курсором, мы считаем сами
-//! по местам значков. Вложенные «ящики событий» GTK здесь не годились:
-//! у каждого своё окошко ввода, и щелчки доставались не тому, кто их ждал, —
-//! стол просто не слышал нажатий.
+//! Устроено нарочно просто: окно, в нём неподвижное поле со значками и
+//! виджетами, и все нажатия ловит само окно. Какой значок под курсором, мы
+//! считаем сами по местам значков. Вложенные «ящики событий» GTK здесь не
+//! годились: у каждого своё окошко ввода, и щелчки доставались не тому,
+//! кто их ждал, — стол просто не слышал нажатий.
 
-use crate::agent::{позови, скажи};
+use crate::core;
+use crate::notify;
 use base64::Engine;
 use gtk::gio;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::Duration;
 
 /// Значок на столе.
 struct Значок {
@@ -32,6 +31,7 @@ struct Значок {
     вид: gtk::Box,
     x: f64,
     y: f64,
+    данные: Value,
 }
 
 /// Что сейчас делает мышь на столе.
@@ -52,6 +52,8 @@ struct Стол {
     обои_css: String,
     стиль_обоев: Option<gtk::CssProvider>,
     жест: Жест,
+    виджеты: gtk::Box,
+    слепок_виджетов: String,
 }
 
 thread_local! {
@@ -62,21 +64,10 @@ fn стол() -> Option<Rc<RefCell<Стол>>> {
     СТОЛ.with(|с| с.borrow().clone())
 }
 
-fn дело(что: &str, доводы: Value) {
-    let mut тело = доводы;
-    тело["что"] = json!(что);
-    скажи("значки-дело", тело);
-}
-
-/// Клавиатура после щелчка по столу — странице стола: Enter, F2 и Delete
-/// для выделенного обрабатывает она, и её диалоги ждут ввода.
-fn клавиатуру_столу() {
-    позови("sys.window", json!({ "action": "focus", "appId": "glowershell" }), |_| {});
-}
-
 fn отладка() -> bool {
     std::env::var_os("GLOWER_DEBUG").is_some()
 }
+
 
 // ------------------------------------------------------------- обои
 
@@ -185,7 +176,6 @@ fn примени_стиль(css: &str) {
     с.стиль_обоев = Some(новый);
 }
 
-
 // ------------------------------------------------------------- поверхность
 
 pub fn создай() {
@@ -200,11 +190,13 @@ pub fn создай() {
     }
     // Обои — во весь экран, под панелью тоже: она прозрачна
     окно.set_exclusive_zone(-1);
-    окно.set_keyboard_mode(KeyboardMode::None);
+    // Клавиатура — по щелчку: Enter, F2, Delete для выделенного и заметка
+    окно.set_keyboard_mode(KeyboardMode::OnDemand);
     окно.add_events(
         gtk::gdk::EventMask::BUTTON_PRESS_MASK
             | gtk::gdk::EventMask::BUTTON_RELEASE_MASK
-            | gtk::gdk::EventMask::BUTTON_MOTION_MASK,
+            | gtk::gdk::EventMask::BUTTON_MOTION_MASK
+            | gtk::gdk::EventMask::KEY_PRESS_MASK,
     );
 
     let поле = gtk::Fixed::new();
@@ -224,6 +216,17 @@ pub fn создай() {
         glib::Propagation::Proceed
     });
     окно.add(&поле);
+    let виджеты = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    виджеты.style_context().add_class("widgets");
+    поле.put(&виджеты, 0, 0);
+    // Виджеты — у правого края: место узнаём, когда окно получит размер
+    окно.connect_size_allocate(|о, _| {
+        if let Some(с) = стол() {
+            let с = с.borrow();
+            let ш = о.allocated_width();
+            с.поле.move_(&с.виджеты, (ш - 270).max(0), 44);
+        }
+    });
 
     окно.connect_button_press_event(|_, е| {
         нажатие(е);
@@ -237,6 +240,7 @@ pub fn создай() {
         отпускание();
         glib::Propagation::Stop
     });
+    окно.connect_key_press_event(|_, е| клавиша(е));
 
     let с = Rc::new(RefCell::new(Стол {
         обои: окно.clone(),
@@ -247,10 +251,17 @@ pub fn создай() {
         обои_css: String::new(),
         стиль_обоев: None,
         жест: Жест::Нет,
+        виджеты,
+        слепок_виджетов: String::new(),
     }));
     СТОЛ.with(|я| *я.borrow_mut() = Some(с));
     примени_стиль("window.desktop { background-image: linear-gradient(#0b0d1a, #05060c); }");
     окно.show_all();
+    // Часы и система на виджетах — живые
+    glib::timeout_add_local(Duration::from_secs(1), || {
+        тик_виджетов();
+        glib::ControlFlow::Continue
+    });
 }
 
 /// Какой значок под точкой — по его месту и размеру.
@@ -267,10 +278,30 @@ fn под_курсором(x: f64, y: f64) -> Option<String> {
         .map(|з| з.имя.clone())
 }
 
+/// Над виджетами стол своими жестами не распоряжается
+fn в_виджетах(x: f64, y: f64) -> bool {
+    let Some(с) = стол() else { return false };
+    let с = с.borrow();
+    if !с.виджеты.is_visible() || с.виджеты.children().is_empty() {
+        return false;
+    }
+    let а = с.виджеты.allocation();
+    x >= а.x() as f64 && x <= (а.x() + а.width()) as f64 && y >= а.y() as f64 && y <= (а.y() + а.height()) as f64
+}
+
+fn данные_значка(имя: &str) -> Option<Value> {
+    let с = стол()?;
+    let с = с.borrow();
+    с.значки.iter().find(|з| з.имя == имя).map(|з| з.данные.clone())
+}
+
 fn нажатие(е: &gtk::gdk::EventButton) {
     let (x, y) = е.position();
     if отладка() {
         eprintln!("glower-panel: стол: нажатие {} в {x:.0},{y:.0}", е.button());
+    }
+    if в_виджетах(x, y) {
+        return;
     }
     let Some(с) = стол() else { return };
     // GTK шлёт и одиночное нажатие, и «двойное» вдогонку — двойное
@@ -279,7 +310,7 @@ fn нажатие(е: &gtk::gdk::EventButton) {
         if е.button() == 1 {
             if let Some(имя) = под_курсором(x, y) {
                 с.borrow_mut().жест = Жест::Нет;
-                дело("открой", json!({ "n": имя }));
+                открой(&имя);
             }
         }
         return;
@@ -287,7 +318,6 @@ fn нажатие(е: &gtk::gdk::EventButton) {
     if е.event_type() != gtk::gdk::EventType::ButtonPress {
         return;
     }
-    клавиатуру_столу();
     let значок = под_курсором(x, y);
 
     if е.button() == 3 {
@@ -296,10 +326,12 @@ fn нажатие(е: &gtk::gdk::EventButton) {
                 if !с.borrow().выбор.contains(&имя) {
                     выдели(vec![имя.clone()]);
                 }
-                дело("меню", json!({ "n": имя, "x": x.round(), "y": y.round() }));
+                меню_значков(е);
             }
-            // По пустому месту — меню стола, то же, что было всегда
-            None => дело("меню-стола", json!({ "x": x.round(), "y": y.round() })),
+            None => {
+                выдели(Vec::new());
+                меню_стола(е);
+            }
         }
         return;
     }
@@ -369,7 +401,7 @@ fn движение((x, y): (f64, f64)) {
                 .collect();
             drop(с_);
             поле.queue_draw();
-            выдели_молча(выбранные);
+            выдели(выбранные);
         }
         Жест::Нет => {}
     }
@@ -379,30 +411,26 @@ fn отпускание() {
     let Some(с) = стол() else { return };
     let жест = std::mem::replace(&mut с.borrow_mut().жест, Жест::Нет);
     match жест {
-        // Новое место запоминает страница — как и прежде, в iconPos
+        // Новое место запоминает ядро — в настройках, iconPos
         Жест::Тянем { где, сдвинули: true, .. } => {
             let с_ = с.borrow();
-            let mut места = Map::new();
+            let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
             for (n, _, _) in &где {
                 if let Some(з) = с_.значки.iter().find(|з| &з.имя == n) {
                     места.insert(n.clone(), json!({ "x": з.x.round(), "y": з.y.round() }));
                 }
             }
             drop(с_);
-            дело("позиции", json!({ "позиции": Value::Object(места) }));
+            core::задай("iconPos", Value::Object(места));
         }
-        Жест::Рамка { .. } => {
-            с.borrow().поле.queue_draw();
-            let выбор = с.borrow().выбор.clone();
-            дело("выбор", json!({ "имена": выбор }));
-        }
+        Жест::Рамка { .. } => с.borrow().поле.queue_draw(),
         _ => {}
     }
 }
 
 // ------------------------------------------------------------- выделение
 
-fn выдели_молча(имена: Vec<String>) {
+fn выдели(имена: Vec<String>) {
     let Some(с) = стол() else { return };
     let mut с = с.borrow_mut();
     for з in &с.значки {
@@ -415,9 +443,254 @@ fn выдели_молча(имена: Vec<String>) {
     с.выбор = имена;
 }
 
-fn выдели(имена: Vec<String>) {
-    выдели_молча(имена.clone());
-    дело("выбор", json!({ "имена": имена }));
+fn выбранные() -> Vec<Value> {
+    let Some(с) = стол() else { return Vec::new() };
+    let с = с.borrow();
+    с.значки.iter().filter(|з| с.выбор.contains(&з.имя)).map(|з| з.данные.clone()).collect()
+}
+
+// ------------------------------------------------------------- дела
+
+fn путь_файла(з: &Value) -> Option<PathBuf> {
+    matches!(з["вид"].as_str(), Some("файл") | Some("папка")).then(|| core::папка_стола().join(з["n"].as_str().unwrap_or("")))
+}
+
+fn открой(имя: &str) {
+    let Some(з) = данные_значка(имя) else { return };
+    match з["вид"].as_str().unwrap_or("") {
+        "приложение" => core::запусти(з["ярлык"].as_str().unwrap_or(""), "приложение"),
+        "машина" => core::запусти(з["ярлык"].as_str().unwrap_or(""), "машина"),
+        "система" => {
+            core::запусти_команду("glower-files", &[]);
+        }
+        _ => {
+            if let Some(п) = путь_файла(&з) {
+                core::открой_путь(&п);
+            }
+        }
+    }
+}
+
+/// Просьбы с шины — для тех, кто ещё говорит со столом по-старому
+pub fn дело_ядра(д: &Value) {
+    match д["что"].as_str().unwrap_or("") {
+        "открой" => открой(д["n"].as_str().unwrap_or("")),
+        "позиции" => {
+            let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
+            for (n, п) in д["позиции"].as_object().cloned().unwrap_or_default() {
+                места.insert(n, п);
+            }
+            core::задай("iconPos", Value::Object(места));
+        }
+        _ => {}
+    }
+}
+
+fn спроси_имя(заголовок: &str, было: &str) -> Option<String> {
+    let д = gtk::Dialog::with_buttons(Some(заголовок), None::<&gtk::Window>, gtk::DialogFlags::MODAL, &[("Отмена", gtk::ResponseType::Cancel), ("Готово", gtk::ResponseType::Accept)]);
+    д.style_context().add_class("glower-app");
+    д.set_default_response(gtk::ResponseType::Accept);
+    let поле = gtk::Entry::new();
+    поле.set_text(было);
+    {
+        let д = д.clone();
+        поле.connect_activate(move |_| д.response(gtk::ResponseType::Accept));
+    }
+    поле.set_width_chars(34);
+    поле.set_margin(14);
+    д.content_area().add(&поле);
+    д.show_all();
+    let конец = match было.rfind('.') {
+        Some(т) if т > 0 => т as i32,
+        _ => -1,
+    };
+    let поле2 = поле.clone();
+    glib::idle_add_local_once(move || поле2.select_region(0, конец));
+    let ответ = д.run();
+    let имя = поле.text().trim().to_string();
+    unsafe { д.destroy() };
+    (ответ == gtk::ResponseType::Accept && !имя.is_empty() && !имя.contains('/') && имя != "." && имя != "..").then_some(имя)
+}
+
+fn свободное(имя: &str) -> PathBuf {
+    let папка = core::папка_стола();
+    let п = папка.join(имя);
+    if !п.exists() {
+        return п;
+    }
+    let (основа, хвост) = match имя.rfind('.') {
+        Some(т) if т > 0 => (&имя[..т], &имя[т..]),
+        _ => (имя, ""),
+    };
+    (2..).map(|н| папка.join(format!("{основа} ({н}){хвост}"))).find(|п| !п.exists()).unwrap()
+}
+
+fn создай_на_столе(папку: bool) {
+    let _ = std::fs::create_dir_all(core::папка_стола());
+    let черновик = свободное(if папку { "Новая папка" } else { "Новый документ.txt" });
+    let имя = черновик.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+    let Some(имя) = спроси_имя(if папку { "Новая папка" } else { "Новый файл" }, &имя) else { return };
+    let путь = core::папка_стола().join(&имя);
+    if путь.exists() {
+        return notify::покажи("Имя уже занято", &format!("На столе уже есть «{имя}»"), "⚠️");
+    }
+    let итог = if папку { std::fs::create_dir(&путь) } else { std::fs::write(&путь, b"") };
+    if let Err(е) = итог {
+        notify::покажи("Не удалось создать", &е.to_string(), "⚠️");
+    }
+}
+
+fn переименуй() {
+    let выбор = выбранные();
+    let [з] = выбор.as_slice() else { return };
+    let Some(путь) = путь_файла(з) else { return };
+    let было = з["n"].as_str().unwrap_or("").to_string();
+    let Some(имя) = спроси_имя("Переименовать", &было) else { return };
+    if имя == было {
+        return;
+    }
+    let куда = core::папка_стола().join(&имя);
+    if куда.exists() {
+        return notify::покажи("Имя уже занято", &format!("На столе уже есть «{имя}»"), "⚠️");
+    }
+    match std::fs::rename(&путь, &куда) {
+        Ok(()) => {
+            // Место значка переезжает вместе с именем
+            let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
+            if let Some(м) = места.remove(&было) {
+                места.insert(имя, м);
+                core::задай("iconPos", Value::Object(места));
+            }
+        }
+        Err(е) => notify::покажи("Не удалось переименовать", &е.to_string(), "⚠️"),
+    }
+}
+
+/// Удалить выделенное: файлы — в корзину, программы — со стола
+fn удали() {
+    for з in выбранные() {
+        match з["вид"].as_str().unwrap_or("") {
+            "файл" | "папка" => {
+                if let Some(п) = путь_файла(&з) {
+                    if let Err(е) = gio::File::for_path(&п).trash(gio::Cancellable::NONE) {
+                        notify::покажи("Не удалось удалить", &format!("«{}»: {е}", з["n"].as_str().unwrap_or("")), "⚠️");
+                    }
+                }
+            }
+            "приложение" => crate::core::убери_со_стола(з["ярлык"].as_str().unwrap_or(""), "приложение"),
+            "машина" => crate::core::убери_со_стола(з["ярлык"].as_str().unwrap_or(""), "машина"),
+            _ => {}
+        }
+    }
+    выдели(Vec::new());
+}
+
+fn пункт(меню: &gtk::Menu, текст: &str, дело: impl Fn() + 'static) {
+    let п = gtk::MenuItem::with_label(текст);
+    п.connect_activate(move |_| дело());
+    меню.append(&п);
+}
+
+fn черта(меню: &gtk::Menu) {
+    меню.append(&gtk::SeparatorMenuItem::new());
+}
+
+fn меню_значков(е: &gtk::gdk::EventButton) {
+    let выбор = выбранные();
+    let Some(первый) = выбор.first().cloned() else { return };
+    let один = выбор.len() == 1;
+    let вид = первый["вид"].as_str().unwrap_or("").to_string();
+    let меню = gtk::Menu::new();
+    {
+        let имя = первый["n"].as_str().unwrap_or("").to_string();
+        пункт(&меню, "Открыть", move || открой(&имя));
+    }
+    if один && вид == "папка" {
+        if let Some(п) = путь_файла(&первый) {
+            пункт(&меню, "Открыть в Проводнике", move || {
+                core::запусти_команду("glower-files", &[&п.to_string_lossy()]);
+            });
+        }
+    }
+    let файлы: Vec<PathBuf> = выбор.iter().filter_map(путь_файла).collect();
+    if !файлы.is_empty() {
+        черта(&меню);
+        let пути = файлы.iter().map(|п| п.to_string_lossy().to_string()).collect::<Vec<_>>().join("\n");
+        пункт(&меню, "Копировать путь", move || gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).set_text(&пути));
+        if один {
+            пункт(&меню, "Переименовать", переименуй);
+        }
+        пункт(&меню, "Удалить", удали);
+        if один {
+            let п = файлы[0].clone();
+            пункт(&меню, "Показать в Проводнике", move || {
+                core::запусти_команду("glower-files", &[&п.to_string_lossy()]);
+            });
+        }
+    } else if вид == "приложение" || вид == "машина" {
+        черта(&меню);
+        пункт(&меню, "Убрать с рабочего стола", удали);
+    }
+    меню.show_all();
+    let событие: &gtk::gdk::Event = е;
+    меню.popup_at_pointer(Some(событие));
+}
+
+fn меню_стола(е: &gtk::gdk::EventButton) {
+    let меню = gtk::Menu::new();
+    пункт(&меню, "Создать папку", || создай_на_столе(true));
+    пункт(&меню, "Создать текстовый файл", || создай_на_столе(false));
+    черта(&меню);
+    пункт(&меню, "Упорядочить значки", || core::задай("iconPos", json!({})));
+    let виджеты = gtk::Menu::new();
+    for (t, имя, знак) in core::ВИДЖЕТЫ {
+        let t = t.to_string();
+        пункт(&виджеты, &format!("{знак} {имя}"), move || {
+            let mut с: Vec<Value> = core::настройка("deskWidgets").as_array().cloned().unwrap_or_default();
+            с.push(json!({ "t": t }));
+            core::задай("deskWidgets", Value::Array(с));
+            core::задай("showDeskWidgets", json!(true));
+        });
+    }
+    let добавить = gtk::MenuItem::with_label("Добавить виджет");
+    добавить.set_submenu(Some(&виджеты));
+    меню.append(&добавить);
+    черта(&меню);
+    пункт(&меню, "Сменить обои…", || {
+        core::открой_параметры("person");
+    });
+    пункт(&меню, "Параметры экрана", || {
+        core::открой_параметры("display");
+    });
+    пункт(&меню, "Открыть папку стола", || {
+        core::запусти_команду("glower-files", &[&core::папка_стола().to_string_lossy()]);
+    });
+    меню.show_all();
+    let событие: &gtk::gdk::Event = е;
+    меню.popup_at_pointer(Some(событие));
+}
+
+fn клавиша(е: &gtk::gdk::EventKey) -> glib::Propagation {
+    use gtk::gdk::keys::constants as к;
+    let ключ = е.keyval();
+    let ctrl = е.state().contains(gtk::gdk::ModifierType::CONTROL_MASK);
+    if ключ == к::Delete || ключ == к::KP_Delete {
+        удали();
+    } else if ключ == к::F2 {
+        переименуй();
+    } else if ключ == к::Return || ключ == к::KP_Enter {
+        for з in выбранные() {
+            открой(з["n"].as_str().unwrap_or(""));
+        }
+    } else if ctrl && crate::notepad::латинская(е) == "a" {
+        let все: Vec<String> = стол().map(|с| с.borrow().значки.iter().map(|з| з.имя.clone()).collect()).unwrap_or_default();
+        выдели(все);
+    } else if ключ == к::Escape {
+        выдели(Vec::new());
+    } else {
+        return glib::Propagation::Proceed;
+    }
+    glib::Propagation::Stop
 }
 
 // ------------------------------------------------------------- значки
@@ -434,6 +707,13 @@ fn значок_картинкой(з: &Value) -> gtk::Widget {
             }
         }
     }
+    // У файлов — значок темы по их типу, если тема его знает
+    let тема = з["значок"].as_str().unwrap_or("");
+    if (вид == "файл" || вид == "папка") && !тема.is_empty() && gtk::IconTheme::default().is_some_and(|т| т.has_icon(тема)) {
+        let к = gtk::Image::from_icon_name(Some(if вид == "папка" { "folder" } else { тема }), gtk::IconSize::Dialog);
+        к.set_pixel_size(48);
+        return к.upcast();
+    }
     let знак = з["g"].as_str().unwrap_or("");
     let л = gtk::Label::new(Some(if знак.is_empty() {
         match вид {
@@ -448,7 +728,7 @@ fn значок_картинкой(з: &Value) -> gtk::Widget {
     л.upcast()
 }
 
-/// Стол рассказал, что на нём лежит и где.
+/// Ядро рассказало, что лежит на столе и где.
 pub fn значки(список: &Value) {
     let Some(с) = стол() else { return };
     // Пока тянем значок, не перестраиваем: место ему ещё не записано
@@ -460,7 +740,8 @@ pub fn значки(список: &Value) {
         return;
     }
     let поле = с.borrow().поле.clone();
-    for р in поле.children() {
+    let прежние: Vec<gtk::Box> = с.borrow().значки.iter().map(|з| з.вид.clone()).collect();
+    for р in прежние {
         поле.remove(&р);
     }
     let выбор = с.borrow().выбор.clone();
@@ -490,21 +771,211 @@ pub fn значки(список: &Value) {
         подпись.set_justify(gtk::Justification::Center);
         вид.add(&подпись);
         поле.put(&вид, x as i32, y as i32);
-        значки.push(Значок { имя, вид, x, y });
+        значки.push(Значок { имя, вид, x, y, данные: з });
     }
     {
         let mut с_ = с.borrow_mut();
+        с_.выбор.retain(|и| значки.iter().any(|з| &з.имя == и));
         с_.значки = значки;
         с_.слепок = слепок;
     }
     поле.show_all();
+    обнови_виджеты();
 }
 
-/// Стол рассказал, какие у него обои.
+/// Ядро рассказало, какие у стола обои.
 pub fn обои(что: &Value) {
     if let Some(css) = что["css"].as_str() {
         поставь_обои(css);
     }
+}
+
+// ------------------------------------------------------------- виджеты
+
+/// Перестроить виджеты: какие показаны, решают настройки
+pub fn обнови_виджеты() {
+    let Some(с) = стол() else { return };
+    let показывать = core::настройка("showDeskWidgets").as_bool() != Some(false);
+    let список: Vec<String> = if показывать {
+        core::настройка("deskWidgets").as_array().cloned().unwrap_or_default().iter().filter_map(|в| в["t"].as_str().map(String::from)).collect()
+    } else {
+        Vec::new()
+    };
+    let слепок = format!("{}|{}|{}", список.join(","), core::погода(), core::настройка("tz"));
+    if с.borrow().слепок_виджетов == слепок {
+        return;
+    }
+    с.borrow_mut().слепок_виджетов = слепок;
+    let коробка = с.borrow().виджеты.clone();
+    for р in коробка.children() {
+        коробка.remove(&р);
+    }
+    for t in список {
+        let к = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        к.style_context().add_class("widget");
+        к.set_size_request(240, -1);
+        к.set_widget_name(&format!("w-{t}"));
+        наполни_виджет(&к, &t);
+        коробка.add(&к);
+    }
+    коробка.show_all();
+}
+
+fn строка_виджета(к: &gtk::Box, текст: &str, класс: &str) -> gtk::Label {
+    let л = gtk::Label::new(Some(текст));
+    л.set_xalign(0.0);
+    л.set_line_wrap(true);
+    л.style_context().add_class(класс);
+    к.add(&л);
+    л
+}
+
+fn сейчас() -> glib::DateTime {
+    crate::menus::сейчас()
+}
+
+fn наполни_виджет(к: &gtk::Box, t: &str) {
+    match t {
+        "clock" => {
+            строка_виджета(к, "Часы", "w-t");
+            let (в, _) = crate::menus::время_и_дата();
+            строка_виджета(к, &в, "w-big").set_widget_name("время");
+            let т = сейчас();
+            строка_виджета(к, &format!("{}, {} {}", crate::menus::ДНИ[(т.day_of_week() as usize).clamp(1, 7) - 1], т.day_of_month(), crate::menus::МЕСЯЦЫ[(т.month() as usize).clamp(1, 12) - 1]), "w-sub");
+        }
+        "weather" => {
+            let п = core::погода();
+            let город = п["город"].as_str().map(String::from).unwrap_or_else(|| core::настройка("city").as_str().unwrap_or("").to_string());
+            строка_виджета(к, &format!("Погода · {город}"), "w-t");
+            if п.is_null() {
+                строка_виджета(к, "Нет данных — нужна сеть", "w-sub");
+                return;
+            }
+            let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            let з = gtk::Label::new(п["знак"].as_str());
+            з.style_context().add_class("w-emoji");
+            ряд.add(&з);
+            let т = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            let г = gtk::Label::new(Some(&format!("{:+}°", п["t"].as_i64().unwrap_or(0))));
+            г.style_context().add_class("w-big");
+            г.set_xalign(0.0);
+            т.add(&г);
+            let с = gtk::Label::new(п["слово"].as_str());
+            с.style_context().add_class("w-sub");
+            с.set_xalign(0.0);
+            т.add(&с);
+            ряд.add(&т);
+            к.add(&ряд);
+            let дни = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            дни.set_homogeneous(true);
+            for д in п["дни"].as_array().cloned().unwrap_or_default() {
+                let столб = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                for (текст, класс) in [(д["день"].as_str().unwrap_or("").to_string(), "w-sub"), (д["знак"].as_str().unwrap_or("").to_string(), ""), (format!("{}°", д["max"]), "w-sub")] {
+                    let л = gtk::Label::new(Some(&текст));
+                    if !класс.is_empty() {
+                        л.style_context().add_class(класс);
+                    }
+                    столб.add(&л);
+                }
+                дни.add(&столб);
+            }
+            к.add(&дни);
+        }
+        "calendar" => {
+            let т = сейчас();
+            строка_виджета(к, &format!("{} {}", crate::menus::МЕСЯЦЫ_ИМ[(т.month() as usize).clamp(1, 12) - 1], т.year()), "w-t");
+            let сетка = gtk::Grid::new();
+            сетка.set_column_homogeneous(true);
+            сетка.set_row_spacing(2);
+            for (i, д) in ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].iter().enumerate() {
+                let л = gtk::Label::new(Some(д));
+                л.style_context().add_class("w-sub");
+                сетка.attach(&л, i as i32, 0, 1, 1);
+            }
+            let первое = glib::DateTime::from_local(т.year(), т.month(), 1, 0, 0, 0.0).ok();
+            let сдвиг = первое.as_ref().map(|п| п.day_of_week() - 1).unwrap_or(0);
+            let дней = первое.and_then(|п| п.add_months(1).ok()).and_then(|с| с.add_days(-1).ok()).map(|п| п.day_of_month()).unwrap_or(30);
+            for д in 1..=дней {
+                let место = сдвиг + д - 1;
+                let л = gtk::Label::new(Some(&д.to_string()));
+                if д == т.day_of_month() {
+                    л.style_context().add_class("w-today");
+                }
+                сетка.attach(&л, место % 7, 1 + место / 7, 1, 1);
+            }
+            к.add(&сетка);
+        }
+        "system" => {
+            строка_виджета(к, "Система", "w-t");
+            строка_виджета(к, "…", "w-sub").set_widget_name("система");
+        }
+        "note" => {
+            строка_виджета(к, "Заметка", "w-t");
+            let поле = gtk::TextView::new();
+            поле.set_wrap_mode(gtk::WrapMode::WordChar);
+            поле.style_context().add_class("w-note");
+            поле.set_size_request(-1, 90);
+            поле.buffer().map(|б| б.set_text(core::настройка("note").as_str().unwrap_or("")));
+            // Пишем по паузе: каждую букву в файл класть незачем
+            let ждём: Rc<std::cell::Cell<u32>> = Rc::new(std::cell::Cell::new(0));
+            if let Some(б) = поле.buffer() {
+                б.connect_changed(move |б| {
+                    let номер = ждём.get() + 1;
+                    ждём.set(номер);
+                    let (ждём2, б2) = (ждём.clone(), б.clone());
+                    glib::timeout_add_local_once(Duration::from_millis(800), move || {
+                        if ждём2.get() == номер {
+                            let (н, к) = б2.bounds();
+                            core::задай_тихо("note", json!(б2.text(&н, &к, false).map(|т| т.to_string()).unwrap_or_default()));
+                        }
+                    });
+                });
+            }
+            к.add(&поле);
+        }
+        _ => {}
+    }
+}
+
+/// Раз в секунду — часы, раз в две — система
+fn тик_виджетов() {
+    let Some(с) = стол() else { return };
+    let коробка = с.borrow().виджеты.clone();
+    for виджет in коробка.children() {
+        let Some(к) = виджет.downcast_ref::<gtk::Box>() else { continue };
+        for р in к.children() {
+            match р.widget_name().as_str() {
+                "время" => {
+                    if let Some(л) = р.downcast_ref::<gtk::Label>() {
+                        л.set_text(&crate::menus::время_и_дата().0);
+                    }
+                }
+                "система" => {
+                    if let Some(л) = р.downcast_ref::<gtk::Label>() {
+                        л.set_text(&система_словами());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+thread_local! {
+    static ТАКТЫ: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+fn система_словами() -> String {
+    let т = std::fs::read_to_string("/proc/stat").unwrap_or_default();
+    let ч: Vec<u64> = т.lines().next().unwrap_or("").split_whitespace().skip(1).filter_map(|с| с.parse().ok()).collect();
+    let всего: u64 = ч.iter().sum();
+    let простой = ч.get(3).copied().unwrap_or(0) + ч.get(4).copied().unwrap_or(0);
+    let (б_в, б_п) = ТАКТЫ.with(|т| т.replace((всего, простой)));
+    let цп = if б_в > 0 && всего > б_в { (1.0 - (простой - б_п) as f64 / (всего - б_в) as f64) * 100.0 } else { 0.0 };
+    let м = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+    let поле = |имя: &str| м.lines().find(|с| с.starts_with(имя)).and_then(|с| с.split_whitespace().nth(1)).and_then(|ч| ч.parse::<f64>().ok()).unwrap_or(0.0) / 1048576.0;
+    let (всего_п, свободно) = (поле("MemTotal:"), поле("MemAvailable:"));
+    format!("Процессор {цп:.0}%   ·   Память {:.1} из {:.1} ГБ", всего_п - свободно, всего_п).replace('.', ",")
 }
 
 #[cfg(test)]
