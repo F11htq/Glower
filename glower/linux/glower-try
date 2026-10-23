@@ -1,0 +1,33 @@
+#!/bin/sh
+# ==========================================================================
+#  Пробный режим: с установочной флешки — на рабочий стол
+#
+#  Флешка грузится быстро потому, что меню загрузки выключает на этот запуск
+#  всё, что установщику не нужно: сеть, печать, обновления (systemd.mask=…
+#  в строке ядра). Человеку, который решил сначала попробовать систему,
+#  всё это нужно. Перезагружаться ради этого незачем: маски из строки ядра
+#  живут в /run, их можно снять и поднять службы прямо сейчас.
+# ==========================================================================
+set -u
+[ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
+
+UNITS=""
+for w in $(cat /proc/cmdline); do
+  case "$w" in systemd.mask=*) UNITS="$UNITS ${w#systemd.mask=}" ;; esac
+done
+
+for u in $UNITS; do
+  # Маску из строки ядра кладёт генератор — ссылкой на /dev/null
+  for d in /run/systemd/generator.early /run/systemd/generator /run/systemd/system /run/systemd/transient; do
+    [ "$(readlink "$d/$u" 2>/dev/null)" = /dev/null ] && rm -f "$d/$u"
+  done
+  systemctl unmask --runtime "$u" >/dev/null 2>&1 || true
+done
+systemctl daemon-reload
+
+# Поднимаем то, что пригодится в пробной системе. Обновления и снапы — нет:
+# живой системе, которая забудет всё при выключении, они только мешают
+for u in NetworkManager.service avahi-daemon.service cups.service cups-browsed.service ModemManager.service; do
+  systemctl start --no-block "$u" >/dev/null 2>&1 || true
+done
+echo "пробный режим: службы запущены"

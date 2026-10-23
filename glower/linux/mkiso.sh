@@ -403,6 +403,8 @@ install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
+# пробный режим с флешки: Esc в установщике снимает маски быстрой загрузки
+install -m 755 "$SRC/linux/glower-try" "$ROOTFS/usr/bin/glower-try"
 # открыть скачанный файл-установщик: передаёт его оболочке, а та спрашивает
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
 # Посредник для снимков экрана: его зовёт оконный сервер по сочетанию клавиш
