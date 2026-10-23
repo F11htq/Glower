@@ -2,9 +2,9 @@
 /* ==========================================================================
    Системный агент GlowerOS
 
-   Даёт оболочке то, чего у страницы нет: настоящий диск.
-   Запуск:  node agent/server.mjs [--port 8123] [--root ~/GlowerOS]
-   Затем открыть  http://localhost:8123  — оболочка увидит реальные файлы.
+   Даёт рабочему столу (glower-panel) знания о машине и то, что требует
+   прав: вызовы по HTTP на /rpc, только с 127.0.0.1.
+   Запуск:  node agent/server.mjs [--port 8123] [--root ~/GlowerOS] [--system]
 
    Намеренно НЕ умеет: запускать программы, читать что-либо вне корневой
    папки, ходить в сеть. Это граница доверия, а не недоделка.
@@ -13,10 +13,8 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, mkdir, rm, rename, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve, relative, dirname, extname, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
-const UI_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const arg = (name, def) => {
   const i = process.argv.indexOf('--' + name);
@@ -129,7 +127,6 @@ if (SYSTEM){
     ...m.keyboard,
     ...m.locale,
     ...m.tray(ALLOW_LAUNCH),
-    ...(await import('./browser.mjs')).browser(PORT, ALLOW_LAUNCH),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
     ...(await import('./packages.mjs')).packages(ALLOW_PKG),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
@@ -389,47 +386,9 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  /* Обои системы отдаём отдельной дорожкой.
-
-     Картинка на пять мегабайт, пересказанная строкой base64 через шину,
-     стоит вдвое дороже и не кешируется вовсе: на слабой машине страница
-     от этого встаёт. А так её отдаёт обычный веб-сервер и берёт на себя
-     браузер. Наружу уходит только то, что лежит в папках обоев: путь
-     проверяется тем же списком, по которому их и нашли. */
-  const дорожка = (() => {
-    try { return decodeURIComponent(req.url.split('?')[0]); } catch(e){ return req.url.split('?')[0]; }
-  })();
-  if (дорожка === '/обои'){
-    /* Имя довода латиницей — «p», и это не про вкус. Всё, что попадает в
-       строку запроса, должно быть закодировано, иначе разбор запроса
-       отказывает ещё до нас: сервер отвечает «400» на кириллицу в сыром
-       виде, и понять по такому ответу нечего. Путь кодирует страница,
-       а имя довода пусть будет тем, что можно набрать руками. */
-    const спрос = new URLSearchParams(req.url.split('?')[1] || '');
-    const путь = спрос.get('p') || '';
-    if (!SYSTEM) return send(res, 403, 'системный слой выключен');
-    const m = await import('./system.mjs');
-    if (!m.обоиМожно(путь) || путь.includes('..')) return send(res, 403, 'не обои');
-    try {
-      const данные = await readFile(путь);
-      const ext = extname(путь).slice(1).toLowerCase();
-      return send(res, 200, данные, {
-        'Content-Type':(MIME[ext] || 'application/octet-stream'),
-        /* Обои не меняются — пусть браузер держит их у себя. */
-        'Cache-Control':'public, max-age=86400' });
-    } catch(e){ return send(res, 404, 'нет такого файла'); }
-  }
-
-  // статика оболочки
-  let p = decodeURIComponent(req.url.split('?')[0]);
-  if (p === '/') p = '/index.html';
-  const file = resolve(UI_DIR, '.' + p);
-  if (!file.startsWith(UI_DIR) || !existsSync(file)) return send(res, 404, 'not found');
-  try {
-    const data = await readFile(file);
-    const ext = extname(file).slice(1).toLowerCase();
-    send(res, 200, data, { 'Content-Type':(MIME[ext] || 'text/plain') + '; charset=utf-8' });
-  } catch(e){ send(res, 500, 'error'); }
+  /* Кроме /rpc агент ничего не отдаёт: страницы рабочего стола больше
+     нет, её файлы ему раздавать незачем. */
+  send(res, 404, 'not found');
 });
 
 await mkdir(ROOT, { recursive:true });

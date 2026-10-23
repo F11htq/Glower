@@ -2,19 +2,13 @@
   "name": "glower-os",
   "version": "1.0.1200",
   "private": true,
-  "description": "GlowerOS: оболочка на HTML, CSS и JavaScript — от вкладки браузера до сеанса Linux",
+  "description": "GlowerOS: рабочий стол на Rust (panel), свой оконный сервер (wm) и агент системы на Node",
   "scripts": {
     "start": "node agent/server.mjs",
     "system": "node agent/server.mjs --system --allow-open",
     "session": "sh linux/glower-session",
-    "browser-only": "npx --yes http-server . -p 8080 -c-1",
     "install-linux": "sudo sh linux/install.sh",
-    "test": "node test/smoke.mjs",
-    "test:native": "node test/native.mjs",
-    "test:linux": "node test/linux.mjs",
-    "test:all": "node test/smoke.mjs && node test/native.mjs && node test/linux.mjs"
-  },
-  "devDependencies": {
-    "playwright": "^1.56.0"
+    "test": "node test/linux.mjs",
+    "test:linux": "node test/linux.mjs"
   }
 }

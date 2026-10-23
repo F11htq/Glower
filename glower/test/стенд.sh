@@ -27,7 +27,6 @@ mkdir -p "$RT"; chmod 700 "$RT"
 export XDG_RUNTIME_DIR="$RT"
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman
 export LIBGL_ALWAYS_SOFTWARE=1
-export WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 # Один только файл сокета ничего не значит: он остаётся лежать и после того,
 # как сервер умер. Стенд на это попался — сокет от прошлого раза был на

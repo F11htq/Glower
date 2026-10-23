@@ -48,10 +48,10 @@ sleep 45
 procs=$(спроси '{"method":"sys.procs","params":{}}')
 echo "$procs" | grep -q '"name":"Xorg"' && r=да || r=нет
 проверь "рабочий стол показывает X-сервер" "$r"
-echo "$procs" | grep -q 'WebKit' && r=да || r=нет
-проверь "оболочку показывает своя программа на WebKit" "$r"
-echo "$procs" | grep -q '"name":"openbox"' && r=да || r=нет
-проверь "чужими окнами распоряжается оконный менеджер" "$r"
+echo "$procs" | grep -q 'glower-panel' && r=да || r=нет
+проверь "рабочий стол показывает glower-panel" "$r"
+echo "$procs" | grep -q '"name":"labwc"' && r=да || r=нет
+проверь "окнами внутри X-сервера распоряжается labwc" "$r"
 
 wins=$(спроси '{"method":"sys.windows","params":{}}')
 echo "$wins" | grep -q '"через":"x"' && r=да || r=нет

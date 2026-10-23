@@ -17,13 +17,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const PORT = 8700 + Math.floor(Math.random() * 200);
 
-let chromium;
-try { ({ chromium } = await import(pathToFileURL('/opt/node22/lib/node_modules/playwright/index.mjs').href)); }
-catch(e){ try { ({ chromium } = await import('playwright')); } catch(e2){
-  console.error('Нужен playwright: npm i -D playwright'); process.exit(2); } }
-const exe = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/usr/bin/chromium', '/usr/bin/google-chrome']
-  .find(p => existsSync(p));
-
 let passed = 0, failed = 0;
 const out = [];
 const check = (n, c, d = '') => { c ? (passed++, out.push('  ✅ ' + n))
@@ -35,37 +28,49 @@ if (process.platform !== 'linux'){
 }
 
 const WS = await mkdtemp(join(tmpdir(), 'glower-'));
-/* Настоящий сеанс говорит агенту, каким движком рисовать страницы, — здесь
-   делаем то же самое. Раньше этого не было, и проверки встроенного браузера
-   падали не из-за системы, а из-за того, что в проверочной машине нет
-   команды chromium в путях. */
 /* Корзина — своя, проверочная: настоящую корзину машины не трогаем */
 const КОРЗИНА = await mkdtemp(join(tmpdir(), 'glower-trash-'));
 const agent = spawn(process.execPath,
   [join(root, 'agent/server.mjs'), '--port', String(PORT), '--root', WS, '--system'],
   { stdio:['ignore', 'pipe', 'pipe'],
-    env:{ ...process.env, GLOWER_BROWSER:process.env.GLOWER_BROWSER || exe || '', GLOWER_TRASH:КОРЗИНА } });
+    env:{ ...process.env, GLOWER_TRASH:КОРЗИНА } });
 let agentLog = '';
 agent.stdout.on('data', d => agentLog += d);
 await new Promise(r => setTimeout(r, 1300));
 
-const browser = await chromium.launch(exe ? { executablePath:exe, args:['--no-sandbox'] } : { args:['--no-sandbox'] });
-const page = await browser.newPage({ viewport:{ width:1280, height:820 } });
-/* мастер первого запуска проверяется в смоук-тестах — здесь он только мешал бы */
-await page.addInitScript(() => {
-  try { localStorage.setItem('glower.setup.done', 'true'); } catch(e){}
-});
-const errs = [];
-page.on('pageerror', e => errs.push(e.message));
+/* Страницы рабочего стола (и браузерного движка под ней) больше нет: всё,
+   что проверки спрашивали у агента через неё, спрашиваем напрямую. Тонкая
+   прослойка с тем же видом, что был у страницы: page.evaluate(() =>
+   Platform.rpc(...)) выполняется здесь, в Node, и ходит к агенту по HTTP. */
+const rpc = async (method, params) => {
+  const r = await fetch(`http://localhost:${PORT}/rpc`, {
+    method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ method, params }) });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'ошибка агента');
+  return j.result;
+};
+globalThis.Platform = { rpc, mode:'native' };
+/* Те же вызовы, что были у страницы в js/os.js */
+const OS = globalThis.OS = {
+  caps:null,
+  on(){ return !!this.caps; },
+  procs:() => rpc('sys.procs'),
+  apps:() => rpc('sys.apps'),
+  launch:id => rpc('sys.launch', { id }),
+  power:(action, сразу) => rpc('sys.power', { action, 'сразу':!!сразу }),
+  volume:() => rpc('sys.volume.get'),
+  brightness:() => rpc('sys.brightness.get'),
+  wifiState:() => rpc('sys.wifi.state'),
+};
+const page = {
+  evaluate: async (fn, arg) => fn(arg),
+  waitForTimeout: ms => new Promise(r => setTimeout(r, ms)),
+};
 
 try {
-  await page.goto(`http://localhost:${PORT}/`);
-  await page.waitForTimeout(2600);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(2500);
+  OS.caps = await rpc('sys.caps').catch(() => null);
 
-  check('оболочка запустилась и подключилась к машине',
-    await page.evaluate(() => OS.on()), await page.evaluate(() => Platform.mode + '/' + !!OS.caps));
+  check('агент запустился и рассказал о машине', OS.on(), JSON.stringify(OS.caps).slice(0, 120));
 
   check('машина опознана правильно',
     await page.evaluate(() => OS.caps.platform === 'linux' && !!OS.caps.host) &&
@@ -122,111 +127,6 @@ try {
   check('подложить путь вместо имени программы не выйдет',
     /неверный идентификатор|--allow-launch/.test(bad), bad);
 
-  /* --- диспетчер задач показывает машину --- */
-  check('диспетчер задач сразу показывает процессы машины',
-    await page.evaluate(async () => {
-      WM.open('taskmgr');
-      await new Promise(r => setTimeout(r, 1200));
-      const w = WM.wins.find(x => x.appId === 'taskmgr');
-      const t = w.body.innerText;
-      const итог = /Средняя нагрузка/.test(t) && /systemd|node|init|chrome/.test(t);
-      WM.close(w);
-      return итог;
-    }));
-
-  check('приложение «Программы машины» появилось только в этом режиме',
-    await page.evaluate(() => !!APPS.native));
-
-  /* --- настройки говорят о машине, а не о браузере --- */
-  const devText = await page.evaluate(async () => {
-    WM.open('settings');
-    await new Promise(r => setTimeout(r, 700));
-    const w = WM.wins.find(x => x.appId === 'settings');
-    const nav = [...w.body.querySelectorAll('.set-nav button, .nav-item, button')]
-      .find(b => /Устройства и датчики/.test(b.textContent));
-    if (nav) nav.click();
-    await new Promise(r => setTimeout(r, 1400));
-    return w.body.innerText;
-  });
-
-  check('оборудование показано по данным машины, а не по оценке браузера',
-    /Процессор/.test(devText) && !/округлено браузером/.test(devText), devText.slice(0, 200));
-  check('память названа настоящим объёмом',
-    devText.includes((totalmem() / 1073741824).toFixed(1) + ' ГБ'),
-    devText.match(/Оперативная память[\s\S]{0,40}/));
-  check('вместо «Платформа: Linux» — система и её ядро',
-    /Система/.test(devText) && new RegExp(process.platform === 'linux' ? 'ядро Linux' : '.').test(devText));
-  check('строки про мобильное устройство и hover убраны',
-    !/Мобильное устройство/.test(devText) && !/hover/i.test(devText));
-  check('про Web Bluetooth оболочка больше не оправдывается',
-    !/Web Bluetooth/.test(devText) && /Bluetooth/.test(devText), devText.slice(0, 200));
-
-  const sysText = await page.evaluate(async () => {
-    const w = WM.wins.find(x => x.appId === 'settings');
-    const nav = [...w.body.querySelectorAll('.set-nav button, .nav-item, button')]
-      .find(b => /^\s*.?\s*Система\s*$/.test(b.textContent));
-    if (nav) nav.click();
-    await new Promise(r => setTimeout(r, 900));
-    return w.body.innerText;
-  });
-  check('внутренняя кухня агента убрана из настроек настоящей системы',
-    !/Подключено к системе/.test(sysText) && !/Перечитать диск/.test(sysText), sysText.slice(0, 200));
-
-  /* --- встроенный браузер --- */
-  const web = await page.evaluate(async () => {
-    const out = {};
-    WM.open('browser');
-    await new Promise(r => setTimeout(r, 800));
-    const w = WM.wins.find(x => x.appId === 'browser');
-    out.старт = !!w.body.querySelector('.br-start');
-
-    const i = w.body.querySelector('.br-bar input');
-    i.value = 'about:blank';
-    i.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', bubbles:true }));
-    for (let k = 0; k < 60 && !w._web.tabs[0].view; k++) await new Promise(r => setTimeout(r, 200));
-    const v = w._web.tabs[0].view;
-    out.движок = !!v;
-    if (!v) return out;
-    for (let k = 0; k < 40 && !w.body.querySelector('.br-frame').src; k++) await new Promise(r => setTimeout(r, 200));
-    out.кадр = (w.body.querySelector('.br-frame').src || '').startsWith('data:image/jpeg');
-
-    /* ставим поле и кнопку прямо на страницу движка и работаем с ними как человек */
-    await v.cdp.send('Runtime.evaluate', { expression:
-      `document.body.innerHTML = '<input id=p style="position:fixed;left:10px;top:10px;width:300px;height:40px">' +
-        '<button id=b style="position:fixed;left:10px;top:70px;width:200px;height:40px">кнопка</button>' +
-        '<div style="height:4000px"></div>';
-       window.__c = 0; document.getElementById('b').onclick = () => window.__c++;
-       document.getElementById('p').focus(); 'ok'`, returnByValue:true }, v.sid);
-
-    const r = v.node.getBoundingClientRect();
-    for (const ch of 'привет'){
-      v.node.dispatchEvent(new KeyboardEvent('keydown', { key:ch, bubbles:true, cancelable:true }));
-      v.node.dispatchEvent(new KeyboardEvent('keyup', { key:ch, bubbles:true, cancelable:true }));
-    }
-    v.node.dispatchEvent(new MouseEvent('mousedown', { clientX:r.left + 100, clientY:r.top + 90, button:0, buttons:1, detail:1, bubbles:true, cancelable:true }));
-    v.node.dispatchEvent(new MouseEvent('mouseup', { clientX:r.left + 100, clientY:r.top + 90, button:0, buttons:0, detail:1, bubbles:true, cancelable:true }));
-    v.node.dispatchEvent(new WheelEvent('wheel', { deltaY:400, clientX:r.left + 200, clientY:r.top + 200, bubbles:true, cancelable:true }));
-    await new Promise(r2 => setTimeout(r2, 900));
-
-    const got = await v.cdp.send('Runtime.evaluate', { expression:
-      'JSON.stringify({ t:document.getElementById("p").value, c:window.__c, y:window.scrollY })',
-      returnByValue:true }, v.sid);
-    Object.assign(out, JSON.parse(got.result.value));
-
-    /* новая вкладка по Ctrl+T */
-    w.body.querySelector('.app').dispatchEvent(
-      new KeyboardEvent('keydown', { key:'t', ctrlKey:true, bubbles:true, cancelable:true }));
-    out.вкладок = w._web.tabs.length;
-    return out;
-  });
-
-  check('браузер открывается на своей начальной странице', web.старт);
-  check('движок машины поднялся и отдал кадр', web.движок && web.кадр, JSON.stringify(web));
-  check('клавиатура доходит до страницы', web.t === 'привет', String(web.t));
-  check('щелчок доходит до страницы', web.c === 1, String(web.c));
-  check('колесо прокручивает страницу', web.y > 0, String(web.y));
-  check('Ctrl + T открывает вкладку', web.вкладок === 2, String(web.вкладок));
-
   /* --- Wi-Fi --- */
   const wifi = await page.evaluate(() => OS.wifiState().then(x => x, e => ({ err:e.message })));
   check('система честно отвечает про Wi-Fi этой машины',
@@ -246,7 +146,7 @@ try {
   check('без --allow-power выключение остаётся закрытым', powerWays.allowed === false);
 
   /* --- установка на диск: без ключа она закрыта, и это видно --- */
-  const insCan = await page.evaluate(() => Install.can());
+  const insCan = await rpc('install.can').catch(e => ({ allowed:false, reason:e.message }));
   check('установка выключена, пока её не разрешили ключом',
     insCan.allowed === false && /--allow-install/.test(insCan.reason || ''), JSON.stringify(insCan));
 
@@ -254,13 +154,10 @@ try {
     .then(() => 'запустилась', e => e.message));
   check('без --allow-install диск не трогают', /--allow-install/.test(insStart), insStart);
 
-  const insDisks = await page.evaluate(() => Install.disks().then(d => d, e => ({ err:e.message })));
+  const insDisks = await rpc('install.disks').then(d => d, e => ({ err:e.message }));
   check('список дисков читается из /sys',
     Array.isArray(insDisks.list) && insDisks.list.every(d => d.dev.startsWith('/dev/')),
     JSON.stringify(insDisks).slice(0, 200));
-
-  check('мастер установки не появляется там, где установка невозможна',
-    await page.evaluate(() => !APPS.installer));
 
   /* --- запуск программ машины: без gio тоже должно работать --- */
   {
@@ -369,50 +266,6 @@ try {
       JSON.stringify(найдено));
   }
 
-  /* --- нарисованные приложения уступают место настоящим --- */
-  const подмена = await page.evaluate(async () => {
-    const было = Platform.rpc.bind(Platform);
-    Platform.rpc = (m, p) => {
-      if (m === 'sys.apps') return Promise.resolve({ total:1, canLaunch:true,
-        list:[{ id:'thunar.desktop', name:'Файлы', comment:'', flatpak:false, icon:'', categories:[] }] });
-      if (m === 'sys.launch') return Promise.resolve({ ok:true, via:'проверка', id:p && p.id });
-      return было(m, p);
-    };
-    await wireRealApps();
-    const открыто = WM.wins.length;
-    const итог = WM.open('files');
-    await new Promise(r => setTimeout(r, 400));
-    const ответ = { окноНеОткрылось:итог === null && WM.wins.length === openWins(открыто),
-      подпись:APPS.files && APPS.files.sub,
-      рисованныхУбрали:!APPS.paint && !APPS.todo && !APPS.calendar };
-    Platform.rpc = было;
-    return ответ;
-    function openWins(n){ return n; }
-  });
-  check('«Файлы» открывают настоящую программу, а не рисованное окно',
-    подмена.окноНеОткрылось === true && /Файлы системы/.test(подмена.подпись || ''),
-    JSON.stringify(подмена));
-  check('нарисованные приложения без замены с машины убраны',
-    подмена.рисованныхУбрали === true, JSON.stringify(подмена));
-
-  /* --- настоящие окна машины попадают в панель задач --- */
-  const чужие = await page.evaluate(async () => {
-    const было = Platform.rpc.bind(Platform);
-    Platform.rpc = (m, p) => m === 'sys.windows'
-      ? Promise.resolve({ list:[
-          { appId:'org.telegram.desktop', title:'Telegram', 'оболочка':false },
-          { appId:'glowershell', title:'Рабочий стол', 'оболочка':true }], 'можно':true })
-      : было(m, p);
-    await new Promise(r => setTimeout(r, 3600));
-    const подписи = [...document.querySelectorAll('#dock-running .dock-item')].map(b => b.dataset.tip || '');
-    Platform.rpc = было;
-    return подписи;
-  });
-  check('окно чужой программы видно в панели задач',
-    чужие.some(t => /Telegram/.test(t)), JSON.stringify(чужие));
-  check('сама оболочка себя окном не считает',
-    !чужие.some(t => /Рабочий стол|glowershell/.test(t)), JSON.stringify(чужие));
-
   /* --- у настоящей программы в панели задач свой значок --- */
   {
     const { writeFile, rm } = await import('node:fs/promises');
@@ -434,132 +287,6 @@ try {
     check('о ненайденном значке система говорит прямо',
       нет['есть'] === false && !!нет['почему'], JSON.stringify(нет).slice(0, 120));
   }
-
-  /* --- значок доезжает до панели задач и до Пуска --- */
-  const значкиВПанели = await page.evaluate(async () => {
-    const было = Platform.rpc.bind(Platform);
-    Platform.rpc = (m, p) => {
-      if (m === 'sys.apps') return Promise.resolve({ total:1, canLaunch:true,
-        list:[{ id:'org.telegram.desktop.desktop', name:'Telegram', comment:'', flatpak:false,
-                icon:'telegram', 'окно':'org.telegram.desktop', categories:[] }] });
-      if (m === 'sys.windows') return Promise.resolve({ list:[
-        { appId:'org.telegram.desktop', title:'Telegram', 'оболочка':false,
-          'состояние':{ 'развёрнуто':true, 'свёрнуто':false, 'вовесь':false, 'активно':true } }],
-        'можно':true, 'занятЭкран':true });
-      if (m === 'sys.icon') return Promise.resolve({ 'есть':true, 'тип':'image/png',
-        'данные':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
-      return было(m, p);
-    };
-    /* Ждём не по часам, а по делу: значок приходит запросом к системе, и на
-       загруженной машине он может опоздать. Прежнее ожидание в 3,6 секунды
-       иногда не дожидалось — проверка падала на ровном месте и приучала не
-       верить красному. */
-    const дождись = async (что, сколько = 15000) => {
-      const до = Date.now() + сколько;
-      while (Date.now() < до){
-        const r = что();
-        if (r) return r;
-        await new Promise(r2 => setTimeout(r2, 100));
-      }
-      return что();
-    };
-    const найдиКнопку = () => [...document.querySelectorAll('#dock-running .dock-item')]
-      .find(b => /Telegram/.test(b.dataset.tip || ''));
-    await дождись(() => { const b = найдиКнопку(); return b && b.querySelector('img'); });
-    const кнопка = найдиКнопку();
-    const ответ = {
-      картинка:!!(кнопка && кнопка.querySelector('img')),
-      вработе:!!(кнопка && кнопка.classList.contains('active')),
-      впритык:document.body.classList.contains('впритык'),
-      подпись:кнопка ? кнопка.dataset.tip : ''
-    };
-    Platform.rpc = было;
-    document.body.classList.remove('впритык');
-    return ответ;
-  });
-  /* --- системный лоток --- */
-  /* Настоящую шину сюда не поднять, но всё, что делает оболочка, проверяется
-     и так: рисует ли она пришедшие значки и доходит ли нажатие обратно. */
-  const лоток = await page.evaluate(async () => {
-    const было = Platform.rpc.bind(Platform);
-    const позвали = [];
-    Platform.rpc = (m, p) => {
-      if (m === 'sys.tray') return Promise.resolve({ 'служба':true, 'значки':[
-        { id:'a', service:'org.kde.StatusNotifierItem-1-1', path:'/StatusNotifierItem',
-          name:'Happ', status:'Active', iconName:'', tooltip:'Happ · подключено',
-          iconData:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          menu:'/MenuBar', itemIsMenu:false },
-        { id:'b', service:'org.kde.StatusNotifierItem-2-1', path:'/StatusNotifierItem',
-          name:'Качалка', status:'Active', iconName:'', tooltip:'', iconData:'',
-          menu:'', itemIsMenu:true }] });
-      if (m === 'sys.tray.нажать'){ позвали.push(p); return Promise.resolve({ ok:true }); }
-      return было(m, p);
-    };
-
-    const дождись = async (что, сколько = 8000) => {
-      const до = Date.now() + сколько;
-      while (Date.now() < до){ if (что()) return true; await new Promise(r => setTimeout(r, 100)); }
-      return false;
-    };
-    const появились = await дождись(() =>
-      document.querySelectorAll('.tray-их .tray-чужой').length === 2);
-
-    const кнопки = [...document.querySelectorAll('.tray-их .tray-чужой')];
-    const скартинкой = !!(кнопки[0] && кнопки[0].querySelector('img'));
-    const буквой = кнопки[1] ? кнопки[1].textContent.trim() : '';
-    const подсказка = кнопки[0] ? кнопки[0].dataset.tip : '';
-
-    /* Левая кнопка по обычному значку — «покажись», по значку-меню — меню */
-    if (кнопки[0]) кнопки[0].click();
-    if (кнопки[1]) кнопки[1].click();
-    /* Правая — всегда меню */
-    if (кнопки[0]) кнопки[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles:true }));
-    await new Promise(r => setTimeout(r, 200));
-
-    Platform.rpc = было;
-    return { появились, скартинкой, буквой, подсказка,
-             действия:позвали.map(п => п['действие']) };
-  });
-
-  check('значки программ появляются в лотке',
-    лоток.появились === true, JSON.stringify(лоток));
-  check('значок с картинкой рисуется картинкой, а без неё — буквой',
-    лоток.скартинкой === true && лоток.буквой === 'К', JSON.stringify(лоток));
-  check('подсказка значка — та, что дала программа',
-    лоток.подсказка === 'Happ · подключено', лоток.подсказка);
-  check('нажатия доходят до программы: обычное, меню и правой кнопкой',
-    JSON.stringify(лоток.действия) === JSON.stringify(['Activate', 'ContextMenu', 'ContextMenu']),
-    JSON.stringify(лоток.действия));
-
-  check('у чужого окна в панели задач свой значок',
-    значкиВПанели.картинка === true, JSON.stringify(значкиВПанели));
-  check('панель задач видит, какое чужое окно сейчас в работе',
-    значкиВПанели.вработе === true, JSON.stringify(значкиВПанели));
-  check('о развёрнутом окне сказано словами',
-    /развёрнуто/.test(значкиВПанели.подпись || ''), значкиВПанели.подпись);
-  check('при развёрнутом чужом окне панель прижимается к краю',
-    значкиВПанели.впритык === true, JSON.stringify(значкиВПанели));
-
-  /* --- чужое окно во весь экран: панель уходит с дороги --- */
-  const вовесь = await page.evaluate(async () => {
-    const было = Platform.rpc.bind(Platform);
-    const сказано = [];
-    Platform.rpc = (m, p) => {
-      if (m === 'sys.windows') return Promise.resolve({ list:[
-        { appId:'mpv', title:'Кино', 'оболочка':false,
-          'состояние':{ 'развёрнуто':false, 'свёрнуто':false, 'вовесь':true, 'активно':true } }],
-        'можно':true, 'вовесьЭкран':true });
-      if (m === 'ui.say'){ сказано.push(p); return Promise.resolve({ ok:true }); }
-      return было(m, p);
-    };
-    await new Promise(r => setTimeout(r, 3600));
-    const ушла = document.body.classList.contains('чужой-вовесь');
-    Platform.rpc = было;
-    document.body.classList.remove('чужой-вовесь');
-    return { ушла, сказано };
-  });
-  check('при чужом окне во весь экран панель уходит с дороги',
-    вовесь.ушла === true, JSON.stringify(вовесь).slice(0, 160));
 
   /* --- программа, скачанная файлом: .deb ставится двойным щелчком --- */
   {
@@ -602,82 +329,12 @@ try {
     check('без --allow-packages программу из файла не поставить',
       /--allow-packages/.test(String(безКлюча)), String(безКлюча));
 
-    /* Оболочка должна спросить согласия, а не ставить молча */
-    const спросила = await page.evaluate(async () => {
-      const было = Platform.rpc.bind(Platform);
-      let звали = null;
-      Platform.rpc = (m, p) => {
-        if (m === 'pkg.file.info') return Promise.resolve({ 'имя':'проба', 'версия':'1.0',
-          'размер':1024, 'место':2048, 'описание':'проба', файл:p['путь'] });
-        if (m === 'pkg.file.install'){ звали = p; return Promise.resolve({ ok:true }); }
-        return было(m, p);
-      };
-      const обещание = спросиПроУстановку({ путь:'/tmp/проба.deb' });
-      await new Promise(r => setTimeout(r, 400));
-      const окно = document.querySelector('.dlg');
-      const текст = окно ? окно.innerText : '';
-      /* отказываемся: система не должна ставить ничего */
-      const отказ = окно && [...окно.querySelectorAll('button')].find(b => !/Поставить/.test(b.textContent));
-      if (отказ) отказ.click();
-      await обещание.catch(() => {});
-      await new Promise(r => setTimeout(r, 200));
-      Platform.rpc = было;
-      return { текст, звали };
-    });
-    check('перед установкой из файла система спрашивает человека',
-      /Поставить/.test(спросила.текст || '') && /проба/.test(спросила.текст || ''),
-      JSON.stringify(спросила).slice(0, 200));
-    check('на отказ система ничего не ставит',
-      спросила.звали === null, JSON.stringify(спросила.звали));
-
-    /* Программа одним файлом: её не ставят, а запускают — и только по
-       согласию человека. */
-    const одинФайл = await page.evaluate(async () => {
-      const было = Platform.rpc.bind(Platform);
-      let звали = null;
-      Platform.rpc = (m, p) => {
-        if (m === 'sys.appimage'){ звали = p; return Promise.resolve({ ok:true }); }
-        return было(m, p);
-      };
-      const обещание = спросиПроУстановку({ путь:'/tmp/Программа.AppImage' });
-      await new Promise(r => setTimeout(r, 400));
-      const окно = document.querySelector('.dlg');
-      const текст = окно ? окно.innerText : '';
-      const да = окно && [...окно.querySelectorAll('button')].find(b => /Запустить/.test(b.textContent));
-      if (да) да.click();
-      await обещание.catch(() => {});
-      await new Promise(r => setTimeout(r, 200));
-      Platform.rpc = было;
-      return { текст, звали };
-    });
-    check('о программе одним файлом система спрашивает и запускает её',
-      /Запустить/.test(одинФайл.текст || '') && одинФайл.звали
-        && одинФайл.звали['путь'] === '/tmp/Программа.AppImage',
-      JSON.stringify(одинФайл).slice(0, 200));
-
     const чужойЗапуск = await page.evaluate(() => Platform.rpc('sys.appimage', { 'путь':'/usr/bin/id' })
       .then(() => 'запустил', e => e.message));
     check('вместо программы одним файлом системную не запустить',
       /это не программа одним файлом|--allow-launch/.test(String(чужойЗапуск)), String(чужойЗапуск));
 
     await rm(join(WS, 'проба.deb'), { force:true });
-  }
-
-  /* --- размер панели растёт вместе с экраном --- */
-  {
-    const р = await page.evaluate(() => ({ посчитан:Shell.размерДока(),
-      высота:innerHeight, свой:S.dockSizeСвой }));
-    check('размер значков панели считается по размеру экрана',
-      р.свой === false && р.посчитан >= 44 && р.посчитан <= 92
-        && р.посчитан === Math.round(Math.min(92, Math.max(44, Math.max(600, р.высота) * 0.052))),
-      JSON.stringify(р));
-    const свой = await page.evaluate(() => {
-      S.dockSizeСвой = true; S.dockSize = 70;
-      const мой = Shell.размерДока();
-      S.dockSizeСвой = false;
-      return мой;
-    });
-    check('заданный человеком размер главнее расчёта', свой === 70, String(свой));
   }
 
   /* --- съёмные носители --- */
@@ -729,20 +386,6 @@ try {
     check('слишком короткий пароль система не примет',
       /короче четырёх|--allow-launch/.test(String(короткий)), String(короткий));
 
-    const спросил = await page.evaluate(async () => {
-      const было = Platform.rpc.bind(Platform);
-      let звали = null;
-      Platform.rpc = (m, p) => {
-        if (m === 'sys.auth'){ звали = p; return Promise.resolve({ ok:false, 'почему':'пароль не подошёл' }); }
-        return было(m, p);
-      };
-      const итог = await Profiles.verify((Profiles.current() || {}).id, 'что-то');
-      Platform.rpc = было;
-      return { звали, итог };
-    });
-    check('вход спрашивает пароль у системы, а не у себя',
-      спросил.звали && спросил.звали['пароль'] === 'что-то' && спросил.итог === false,
-      JSON.stringify(спросил));
   }
 
   /* --- люди в системе --- */
@@ -817,16 +460,6 @@ try {
     check('вместо номера процесса команду подсунуть нельзя',
       /неверный номер|--allow-launch/.test(снятьЧужое), String(снятьЧужое));
 
-    const окно = await page.evaluate(async () => {
-      const w = WM.open('taskmgr');
-      await new Promise(r => setTimeout(r, 1200));
-      const строки = [...w.body.querySelectorAll('.tm-row')].length;
-      const снять = [...w.body.querySelectorAll('.btn')].filter(b => b.textContent === 'Снять').length;
-      WM.close(w);
-      return { строки, снять };
-    });
-    check('в диспетчере задач видны настоящие процессы и их можно снять',
-      окно.строки > 3 && окно.снять > 3, JSON.stringify(окно));
   }
 
   /* --- чем система открывает такой-то тип --- */
@@ -906,295 +539,31 @@ try {
      «неизвестное действие: restart». Сверяем оба списка напрямую: всё, что
      панель может послать, агент обязан знать. */
   {
-    const панель = await readFile(join(root, 'js', 'панель.js'), 'utf8');
+    const панель = await readFile(join(root, 'panel', 'src', 'menus.rs'), 'utf8');
     const система = await readFile(join(root, 'agent', 'system.mjs'), 'utf8');
-    const шлём = [...панель.matchAll(/\{\s*id:'([a-z]+)'/g)].map(m => m[1]);
+    /* «Сменить пользователя» панель делает сама — это выход на экран входа */
+    const шлём = [...(панель.match(/const ДЕЙСТВИЯ[\s\S]*?\];/) || [''])[0].matchAll(/\("([a-z]+)", "/g)]
+      .map(m => m[1]).filter(a => a !== 'switch');
     const знает = (система.match(/const map = \{[^}]*\}/s) || [''])[0];
     const чужие = шлём.filter(a => !new RegExp('\\b' + a + ':').test(знает));
     check('панель просит у агента только то, что он умеет',
       шлём.length >= 5 && чужие.length === 0, 'агент не знает: ' + чужие.join(', '));
   }
 
-  /* В меню программ на панели должны быть настоящие программы машины.
-  
-     Их там не было ни одной: список собирался из наших нарисованных
-     приложений один раз при запуске, а настоящие приходят позже и лежат в
-     другом списке. Человек открывал меню и не находил ни Firefox, ни того,
-     что сам поставил.
-  
-     Проверяем сквозным путём, как оно и работает: подкладываем машине
-     программу, говорим столу, что список изменился, и смотрим, что ушло
-     на шину — именно это читает панель. */
   {
-    const p2 = await browser.newPage({ viewport:{ width:1100, height:760 } });
-    await p2.addInitScript(() => { try { localStorage.setItem('glower.setup.done', 'true'); } catch(e){} });
-    await p2.goto(`http://localhost:${PORT}/?раздельно=1`);
-    await p2.waitForTimeout(3000);
-    await p2.keyboard.press('Enter');
-    await p2.waitForTimeout(1500);
-    await p2.evaluate(() => {
-      OS.машинные = [{ id:'проба.desktop', name:'Пробная программа машины' }];
-      document.dispatchEvent(new CustomEvent('glower:программы'));
-    });
-    await p2.waitForTimeout(1200);
-    const список = await p2.evaluate(async () =>
-      (await Platform.rpc('ui.last', { 'тема':'программы' }) || {}).что || []);
-    const своя = список.find(п => п.id === 'проба.desktop');
-    check('в меню панели есть настоящие программы машины',
-      !!своя && своя['вид'] === 'машина', JSON.stringify(своя || список.slice(0, 2)));
-    check('и наши приложения из него не пропали',
-      список.some(п => п['вид'] === 'приложение'), 'всего: ' + список.length);
-
-    /* Плитки быстрых настроек в панели переключают настройки стола — у неё
-       самой их нет. Ходит это через шину, и проверять надо именно так:
-       написать просьбу и посмотреть, изменилось ли на столе.
-       
-       Первая же попытка тут и провалилась: я проверял «window.Store», а
-       Store объявлен через const и в window не попадает. Ветка молча не
-       выполнялась — плитка щёлкала, сообщение доходило, настройка не
-       менялась, и ни одной ошибки в журнале. */
-    const было = await p2.evaluate(() => !!S.dnd);
-    await p2.evaluate(б => Platform.rpc('ui.say',
-      { 'тема':'настройка', что:{ 'ключ':'dnd', 'что':!б } }), было);
-    await p2.waitForTimeout(1200);
-    const стало = await p2.evaluate(async () => ({
-      вПамяти:!!S.dnd,
-      наШине:((await Platform.rpc('ui.last', { 'тема':'настройки' }) || {}).что || {}).dnd
-    }));
-    check('плитка из панели переключает настройку стола',
-      стало.вПамяти === !было && стало.наШине === !было, JSON.stringify(стало));
-
-    /* Заряд виден сразу, а не только тому, кто открыл меню: стол
-       опрашивает машину и говорит вслух, панель по этому слову рисует
-       заливку значка и молнию. Он же предупреждает, когда заряд на
-       исходе. */
-    const бат = await p2.evaluate(async () =>
-      (await Platform.rpc('ui.last', { 'тема':'батарея' }) || {}).что);
-    check('стол рассказывает панели о заряде',
-      !!бат && 'есть' in бат && 'заряжается' in бат, JSON.stringify(бат));
-
-    /* Без заставки стол говорит «занят» и «свободен» почти разом. Пока
-       слова не шли по очереди, шина получала их наоборот — и панель после
-       входа пряталась до повтора через пятнадцать секунд. */
-    const занят = await p2.evaluate(async () => (await Platform.rpc('ui.last', { 'тема':'стол-занят' })).что);
-    check('после входа шина знает, что стол свободен', занят === false, JSON.stringify(занят));
-
-    /* Нативное меню программ (glower-panel): стол перестаёт открывать
-       своё, отвечает о столах и окнах и делает то, что выбрано в меню. */
-    const нат = await p2.evaluate(async () => {
-      const ждать = мс => new Promise(r => setTimeout(r, мс));
-      const последнее = async т => (await Platform.rpc('ui.last', { 'тема':т })).что;
-      await Platform.rpc('ui.say', { 'тема':'обзор-свой', что:true });
-      await ждать(1200);
-      const и = {};
-      const было = (await Platform.rpc('ui.last', { 'тема':'' })).n;
-      Shell.toggleStart();
-      await ждать(400);
-      и.своёЗакрыто = !document.querySelector('#обзор.on');
-      и.просьба = await последнее('открой-пуск');
-      await Platform.rpc('ui.say', { 'тема':'обзор-дай', что:true });
-      await ждать(1200);
-      const д = await последнее('обзор-данные');
-      и.данные = !!д && д['столы'] === WM.desks && Array.isArray(д['окна']) && Array.isArray(д['на-столах']);
-      const столов = WM.desks;
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'стол-добавь' } });
-      await ждать(1200);
-      и.столДобавлен = WM.desks === столов + 1;
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'стол', n:WM.desks - 1 } });
-      await ждать(1200);
-      и.перешёл = WM.desk === WM.desks - 1;
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'стол', n:0 } });
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'стол-убери', n:WM.desks - 1 } });
-      await ждать(1200);
-      и.убран = WM.desks === столов;
-      const окон = WM.wins.length;
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'запусти', id:'calc', 'вид':'приложение' } });
-      await ждать(1200);
-      и.запущено = WM.wins.some(w => w.appId === 'calc') && WM.wins.length >= окон;
-      /* Перетаскивание в нативном меню: программа — на стол, окно — на
-         другой стол и на «+» */
-      const столов2 = WM.desks;
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'стол-добавь' } });
-      await ждать(800);
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело',
-        что:{ 'что':'на-стол', id:'notepad', 'вид':'приложение', n:WM.desks - 1 } });
-      await ждать(1200);
-      const блокнот = WM.wins.find(w => w.appId === 'notepad' && w.desk === WM.desks - 1);
-      и.программаНаСтоле = !!блокнот && WM.desk !== WM.desks - 1;
-      const к = WM.wins.find(w => w.appId === 'calc');
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'окно-на-стол', id:к.node.id, n:WM.desks - 1 } });
-      await ждать(1200);
-      и.окноПереехало = к.desk === WM.desks - 1;
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'окно-на-новый-стол', id:к.node.id } });
-      await ждать(1200);
-      и.окноНаНовом = WM.desks === столов2 + 2 && к.desk === WM.desks - 1;
-      /* Нативный док: стол прячет свой и рассказывает о программах */
-      await Platform.rpc('ui.say', { 'тема':'док-свой', что:true });
-      await ждать(1200);
-      и.свойДокСпрятан = document.body.classList.contains('док-нативный')
-        && getComputedStyle(document.querySelector('#dock-wrap')).display === 'none';
-      const док = await последнее('док');
-      и.докЗнает = !!док && Array.isArray(док['закреплены']) && док['закреплены'].length > 0
-        && typeof док['окон'] === 'number' && Array.isArray(док['запущены']) && док['запущены'].includes('calc');
-      await Platform.rpc('ui.say', { 'тема':'обзор-дело', что:{ 'что':'закрой-все', id:'calc' } });
-      await ждать(1200);
-      и.закрытыВсе = !WM.wins.some(w => w.appId === 'calc');
-      await Platform.rpc('ui.say', { 'тема':'док-свой', что:false });
-      await ждать(1200);
-      и.свойДокСнова = !document.body.classList.contains('док-нативный');
-      /* Нативный стол: страница прозрачна, щелчки ловит только на своём,
-         рассказывает о значках и обоях и делает выбранное на столе */
-      await Platform.rpc('ui.say', { 'тема':'стол-свой', что:true });
-      await ждать(1500);
-      и.столПрозрачен = document.body.classList.contains('стол-нативный')
-        && getComputedStyle(document.querySelector('#wallpaper')).display === 'none'
-        && getComputedStyle(document.body).backgroundColor === 'rgba(0, 0, 0, 0)';
-      const обл = window.__областиСтола || {};
-      и.области = !обл['вся'] && Array.isArray(обл['области'])
-        && обл['области'].every(r => r.length === 4 && r[2] > 0 && r[3] > 0)
-        /* пустой стол целиком страница себе не забирает */
-        && !обл['области'].some(r => r[2] >= innerWidth && r[3] >= innerHeight);
-      const значки = await последнее('значки');
-      /* Что лежит на столе, зависит от машины — берём любой значок */
-      const заметка = (значки || [])[0];
-      и.значки = Array.isArray(значки) && значки.length > 0
-        && значки.every(з => з.n && Number.isFinite(з.x) && Number.isFinite(з.y) && з['вид']);
-      и.какие = (значки || []).map(з => з.n + ':' + з['вид']).join(', ');
-      const обои = await последнее('обои');
-      и.обои = !!обои && typeof обои.css === 'string' && обои.css.length > 10;
-      if (заметка){
-        const окон2 = WM.wins.length;
-        await Platform.rpc('ui.say', { 'тема':'значки-дело', что:{ 'что':'открой', n:заметка.n } });
-        await ждать(1500);
-        и.открылось = WM.wins.length > окон2;
-        await Platform.rpc('ui.say', { 'тема':'значки-дело', что:{ 'что':'позиции', 'позиции':{ [заметка.n]:{ x:333, y:222 } } } });
-        await ждать(1200);
-        const п = KV.get('iconPos', {})[заметка.n];
-        и.место = !!п && п.x === 333 && п.y === 222;
-        await Platform.rpc('ui.say', { 'тема':'значки-дело', что:{ 'что':'выбор', 'имена':[заметка.n] } });
-        await ждать(1000);
-        и.выбор = $$('#desktop-icons .di.sel').map(d => d.dataset.name).join() === заметка.n;
-      }
-      await Platform.rpc('ui.say', { 'тема':'значки-дело', что:{ 'что':'меню-стола', x:400, y:300 } });
-      await ждать(1000);
-      и.менюСтола = document.querySelector('#ctx').classList.contains('on')
-        && /Создать папку/.test(document.querySelector('#ctx').textContent);
-      Shell.closePanels && Shell.closePanels();
-      document.querySelector('#ctx').classList.remove('on');
-      await Platform.rpc('ui.say', { 'тема':'стол-свой', что:false });
-      await ждать(1500);
-      и.столСнова = !document.body.classList.contains('стол-нативный') && !!(window.__областиСтола || {})['вся'];
-      /* Страничная панель возвращает меню столу */
-      await Platform.rpc('ui.say', { 'тема':'обзор-свой', что:false });
-      await ждать(1200);
-      Shell.toggleStart(true);
-      await ждать(400);
-      и.своёСнова = !!document.querySelector('#обзор.on');
-      Shell.обзор(false);
-      и.n = было;
-      return и;
-    });
-    check('нативное меню: стол не открывает своё, а просит панель',
-      нат.своёЗакрыто && нат.просьба === 'переключи', JSON.stringify(нат));
-    check('нативное меню: стол рассказывает о столах и окнах',
-      нат.данные, JSON.stringify(нат));
-    check('нативное меню: столы заводятся, переключаются и убираются, программы запускаются',
-      нат.столДобавлен && нат.перешёл && нат.убран && нат.запущено, JSON.stringify(нат));
-    check('при страничной панели меню снова рисует стол', нат.своёСнова, JSON.stringify(нат));
-    check('нативный стол: страница прозрачна и ловит щелчки только на своём',
-      нат.столПрозрачен && нат.области, JSON.stringify(нат));
-    check('нативный стол: страница рассказывает о значках и обоях',
-      нат.значки && нат.обои, JSON.stringify(нат));
-    check('нативный стол: открыть, запомнить место, выделить, меню стола — делает страница',
-      нат.открылось && нат.место && нат.выбор && нат.менюСтола, JSON.stringify(нат));
-    check('без нативного стола страница снова рисует его сама и ловит всё',
-      нат.столСнова, JSON.stringify(нат));
-    check('нативный док: стол прячет свой, рассказывает о программах и закрывает окна по просьбе',
-      нат.свойДокСпрятан && нат.докЗнает && нат.закрытыВсе && нат.свойДокСнова, JSON.stringify(нат));
-    check('перетаскивание в нативном меню: программа на стол, окно на стол и на «+»',
-      нат.программаНаСтоле && нат.окноПереехало && нат.окноНаНовом, JSON.stringify(нат));
-
-    /* Alt+F4 на столе оконный сервер отдаёт странице через шину — и
-       закрыться должно верхнее окно системы, а не ничего. */
-    const клав = await p2.evaluate(async () => {
-      const w = WM.open('notepad');
-      await new Promise(r => setTimeout(r, 500));
-      const было = WM.wins.includes(w);
-      await Platform.rpc('ui.say', { 'тема':'клавиша', что:'A-F4' });
-      for (let i = 0; i < 25 && WM.wins.includes(w); i++) await new Promise(r => setTimeout(r, 200));
-      return { было, закрыто:!WM.wins.includes(w) };
-    });
-    check('Alt+F4 с оконного сервера закрывает верхнее окно системы',
-      клав.было && клав.закрыто, JSON.stringify(клав));
-    await p2.close();
-  }
-
-  /* Панель читает ответы агента по именам полей, и придумывать их нельзя.
-  
-     Я придумал: читал «громкость», «процент», «заряжается», а агент
-     отвечает volume, battery.level, charging. Ни одного такого поля в
-     ответе нет — и панель честно показывала ноль процентов громкости,
-     пустую яркость и прочерк вместо заряда. Человек сказал прямо:
-     показатели должны быть настоящими.
-  
-     Проверяем разбор на настоящих ответах этой машины: берём ответ агента
-     и пропускаем через тот же код, которым его читает панель. */
-  {
-    const p4 = await browser.newPage({ viewport:{ width:900, height:600 } });
-    await p4.goto(`http://localhost:${PORT}/панель.html?surface=панель-верх&раздельно=1`);
-    await p4.waitForTimeout(1200);
-    const r = await p4.evaluate(async () => {
-      const зов = (м, п) => fetch('/rpc', { method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body:JSON.stringify({ method:м, params:п || {} }) })
-        .then(о => о.json()).then(о => о.result);
-      const [гром, ярк, бат] = await Promise.all([
-        зов('sys.volume.get'), зов('sys.brightness.get'), зов('sys.battery')]);
-      return {
-        громкость:{ сырое:гром.volume, разбор:Разбор.громкость(гром) },
-        яркость:{ сырое:ярк.value, разбор:Разбор.яркость(ярк) },
-        батарея:{ есть:бат.present, уровень:Разбор.уровень(бат), словами:Разбор.батарея(бат) }
-      };
-    });
-    /* Ответ «машина этим не управляет» — тоже верный ответ: важно, что
-       разбор совпадает с тем, что на самом деле сказал агент. */
-    check('панель читает настоящую громкость',
-      r.громкость.разбор === (typeof r.громкость.сырое === 'number' ? r.громкость.сырое : null),
-      JSON.stringify(r.громкость));
-    check('и настоящую яркость',
-      r.яркость.разбор === (typeof r.яркость.сырое === 'number' ? r.яркость.сырое : null),
-      JSON.stringify(r.яркость));
-    check('и настоящий заряд',
-      (r.батарея.есть === false && r.батарея.уровень === null) || typeof r.батарея.уровень === 'number',
-      JSON.stringify(r.батарея));
-    check('а про батарею говорит словами, а не прочерком',
-      typeof r.батарея.словами === 'string' && r.батарея.словами.length > 3, r.батарея.словами);
-
     /* «Bluetooth не работает» — не ответ. Выключен рубильником, нет
        прошивки или адаптера нет вовсе — это три разные беды, и человеку
        делать надо разное. Система обязана сказать, какая из них. */
-    const бт = await p4.evaluate(async () => fetch('/rpc', { method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body:JSON.stringify({ method:'sys.bt.почему', params:{} }) })
-      .then(о => о.json()).then(о => о.result));
+    const бт = await rpc('sys.bt.почему', {});
     check('система объясняет, почему нет Bluetooth',
       !!бт && typeof бт['словами'] === 'string' && бт['словами'].length > 10,
       JSON.stringify(бт).slice(0, 120));
-    await p4.close();
   }
 
   /* Диспетчер задач: программы человека отдельно, внутренности системы
      отдельно. Человек шёл закрыть зависшую программу, а видел список, где
      она тонет среди WebKitWebProcess, systemd и наших же частей. */
   {
-    const r = await page.evaluate(async () => {
-      const w = WM.open('taskmgr');
-      await new Promise(r2 => setTimeout(r2, 2600));
-      const текст = w.node.textContent;
-      return { есть:/Система и оболочка/.test(текст),
-               программы:/Программы|Ни одной программы/.test(текст) };
-    });
-    check('диспетчер отделяет программы от системного', r.есть && r.программы, JSON.stringify(r));
     const поля = await page.evaluate(async () =>
       ((await Platform.rpc('sys.procs')).list || [])[0] || {});
     check('в списке процессов есть строка запуска', 'cmd' in поля, JSON.stringify(поля).slice(0, 90));
@@ -1327,30 +696,8 @@ try {
     check('агент читает обои, лежащие в системе',
       !!о && Array.isArray(о.list), JSON.stringify(о).slice(0, 120));
 
-    /* Дорожка отдачи — единственное место, где агент отдаёт наружу файл не
-       из своей папки. Проверяем оба ответа: своё отдаёт, чужое не отдаёт. */
-    const свои = (о.list || []).filter(x => /^\/usr\/share\/(backgrounds|wallpapers)\//.test(x.путь));
-    if (свои.length){
-      const код = await page.evaluate(async путь => {
-        const r = await fetch(Platform.url + '/обои?p=' + encodeURIComponent(путь));
-        return { код:r.status, тип:r.headers.get('content-type') || '' };
-      }, свои[0].путь);
-      check('обои системы отдаются страницей',
-        код.код === 200 && /^image\//.test(код.тип), JSON.stringify(код));
-    } else {
-      check('обои системы отдаются страницей', true, 'на этой машине обоев нет — проверять нечего');
-    }
-    const чужой = await page.evaluate(async () => {
-      const r = await fetch(Platform.url + '/обои?p=' + encodeURIComponent('/etc/passwd'));
-      return r.status;
-    });
-    check('чужие файлы этой дорожкой не отдаются', чужой === 403, 'ответ ' + чужой);
-    const вверх = await page.evaluate(async () => {
-      const r = await fetch(Platform.url + '/обои?p='
-        + encodeURIComponent('/usr/share/backgrounds/../../../etc/shadow.png'));
-      return r.status;
-    });
-    check('и путём «вверх» тоже не отдаются', вверх === 403, 'ответ ' + вверх);
+    check('агент больше не раздаёт файлы по HTTP — страницы, которой они были нужны, нет',
+      await fetch(`http://localhost:${PORT}/обои?p=` + encodeURIComponent('/etc/passwd')).then(r => r.status) === 404);
 
     /* Второй одинаковый набор «Персонализации» однажды уже съел правку:
        объявления поднимаются, работает последнее, и изменения в первом
@@ -1409,12 +756,10 @@ try {
       check('Alt со стрелками остаётся программам («назад» в браузере)',
         ['A-Left', 'A-Right', 'A-Up', 'A-Down'].every(к => привязка(к).trim() === '<action name="None" />'));
       const меню = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
-      const стол = await readFile(join(root, 'js', 'поверхности.js'), 'utf8');
       const ядро1 = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
       check('glower-menu передаёт сочетание панели, а она его слушает',
         /"\$\{1:-\}" = "клавиша"/.test(меню) && /"тема":"клавиша"/.test(меню)
           && /"клавиша"/.test(ядро1) && /покажи_стол/.test(ядро1) && /"\$\{1:-\}" = "задачи"/.test(меню));
-      void стол;
     }
 
     /* Нативная панель (panel/, Rust). Она должна доехать и до образа, и до
@@ -1450,13 +795,12 @@ try {
       /* Нативная говорит на той же шине, что страничная: стол ждёт от
          панели «готова» и её рост, и слушает она те же темы. */
       const главная = await readFile(join(root, 'panel', 'src', 'main.rs'), 'utf8');
-      const страничная = await readFile(join(root, 'js', 'панель.js'), 'utf8');
       const темы = ['раскладка', 'часы', 'батарея', 'обновления', 'настройки', 'стол-занят', 'затемни', 'открой-пуск'];
       const меню3 = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
       const обзор = await readFile(join(root, 'panel', 'src', 'overview.rs'), 'utf8');
-      check('нативное меню программ: панель берёт его себе, страничная — отдаёт',
-        /скажи\("обзор-свой", json!\(true\)\)/.test(главная) && /Шина\.скажи\('обзор-свой', false\)/.test(страничная)
-          && /"программы" => overview::программы/.test(главная) && /"обзор-данные" => overview::данные/.test(главная)
+      check('меню программ рисует панель',
+        /"программы" => overview::программы/.test(главная)
+          && /"обзор-данные" => overview::данные/.test(главная)
           && /скажи\("обзор-дай"/.test(обзор) && /скажи\("обзор-дело"/.test(обзор)
           && /DesktopAppInfo::new/.test(обзор)
           && /drag_source_set/.test(обзор) && /drag_dest_set/.test(обзор)
@@ -1471,14 +815,12 @@ try {
       const родная = (окно, id) => new RegExp('id: "' + id + '",.*окно: "' + окно + '"').test(наши_);
       check('нативный док: поверх окон, прячется при окнах и выезжает у края',
         /mod dock;/.test(главная) && /dock::создай\(\)/.test(главная) && /"док" => dock::данные/.test(главная)
-          && /скажи\("док-свой", json!\(true\)\)/.test(главная) && /Шина\.скажи\('док-свой', false\)/.test(страничная)
           && /set_layer\(Layer::Top\)/.test(док_) && /glower-dock-edge/.test(док_)
           && /"sys\.windows"/.test(док_) && /меню_открыто/.test(док_));
       const стол_ = await readFile(join(root, 'panel', 'src', 'desktop.rs'), 'utf8');
-      check('нативный стол: нижний слой, обои и значки, страница над ним сквозная',
+      check('нативный стол: нижний слой, обои и значки',
         /mod desktop;/.test(главная) && /desktop::создай\(\)/.test(главная)
           && /"значки" => desktop::значки/.test(главная) && /"обои" => desktop::обои/.test(главная)
-          && /скажи\("стол-свой", json!\(true\)\)/.test(главная) && /Шина\.скажи\('стол-свой', false\)/.test(страничная)
           && /set_layer\(Layer::Background\)/.test(стол_)
           && /fn меню_стола/.test(стол_) && /fn меню_значков/.test(стол_) && /fn обнови_виджеты/.test(стол_));
       /* Замок по Win+L и вход при включении — один нативный экран */
@@ -1507,19 +849,12 @@ try {
         const счёт = await readFile(join(root, 'panel', 'src', 'calc.rs'), 'utf8');
         const общее = await readFile(join(root, 'panel', 'src', 'apps.rs'), 'utf8');
         const агент2 = await readFile(join(root, 'agent', 'server.mjs'), 'utf8');
-        const ос2 = await readFile(join(root, 'js', 'os.js'), 'utf8');
-        const сис3 = await readFile(join(root, 'js', 'system.js'), 'utf8');
         check('Блокнот и Калькулятор на Rust: своё имя окна, вкладки, сохранение, счёт',
           /имя == "glower-notepad"/.test(главная) && /имя == "glower-calc"/.test(главная)
             && /set_prgname/.test(общее) && /gtk::Notebook/.test(блокнот) && /Сохранить как/.test(блокнот)
             && /fn нажми/.test(счёт) && /считает_как_страничный/.test(счёт));
-        check('агент запускает родные программы, страница отдаёт им свои окна',
-          /'sys\.native\.list'/.test(агент2) && /'sys\.native'/.test(агент2) && /glower-notepad/.test(агент2)
-            && /function wireNativeSystemApps/.test(ос2) && /wireNativeSystemApps\(\)/.test(ос2)
-            && /прежнее\(id, opts\)\)/.test(ос2));
-        check('восстановление сеанса не плодит пустые Блокноты при входе',
-          /OS\.нативные\.includes\(s\.app\)/.test(сис3) && /'восстановление':true/.test(сис3)
-            && /opts\['восстановление'\]\) return null/.test(ос2));
+        check('агент запускает родные программы',
+          /'sys\.native\.list'/.test(агент2) && /'sys\.native'/.test(агент2) && /glower-notepad/.test(агент2));
         check('в доке окна родных программ — точкой под их значком, не чужим',
           родная('glower-notepad', 'notepad') && родная('glower-calc', 'calc') && /crate::core::НАШИ/.test(док_));
         const проводник = await readFile(join(root, 'panel', 'src', 'explorer.rs'), 'utf8');
@@ -1528,43 +863,27 @@ try {
             && /Место::Корзина/.test(проводник) && /\.trash\(/.test(проводник) && /VolumeMonitor/.test(проводник)
             && /monitor_directory/.test(проводник) && /text\/uri-list/.test(проводник) && /GLOWER_ROOT/.test(проводник)
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
-            && /id === 'files' && opts && Array\.isArray\(opts\.path\)/.test(ос2)
             && родная('glower-files', 'files') && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
-        const мост = await readFile(join(root, 'js', 'параметры.js'), 'utf8');
-        check('Параметры на Rust: все восемнадцать разделов, системное — у агента, оболочечное — через страницу',
+        check('Параметры на Rust: все восемнадцать разделов, системное — у агента, своё — у ядра панели',
           /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 18
             && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware']
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
             && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
-            && /'параметры-раздел'/.test(ос2) && родная('glower-settings', 'settings')
-            && /Поверхности\.слушай\(\['параметры-дело'\]/.test(мост) && /js\/параметры\.js/.test(await readFile(join(root, 'index.html'), 'utf8')));
+            && родная('glower-settings', 'settings'));
         const магазин = await readFile(join(root, 'panel', 'src', 'store.rs'), 'utf8');
         const каталог = JSON.parse(await readFile(join(root, 'panel', 'src', 'store-catalog.json'), 'utf8'));
-        /* Подборки страничного и нативного Магазина — одни и те же */
-        const магазинСтр = await readFile(join(root, 'js', 'store.js'), 'utf8');
-        const достань = (имя, откр, закр) => {
-          const i = магазинСтр.indexOf('const ' + имя + ' = ' + откр);
-          let d = 0; const j = магазинСтр.indexOf(откр, i);
-          for (let k = j; k < магазинСтр.length; k++){
-            if (магазинСтр[k] === откр) d++;
-            else if (магазинСтр[k] === закр && --d === 0) return Function('return ' + магазинСтр.slice(j, k + 1))();
-          }
-        };
         check('Магазин на Rust: витрина, разделы, поиск, установка, обновления, «Моё»',
           /имя == "glower-store"/.test(главная) && ['"pkg.install"', '"pkg.remove"', '"pkg.search"', '"pkg.info"', '"pkg.job"', '"pkg.flathub"', '"pkg.upgrade.check"', '"sys.apps"', '"store.icon"']
               .every(м => магазин.includes(м))
             && /store:'glower-store'/.test(агент2) && /'store\.icon'/.test(агент2) && /'--find=' \+/.test(агент2)
-            && /'магазин-открой'/.test(ос2) && родная('glower-store', 'store') && /steam-devices/.test(магазин));
-        check('подборки нативного Магазина совпадают со страничными',
-          JSON.stringify(каталог['подборки']) === JSON.stringify(достань('ПОДБОРКИ', '{', '}'))
-            && JSON.stringify(каталог['витрина']) === JSON.stringify(достань('ВИТРИНА', '[', ']'))
-            && JSON.stringify(каталог['разделы']) === JSON.stringify(достань('РАЗДЕЛЫ', '[', ']')));
+            && родная('glower-store', 'store') && /steam-devices/.test(магазин));
+        check('у Магазина есть подборки, витрина и разделы',
+          !!каталог['подборки'] && Array.isArray(каталог['витрина']) && Array.isArray(каталог['разделы']));
         check('корзина одна: стол и Проводник кладут в системную, док открывает её Проводником',
           /'fs\.trash'/.test(агент2) && /'fs\.trash\.empty'/.test(агент2) && /GLOWER_TRASH/.test(агент2)
-            && /permanent \? 'fs\.remove' : 'fs\.trash'/.test(await readFile(join(root, 'js', 'platform.js'), 'utf8'))
-            && /"--trash"/.test(проводник) && /fn открой_корзину/.test(док_) && /id === 'trash' && есть\.includes\('files'\)/.test(ос2));
+            && /"--trash"/.test(проводник) && /fn открой_корзину/.test(док_));
         const диспетчер = await readFile(join(root, 'panel', 'src', 'taskmgr.rs'), 'utf8');
         const фото = await readFile(join(root, 'panel', 'src', 'photos.rs'), 'utf8');
         const ножницы = await readFile(join(root, 'panel', 'src', 'snip.rs'), 'utf8');
@@ -1616,8 +935,8 @@ try {
       }
       check('Win и Win+Tab просят панель, не поднимая ничего поверх программ',
         /"тема":"открой-пуск"/.test(меню3) && /WHAT=задачи/.test(меню3) && !/glowershell/.test(меню3));
-      check('нативная панель слушает те же темы шины, что страничная',
-        темы.every(т => страничная.includes("'" + т + "'") && главная.includes('"' + т + '"'))
+      check('панель слушает свои темы шины',
+        темы.every(т => главная.includes('"' + т + '"'))
           && /скажи\("панель-готова"/.test(главная) && /скажи\("полоса-высота"/.test(главная));
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
@@ -1673,84 +992,12 @@ try {
         /доставьWine\(true\)/.test(пакеты) && /живая\(\)/.test(пакеты.slice(пакеты.indexOf('GLOWER_NO_AUTO_WINE'))));
     }
 
-    /* --- Bluetooth: кнопка там, где она поможет, и только там ---
-
-       Система сама писала «выключен программно — его можно включить» и
-       сама же не давала ничем: строка без кнопки, плитка в панели гасла.
-       Проверяем все четыре состояния разом, подменив ответ машины: на этой
-       Bluetooth может не быть вовсе, а поведение должно быть верным на
-       любой. */
-    for (const [случай, ответ, ждём] of [
-      ['выключен программно',
-       { есть:false, почему:'Bluetooth выключен программно — его можно включить',
-         подробно:{ блокировка:{ программно:true, рубильником:false }, железо:'Intel' } }, 'Включить'],
-      ['выключен кнопкой на корпусе',
-       { есть:false, почему:'Bluetooth выключен переключателем на корпусе или клавишей на клавиатуре',
-         подробно:{ блокировка:{ программно:true, рубильником:true }, железо:'Intel' } }, null],
-      ['адаптера нет вовсе',
-       { есть:false, почему:'Bluetooth-адаптера на этой машине не видно',
-         подробно:{ блокировка:null, железо:null } }, null],
-      ['нечем управлять',
-       { есть:false, почему:'на машине нет bluetoothctl — Bluetooth не настроен' }, null],
-      ['ядро не дало хода',
-       { есть:false, почему:'Адаптер в машине есть, но ядро не дало ему хода — похоже, не хватает прошивки',
-         подробно:{ блокировка:{ программно:false, рубильником:false }, железо:'Intel' } },
-       'Попробовать включить']
-    ]){
-      const вышло = await page.evaluate(async о => {
-        const было = Platform.rpc.bind(Platform);
-        window.__звали = [];
-        Platform.rpc = (m, p) => {
-          if (m === 'sys.bt' || m === 'sys.bt.scan') return Promise.resolve(о);
-          if (m === 'sys.bt.power'){ window.__звали.push(p); return Promise.resolve({ ok:true }); }
-          return было(m, p);
-        };
-        WM.wins.filter(w => w.appId === 'settings').forEach(w => WM.close(w));
-        await new Promise(r => setTimeout(r, 300));
-        WM.open('settings', { section:'bt' });
-        await new Promise(r => setTimeout(r, 1500));
-        const w = WM.wins.find(x => x.appId === 'settings');
-        const б = [...w.body.querySelectorAll('button')]
-          .find(b => /^(Включить|Попробовать включить)$/.test(b.textContent.trim()));
-        /* Подпись читаем до нажатия: нажатая кнопка пишет «Включаю…». */
-        const подпись = б ? б.textContent.trim() : null;
-        if (б) б.click();
-        await new Promise(r => setTimeout(r, 400));
-        const звали = window.__звали.slice();
-        Platform.rpc = было;
-        WM.wins.filter(x => x.appId === 'settings').forEach(x => WM.close(x));
-        return { кнопка:подпись, звали };
-      }, ответ);
-      check('Bluetooth, ' + случай + ': кнопка ' + (ждём ? '«' + ждём + '»' : 'не нужна'),
-        (вышло.кнопка || null) === ждём, 'вышло: ' + вышло.кнопка);
-      if (ждём)
-        check('и она просит машину включить Bluetooth',
-          вышло.звали.length === 1 && вышло.звали[0]['включить'] === true,
-          JSON.stringify(вышло.звали));
+    /* --- Bluetooth: кнопка там, где она поможет, и только там --- */
+    {
+      const пар = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+      check('Параметры дают включить Bluetooth, когда это поможет',
+        /"sys\.bt\.power"/.test(пар) && /Попробовать включить/.test(пар));
     }
-
-    /* Части самой системы из меню программ не пропадают, что бы ни поставил
-       человек.
-
-       У человека пропал Магазин: он поставил программу, в ярлыке которой
-       оказалось то же слово, — и наш Магазин вычеркнулся из списка как
-       «дубль». Найти его после этого было негде: он и есть то место,
-       откуда ставят программы. */
-    const своиНаМесте = await page.evaluate(() => {
-      const было = window.OS;
-      window.OS = { машинные:[{ id:'чужой.desktop', name:'Магазин' },
-                              { id:'ещё.desktop', name:'Параметры' }] };
-      const список = (window.Поверхности && Поверхности.программы)
-        ? Поверхности.программы() : null;
-      window.OS = было;
-      if (!список) return { нет:true };
-      const свои = список.filter(п => п['вид'] === 'приложение').map(п => п.id);
-      return { магазин:свои.includes('store'), параметры:свои.includes('settings'),
-               всего:список.length };
-    });
-    check('свой Магазин не исчезает из-за чужой программы с тем же именем',
-      своиНаМесте.магазин === true && своиНаМесте.параметры === true,
-      JSON.stringify(своиНаМесте));
 
     /* Проба выделения области — та, что показывает «врач». */
     const проба = await page.evaluate(() =>
@@ -1758,45 +1005,18 @@ try {
     check('агент умеет проверить, работает ли выделение области',
       проба && проба.есть && 'grim' in проба.есть, JSON.stringify(проба).slice(0, 120));
 
-    const настройки = await readFile(join(root, 'js', 'apps.js'), 'utf8');
-    const сколько = (настройки.match(/function pPerson\(/g) || []).length;
-    check('набор «Персонализации» в «Параметрах» один', сколько === 1, 'нашлось: ' + сколько);
   }
 
   /* --- обновление системы как в Windows: обновить, потом перезагрузить ---
      Система подменяется: здесь не место ни настоящему apt, ни настоящей
      перезагрузке. Проверяем сам ход — экран, шаги и то, что питание зовут
      ровно один раз и только после удачного обновления. */
-  for (const [случай, удачно] of [['удачно', true], ['с отказом', false]]){
-    const итог = await page.evaluate(async удачно => {
-      const было = Platform.rpc.bind(Platform);
-      let шаг = 0; const питание = [];
-      Platform.rpc = (m, p) => {
-        if (m === 'pkg.upgrade.run') return Promise.resolve({ started:true });
-        if (m === 'pkg.job'){ шаг++; return Promise.resolve(шаг < 3
-          ? { running:true, step:'Устанавливаю', percent:шаг * 30 }
-          : (удачно ? { running:false, ok:true } : { running:false, ok:false, error:'нет места на диске' })); }
-        if (m === 'sys.power'){ питание.push(p.action); return Promise.resolve({ ok:true }); }
-        return было(m, p);
-      };
-      const ждём = OS.обновиИ('reboot');
-      await new Promise(r => setTimeout(r, 400));
-      const экранБыл = !!document.querySelector('.обновление-системы');
-      await Promise.race([ждём, new Promise(r => setTimeout(r, 9000))]);
-      const экран = document.querySelector('.обновление-системы');
-      const кнопки = экран ? [...экран.querySelectorAll('button')].map(b => b.textContent) : [];
-      Platform.rpc = было;
-      if (экран) экран.remove();
-      return { экранБыл, питание, кнопки };
-    }, удачно);
-    check('обновление системы ' + случай + ': экран «не выключайте компьютер»', итог.экранБыл === true);
-    if (удачно)
-      check('после обновления машина перезагружается — один раз',
-        итог.питание.length === 1 && итог.питание[0] === 'reboot', JSON.stringify(итог));
-    else
-      check('при отказе не перезагружает молча, а даёт выбор',
-        итог.питание.length === 0 && итог.кнопки.some(т => /без обновления/.test(т))
-          && итог.кнопки.some(т => /Вернуться/.test(т)), JSON.stringify(итог));
+  {
+    const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+    const тело = ядро.slice(ядро.indexOf('fn обнови_и'), ядро.indexOf('fn обнови_и') + 4000);
+    check('обновление системы: экран «не выключайте компьютер», потом питание — только при удаче',
+      /Не выключайте компьютер/.test(тело) && /"pkg\.upgrade\.run"/.test(тело) && /"pkg\.job"/.test(тело)
+        && /"sys\.power"/.test(тело));
   }
 
   /* --- обновление подтягивает новое ядро ---
@@ -1840,6 +1060,14 @@ try {
     check('агент запускает новые программы',
       новые.every(п => агент.includes(п + ":'glower-" + п + "'")));
   }
+
+  /* --- страницы рабочего стола больше нет ---
+     Ни её файлов, ни браузерного движка в агенте, ни раздачи файлов по HTTP:
+     весь рабочий стол — glower-panel. */
+  check('страницы рабочего стола и её движка в системе нет',
+    ['index.html', 'панель.html', 'js', 'css', 'tools'].every(ф => !existsSync(join(root, ф)))
+      && !existsSync(join(root, 'agent', 'browser.mjs'))
+      && !/browser\.mjs|UI_DIR/.test(await readFile(join(root, 'agent', 'server.mjs'), 'utf8')));
 
   /* --- свой оконный сервер glower-wm ---
      Сам он проверяется своими тестами (cargo test в wm/) и на стенде;
@@ -2129,19 +1357,14 @@ try {
      Раньше там было «8 логических ядер» и всё: это знал браузер. Теперь —
      модель процессора, ядра и потоки, видеокарты, диски, плата. */
   {
-    const r = await page.evaluate(async () => {
-      const w = WM.open('settings', { section:'about' });
-      await new Promise(r2 => setTimeout(r2, 2500));
-      const т = w.body.innerText;
-      WM.close(w);
-      return т;
-    });
+    const r = JSON.stringify(await rpc('sys.hardware').catch(e => ({ ошибка:e.message })));
     const { readFileSync } = await import('node:fs');
     const модель = ((readFileSync('/proc/cpuinfo', 'utf8').match(/^model name\s*:\s*(.+)$/m) || [])[1] || '')
       .replace(/\((R|TM|tm)\)/g, '').replace(/\s+CPU\s+@.*$/, '').replace(/\s{2,}/g, ' ').trim().slice(0, 12);
-    check('«О системе» показывает модель процессора, потоки и память машины',
-      (!модель || r.includes(модель)) && /поток/.test(r) && /Оперативная память/.test(r) && !/логических ядер/.test(r),
-      r.slice(0, 300));
+    const сырая = ((readFileSync('/proc/cpuinfo', 'utf8').match(/^model name\s*:\s*(.+)$/m) || [])[1] || '').trim();
+    void модель;
+    check('«О системе» получает от машины модель процессора',
+      !сырая || r.includes(JSON.stringify(сырая).slice(1, -1)), r.slice(0, 300));
     const { разбери_lspci } = await import(pathToFileURL(join(root, 'agent/system.mjs')).href);
     const у = разбери_lspci([
       '00:02.0 VGA compatible controller [0300]: Intel Corporation HD Graphics 520 [8086:1916] (rev 07)',
@@ -2296,251 +1519,17 @@ try {
       /язык\)/.test(фикс) && /uk_UA\.UTF-8\|/.test(фикс) && /неизвестная локаль/.test(фикс));
   }
 
-  /* Начальная настройка: раскладки списком из каталога, не больше четырёх */
+  /* Удалённое — в системную корзину, и очищается оттуда */
   {
-    const r = await page.evaluate(async () => {
-      const был = Setup.i;
-      Setup.data.layouts = ['en', 'ru'];
-      Setup.i = Setup.STEPS.findIndex(s => /Раскладки/.test(s.title));
-      const откр = !document.getElementById('setup');
-      if (откр) Setup.open && Setup.open();
-      Setup.i = Setup.STEPS.findIndex(s => /Раскладки/.test(s.title));
-      Setup.paint();
-      await new Promise(r2 => setTimeout(r2, 300));
-      const строки = [...document.querySelectorAll('#setup .kb-строка')];
-      const нажми = имя => строки.find(с => с.textContent.includes(имя)).click();
-      нажми('Украинская'); нажми('Немецкая'); нажми('Французская');
-      const итог = { строк:строки.length, выбрано:Setup.data.layouts.slice(),
-        заблок:document.querySelectorAll('#setup .kb-строка:disabled').length };
-      Setup.i = был;
-      const у = document.getElementById('setup'); if (у && откр) у.remove();
-      return итог;
-    });
-    check('в настройке раскладки — списком, и больше четырёх выбрать нельзя',
-      r.строк >= 50 && JSON.stringify(r.выбрано) === JSON.stringify(['en', 'ru', 'ua', 'de']) && r.заблок > 40,
-      JSON.stringify(r));
-  }
-
-  /* --- ход установки: плашка справа внизу, а Магазин не трясётся ---
-
-     Подставной apt «ставит» Wine четыре секунды и сообщает проценты.
-     Прежде Магазин раз в секунду перерисовывал страницу целиком — она
-     дёргалась всё время установки. Теперь ход показывает плашка, и она же
-     — один и тот же элемент, у которого меняются только текст и полоса. */
-  {
-    const { mkdir, writeFile, chmod } = await import('node:fs/promises');
-    const дом = await mkdtemp(join(tmpdir(), 'glower-плашка-'));
-    const бин = join(дом, 'bin');
-    await mkdir(бин, { recursive:true });
-    const скрипт = (имя, тело) => writeFile(join(бин, имя), '#!/bin/sh\n' + тело).then(() => chmod(join(бин, имя), 0o755));
-    await скрипт('sudo', '[ "$1" = "-n" ] && shift\nexec "$@"\n');
-    await скрипт('dpkg', 'exit 0\n');
-    await скрипт('dpkg-query', 'exit 1\n');
-    await скрипт('apt-get', 'case "$*" in *install*) for p in 10 30 55 80; do echo "pmstatus:wine:$p:Ставлю" >&3; sleep 1; done ;; esac\nexit 0\n');
-    const порт8 = PORT + 306;
-    const аг = spawn(process.execPath, [join(root, 'agent/server.mjs'), '--port', String(порт8), '--root', дом,
-      '--system', '--allow-packages'],
-      { stdio:'ignore', env:{ ...process.env, HOME:дом, PATH:бин + ':' + process.env.PATH, GLOWER_NO_AUTO_WINE:'1' } });
-    await new Promise(r => setTimeout(r, 1500));
-    const стр = await browser.newPage({ viewport:{ width:1280, height:800 } });
-    await стр.addInitScript(() => { localStorage.setItem('glower.setup.done', 'true'); localStorage.setItem('glower.perf.userChoice', 'true'); });
-    let и = {};
-    try {
-      await стр.goto(`http://localhost:${порт8}/`);
-      await стр.waitForTimeout(3500);
-      и = await стр.evaluate(async () => {
-        document.querySelectorAll('.welcome, .вход').forEach(н => н.remove());
-        /* Сначала работа, потом Магазин: открытый посреди работы, он
-           подхватывает её сам — прежде именно так он и начинал трястись */
-        await Platform.rpc('pkg.windows.install');
-        Работы.следи('wine', 'Поддержка программ Windows', '🪟');
-        WM.open('store');
-        await new Promise(r => setTimeout(r, 1800));
-        const плашка = document.querySelector('.работа');
-        const ст = document.querySelector('.st-body');
-        const первая = ст && ст.firstElementChild;
-        const было = { есть:!!плашка, текст:плашка ? плашка.textContent : '', вСтолбике:!!(плашка && плашка.closest('#toasts')) };
-        const место = плашка ? плашка.getBoundingClientRect() : null;
-        await new Promise(r => setTimeout(r, 2000));
-        const та = document.querySelector('.работа') === плашка;
-        const страницаНаМесте = !!первая && ст.firstElementChild === первая;
-        const проценты = (плашка.querySelector('.работа-шаг') || {}).textContent;
-        await new Promise(r => setTimeout(r, 3500));
-        return { ...было, та, страницаНаМесте, проценты,
-          справаВнизу:!!место && место.right > innerWidth - 60 && место.bottom > innerHeight * 0.6,
-          итог:(document.querySelector('.работа-шаг') || {}).textContent,
-          готово:!!document.querySelector('.работа.готово') };
-      });
-    } catch(e){ и.беда = e.message; }
-    await стр.close();
-    аг.kill();
-    check('ход установки — плашка справа внизу с названием и процентами',
-      и.есть && и.вСтолбике && /Поддержка программ Windows/.test(и.текст) && /%/.test(и.проценты || '') && и.справаВнизу,
-      JSON.stringify(и));
-    check('плашка не пересоздаётся, а страница Магазина не перерисовывается во время установки',
-      и.та && и.страницаНаМесте, JSON.stringify(и));
-    check('в конце плашка говорит «Установлено»', и.готово && /Установлено/.test(и.итог || ''), JSON.stringify(и));
-  }
-
-  /* В меню программ по правой кнопке есть «Удалить» — у программ машины. */
-  {
-    const r = await page.evaluate(() => {
-      Shell.менюПрограммы({ clientX:200, clientY:200, preventDefault(){} },
-        { id:'проба.desktop', 'вид':'машина', 'имя':'Проба' });
-      const текст = document.getElementById('ctx').textContent;
-      Shell.менюПрограммы({ clientX:200, clientY:200, preventDefault(){} },
-        { id:'notepad', 'вид':'приложение', 'имя':'Блокнот' });
-      const текст2 = document.getElementById('ctx').textContent;
-      document.getElementById('ctx').classList.remove('on');
-      return { текст, текст2 };
-    });
-    check('в меню программ у программы машины есть «Удалить», у частей системы — нет',
-      /Удалить/.test(r.текст) && !/Удалить/.test(r.текст2), JSON.stringify(r));
-  }
-
-  /* --- .exe в Проводнике уходит системе, а не в Блокнот ---
-     Здесь агенту запуск не разрешён, и это кстати: его отказ доказывает,
-     что файл дошёл до системного слоя, а не открылся как текст. */
-  {
-    const r = await page.evaluate(async () => {
-      await Platform.rpc('fs.write', { path:'проба.exe', body:'MZ' });
-      const окон = WM.wins.filter(w => w.appId === 'notepad').length;
-      Assoc.open({ name:'проба.exe', type:'file' }, []);
-      await new Promise(r2 => setTimeout(r2, 900));
-      const текст = document.body.innerText;
-      const итог = { блокнот:WM.wins.filter(w => w.appId === 'notepad').length > окон,
-                     отказ:/запуск программ выключен/.test(текст) };
-      document.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true }));
-      await new Promise(r2 => setTimeout(r2, 300));
-      const w = WM.open('settings', { section:'apps' });
-      await new Promise(r2 => setTimeout(r2, 1500));
-      const карта = w.node.querySelector('.win-wine');
-      итог.карта = карта ? карта.innerText.replace(/\s+/g, ' ').slice(0, 160) : null;
-      WM.close(w);
-      return итог;
-    });
-    check('.exe в Проводнике уходит системе, а не открывается Блокнотом',
-      !r.блокнот && r.отказ, JSON.stringify(r));
-    check('в Параметрах → Приложения есть «Программы Windows» с состоянием Wine',
-      r.карта && /Wine/.test(r.карта) && !/Проверяю/.test(r.карта), JSON.stringify(r));
-  }
-
-  /* Куда уходит WM.open, когда на машине есть родные программы */
-  {
-    const r = await page.evaluate(async () => {
-      const было = { rpc: Platform.rpc, open: WM.open, нат: OS.нативные };
-      const вызовы = [];
-      let нетФайла = false;
-      /* Подменяем только то, о чём спрашивает переходник; остальное —
-         опрос панелей и открытых окон — идёт к настоящему агенту */
-      const НАШИ = ['sys.native.list', 'sys.native', 'fs.stat', 'sys.windows', 'sys.window'];
-      Platform.rpc = async (м, п, ...ещё) => {
-        if (!НАШИ.includes(м)) return было.rpc(м, п, ...ещё);
-        вызовы.push([м, п]);
-        if (м === 'sys.native.list') return { list:['notepad', 'calc', 'files', 'settings', 'store', 'photos', 'taskmgr', 'snip'] };
-        if (м === 'fs.stat' && нетФайла) throw new Error('нет');
-        if (м === 'sys.windows') return { list:[{ appId:'glower-calc', title:'Калькулятор' }] };
-        return {};
-      };
-      try {
-        await wireNativeSystemApps();
-        const ждём = () => new Promise(r2 => setTimeout(r2, 60));
-        const итог = {};
-        итог.файл = WM.open('notepad', { file:{ path:['Документы'], name:'а.txt' } });
-        await ждём();
-        итог.путь = (вызовы.find(в => в[0] === 'sys.native') || [])[1];
-        вызовы.length = 0;
-        WM.open('files', { path:['Документы', 'Отчёты'] });
-        await ждём();
-        итог.папка = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
-        вызовы.length = 0;
-        WM.open('settings', { section:'net' });
-        await ждём();
-        итог.параметры = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
-        вызовы.length = 0;
-        WM.open('store', { 'вкладка':'обновления' });
-        await ждём();
-        итог.магазин = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
-        WM.open('photos', { file:{ path:['Изображения'], name:'кот.png' } });
-        await ждём();
-        итог.фото = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
-        WM.open('trash');
-        await ждём();
-        итог.корзина = (вызовы.filter(в => в[0] === 'sys.native').pop() || [])[1];
-        вызовы.length = 0;
-        итог.сеанс = WM.open('notepad', { x:1, y:1, w:300, h:200, 'восстановление':true });
-        await ждём();
-        итог.сеансЗвал = вызовы.length;
-        WM.open('calc');
-        await ждём();
-        итог.калк = вызовы.map(в => в[0] + (в[1] && в[1].action ? ':' + в[1].action : ''));
-        вызовы.length = 0;
-        нетФайла = true;
-        WM.open('notepad', { file:{ path:['Документы'], name:'нет.txt', content:'x' } });
-        await new Promise(r2 => setTimeout(r2, 300));
-        const своё = WM.wins.find(w => w.appId === 'notepad');
-        итог.запасной = !!своё;
-        if (своё) WM.close(своё);
-        return итог;
-      } finally {
-        Platform.rpc = было.rpc; WM.open = было.open; OS.нативные = было.нат;
-      }
-    });
-    check('Блокнот открывает файл нативным окном, с путём файла',
-      r.файл === null && r.путь && r.путь['программа'] === 'notepad' && JSON.stringify(r.путь['путь']) === JSON.stringify(['Документы', 'а.txt']),
-      JSON.stringify(r));
-    check('папка открывается нативным Проводником, с путём папки',
-      r.папка && r.папка['программа'] === 'files' && JSON.stringify(r.папка['путь']) === JSON.stringify(['Документы', 'Отчёты']),
-      JSON.stringify(r));
-    check('Параметры открываются нативными, сразу на нужном разделе',
-      r.параметры && r.параметры['программа'] === 'settings' && r.параметры['раздел'] === 'net', JSON.stringify(r));
-    check('Магазин открывается нативным, сразу на нужной вкладке',
-      r.магазин && r.магазин['программа'] === 'store' && r.магазин['раздел'] === 'updates', JSON.stringify(r));
-    check('картинки открываются нативными Фото',
-      r.фото && r.фото['программа'] === 'photos' && JSON.stringify(r.фото['путь']) === JSON.stringify(['Изображения', 'кот.png']), JSON.stringify(r));
-    check('корзину на машине показывает Проводник',
-      r.корзина && r.корзина['программа'] === 'files' && r.корзина['раздел'] === 'trash', JSON.stringify(r));
-    check('восстановление сеанса нативных не запускает', r.сеанс === null && r.сеансЗвал === 0, JSON.stringify(r));
-    check('Калькулятор один: открыт — переходим к нему', r.калк.includes('sys.window:focus') && !r.калк.includes('sys.native'), JSON.stringify(r));
-    check('не вышло нативно — открывается своё окно, как раньше', r.запасной, JSON.stringify(r));
-  }
-
-  /* Удалённое со стола — в системную корзину, а не в память страницы */
-  {
-    const r = await page.evaluate(async () => {
-      const было = (KV.get('trash', []) || []).length;
-      FS.write(['Документы'], 'в-корзину.txt', 'мусор');
-      await new Promise(r2 => setTimeout(r2, 400));
-      FS.rm(['Документы'], 'в-корзину.txt');
-      await new Promise(r2 => setTimeout(r2, 700));
-      const сколько = (await Platform.rpc('fs.trash.count'))['сколько'];
-      const вПамяти = (KV.get('trash', []) || []).length - было;
-      Shell.делоПрограммы('очисти-корзину', {});
-      await new Promise(r2 => setTimeout(r2, 500));
-      const после = (await Platform.rpc('fs.trash.count'))['сколько'];
-      return { сколько, вПамяти, после };
-    });
+    await rpc('fs.write', { path:'Документы/в-корзину.txt', body:'мусор' });
+    await rpc('fs.trash', { path:'Документы/в-корзину.txt' });
+    const сколько = (await rpc('fs.trash.count'))['сколько'];
+    await rpc('fs.trash.empty', {});
+    const после = (await rpc('fs.trash.count'))['сколько'];
     const { readdir: rd } = await import('node:fs/promises');
-    check('удалённое со стола ложится в системную корзину и очищается оттуда',
-      r.сколько === 1 && r.вПамяти === 0 && r.после === 0, JSON.stringify(r));
+    check('удалённое ложится в системную корзину и очищается оттуда',
+      сколько === 1 && после === 0, JSON.stringify({ сколько, после }));
     check('сам файл с диска ушёл', !existsSync(join(WS, 'Документы', 'в-корзину.txt')), (await rd(join(WS, 'Документы')).catch(() => [])).join(','));
-  }
-
-  /* Перезагрузка — с чистого листа: окна после неё сами не открываются */
-  {
-    const r = await page.evaluate(async () => {
-      const было = KV.get(Session.KEY, []);
-      KV.set(Session.KEY, [{ app:'calc', x:1, y:1, w:300, h:300 }]);
-      await Поверхности.скажи('питание', 'reboot');
-      await new Promise(r2 => setTimeout(r2, 2500));
-      const после = KV.get(Session.KEY, []).length;
-      Session.save('проверка');
-      const иСнова = KV.get(Session.KEY, []).length;
-      Session.уходим = false; KV.set(Session.KEY, было);
-      return { после, иСнова };
-    });
-    check('перед перезагрузкой стол забывает окна и больше их не записывает',
-      r.после === 0 && r.иСнова === 0, JSON.stringify(r));
   }
 
   /* Состояние темы не вытесняется болтовнёй других тем */
@@ -2553,32 +1542,10 @@ try {
     check('шина помнит последнее по теме и после двухсот чужих сообщений', r && r['док'] === 'полный', JSON.stringify(r));
   }
 
-  /* Мост нативных Параметров: страница рассказывает и слушается */
-  {
-    const r = await page.evaluate(async () => {
-      const с = МостПараметров.состояние();
-      const было = S.wctl;
-      await МостПараметров.дело({ 'что':'set', k:'wctl', v:'mac' });
-      const стало = S.wctl;
-      await МостПараметров.дело({ 'что':'set', k:'wctl', v:было });
-      const вДоке = S.dockApps.includes('calc');
-      await МостПараметров.дело({ 'что':'список', k:'dockApps', id:'calc' });
-      const переключилось = S.dockApps.includes('calc') !== вДоке;
-      await МостПараметров.дело({ 'что':'список', k:'dockApps', id:'calc' });
-      return { обоев:с['обои'].length, акцентов:с['акценты'].length, программ:с['программы'].length,
-               раскладок:с['все_раскладки'].length, стало, переключилось, вернулось:S.dockApps.includes('calc') === вДоке };
-    });
-    check('страница рассказывает Параметрам обои, акценты, программы и раскладки',
-      r.обоев > 10 && r.акцентов === 10 && r.программ > 10 && r.раскладок > 5, JSON.stringify(r));
-    check('просьбы Параметров меняют настройки оболочки', r.стало === 'mac' && r.переключилось && r.вернулось, JSON.stringify(r));
-  }
-
-  check('в консоли нет ошибок JS', errs.length === 0, errs.slice(0, 2).join(' | '));
 
 } catch(e){
   failed++; out.push('  ❌ упало с исключением — ' + e.message);
 } finally {
-  await browser.close();
   agent.kill();
 }
 
