@@ -15,7 +15,7 @@ const СТИЛЬ: &str = r#"
 .calc .display { padding: 18px 20px 10px; }
 .calc .keys { padding: 8px 12px 14px; }
 .calc button { font-size: 17px; border-radius: 12px; min-height: 52px; padding: 0; }
-.calc button.fn { background-color: rgba(255, 255, 255, 0.11); }
+.calc button.fn { background-color: alpha(@glower_fg, 0.11); }
 .calc button.op { background-color: rgba(99, 102, 241, 0.35); }
 .calc button.eq { background-image: linear-gradient(140deg, #a5b4fc, #6366f1); color: #ffffff; }
 "#;

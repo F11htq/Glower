@@ -60,6 +60,16 @@ jobs:
           cargo build --release --locked --manifest-path glower/panel/Cargo.toml
           ls -la glower/panel/target/release/glower-panel
 
+      # Свой оконный сервер на Smithay (glower/wm). Ему нужны заголовки
+      # libinput, libseat, gbm и udev — рисует он прямо на видеокарте.
+      - name: Собрать оконный сервер
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libudev-dev libinput-dev libgbm-dev libseat-dev libxkbcommon-dev libdrm-dev libegl-dev libwayland-dev
+          cargo test --release --locked --manifest-path glower/wm/Cargo.toml
+          cargo build --release --locked --manifest-path glower/wm/Cargo.toml
+          ls -la glower/wm/target/release/glower-wm
+
       # Зеркало задаём здесь, а не оставляем на усмотрение рецепта.
       #
       # Две сборки подряд встали на одном и том же пакете — debianutils — и

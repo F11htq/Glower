@@ -48,6 +48,10 @@ pub const НАШИ: &[Наша] = &[
     Наша { id: "photos", имя: "Фотографии", знак: "🖼️", фон: "linear-gradient(140deg,#6ee7b7,#0ea5e9)", окно: "glower-photos", одна: false },
     Наша { id: "taskmgr", имя: "Диспетчер задач", знак: "📊", фон: "linear-gradient(140deg,#cbd5e1,#475569)", окно: "glower-taskmgr", одна: true },
     Наша { id: "snip", имя: "Ножницы", знак: "✂️", фон: "linear-gradient(140deg,#7dd3fc,#0ea5e9)", окно: "glower-snip", одна: true },
+    Наша { id: "paint", имя: "Paint", знак: "🎨", фон: "linear-gradient(140deg,#f9a8d4,#a855f7)", окно: "glower-paint", одна: false },
+    Наша { id: "calendar", имя: "Календарь", знак: "📅", фон: "linear-gradient(140deg,#fca5a5,#ef4444)", окно: "glower-calendar", одна: true },
+    Наша { id: "clock", имя: "Часы", знак: "🕐", фон: "linear-gradient(140deg,#93c5fd,#1d4ed8)", окно: "glower-clock", одна: true },
+    Наша { id: "todo", имя: "Дела", знак: "✅", фон: "linear-gradient(140deg,#86efac,#16a34a)", окно: "glower-todo", одна: true },
     Наша { id: "installer", имя: "Установка GlowerOS", знак: "💽", фон: "linear-gradient(140deg,#a78bfa,#4c1d95)", окно: "glower-installer", одна: true },
 ];
 
@@ -82,6 +86,7 @@ pub const ВИДЖЕТЫ: &[(&str, &str, &str)] = &[
     ("weather", "Погода", "🌤"),
     ("calendar", "Календарь", "📅"),
     ("system", "Система", "📊"),
+    ("todo", "Дела", "✅"),
     ("note", "Заметка", "📝"),
 ];
 
@@ -428,7 +433,7 @@ fn данные_обзора(s: &Value, стол: u64) -> Value {
         "столы": s["desks"].as_u64().unwrap_or(2).clamp(1, 4),
         "текущий": стол,
         "можно-ещё": s["desks"].as_u64().unwrap_or(2) < 4,
-        "можно-убрать": false,
+        "можно-убрать": столов > 1,
         "на-столах": на_столах,
         "окна": окна,
         "на-столе": на_столе,
@@ -572,7 +577,34 @@ pub fn открой_путь(путь: &std::path::Path) {
    окно на стол», и мы нажимаем их через wtype. */
 
 fn клавиши(доводы: &[&str]) -> bool {
+    // Под своим оконным сервером (glower-wm) просим словами через его
+    // сокет: нажатия wtype уходят прямо программе в фокусе, мимо сервера
+    if let Some(просьба) = просьба_серверу(доводы) {
+        if скажи_серверу(&просьба).is_some() {
+            return true;
+        }
+    }
     std::process::Command::new("wtype").args(доводы).status().map(|с| с.success()).unwrap_or(false)
+}
+
+/// Служебное сочетание → строка для сокета glower-wm: «desk 2», «send 3»
+fn просьба_серверу(доводы: &[&str]) -> Option<String> {
+    let клавиша = доводы.iter().position(|д| *д == "-k").and_then(|i| доводы.get(i + 1))?;
+    let n: u64 = клавиша.strip_prefix('F')?.parse().ok()?;
+    let отправить = доводы.windows(2).any(|п| п[0] == "-M" && п[1] == "shift");
+    Some(format!("{} {n}", if отправить { "send" } else { "desk" }))
+}
+
+/// Строка серверу glower-wm и его ответ. None — сервера нет (сеанс под labwc)
+pub fn скажи_серверу(просьба: &str) -> Option<String> {
+    use std::io::{Read, Write};
+    let путь = std::env::var_os("GLOWER_WM_SOCKET")?;
+    let mut с = std::os::unix::net::UnixStream::connect(путь).ok()?;
+    let _ = с.set_read_timeout(Some(Duration::from_millis(500)));
+    с.write_all(format!("{просьба}\n").as_bytes()).ok()?;
+    let mut ответ = String::new();
+    let _ = с.read_to_string(&mut ответ);
+    Some(ответ.trim().to_string())
 }
 
 pub fn на_стол(n: u64) {
@@ -584,6 +616,43 @@ pub fn на_стол(n: u64) {
     if клавиши(&["-M", "logo", "-M", "ctrl", "-M", "alt", "-k", &f, "-m", "alt", "-m", "ctrl", "-m", "logo"]) {
         с_ядром(|я| я.стол = n);
         расскажи_скоро();
+    }
+}
+
+/// Убрать рабочий стол. Окна на нём не теряются: переезжают на соседний
+/// слева, а столы правее сдвигаются на место убранного
+fn убери_стол(n: u64) {
+    let всего = настройка("desks").as_u64().unwrap_or(2).clamp(1, 4);
+    if всего <= 1 || n >= всего {
+        return;
+    }
+    let куда = n.saturating_sub(1);
+    let переезды: Vec<(String, u64)> = с_ядром(|я| {
+        let стол = я.стол;
+        я.окна
+            .iter()
+            .map(ключ_окна)
+            .filter_map(|к| {
+                let где = я.где_окно.get(&к).copied().unwrap_or(стол);
+                if где == n {
+                    Some((к, куда))
+                } else if где > n {
+                    Some((к, где - 1))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    })
+    .unwrap_or_default();
+    // Отправлять окна можно только по одному и в фокусе — с паузами
+    for (i, (к, на)) in переезды.into_iter().enumerate() {
+        glib::timeout_add_local_once(Duration::from_millis(300 * i as u64), move || окно_на_стол(&к, на));
+    }
+    let текущий = с_ядром(|я| я.стол).unwrap_or(0);
+    задай("desks", json!(всего - 1));
+    if текущий >= n && текущий > 0 {
+        на_стол(текущий - 1);
     }
 }
 
@@ -643,6 +712,7 @@ fn обзор_дело(д: &Value) {
             let n = (настройка("desks").as_u64().unwrap_or(2) + 1).min(4);
             задай("desks", json!(n));
         }
+        "стол-убери" => убери_стол(д["n"].as_u64().unwrap_or(u64::MAX)),
         "окно" => {
             let (app, title) = id.split_once('\t').unwrap_or((id, ""));
             let свёрнуто = с_ядром(|я| я.окна.iter().any(|о| о["appId"].as_str() == Some(app) && о["title"].as_str() == Some(title) && о["состояние"]["свёрнуто"].as_bool() == Some(true))).unwrap_or(false);
@@ -863,7 +933,10 @@ fn параметры_дело(д: &Value) {
         }
         "питание" => {
             let действие = д["action"].as_str().unwrap_or("").to_string();
-            позови("sys.power", json!({ "action": действие }), |_| {});
+            match действие.strip_prefix("update-") {
+                Some(потом) => обнови_и(потом.to_string()),
+                None => позови("sys.power", json!({ "action": действие }), |_| {}),
+            }
         }
         "погода" => обнови_погоду(),
         "настройка" => crate::setup::покажи(),
@@ -1109,6 +1182,144 @@ fn смени_обои() {
     }
 }
 
+/// «Обновить и перезагрузить»: поверх всего — просьба не выключать,
+/// обновления ставятся, потом машина перезагружается или выключается
+fn обнови_и(потом: String) {
+    if !["reboot", "poweroff"].contains(&потом.as_str()) {
+        return;
+    }
+    let занавес = crate::menus::занавес("Ставлю обновления. Не выключайте компьютер…");
+    позови("pkg.upgrade.run", json!({}), move |о| {
+        if let Err(е) = о {
+            unsafe { занавес.destroy() };
+            notify::покажи("Обновления не поставились", &е, "⚠️");
+            return;
+        }
+        let кончено = std::rc::Rc::new(Cell::new(false));
+        glib::timeout_add_local(Duration::from_secs(2), move || {
+            if кончено.get() {
+                return glib::ControlFlow::Break;
+            }
+            let (кончено2, занавес2, потом2) = (кончено.clone(), занавес.clone(), потом.clone());
+            позови("pkg.job", json!({}), move |о| {
+                let Ok(ход) = о else { return };
+                if ход["running"].as_bool() == Some(true) || кончено2.get() {
+                    return;
+                }
+                кончено2.set(true);
+                if ход["ok"].as_bool() == Some(false) && ход["error"].is_string() {
+                    unsafe { занавес2.destroy() };
+                    notify::покажи("Обновления не поставились", ход["error"].as_str().unwrap_or(""), "⚠️");
+                    return;
+                }
+                скажи("питание", json!(потом2));
+                позови("sys.power", json!({ "action": потом2 }), |_| {});
+            });
+            glib::ControlFlow::Continue
+        });
+    });
+}
+
+/* ---------- напоминания: календарь и будильники ----------
+
+   Календарь и Часы — отдельные программы, их можно закрыть. Звонит
+   поэтому рабочий стол: раз в двадцать секунд смотрит в их файлы. */
+
+thread_local! {
+    static СЛЕЖКА_ДЕЛ: RefCell<Vec<gio::FileMonitor>> = const { RefCell::new(Vec::new()) };
+}
+
+fn следи_за_делами() {
+    for имя in [crate::todo::ФАЙЛ, crate::calendar::ФАЙЛ] {
+        let ф = gio::File::for_path(crate::apps::файл_данных(имя));
+        if let Ok(м) = ф.monitor_file(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE) {
+            м.connect_changed(|_, _, _, _| crate::desktop::обнови_виджеты());
+            СЛЕЖКА_ДЕЛ.with(|с| с.borrow_mut().push(м));
+        }
+    }
+    glib::timeout_add_local(Duration::from_secs(20), || {
+        напомни();
+        glib::ControlFlow::Continue
+    });
+    // В полночь — новый день на виджетах
+    glib::timeout_add_local(Duration::from_secs(60), || {
+        crate::desktop::обнови_виджеты();
+        glib::ControlFlow::Continue
+    });
+}
+
+/// Сработавшее ли сейчас: срок прошёл, но не больше десяти минут назад
+pub fn пора(срок: &str, сейчас_мин: i64) -> bool {
+    let mut ч = срок.split(':');
+    match (ч.next().and_then(|х| х.parse::<i64>().ok()), ч.next().and_then(|х| х.parse::<i64>().ok())) {
+        (Some(h), Some(m)) => {
+            let м = h * 60 + m;
+            сейчас_мин >= м && сейчас_мин - м < 10
+        }
+        _ => false,
+    }
+}
+
+fn напомни() {
+    let Ok(н) = glib::DateTime::now_local() else { return };
+    let мин = (н.hour() * 60 + н.minute()) as i64;
+    let сегодня = crate::calendar::ключ(н.year(), н.month() as u32, н.day_of_month() as u32);
+
+    // События календаря со временем
+    let mut кал = crate::apps::читай_данные(crate::calendar::ФАЙЛ);
+    let mut менял = false;
+    if let Some(список) = кал.get_mut(&сегодня).and_then(|с| с.as_array_mut()) {
+        for е in список.iter_mut() {
+            let срок = е["time"].as_str().unwrap_or("").to_string();
+            if е["done"].as_bool() != Some(true) && пора(&срок, мин) {
+                е["done"] = json!(true);
+                менял = true;
+                notify::из_шины(&json!({ "заголовок": е["t"], "текст": format!("Событие в {срок}"), "значок": "📅", "откуда": "Календарь", "звук": true }));
+            }
+        }
+    }
+    if менял {
+        crate::apps::пиши_данные(crate::calendar::ФАЙЛ, &кал);
+    }
+
+    // Будильники: в свой день недели (0 — понедельник) или каждый день
+    let mut часы = crate::apps::читай_данные(crate::clock::ФАЙЛ);
+    let день = (н.day_of_week() - 1) as u64;
+    let метка = format!("{сегодня} {:02}:{:02}", н.hour(), н.minute());
+    let mut менял = false;
+    let mut звенят = Vec::new();
+    if let Some(список) = часы["alarms"].as_array_mut() {
+        for б in список.iter_mut() {
+            let дни: Vec<u64> = б["days"].as_array().map(|а| а.iter().filter_map(|х| х.as_u64()).collect()).unwrap_or_default();
+            let срок = б["time"].as_str().unwrap_or("").to_string();
+            let уже = б["last"].as_str().is_some_and(|п| п.starts_with(&сегодня));
+            if б["on"].as_bool() != Some(false) && !уже && (дни.is_empty() || дни.contains(&день)) && пора(&срок, мин) {
+                б["last"] = json!(метка);
+                // Разовый (без дней недели) — после звонка выключается
+                if дни.is_empty() {
+                    б["on"] = json!(false);
+                }
+                менял = true;
+                звенят.push((срок, б["label"].as_str().unwrap_or("").to_string()));
+            }
+        }
+    }
+    if менял {
+        crate::apps::пиши_данные(crate::clock::ФАЙЛ, &часы);
+    }
+    for (срок, подпись) in звенят {
+        notify::звук();
+        let заголовок = if подпись.is_empty() { "Будильник".to_string() } else { подпись.clone() };
+        notify::покажи_с_делом(&заголовок, &срок, "⏰", "Отложить на 10 минут", Box::new(move || {
+            let п = подпись.clone();
+            glib::timeout_add_local_once(Duration::from_secs(600), move || {
+                notify::звук();
+                notify::покажи(if п.is_empty() { "Будильник" } else { &п }, "Отложенный звонок", "⏰");
+            });
+        }));
+    }
+}
+
 /* ---------- установка из файла и программы Windows ---------- */
 
 fn спроси(заголовок: &str, текст: &str, да: &str) -> bool {
@@ -1246,7 +1457,7 @@ pub fn начни() {
         &[],
         &[
             "обзор-дело", "обзор-дай", "значки-дело", "параметры-дело", "дай-док", "открой", "настройка", "клавиша", "стол",
-            "пробуждение", "уведомление", "уведомление-закрыть", "файл-установщик", "windows", "снимок", "покажи",
+            "пробуждение", "уведомление", "уведомление-закрыть", "файл-установщик", "windows", "снимок", "покажи", "медиа", "питание",
         ],
     );
     glib::MainContext::default().spawn_local(async move {
@@ -1296,6 +1507,18 @@ pub fn начни() {
                     }
                 }
                 "покажи" if что.as_str() == Some("раскладка") => открой_параметры("time"),
+                "питание" => {
+                    if let Some(потом) = что.as_str().and_then(|д| д.strip_prefix("update-")) {
+                        обнови_и(потом.to_string());
+                    }
+                }
+                // Клавиши мультимедиа: оконный сервер зовёт glower-menu медиа …
+                "медиа" => {
+                    if let Some(м) = что.as_str().filter(|м| ["PlayPause", "Next", "Previous", "Stop"].contains(м)) {
+                        let м = м.to_string();
+                        std::thread::spawn(move || crate::media::нажми(&м));
+                    }
+                }
                 "пробуждение" => {
                     if настройка("lockOnWake").as_bool() != Some(false) {
                         позови("sys.power", json!({ "action": "lock" }), |_| {});
@@ -1380,6 +1603,7 @@ pub fn начни() {
     });
 
     авто_замок();
+    следи_за_делами();
 
     // Установочная среда: сразу мастер установки во весь экран. Мастер
     // первого запуска здесь не нужен — его пройдут на установленной системе
@@ -1402,6 +1626,22 @@ pub fn начни() {
 #[cfg(test)]
 mod проверки {
     use super::*;
+
+    #[test]
+    fn служебные_сочетания_словами() {
+        assert_eq!(просьба_серверу(&["-M", "logo", "-M", "ctrl", "-M", "alt", "-k", "F2", "-m", "alt"]).as_deref(), Some("desk 2"));
+        assert_eq!(просьба_серверу(&["-M", "logo", "-M", "shift", "-k", "F4"]).as_deref(), Some("send 4"));
+        assert_eq!(просьба_серверу(&["-k", "Return"]), None);
+    }
+
+    #[test]
+    fn напоминание_в_свой_срок() {
+        assert!(пора("09:30", 9 * 60 + 30));
+        assert!(пора("09:30", 9 * 60 + 35));
+        assert!(!пора("09:30", 9 * 60 + 29));
+        assert!(!пора("09:30", 9 * 60 + 41));
+        assert!(!пора("", 0));
+    }
 
     #[test]
     fn данные_оболочки_читаются() {

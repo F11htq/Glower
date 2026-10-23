@@ -247,6 +247,36 @@ export function packages(allowPackages){
     if (перевод.unref) перевод.unref();
   }
 
+  /* Прежние версии GlowerOS рисовали оболочку браузерным движком и ставили
+     его в образ сами, явно. Теперь оболочка своя, а движок на поставленных
+     машинах так и лежал бы сотнями мегабайт: apt не уберёт то, что ставили
+     «руками». Помечаем эти пакеты поставленными «за компанию» — и apt сам
+     уберёт их, если больше они никому не нужны. Нужны чему-то ещё (другой
+     программе на этом же движке) — останутся, ничего не сломается.
+     Браузер не трогаем: им человек мог пользоваться. */
+  const СТАРЫЙ_ДВИЖОК = ['gir1.2-webkit2-4.1', 'gir1.2-webkit2-4.0', 'python3-gi-cairo', 'python3-gi',
+    'gir1.2-gtklayershell-0.1', 'cage', 'openbox'];
+  const убериСтарыйДвижок = async дальше => {
+    let стоят = [];
+    try {
+      const { stdout } = await run('dpkg-query', ['-W', '-f=${Package} ${db:Status-Abbrev}\n', ...СТАРЫЙ_ДВИЖОК]);
+      стоят = stdout.split('\n').filter(с => /\sii\s*$/.test(с)).map(с => с.split(' ')[0]);
+    } catch(e){
+      /* dpkg-query отвечает ошибкой, если хоть одного из имён не знает, но
+         печатает остальные — их и берём */
+      стоят = String(e.stdout || '').split('\n').filter(с => /\sii\s*$/.test(с)).map(с => с.split(' ')[0]);
+    }
+    if (!стоят.length) return дальше();
+    try { await run('sudo', ['-n', 'apt-mark', 'auto', ...стоят], { timeout:60000, env:СРЕДА_APT() }); }
+    catch(e){ return дальше(); }
+    job.step = 'Убираю прежний движок оболочки';
+    const прежний = job;
+    запусти('remove', 'прежний движок', ['autoremove', '-y']);
+    job.мягко = true;
+    job.потом = дальше;
+    job.log = прежний.log;
+  };
+
   const начни = (action, name, args) => {
     /* apt умеет отдавать свой собственный ход работы числами — просим его об
        этом. Раньше проценты выводились по узнаваемым строкам, и на длинной
@@ -1065,7 +1095,8 @@ export function packages(allowPackages){
          опоздала бы. */
       const нуженWine = !(await естьWine()).полный;
       const пуск = запусти('upgrade', 'система', ['upgrade', '-y', '--with-new-pkgs', '--no-install-recommends']);
-      if (нуженWine) job.потом = () => доставьWine(true);
+      const конец = () => { job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null; };
+      job.потом = () => убериСтарыйДвижок(нуженWine ? () => доставьWine(true) : конец);
       return пуск;
     },
 

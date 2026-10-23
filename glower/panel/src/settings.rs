@@ -19,18 +19,18 @@ use std::rc::Rc;
 use std::time::Duration;
 
 const СТИЛЬ: &str = r#"
-.settings .sidebar { background-color: #12141b; border-right: 1px solid rgba(255, 255, 255, 0.07); }
+.settings .sidebar { background-color: @glower_bg2; border-right: 1px solid alpha(@glower_fg, 0.07); }
 .settings .sidebar list { background-color: transparent; }
 .settings .sidebar row { padding: 7px 12px; border-radius: 8px; margin: 1px 8px; }
-.settings .sidebar row:selected { background-color: rgba(91, 140, 255, 0.28); }
+.settings .sidebar row:selected { background-color: alpha(@glower_accent, 0.28); }
 .settings .sidebar entry { margin: 10px 10px 6px; }
 .settings .page { padding: 22px 28px 40px; }
 .settings .h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
-.settings .card { background-color: rgba(255, 255, 255, 0.045); border-radius: 14px; padding: 6px 0; }
+.settings .card { background-color: alpha(@glower_fg, 0.045); border-radius: 14px; padding: 6px 0; }
 .settings .card-t { font-size: 12px; opacity: 0.6; margin: 14px 4px 6px; }
 .settings .sub { font-size: 13px; font-weight: 600; opacity: 0.8; margin: 8px 18px 2px; }
 .settings .row { padding: 9px 16px; }
-.settings .row + .row { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.settings .row + .row { border-top: 1px solid alpha(@glower_fg, 0.05); }
 .settings .emo { font-size: 18px; min-width: 28px; }
 .settings .t { font-size: 14px; }
 .settings .d { font-size: 12px; opacity: 0.6; }
@@ -38,13 +38,13 @@ const СТИЛЬ: &str = r#"
 .settings .val { font-size: 12px; opacity: 0.75; }
 .settings .hero { padding: 16px; }
 .settings .ava { font-size: 28px; min-width: 56px; min-height: 56px; border-radius: 28px;
-                 background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); color: #ffffff; }
+                 background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); color: #ffffff; }
 .settings .wall { min-width: 132px; min-height: 76px; border-radius: 10px; padding: 0; border: 2px solid transparent; }
 .settings .wall.on { border-color: #ffffff; }
 .settings .wall-name { font-size: 11px; opacity: 0.75; }
 .settings .sw { min-width: 30px; min-height: 30px; border-radius: 15px; padding: 0; border: 2px solid transparent; }
 .settings .sw.on { border-color: #ffffff; }
-.settings button.on { background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); }
+.settings button.on { background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
 .settings .seg button { border-radius: 0; }
 .settings .seg button:first-child { border-radius: 9px 0 0 9px; }
 .settings .seg button:last-child { border-radius: 0 9px 9px 0; }
@@ -250,7 +250,7 @@ fn ползунок(сейчас: f64, мин: f64, макс: f64, шаг: f64, 
 fn выбор(варианты: &[(String, String)], сейчас: &str, дело: impl Fn(String) + 'static) -> gtk::Widget {
     let в = gtk::ComboBoxText::new();
     for (id, имя) in варианты {
-        в.append(Some(id), имя);
+        в.append(Some(id), &crate::i18n::tr(имя));
     }
     в.set_active_id(Some(сейчас));
     в.connect_changed(move |в| {
@@ -877,6 +877,16 @@ fn дисплей(п: &П) {
     let место = gtk::Box::new(gtk::Orientation::Vertical, 0);
     э.add(&место);
     экраны(п, &место);
+
+    // Свой оконный сервер — пока проба: включается со следующего входа, и
+    // если не поднимется, сеанс сам вернётся к labwc
+    let ос = карта(п, "Оконный сервер");
+    let п1 = п.clone();
+    let сейчас_свой = std::env::var_os("GLOWER_WM_PID").is_some();
+    добавь(&ос, "✨", "Новый оконный сервер (проба)",
+        if сейчас_свой { "Работает сейчас: размытие под меню и панелью, анимации окон. Выключение — со следующего входа" }
+        else { "Размытие под меню и панелью, анимации окон. Включится со следующего входа; если не запустится — вернётся прежний" },
+        Some(&переключатель(s(п, "wm").as_str() == Some("glower"), move |v| задай(&п1, "wm", json!(if v { "glower" } else { "labwc" })))));
 
     let я = карта(п, "Подсветка");
     let место = gtk::Box::new(gtk::Orientation::Vertical, 0);

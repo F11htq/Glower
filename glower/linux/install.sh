@@ -49,12 +49,15 @@ say "агент: $SHARE"
 install -d "$PREFIX/bin" "$PREFIX/share/glower/labwc"
 install -m 755 "$PANEL_BIN" "$PREFIX/bin/glower-panel"
 for prog in glower-lock glower-login glower-notepad glower-calc glower-files glower-settings \
-            glower-store glower-taskmgr glower-photos glower-snip glower-installer glower-music; do
+            glower-store glower-taskmgr glower-photos glower-snip glower-installer glower-music \
+            glower-paint glower-calendar glower-clock glower-todo glower-props; do
   ln -sf glower-panel "$PREFIX/bin/$prog"
 done
 for prog in glower-menu glower-desk glower-shot glower-open-package glower-exe glower-tray; do
   install -m 755 "$SRC/linux/$prog" "$PREFIX/bin/$prog"
 done
+# Свой оконный сервер — если собран (cd wm && cargo build --release --locked)
+[ -x "$SRC/wm/target/release/glower-wm" ] && install -m 755 "$SRC/wm/target/release/glower-wm" "$PREFIX/bin/glower-wm"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$PREFIX/share/glower/labwc/rc.xml"
 say "рабочий стол: $PREFIX/bin/glower-panel"
 

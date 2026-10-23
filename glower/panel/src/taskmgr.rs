@@ -15,17 +15,17 @@ use std::time::{Duration, Instant};
 
 const СТИЛЬ: &str = r#"
 .taskmgr .cards { padding: 12px; }
-.taskmgr .tm-card { background-color: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 10px 14px; }
+.taskmgr .tm-card { background-color: alpha(@glower_fg, 0.05); border-radius: 12px; padding: 10px 14px; }
 .taskmgr .tm-k { font-size: 12px; opacity: 0.6; }
 .taskmgr .tm-v { font-size: 20px; font-weight: 600; }
-.taskmgr treeview { background-color: #12141b; }
-.taskmgr treeview:selected { background-color: rgba(91, 140, 255, 0.35); }
-.taskmgr treeview header button { background-color: #161821; border: none; border-bottom: 1px solid rgba(255, 255, 255, 0.07); padding: 4px 8px; }
+.taskmgr treeview { background-color: @glower_bg2; }
+.taskmgr treeview:selected { background-color: alpha(@glower_accent, 0.35); }
+.taskmgr treeview header button { background-color: @glower_bg; border: none; border-bottom: 1px solid alpha(@glower_fg, 0.07); padding: 4px 8px; }
 "#;
 
 /// Наши части и службы системы: человеку они нужны редко
 const СИСТЕМНОЕ: &[&str] = &[
-    "glower-", "server.mjs", "labwc", "Xwayland", "greetd", "systemd", "dbus", "polkit", "udisks", "upower",
+    "glower-", "server.mjs", "labwc", "glower-wm", "Xwayland", "greetd", "systemd", "dbus", "polkit", "udisks", "upower",
     "NetworkManager", "wpa_supplicant", "ModemManager", "pipewire", "wireplumber", "avahi", "bluetoothd", "cups",
     "rsyslog", "cron", "agetty", "plymouth", "accounts-daemon", "gvfs", "at-spi", "xdg-desktop-portal", "swayidle", "wlsunset",
 ];

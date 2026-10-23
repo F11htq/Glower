@@ -2438,8 +2438,11 @@ export const keyboard = {
         const стало = было.split('\n').filter(с => с && !/^XKB_DEFAULT_LAYOUT=/.test(с))
           .concat('XKB_DEFAULT_LAYOUT=' + строка).join('\n') + '\n';
         await writeFile(env, стало);
-        const кто = String(await call('pgrep', ['-u', String(process.getuid ? process.getuid() : ''), '-x', 'labwc']).catch(() => ''))
-          .split('\n').map(Number).filter(Boolean);
+        /* labwc или свой сервер glower-wm: оба перечитывают environment по SIGHUP */
+        const кто = [];
+        for (const имя of ['labwc', 'glower-wm'])
+          кто.push(...String(await call('pgrep', ['-u', String(process.getuid ? process.getuid() : ''), '-x', имя]).catch(() => ''))
+            .split('\n').map(Number).filter(Boolean));
         for (const pid of кто){ try { process.kill(pid, 'SIGHUP'); сразу = true; } catch(e){} }
       }
     } catch(e){ /* папки нет — сеанс не под labwc или старый вход */ }

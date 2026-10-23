@@ -16,21 +16,21 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 const СТИЛЬ: &str = r#"
-.files .sidebar { background-color: #12141b; border-right: 1px solid rgba(255, 255, 255, 0.07); }
+.files .sidebar { background-color: @glower_bg2; border-right: 1px solid alpha(@glower_fg, 0.07); }
 .files .sidebar list { background-color: transparent; }
 .files .sidebar row { padding: 6px 12px; border-radius: 8px; margin: 1px 6px; }
-.files .sidebar row:selected { background-color: rgba(91, 140, 255, 0.28); }
+.files .sidebar row:selected { background-color: alpha(@glower_accent, 0.28); }
 .files .sidebar .title { font-size: 11px; opacity: 0.5; padding: 10px 18px 4px; }
 .files .crumbs button { padding: 4px 8px; background-color: transparent; }
-.files .crumbs button:hover { background-color: rgba(255, 255, 255, 0.09); }
+.files .crumbs button:hover { background-color: alpha(@glower_fg, 0.09); }
 .files .crumbs .sep { opacity: 0.4; }
-.files .crumbs { background-color: rgba(255, 255, 255, 0.05); border-radius: 9px; padding: 0 4px; }
-.files iconview { background-color: #12141b; }
-.files iconview:selected { background-color: rgba(91, 140, 255, 0.35); border-radius: 8px; }
-.files treeview { background-color: #12141b; }
-.files treeview:selected { background-color: rgba(91, 140, 255, 0.35); }
-.files treeview header button { background-color: #161821; border: none; border-bottom: 1px solid rgba(255, 255, 255, 0.07); padding: 4px 8px; }
-.files .trashbar { padding: 6px 10px; background-color: #1b1e28; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.files .crumbs { background-color: alpha(@glower_fg, 0.05); border-radius: 9px; padding: 0 4px; }
+.files iconview { background-color: @glower_bg2; }
+.files iconview:selected { background-color: alpha(@glower_accent, 0.35); border-radius: 8px; }
+.files treeview { background-color: @glower_bg2; }
+.files treeview:selected { background-color: alpha(@glower_accent, 0.35); }
+.files treeview header button { background-color: @glower_bg; border: none; border-bottom: 1px solid alpha(@glower_fg, 0.07); padding: 4px 8px; }
+.files .trashbar { padding: 6px 10px; background-color: @glower_bg3; border-bottom: 1px solid alpha(@glower_fg, 0.07); }
 .files entry.error { border-color: #f87171; }
 "#;
 

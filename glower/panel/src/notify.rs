@@ -78,8 +78,23 @@ pub fn покажи_с_делом(заголовок: &str, текст: &str, з
     });
 }
 
-/// С шины: { заголовок, текст, значок, откуда, номер }
+/// Звук звонка: из темы звуков freedesktop, чем есть. Нечем — молча
+pub fn звук() {
+    let файл = "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga";
+    std::thread::spawn(move || {
+        for (прог, доводы) in [("canberra-gtk-play", vec!["-i", "alarm-clock-elapsed"]), ("pw-play", vec![файл]), ("paplay", vec![файл])] {
+            if std::process::Command::new(прог).args(&доводы).stderr(std::process::Stdio::null()).status().is_ok_and(|с| с.success()) {
+                return;
+            }
+        }
+    });
+}
+
+/// С шины: { заголовок, текст, значок, откуда, номер, звук }
 pub fn из_шины(что: &Value) {
+    if что["звук"].as_bool() == Some(true) {
+        звук();
+    }
     let строка = |k: &str| что[k].as_str().map(String::from).unwrap_or_else(|| if что[k].is_null() { String::new() } else { что[k].to_string() });
     let номер = что["номер"].as_u64().map(|н| н as u32).filter(|н| *н > 0).unwrap_or_else(следующий_номер);
     добавь(Уведомление {

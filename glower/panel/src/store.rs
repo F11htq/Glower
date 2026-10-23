@@ -23,12 +23,12 @@ use std::time::Duration;
 const КАТАЛОГ: &str = include_str!("store-catalog.json");
 
 const СТИЛЬ: &str = r#"
-.store .rail { background-color: #12141b; border-right: 1px solid rgba(255, 255, 255, 0.07); padding: 8px 6px; }
+.store .rail { background-color: @glower_bg2; border-right: 1px solid alpha(@glower_fg, 0.07); padding: 8px 6px; }
 .store .rail button { padding: 8px 4px; border-radius: 10px; background-color: transparent; min-width: 64px; }
-.store .rail button.on { background-color: rgba(91, 140, 255, 0.24); }
+.store .rail button.on { background-color: alpha(@glower_accent, 0.24); }
 .store .rail .z { font-size: 20px; }
 .store .rail .p { font-size: 11px; opacity: 0.8; }
-.store .top { padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.store .top { padding: 10px 16px; border-bottom: 1px solid alpha(@glower_fg, 0.07); }
 .store .body { padding: 18px 22px 40px; }
 .store .h { font-size: 18px; font-weight: 600; margin: 14px 2px 8px; }
 .store .hero { border-radius: 16px; padding: 22px; min-height: 170px; color: #ffffff; }
@@ -38,21 +38,21 @@ const СТИЛЬ: &str = r#"
 .store .hero-small .name { font-size: 16px; }
 .store .hero .line { font-size: 13px; opacity: 0.9; }
 .store .chip { border-radius: 18px; padding: 6px 14px; }
-.store .card { border-radius: 12px; padding: 12px; background-color: rgba(255, 255, 255, 0.05); min-width: 220px; }
-.store .card:hover { background-color: rgba(255, 255, 255, 0.09); }
+.store .card { border-radius: 12px; padding: 12px; background-color: alpha(@glower_fg, 0.05); min-width: 220px; }
+.store .card:hover { background-color: alpha(@glower_fg, 0.09); }
 .store .card .n { font-weight: 600; }
 .store .card .a { font-size: 12px; opacity: 0.6; }
 .store .ico { border-radius: 12px; min-width: 48px; min-height: 48px; font-size: 26px; }
 .store .ico-big { min-width: 96px; min-height: 96px; font-size: 52px; border-radius: 22px; }
 .store .tile { border-radius: 14px; padding: 18px; min-width: 190px; min-height: 96px; color: #ffffff; }
 .store .tile .z { font-size: 30px; }
-.store .fact { background-color: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 10px 14px; }
+.store .fact { background-color: alpha(@glower_fg, 0.05); border-radius: 10px; padding: 10px 14px; }
 .store .fact .k { font-size: 11px; opacity: 0.6; }
 .store .about { font-size: 14px; opacity: 0.85; margin-top: 14px; }
 .store .note { font-size: 13px; opacity: 0.65; margin: 8px 2px; }
 .store .big { font-size: 15px; padding: 10px 22px; }
-.store .work { padding: 10px 16px; background-color: #1b1e28; border-top: 1px solid rgba(255, 255, 255, 0.07); }
-.store .dot { min-width: 8px; min-height: 8px; border-radius: 4px; padding: 0; background-color: rgba(255, 255, 255, 0.3); }
+.store .work { padding: 10px 16px; background-color: @glower_bg3; border-top: 1px solid alpha(@glower_fg, 0.07); }
+.store .dot { min-width: 8px; min-height: 8px; border-radius: 4px; padding: 0; background-color: alpha(@glower_fg, 0.3); }
 .store .dot.on { background-color: #ffffff; }
 "#;
 

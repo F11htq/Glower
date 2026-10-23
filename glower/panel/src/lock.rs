@@ -690,6 +690,7 @@ pub fn запусти(режим: Режим) -> ! {
         eprintln!("glower-lock: нет экрана");
         std::process::exit(1);
     }
+    crate::i18n::подключи();
     if !gtk_layer_shell::is_supported() {
         eprintln!("glower-lock: оконный сервер не умеет слоёв");
         std::process::exit(3);

@@ -181,6 +181,17 @@ if [ ! -s "$ROOTFS/etc/resolv.conf" ]; then
 fi
 grep -q '^nameserver' "$ROOTFS/etc/resolv.conf" 2>/dev/null || \
   printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > "$ROOTFS/etc/resolv.conf"
+# Сроки для apt на время сборки. Своих у него нет: зависшее соединение с
+# зеркалом он ждёт бесконечно. Сборка v11.32 так и простояла два часа на
+# шаге 2/6 без единой строки в журнале — apt-get update ждал ответа, а
+# оборвал всё общий срок задания. Теперь застрявшее обращение рвётся через
+# полминуты и повторяется, а файл убираем перед сжатием: людям он не нужен.
+cat > "$ROOTFS/etc/apt/apt.conf.d/80glower-build" <<'APTCONF'
+Acquire::http::Timeout "30";
+Acquire::https::Timeout "30";
+Acquire::Retries "5";
+APTCONF
+
 mount --bind /dev "$ROOTFS/dev" 2>/dev/null || true
 mount -t proc proc "$ROOTFS/proc" 2>/dev/null || true
 mount -t sysfs sys "$ROOTFS/sys" 2>/dev/null || true
@@ -238,14 +249,21 @@ trap cleanup EXIT
 # пакеты молча не попадают в образ, а bash -n такого не замечает.
 chroot "$ROOTFS" /bin/bash -e <<'INCHROOT'
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+# Не молча: если зеркало тянет, это должно быть видно в журнале сразу.
+# Три попытки — сеть облака иногда роняет первую.
+for try in 1 2 3; do
+  timeout 900 apt-get update && break
+  echo "  apt-get update: попытка $try не удалась" >&2
+  [ "$try" = 3 ] && exit 1
+  sleep 15
+done
 apt-get install -y --no-install-recommends \
   systemd systemd-sysv dbus ca-certificates \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   linux-firmware \
   pciutils usbutils \
   plymouth plymouth-label plymouth-themes \
-  labwc wlrctl wlr-randr wtype wlsunset swayidle foot seatd greetd swaylock i3lock libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
+  labwc wlrctl wlr-randr wtype wlsunset swayidle libseat1 libinput10 libgbm1 libxkbcommon0 foot seatd greetd swaylock i3lock libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
   wl-clipboard xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
   thunar gvfs gvfs-fuse mousepad gnome-calculator eog mpv xfce4-terminal \
   udisks2 ntfs-3g exfatprogs dosfstools \
@@ -278,7 +296,7 @@ apt-get install -y --no-install-recommends \
   libopengl0 libglx0 libglu1-mesa \
   xwayland qtwayland5 qt6-wayland libxcb-cursor0 \
   libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 \
-  grim slurp maim xclip \
+  grim slurp maim xclip sound-theme-freedesktop \
   2>&1 | tail -2
 
 # Необязательные программы ставим отдельно и поштучно. Причина простая и
@@ -398,11 +416,24 @@ if [ -x "$PANEL_BIN" ]; then
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-files"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-settings"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-store"
-  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
+  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
   echo "  рабочий стол: $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "нет panel/target/release/glower-panel — рабочий стол собрать не из чего"
   exit 1
+fi
+# Свой оконный сервер (wm/, glower-wm) — пока по выбору в «Параметрах»,
+# основным остаётся labwc. Его тоже собирает шаг до образа. Нет его — не
+# беда: сеанс просто идёт под labwc, поэтому сборку это не останавливает.
+WM_BIN="$SRC/wm/target/release/glower-wm"
+if [ ! -x "$WM_BIN" ] && command -v cargo >/dev/null 2>&1; then
+  (cd "$SRC/wm" && cargo build --release --locked) || true
+fi
+if [ -x "$WM_BIN" ]; then
+  install -m 755 "$WM_BIN" "$ROOTFS/usr/bin/glower-wm"
+  echo "  оконный сервер: $(du -k "$WM_BIN" | cut -f1) КБ"
+else
+  echo "  оконный сервер glower-wm не собран — будет только labwc"
 fi
 # Приёмник значков лотка. Разговор с шиной разобран в нём руками, поэтому
 # ничего, кроме самого Python, ему не нужно — ни python3-dbus, ни python3-gi.
@@ -1009,6 +1040,7 @@ chroot "$ROOTFS" systemctl set-default graphical.target >/dev/null 2>&1 || true
 # Собирали с ближнего зеркала, а жить системе с общедоступным: машина
 # сборки стояла в чужом облаке, и её зеркало человеку за компьютером не
 # ближе и не быстрее прочих.
+rm -f "$ROOTFS/etc/apt/apt.conf.d/80glower-build"
 cat > "$ROOTFS/etc/apt/sources.list" <<EOF
 deb $MIRROR_OUT $SUITE main universe restricted multiverse
 deb $MIRROR_OUT $SUITE-updates main universe restricted multiverse

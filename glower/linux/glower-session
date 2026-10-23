@@ -242,7 +242,8 @@ while :; do
   [ \$falls -ge 5 ] && break
   sleep 1
 done
-labwc -e >/dev/null 2>&1 || true
+# Конец сеанса — тому серверу, под которым он шёл
+if [ -n "\${GLOWER_WM_PID:-}" ]; then glower-wm -e >/dev/null 2>&1 || true; else labwc -e >/dev/null 2>&1 || true; fi
 STARTUP
   chmod +x "$START_SH"
 }
@@ -278,6 +279,25 @@ fold_repeats(){
           printf "  ... всего повторов за сеанс: %d — %s\n", seen[k], k
     }
   '
+}
+
+# Папка настроек оконного сервера на сеанс (см. комментарий в run_labwc)
+prepare_wm_dir(){
+  LABWC_SYS="${GLOWER_LABWC:-/usr/share/glower/labwc}"
+  LABWC_DIR="${XDG_RUNTIME_DIR:-/tmp}/glower-labwc"
+  if mkdir -p "$LABWC_DIR" 2>/dev/null && [ ! -L "$LABWC_DIR/environment" ]; then
+    for f in "$LABWC_SYS"/*; do
+      [ -e "$f" ] || continue
+      [ "$(basename "$f")" = environment ] && continue
+      ln -sfn "$f" "$LABWC_DIR/$(basename "$f")"
+    done
+    {
+      [ -r "$LABWC_SYS/environment" ] && cat "$LABWC_SYS/environment"
+      printf 'XKB_DEFAULT_LAYOUT=%s\nXKB_DEFAULT_OPTIONS=%s\n' "$XKB_DEFAULT_LAYOUT" "$XKB_DEFAULT_OPTIONS"
+    } > "$LABWC_DIR/environment"
+  else
+    LABWC_DIR="$LABWC_SYS"
+  fi
 }
 
 run_labwc(){
@@ -325,21 +345,7 @@ run_labwc(){
   # системную папку, в которую человеку писать нельзя. Сам environment —
   # всегда свой файл, не ссылка: иначе запись ушла бы в системный. Не
   # вышло завести папку — работаем прямо от системной, как раньше.
-  LABWC_SYS="${GLOWER_LABWC:-/usr/share/glower/labwc}"
-  LABWC_DIR="${XDG_RUNTIME_DIR:-/tmp}/glower-labwc"
-  if mkdir -p "$LABWC_DIR" 2>/dev/null && [ ! -L "$LABWC_DIR/environment" ]; then
-    for f in "$LABWC_SYS"/*; do
-      [ -e "$f" ] || continue
-      [ "$(basename "$f")" = environment ] && continue
-      ln -sfn "$f" "$LABWC_DIR/$(basename "$f")"
-    done
-    {
-      [ -r "$LABWC_SYS/environment" ] && cat "$LABWC_SYS/environment"
-      printf 'XKB_DEFAULT_LAYOUT=%s\nXKB_DEFAULT_OPTIONS=%s\n' "$XKB_DEFAULT_LAYOUT" "$XKB_DEFAULT_OPTIONS"
-    } > "$LABWC_DIR/environment"
-  else
-    LABWC_DIR="$LABWC_SYS"
-  fi
+  prepare_wm_dir
 
   STATUS="$HOME/.local/share/glower/labwc.code"
   rm -f "$STATUS"
@@ -384,8 +390,49 @@ XRC
   return $code
 }
 
+# Свой оконный сервер (glower-wm) — по выбору в «Параметрах», пока как
+# проба: с размытием и анимациями, но ещё молодой. Если он не поднялся
+# или упал в первые секунды — сеанс сам продолжается под labwc, и человек
+# видит рабочий стол, а не чёрный экран. Выбор лежит в настройках панели:
+# "wm": "glower".
+wants_glower_wm(){
+  command -v glower-wm >/dev/null 2>&1 || return 1
+  grep -qE '"wm"[[:space:]]*:[[:space:]]*"glower"' "$HOME/.config/glower/settings.json" 2>/dev/null
+}
+
+run_glower_wm(){
+  [ "$HAVE_DRI" = yes ] || return 1
+  wants_glower_wm || return 1
+  say "GlowerOS: пробую glower-wm (свой оконный сервер)"
+  XDG_SESSION_TYPE=wayland
+  XDG_CURRENT_DESKTOP=GlowerOS:wlroots
+  QT_QPA_PLATFORM='wayland;xcb'
+  MOZ_ENABLE_WAYLAND=1
+  export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP QT_QPA_PLATFORM MOZ_ENABLE_WAYLAND
+  write_start ""
+  # Та же папка настроек, что у labwc: rc.xml и environment с раскладками
+  prepare_wm_dir
+  WM_DIR="$LABWC_DIR"
+  started=$(date +%s)
+  STATUS="$HOME/.local/share/glower/wm.code"
+  rm -f "$STATUS"
+  {
+    glower-wm -C "$WM_DIR" -s "$START_SH" 2>&1
+    echo $? > "$STATUS"
+  } | fold_repeats >> "$LOG"
+  code="$(cat "$STATUS" 2>/dev/null || echo 1)"
+  lived=$(( $(date +%s) - started ))
+  say "GlowerOS: glower-wm завершился с кодом $code через $lived с"
+  # Нормальный выход (человек вышел из сеанса) — конец. Упал быстро —
+  # пусть дальше работает labwc
+  [ "$code" = 0 ] && return 0
+  [ "$lived" -lt 20 ] && return 1
+  return "$code"
+}
+
 # Успешный выход — это конец сеанса (оболочку закрыли), а не повод
 # перезапускаться следующим способом.
+[ "$HAVE_DRI" = yes ] && { run_glower_wm && exit 0; }
 [ "$HAVE_DRI" = yes ] && { run_labwc && exit 0; }
 # Видеоузла нет или labwc на нём не пошёл — через X-сервер: так старые
 # машины всё равно показывают рабочий стол, а не чёрный экран.

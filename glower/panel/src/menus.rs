@@ -370,6 +370,44 @@ fn наполни_быстрые(меню: &gtk::Box) {
     }
     меню.add(&сети);
 
+    // Что играет — у любого проигрывателя, по стандарту MPRIS
+    if let Some(и) = crate::media::что_играет() {
+        let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        ряд.style_context().add_class("now-playing");
+        let текст = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        текст.set_hexpand(true);
+        let н = gtk::Label::new(Some(&format!("♫ {}", if и.название.is_empty() { "Без названия" } else { &и.название })));
+        н.set_xalign(0.0);
+        н.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        н.set_max_width_chars(24);
+        текст.add(&н);
+        if !и.исполнитель.is_empty() {
+            let а = gtk::Label::new(Some(&и.исполнитель));
+            а.style_context().add_class("small");
+            а.set_xalign(0.0);
+            а.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            а.set_max_width_chars(24);
+            текст.add(&а);
+        }
+        ряд.add(&текст);
+        for (знак, метод) in [("⏮", "Previous"), (if и.статус == "Playing" { "⏸" } else { "▶" }, "PlayPause"), ("⏭", "Next")] {
+            let б = gtk::Button::with_label(знак);
+            let м = меню.clone();
+            б.connect_clicked(move |_| {
+                crate::media::нажми(метод);
+                let м = м.clone();
+                glib::timeout_add_local_once(Duration::from_millis(300), move || {
+                    if жив(&м) {
+                        наполни_быстрые(&м);
+                        м.show_all();
+                    }
+                });
+            });
+            ряд.add(&б);
+        }
+        меню.add(&ряд);
+    }
+
     ползунок(меню, "Громкость", "sys.volume.get", "volume", "sys.volume.set");
     ползунок(меню, "Яркость", "sys.brightness.get", "value", "sys.brightness.set");
 
@@ -476,8 +514,11 @@ pub fn батарея(кнопка: &gtk::Button) {
 // ---------------------------------------------------------------- питание
 
 /// Слова — те, что понимает агент: lock, logout, suspend, reboot, poweroff.
-const ДЕЙСТВИЯ: [(&str, &str, Option<&str>, bool); 5] = [
+const ДЕЙСТВИЯ: [(&str, &str, Option<&str>, bool); 6] = [
     ("lock", "Заблокировать", None, false),
+    // Сменить пользователя — это выход на экран входа: сеансы двух людей
+    // разом эта система не держит, и честнее сказать об этом сразу
+    ("switch", "Сменить пользователя", Some("Программы закроются, и откроется экран входа, где можно выбрать другого человека."), false),
     ("logout", "Выйти из системы", Some("Все открытые программы закроются."), false),
     ("suspend", "Спящий режим", None, false),
     ("reboot", "Перезагрузка", Some("Машина перезагрузится."), false),
@@ -536,6 +577,7 @@ fn спроси(меню: &gtk::Box, кнопка: &gtk::Button, id: &'static st
 
 fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static str) {
     popup::закрой();
+    let id = if id == "switch" { "logout" } else { id };
     if id == "lock" {
         позови("sys.power", json!({ "action": id }), |_| {});
         return;
@@ -543,6 +585,7 @@ fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static s
     let з = занавес(match id {
         "reboot" => "Перезагрузка…",
         "suspend" => "Засыпаю…",
+        "logout" if имя == "Сменить пользователя" => "Открываю экран входа…",
         "logout" => "Выхожу из системы…",
         _ => "Завершение работы…",
     });
@@ -578,7 +621,7 @@ fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static s
 }
 
 /// Чёрный экран с надписью — поверх всего, вместе с самой полосой.
-fn занавес(надпись: &str) -> gtk::Window {
+pub(crate) fn занавес(надпись: &str) -> gtk::Window {
     let о = gtk::Window::new(gtk::WindowType::Toplevel);
     о.set_decorated(false);
     о.init_layer_shell();

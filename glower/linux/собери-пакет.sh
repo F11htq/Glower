@@ -61,6 +61,7 @@ OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/glower-menu usr/bin/glower-desk usr/bin/glower-exe
             usr/bin/glower-tray usr/bin/glower-greeter usr/bin/glower-panel
             usr/bin/glower-lock usr/bin/glower-login usr/bin/glower-notepad usr/bin/glower-calc usr/bin/glower-files usr/bin/glower-settings usr/bin/glower-store usr/bin/glower-taskmgr usr/bin/glower-photos usr/bin/glower-snip usr/bin/glower-installer usr/bin/glower-music
+            usr/bin/glower-wm usr/bin/glower-paint usr/bin/glower-calendar usr/bin/glower-clock usr/bin/glower-todo usr/bin/glower-props
             etc/pam.d/glower-lock usr/bin/врач
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
@@ -90,6 +91,10 @@ DEPS_EXTRA=
 if [ -e "$BUILD/usr/bin/glower-panel" ]; then
   ARCH=amd64
   DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, wtype, wlsunset, swayidle"
+fi
+# Свой оконный сервер рисует прямо на видеокарте и сам открывает устройства
+if [ -e "$BUILD/usr/bin/glower-wm" ]; then
+  DEPS_EXTRA="$DEPS_EXTRA, libseat1, libinput10, libgbm1, libxkbcommon0, libegl1, xwayland"
 fi
 
 # Размер пакета apt показывает человеку — считаем честно.

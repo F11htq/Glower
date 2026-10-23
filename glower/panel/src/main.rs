@@ -18,25 +18,33 @@
 mod agent;
 mod apps;
 mod calc;
+mod calendar;
+mod clock;
 mod core;
 mod desktop;
 mod dock;
 mod explorer;
+mod i18n;
 mod icons;
 mod installer;
 mod lock;
+mod media;
 mod menus;
 mod music;
 mod notify;
 mod notepad;
 mod overview;
+mod paint;
 mod popup;
+mod props;
 mod settings;
 mod setup;
 mod store;
 mod snip;
 mod taskmgr;
 mod photos;
+mod theme;
+mod todo;
 mod tray;
 
 use agent::{скажи, слушай};
@@ -52,13 +60,21 @@ use std::time::Duration;
 /// Высота полосы — та же, что у страничной (--полоса-высота).
 const ВЫСОТА: i32 = 30;
 
+/// Поверх основного стиля, когда сервер размывает фон (glower-wm)
+const АКРИЛ: &str = r#"
+.menu, .toast { background-color: alpha(@glower_bg, 0.72); }
+window.overview { background-color: rgba(10, 12, 20, 0.55); }
+.overview button.task { background-color: rgba(30, 33, 46, 0.70); }
+"#;
+
 const СТИЛЬ: &str = r#"
 window.bar {
   background-color: rgba(20, 22, 30, 0.82);
   box-shadow: inset 0 -1px rgba(255, 255, 255, 0.10);
 }
+window.bar, window.bar * { color: rgba(255, 255, 255, 0.95); }
+.menu, .menu * { color: alpha(@glower_fg, 0.95); }
 window.bar, window.bar *, .menu, .menu * {
-  color: rgba(255, 255, 255, 0.95);
   font-family: sans-serif;
   font-size: 13px;
   text-shadow: none;
@@ -86,10 +102,10 @@ window.bar .date { opacity: 0.6; }
 window.bar button.updates { color: #8cc8ff; }
 
 .menu {
-  background-color: rgba(24, 26, 34, 0.96);
+  background-color: alpha(@glower_bg, 0.96);
   border-radius: 14px;
   padding: 8px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.10);
 }
 .menu button {
   background: none;
@@ -100,25 +116,27 @@ window.bar button.updates { color: #8cc8ff; }
   min-height: 0;
   transition: background-color 180ms ease-out;
 }
-.menu button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.menu button:hover { background-color: alpha(@glower_fg, 0.12); }
 .menu button.danger:hover { background-color: rgba(220, 70, 70, 0.35); }
 .menu button.tile {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: alpha(@glower_fg, 0.08);
   border-radius: 12px;
   padding: 9px 11px;
 }
-.menu button.tile:hover { background-color: rgba(255, 255, 255, 0.14); }
-.menu button.tile.on { background-color: #3d7bf0; }
-.menu button.tile.on:hover { background-color: #4f89f5; }
+.menu button.tile:hover { background-color: alpha(@glower_fg, 0.14); }
+.menu button.tile.on { background-color: @glower_accent; }
+.menu button.tile.on:hover { background-color: @glower_accent; }
 .menu button.tile:disabled { opacity: 0.45; }
 .menu .tile-name { font-weight: 600; }
 .menu .tile-sub { font-size: 11px; opacity: 0.7; }
 .menu button.action {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: alpha(@glower_fg, 0.08);
   border-radius: 10px;
   padding: 7px 10px;
 }
-.menu button.action.main { background-color: #3d7bf0; }
+.menu button.action.main { background-color: @glower_accent; }
+.menu .now-playing { padding: 6px 8px; margin: 4px 0; border-radius: 12px; background-color: alpha(@glower_fg, 0.06); }
+.menu .now-playing button { padding: 4px 8px; }
 .menu .title { font-weight: 700; font-size: 14px; padding: 4px 6px 6px; }
 .menu .quiet { opacity: 0.65; padding: 12px; }
 .menu .small { font-size: 11px; opacity: 0.55; padding: 0 10px 6px; }
@@ -127,12 +145,12 @@ window.bar button.updates { color: #8cc8ff; }
 .menu .slider { padding: 6px 10px 2px; }
 .menu scale { padding: 4px 0; }
 .menu scale trough {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: alpha(@glower_fg, 0.15);
   border: none;
   border-radius: 3px;
   min-height: 5px;
 }
-.menu scale highlight { background-color: #5b93f5; border: none; border-radius: 3px; }
+.menu scale highlight { background-color: @glower_accent; border: none; border-radius: 3px; }
 .menu scale slider {
   background-color: #ffffff;
   border: none;
@@ -141,11 +159,11 @@ window.bar button.updates { color: #8cc8ff; }
   min-width: 15px;
   min-height: 15px;
 }
-.menu separator { background-color: rgba(255, 255, 255, 0.12); margin: 4px 6px; min-height: 1px; }
+.menu separator { background-color: alpha(@glower_fg, 0.12); margin: 4px 6px; min-height: 1px; }
 .menu calendar { background: none; border: none; padding: 4px; }
-.menu calendar:selected { background-color: #3d7bf0; border-radius: 6px; }
+.menu calendar:selected { background-color: @glower_accent; border-radius: 6px; }
 .menu calendar.header { border: none; background: none; }
-.menu calendar:indeterminate { color: rgba(255, 255, 255, 0.3); }
+.menu calendar:indeterminate { color: alpha(@glower_fg, 0.3); }
 window.overview { background-color: rgba(10, 12, 20, 0.86); }
 .overview, .overview * {
   color: rgba(255, 255, 255, 0.95);
@@ -167,7 +185,7 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
   font-size: 15px;
   caret-color: #ffffff;
 }
-.overview entry.search:focus { box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.8); }
+.overview entry.search:focus { box-shadow: inset 0 0 0 1px alpha(@glower_accent, 0.8); }
 .overview button {
   background: none;
   border: none;
@@ -195,8 +213,8 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
   font-weight: 600;
 }
 .overview button.desk:hover { background-color: rgba(255, 255, 255, 0.14); }
-.overview button.desk.on { box-shadow: inset 0 0 0 2px #5b93f5; }
-.overview button.desk.drop { background-color: rgba(91, 147, 245, 0.35); box-shadow: inset 0 0 0 2px #8fb6ff; }
+.overview button.desk.on { box-shadow: inset 0 0 0 2px @glower_accent; }
+.overview button.desk.drop { background-color: alpha(@glower_accent, 0.35); box-shadow: inset 0 0 0 2px #8fb6ff; }
 .overview button.desk-plus { min-width: 72px; font-size: 22px; }
 .overview button.desk-x { padding: 0 7px; margin: 4px; border-radius: 9px; font-size: 13px; }
 .overview button.win { background-color: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 6px 12px; }
@@ -209,7 +227,7 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
   min-height: 150px;
   padding: 14px;
 }
-.overview button.task:hover { background-color: rgba(42, 46, 62, 0.97); box-shadow: inset 0 0 0 2px #5b93f5; }
+.overview button.task:hover { background-color: rgba(42, 46, 62, 0.97); box-shadow: inset 0 0 0 2px @glower_accent; }
 .overview button.task.min { opacity: 0.6; }
 .overview .task-empty { opacity: 0.6; font-size: 15px; }
 window.dock, window.dock * {
@@ -242,7 +260,7 @@ window.dock .dot { background-color: rgba(255, 255, 255, 0.85); border-radius: 3
 window.dock .no-dot { min-width: 5px; min-height: 5px; }
 window.dock separator.dock-sep { background-color: rgba(255, 255, 255, 0.16); min-width: 1px; margin: 8px 5px 10px; }
 window.desktop .di { border-radius: 10px; padding: 6px 4px; }
-window.desktop .di.sel { background-color: rgba(120, 160, 255, 0.28); box-shadow: inset 0 0 0 1px rgba(160, 190, 255, 0.55); }
+window.desktop .di.sel { background-color: alpha(@glower_accent, 0.28); box-shadow: inset 0 0 0 1px rgba(160, 190, 255, 0.55); }
 window.desktop .di-glyph { font-size: 40px; min-height: 48px; }
 window.desktop .di-label {
   color: #ffffff;
@@ -253,29 +271,29 @@ window.desktop .di-label {
 window.curtain { background-color: #000000; }
 window.curtain label { color: rgba(255, 255, 255, 0.8); font-size: 18px; }
 /* уведомления */
-window.toasts, window.toasts * { color: rgba(255,255,255,0.95); font-family: sans-serif; font-size: 13px; }
+window.toasts, window.toasts * { color: alpha(@glower_fg, 0.95); font-family: sans-serif; font-size: 13px; }
 .toast {
-  background-color: rgba(24, 26, 36, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background-color: alpha(@glower_bg, 0.96);
+  border: 1px solid alpha(@glower_fg, 0.10);
   border-radius: 14px;
   padding: 12px 10px 12px 14px;
   min-width: 320px;
   margin: 0;
 }
 .note-row {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: alpha(@glower_fg, 0.05);
   border-radius: 12px;
   padding: 10px 12px;
 }
 .toast-title { font-weight: bold; }
-.toast-text { color: rgba(255, 255, 255, 0.75); }
-.toast-time { color: rgba(255, 255, 255, 0.5); font-size: 11px; }
+.toast-text { color: alpha(@glower_fg, 0.75); }
+.toast-time { color: alpha(@glower_fg, 0.5); font-size: 11px; }
 .toast-emoji { font-size: 24px; }
 button.toast-action {
-  background-color: rgba(255, 255, 255, 0.10);
+  background-color: alpha(@glower_fg, 0.10);
   border: none; border-radius: 8px; padding: 3px 12px; margin-top: 6px; box-shadow: none;
 }
-button.toast-close { background: none; border: none; box-shadow: none; padding: 0 6px; color: rgba(255,255,255,0.5); }
+button.toast-close { background: none; border: none; box-shadow: none; padding: 0 6px; color: alpha(@glower_fg, 0.5); }
 button.toast-close:hover { color: white; }
 window.bar button.bell .unread {
   background-color: #e5484d; border-radius: 8px; font-size: 10px; padding: 0 5px; min-width: 8px;
@@ -293,9 +311,11 @@ window.bar button.bell .unread {
 .w-big { font-size: 34px; font-weight: 300; }
 .w-sub { color: rgba(255, 255, 255, 0.7); }
 .w-emoji { font-size: 26px; }
-.w-today { background-color: #4f7cff; border-radius: 6px; color: white; font-weight: bold; }
+.widget checkbutton label { color: rgba(255, 255, 255, 0.9); }
+.widget button.w-link { background: none; border: none; box-shadow: none; padding: 2px 0; color: rgba(160, 190, 255, 0.95); }
+.w-today { background-color: @glower_accent; border-radius: 6px; color: white; font-weight: bold; }
 textview.w-note, textview.w-note text { background-color: transparent; color: rgba(255,255,255,0.9); }
-.widget levelbar block.filled { background-color: #4f7cff; border-radius: 3px; }
+.widget levelbar block.filled { background-color: @glower_accent; border-radius: 3px; }
 .widget levelbar block.empty { background-color: rgba(255,255,255,0.12); border-radius: 3px; }
 "#;
 
@@ -351,6 +371,15 @@ fn main() {
     if имя == "glower-settings" {
         settings::запусти(std::env::args().skip(1).collect());
     }
+    // Программы, которые прежде жили только на странице
+    match имя {
+        "glower-paint" => paint::запусти(std::env::args().skip(1).collect()),
+        "glower-calendar" => calendar::запусти(std::env::args().skip(1).collect()),
+        "glower-clock" => clock::запусти(std::env::args().skip(1).collect()),
+        "glower-todo" => todo::запусти(std::env::args().skip(1).collect()),
+        "glower-props" => props::запусти(std::env::args().skip(1).collect()),
+        _ => {}
+    }
     if имя == "glower-music" {
         music::запусти(std::env::args().skip(1).collect());
     }
@@ -364,6 +393,7 @@ fn main() {
         eprintln!("glower-panel: нет экрана — панель показывать негде");
         std::process::exit(1);
     }
+    i18n::подключи();
     if !gtk_layer_shell::is_supported() {
         // Без слоёв рабочий стол не встанет ни под окнами, ни над ними:
         // такой оконный сервер нам не годится
@@ -371,9 +401,7 @@ fn main() {
         std::process::exit(3);
     }
 
-    if let Some(н) = gtk::Settings::default() {
-        н.set_gtk_application_prefer_dark_theme(true);
-    }
+    crate::theme::подключи();
     let стиль = gtk::CssProvider::new();
     стиль.load_from_data(СТИЛЬ.as_bytes()).expect("стиль панели");
     gtk::StyleContext::add_provider_for_screen(
@@ -381,6 +409,19 @@ fn main() {
         &стиль,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+    // Свой оконный сервер размывает то, что под меню и панелью, — тогда
+    // меню можно сделать заметно прозрачнее, как «акрил» в Windows. Без
+    // размытия прозрачное меню читалось бы плохо, поэтому только при нём
+    if std::env::var_os("GLOWER_WM_BLUR").is_some() {
+        let акрил = gtk::CssProvider::new();
+        if акрил.load_from_data(АКРИЛ.as_bytes()).is_ok() {
+            gtk::StyleContext::add_provider_for_screen(
+                &gtk::gdk::Screen::default().expect("экран"),
+                &акрил,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+            );
+        }
+    }
 
     // Стол — первым: он в самом низу, и пока его нет, под прозрачной
     // страницей стола был бы виден пустой экран
@@ -508,6 +549,7 @@ fn main() {
     язык.connect_clicked(|_| скажи("покажи", json!("раскладка")));
     полоса.pack_end(&язык, false, false, 0);
     полоса.pack_end(&tray::лоток(), false, false, 2);
+    следи_за_раскладкой(&язык);
 
     окно.show_all();
     dock::создай();
@@ -530,7 +572,10 @@ fn main() {
                     "раскладка" => {
                         if let Some(т) = что.as_str() {
                             let т: String = т.to_uppercase().chars().take(5).collect();
-                            язык.set_label(&т);
+                            // Свой сервер знает текущую раскладку — значок показывает её
+                            if файл_раскладки().filter(|ф| ф.exists()).is_none() {
+                                язык.set_label(&т);
+                            }
                             menus::ЗНАЮ.with(|з| з.borrow_mut().раскладка = т);
                         }
                     }
@@ -641,6 +686,38 @@ fn main() {
     скажи("стол-свой", json!(true));
 
     gtk::main();
+}
+
+/// Где glower-wm пишет текущую раскладку: первая строка — «EN», «RU»
+fn файл_раскладки() -> Option<std::path::PathBuf> {
+    std::env::var_os("GLOWER_WM_SOCKET")?;
+    Some(std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?).join("glower-wm").join("layout"))
+}
+
+/// Под labwc текущей раскладки панели не узнать: показываем их список.
+/// Свой сервер пишет текущую в файл — значок меняется вместе с Alt+Shift
+fn следи_за_раскладкой(значок: &gtk::Button) {
+    let Some(путь) = файл_раскладки() else { return };
+    let прочти = {
+        let значок = значок.clone();
+        let путь = путь.clone();
+        move || {
+            if let Ok(т) = std::fs::read_to_string(&путь) {
+                if let Some(коротко) = т.lines().next().filter(|к| !к.is_empty()) {
+                    значок.set_label(коротко);
+                    значок.set_tooltip_text(т.lines().nth(1));
+                }
+            }
+        }
+    };
+    прочти();
+    let Some(папка) = путь.parent() else { return };
+    let _ = std::fs::create_dir_all(папка);
+    if let Ok(с) = gtk::gio::File::for_path(папка).monitor_directory(gtk::gio::FileMonitorFlags::WATCH_MOVES, gtk::gio::Cancellable::NONE) {
+        с.connect_changed(move |_, _, _, _| прочти());
+        // Следящий должен жить весь сеанс
+        std::mem::forget(с);
+    }
 }
 
 #[cfg(test)]

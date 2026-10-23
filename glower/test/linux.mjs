@@ -1466,6 +1466,9 @@ try {
           && /set_source_rgba\(0\.04, 0\.047, 0\.08, 0\.86\)/.test(обзор)
           && /"на-стол"/.test(обзор) && /"окно-на-стол"/.test(обзор) && /"окно-на-новый-стол"/.test(обзор));
       const док_ = await readFile(join(root, 'panel', 'src', 'dock.rs'), 'utf8');
+      /* Свои программы док узнаёт по списку ядра: id и имя окна в одной строке */
+      const наши_ = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+      const родная = (окно, id) => new RegExp('id: "' + id + '",.*окно: "' + окно + '"').test(наши_);
       check('нативный док: поверх окон, прячется при окнах и выезжает у края',
         /mod dock;/.test(главная) && /dock::создай\(\)/.test(главная) && /"док" => dock::данные/.test(главная)
           && /скажи\("док-свой", json!\(true\)\)/.test(главная) && /Шина\.скажи\('док-свой', false\)/.test(страничная)
@@ -1518,7 +1521,7 @@ try {
           /OS\.нативные\.includes\(s\.app\)/.test(сис3) && /'восстановление':true/.test(сис3)
             && /opts\['восстановление'\]\) return null/.test(ос2));
         check('в доке окна родных программ — точкой под их значком, не чужим',
-          /"glower-notepad", "notepad"/.test(док_) && /"glower-calc", "calc"/.test(док_) && /родные_для/.test(док_));
+          родная('glower-notepad', 'notepad') && родная('glower-calc', 'calc') && /crate::core::НАШИ/.test(док_));
         const проводник = await readFile(join(root, 'panel', 'src', 'explorer.rs'), 'utf8');
         check('Проводник на Rust: вкладки, сетка и таблица, корзина системы, флешки сбоку',
           /имя == "glower-files"/.test(главная) && /gtk::IconView/.test(проводник) && /gtk::TreeView/.test(проводник)
@@ -1526,7 +1529,7 @@ try {
             && /monitor_directory/.test(проводник) && /text\/uri-list/.test(проводник) && /GLOWER_ROOT/.test(проводник)
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
             && /id === 'files' && opts && Array\.isArray\(opts\.path\)/.test(ос2)
-            && /"glower-files", "files"/.test(док_) && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
+            && родная('glower-files', 'files') && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
         const мост = await readFile(join(root, 'js', 'параметры.js'), 'utf8');
         check('Параметры на Rust: все восемнадцать разделов, системное — у агента, оболочечное — через страницу',
@@ -1535,7 +1538,7 @@ try {
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
             && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
-            && /'параметры-раздел'/.test(ос2) && /"glower-settings", "settings"/.test(док_)
+            && /'параметры-раздел'/.test(ос2) && родная('glower-settings', 'settings')
             && /Поверхности\.слушай\(\['параметры-дело'\]/.test(мост) && /js\/параметры\.js/.test(await readFile(join(root, 'index.html'), 'utf8')));
         const магазин = await readFile(join(root, 'panel', 'src', 'store.rs'), 'utf8');
         const каталог = JSON.parse(await readFile(join(root, 'panel', 'src', 'store-catalog.json'), 'utf8'));
@@ -1553,7 +1556,7 @@ try {
           /имя == "glower-store"/.test(главная) && ['"pkg.install"', '"pkg.remove"', '"pkg.search"', '"pkg.info"', '"pkg.job"', '"pkg.flathub"', '"pkg.upgrade.check"', '"sys.apps"', '"store.icon"']
               .every(м => магазин.includes(м))
             && /store:'glower-store'/.test(агент2) && /'store\.icon'/.test(агент2) && /'--find=' \+/.test(агент2)
-            && /'магазин-открой'/.test(ос2) && /"glower-store", "store"/.test(док_) && /steam-devices/.test(магазин));
+            && /'магазин-открой'/.test(ос2) && родная('glower-store', 'store') && /steam-devices/.test(магазин));
         check('подборки нативного Магазина совпадают со страничными',
           JSON.stringify(каталог['подборки']) === JSON.stringify(достань('ПОДБОРКИ', '{', '}'))
             && JSON.stringify(каталог['витрина']) === JSON.stringify(достань('ВИТРИНА', '[', ']'))
@@ -1573,7 +1576,7 @@ try {
             && /"grim"/.test(ножницы) && /wl-copy/.test(ножницы) && /Layer::Overlay/.test(ножницы) && /Замазать/.test(ножницы)
             && /taskmgr:'glower-taskmgr', photos:'glower-photos', snip:'glower-snip'/.test(агент2)
             && /exec glower-snip "\$MODE"/.test(снимок) && /"glower-photos"\)\.arg/.test(проводник)
-            && /"glower-taskmgr", "taskmgr"/.test(док_) && /"glower-snip", "snip"/.test(док_));
+            && родная('glower-taskmgr', 'taskmgr') && родная('glower-snip', 'snip'));
         const меню_ = await readFile(join(root, 'panel', 'src', 'menus.rs'), 'utf8');
         check('док выезжает и тает плавно, а не рывком',
           /fn покажи\(окно: &gtk::Window, видно: bool\)/.test(док_) && /set_layer_shell_margin\(Edge::Bottom, \(10\.0 - /.test(док_)
@@ -1807,6 +1810,62 @@ try {
     check('обновление системы подтягивает новое ядро',
       вызовы.length >= 2 && вызовы.every(с => /--with-new-pkgs/.test(с)),
       вызовы.map(с => с.trim()).join(' | '));
+  }
+
+  /* --- новые программы, тема, музыка в быстрых настройках, язык ---
+     Это проверки на месте: что нужные куски есть и связаны между собой.
+     Работу на экране проверяют стенд и тесты самой панели (cargo test). */
+  {
+    const src = f => readFile(join(root, 'panel', 'src', f), 'utf8');
+    const [главная, ядро, тема, муз, медиа, язык, меню, образ, пакет, агент, рц, пакеты] = await Promise.all([
+      src('main.rs'), src('core.rs'), src('theme.rs'), src('music.rs'), src('media.rs'), src('i18n.rs'), src('menus.rs'),
+      readFile(join(root, 'linux', 'mkiso.sh'), 'utf8'), readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8'),
+      readFile(join(root, 'agent', 'server.mjs'), 'utf8'), readFile(join(root, 'linux', 'labwc', 'rc.xml'), 'utf8'),
+      readFile(join(root, 'agent', 'packages.mjs'), 'utf8')]);
+    const новые = ['paint', 'calendar', 'clock', 'todo', 'props'];
+    check('Paint, Календарь, Часы, Дела и Свойства — свои программы, в образе и в пакете',
+      новые.every(п => главная.includes('"glower-' + п + '" =>') && образ.includes('glower-' + п) && пакет.includes('glower-' + п))
+        && ['paint', 'calendar', 'clock', 'todo'].every(п => ядро.includes('id: "' + п + '"')));
+    check('светлая тема и цвет акцента — именами цветов, на лету',
+      /@define-color glower_accent/.test(тема) && /FileMonitor|monitor_file/.test(тема) && /theme::подключи\(\)/.test(главная));
+    check('Музыка говорит по MPRIS, быстрые настройки и медиаклавиши ею управляют',
+      /org\.mpris\.MediaPlayer2/.test(муз) && /PropertiesChanged/.test(муз) && /fn что_играет/.test(медиа)
+        && /now-playing/.test(меню) && /XF86AudioPlay/.test(рц) && /медиа/.test(рц));
+    check('язык интерфейса: словари всех языков, перевод при показе, имена файлов не трогает',
+      ['en', 'uk', 'be', 'kk', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'tr'].every(к => язык.includes('lang/' + к + '.json'))
+        && /g_signal_add_emission_hook/.test(язык) && /no-i18n/.test(язык) && /i18n::подключи\(\)/.test(главная));
+    check('обновление убирает прежний движок оболочки, но не браузер',
+      /apt-mark', 'auto'/.test(пакеты) && /'autoremove', '-y'/.test(пакеты) && /gir1\.2-webkit2-4\.1/.test(пакеты)
+        && !/epiphany|chromium|firefox/.test(пакеты.slice(пакеты.indexOf('СТАРЫЙ_ДВИЖОК'), пакеты.indexOf('const начни'))));
+    check('агент запускает новые программы',
+      новые.every(п => агент.includes(п + ":'glower-" + п + "'")));
+  }
+
+  /* --- свой оконный сервер glower-wm ---
+     Сам он проверяется своими тестами (cargo test в wm/) и на стенде;
+     здесь — что он встроен в систему и что откат на labwc на месте. */
+  {
+    const wm = f => readFile(join(root, 'wm', 'src', f), 'utf8');
+    const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+    const образ = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+    const пакет = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
+    const сборка = await readFile(join(root, '..', '.github', 'workflows', 'build-iso.yml'), 'utf8');
+    const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+    const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+    const система = await readFile(join(root, 'agent', 'system.mjs'), 'utf8');
+    const [главный, ключи, размытие, протоколы] = await Promise.all([wm('main.rs'), wm('keys.rs'), wm('blur.rs'), wm('protocols/mod.rs')]);
+    check('glower-wm читает rc.xml labwc и понимает -C, -s и -e',
+      /linux\/labwc\/rc\.xml/.test(ключи) && /"-C"/.test(главный) && /"-s"/.test(главный) && /"-e"/.test(главный));
+    check('glower-wm: размытие маской по альфе, протоколы панели, замка и снимков',
+      /smoothstep/.test(размытие) && ['foreign_toplevel', 'inhibitor', 'screencopy', 'gamma'].every(м => протоколы.includes('pub mod ' + м)));
+    check('сеанс пробует glower-wm по выбору и откатывается на labwc',
+      /run_glower_wm/.test(сеанс) && /"wm"\[\[:space:\]\]\*:/.test(сеанс) && /lived" -lt 20/.test(сеанс)
+        && сеанс.indexOf('run_glower_wm && exit 0') < сеанс.indexOf('run_labwc && exit 0') && /glower-wm -e/.test(сеанс));
+    check('glower-wm в образе, пакете и сборке; выбор — в Параметрах',
+      /glower-wm/.test(образ) && /libseat1/.test(образ) && /usr\/bin\/glower-wm/.test(пакет) && /glower\/wm\/Cargo\.toml/.test(сборка)
+        && /"wm", json!\(if v \{ "glower" \}/.test(параметры));
+    check('панель просит столы у glower-wm словами, раскладку и SIGHUP понимают оба сервера',
+      /GLOWER_WM_SOCKET/.test(ядро) && /"desk"/.test(ядро) && /'labwc', 'glower-wm'/.test(система));
   }
 
   /* --- программа называется своим именем, а не именем своего подменю ---

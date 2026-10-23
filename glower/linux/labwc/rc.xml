@@ -139,6 +139,18 @@
     <keybind key="W-C-A-S-F2"><action name="SendToDesktop" to="2" follow="no" /></keybind>
     <keybind key="W-C-A-S-F3"><action name="SendToDesktop" to="3" follow="no" /></keybind>
     <keybind key="W-C-A-S-F4"><action name="SendToDesktop" to="4" follow="no" /></keybind>
+    <!-- Клавиши мультимедиа — проигрывателю, который сейчас играет (MPRIS);
+         громкость и яркость — системе напрямую, из любой программы -->
+    <keybind key="XF86AudioPlay"><action name="Execute" command="glower-menu медиа PlayPause" /></keybind>
+    <keybind key="XF86AudioPause"><action name="Execute" command="glower-menu медиа PlayPause" /></keybind>
+    <keybind key="XF86AudioNext"><action name="Execute" command="glower-menu медиа Next" /></keybind>
+    <keybind key="XF86AudioPrev"><action name="Execute" command="glower-menu медиа Previous" /></keybind>
+    <keybind key="XF86AudioStop"><action name="Execute" command="glower-menu медиа Stop" /></keybind>
+    <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+" /></keybind>
+    <keybind key="XF86AudioLowerVolume"><action name="Execute" command="wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-" /></keybind>
+    <keybind key="XF86AudioMute"><action name="Execute" command="wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle" /></keybind>
+    <keybind key="XF86MonBrightnessUp"><action name="Execute" command="brightnessctl -q set 5%+" /></keybind>
+    <keybind key="XF86MonBrightnessDown"><action name="Execute" command="brightnessctl -q set 5%-" /></keybind>
     <!-- Снимок экрана. Сочетания держит оконный сервер: клавиши достаются
          окну в фокусе, и иначе Win+Shift+S уходил бы любой программе. -->
     <keybind key="W-S-s">

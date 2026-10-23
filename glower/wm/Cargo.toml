@@ -1,0 +1,22 @@
+[package]
+name = "glower-wm"
+version = "0.1.0"
+edition = "2021"
+description = "Оконный сервер GlowerOS: Wayland на Smithay, с размытием и анимациями окон"
+license = "MIT"
+
+[dependencies]
+smithay = { version = "0.6", default-features = false, features = [
+  "backend_winit", "backend_drm", "backend_gbm", "backend_libinput", "backend_session_libseat",
+  "backend_udev", "backend_egl", "renderer_gl", "wayland_frontend", "desktop", "xwayland",
+] }
+calloop = { version = "0.14", features = ["signals"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+xcursor = "0.3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true

@@ -219,13 +219,21 @@ pub fn создай() {
     let виджеты = gtk::Box::new(gtk::Orientation::Vertical, 14);
     виджеты.style_context().add_class("widgets");
     поле.put(&виджеты, 0, 0);
-    // Виджеты — у правого края: место узнаём, когда окно получит размер
+    // Виджеты — у правого края: место узнаём, когда окно получит размер.
+    // Двигаем после раскладки, а не внутри неё: изнутри GTK сдвиг
+    // откладывает до следующей, а её может и не быть — если оконный сервер
+    // сразу дал окну полный размер, виджеты оставались слева, на значках
     окно.connect_size_allocate(|о, _| {
-        if let Some(с) = стол() {
-            let с = с.borrow();
-            let ш = о.allocated_width();
-            с.поле.move_(&с.виджеты, (ш - 270).max(0), 44);
-        }
+        let ш = о.allocated_width();
+        glib::idle_add_local_once(move || {
+            if let Some(с) = стол() {
+                let с = с.borrow();
+                let x = (ш - 270).max(0);
+                if с.поле.child_x(&с.виджеты) != x {
+                    с.поле.move_(&с.виджеты, x, 44);
+                }
+            }
+        });
     });
 
     окно.connect_button_press_event(|_, е| {
@@ -627,6 +635,12 @@ fn меню_значков(е: &gtk::gdk::EventButton) {
                 core::запусти_команду("glower-files", &[&п.to_string_lossy()]);
             });
         }
+        черта(&меню);
+        let пути: Vec<String> = файлы.iter().map(|п| п.to_string_lossy().to_string()).collect();
+        пункт(&меню, "Свойства", move || {
+            let доводы: Vec<&str> = пути.iter().map(|п| п.as_str()).collect();
+            core::запусти_команду("glower-props", &доводы);
+        });
     } else if вид == "приложение" || вид == "машина" {
         черта(&меню);
         пункт(&меню, "Убрать с рабочего стола", удали);
@@ -763,6 +777,10 @@ pub fn значки(список: &Value) {
         вид.add(&картинка);
         let подпись = gtk::Label::new(Some(&имя));
         подпись.style_context().add_class("di-label");
+        // Имена файлов и чужих программ не переводим: это не надписи системы
+        if matches!(з["вид"].as_str(), Some("файл" | "папка" | "машина")) {
+            подпись.style_context().add_class("no-i18n");
+        }
         подпись.set_line_wrap(true);
         подпись.set_line_wrap_mode(gtk::pango::WrapMode::WordChar);
         подпись.set_lines(2);
@@ -793,6 +811,11 @@ pub fn обои(что: &Value) {
 // ------------------------------------------------------------- виджеты
 
 /// Перестроить виджеты: какие показаны, решают настройки
+fn сегодня_ключ() -> String {
+    let т = сейчас();
+    crate::calendar::ключ(т.year(), т.month() as u32, т.day_of_month() as u32)
+}
+
 pub fn обнови_виджеты() {
     let Some(с) = стол() else { return };
     let показывать = core::настройка("showDeskWidgets").as_bool() != Some(false);
@@ -801,7 +824,15 @@ pub fn обнови_виджеты() {
     } else {
         Vec::new()
     };
-    let слепок = format!("{}|{}|{}", список.join(","), core::погода(), core::настройка("tz"));
+    // Дела и события дня тоже видны на столе: поменялись — перерисовать
+    let слепок = format!(
+        "{}|{}|{}|{}|{}",
+        список.join(","),
+        core::погода(),
+        core::настройка("tz"),
+        crate::apps::читай_данные(crate::todo::ФАЙЛ),
+        crate::apps::читай_данные(crate::calendar::ФАЙЛ)[&сегодня_ключ()]
+    );
     if с.borrow().слепок_виджетов == слепок {
         return;
     }
@@ -904,6 +935,39 @@ fn наполни_виджет(к: &gtk::Box, t: &str) {
                 сетка.attach(&л, место % 7, 1 + место / 7, 1, 1);
             }
             к.add(&сетка);
+            for е in crate::calendar::события(&crate::apps::читай_данные(crate::calendar::ФАЙЛ), &сегодня_ключ()).iter().take(3) {
+                let т = format!("{}{}", е["time"].as_str().filter(|т| !т.is_empty()).map(|т| format!("{т}  ")).unwrap_or_default(), е["t"].as_str().unwrap_or(""));
+                let л = строка_виджета(к, &т, "w-sub");
+                л.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            }
+        }
+        "todo" => {
+            строка_виджета(к, "Дела", "w-t");
+            let все = crate::todo::дела();
+            let открытые: Vec<(usize, serde_json::Value)> = все.iter().cloned().enumerate().filter(|(_, д)| д["d"].as_bool() != Some(true)).collect();
+            if открытые.is_empty() {
+                строка_виджета(к, "Всё сделано 🎉", "w-sub");
+            }
+            for (i, д) in открытые.into_iter().take(5) {
+                let г = gtk::CheckButton::with_label(д["t"].as_str().unwrap_or(""));
+                г.connect_toggled(move |г| {
+                    if !г.is_active() {
+                        return;
+                    }
+                    let mut все = crate::todo::дела();
+                    if let Some(д) = все.get_mut(i) {
+                        д["d"] = json!(true);
+                    }
+                    crate::apps::пиши_данные(crate::todo::ФАЙЛ, &serde_json::Value::Array(все));
+                    glib::idle_add_local_once(обнови_виджеты);
+                });
+                к.add(&г);
+            }
+            let открыть = gtk::Button::with_label("Открыть Дела");
+            открыть.style_context().add_class("w-link");
+            открыть.set_halign(gtk::Align::Start);
+            открыть.connect_clicked(|_| core::запусти("todo", "приложение"));
+            к.add(&открыть);
         }
         "system" => {
             строка_виджета(к, "Система", "w-t");

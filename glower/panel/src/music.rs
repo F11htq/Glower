@@ -26,11 +26,11 @@ const СТИЛЬ: &str = r#"
   background-image: linear-gradient(140deg, #f472b6, #a855f7);
 }
 .music .m-title { font-size: 18px; font-weight: bold; }
-.music button.pp { min-width: 54px; min-height: 54px; border-radius: 27px; font-size: 20px; background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); }
+.music button.pp { min-width: 54px; min-height: 54px; border-radius: 27px; font-size: 20px; background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
 .music button.ctl { font-size: 16px; min-width: 42px; min-height: 42px; border-radius: 21px; }
 .music list { background-color: transparent; }
 .music list row { padding: 6px 10px; border-radius: 8px; }
-.music list row:selected { background-color: rgba(91, 140, 255, 0.25); }
+.music list row:selected { background-color: alpha(@glower_accent, 0.25); }
 .music .now { color: #8fb0ff; font-weight: bold; }
 "#;
 
@@ -79,13 +79,26 @@ fn мин_сек(с: f64) -> String {
 /// Связь с mpv: команды пишем в сокет, ответы и события читает поток
 struct Плеер {
     сокет: RefCell<Option<UnixStream>>,
+    /// Сказанное до того, как mpv отозвался: уйдёт, как только он готов
+    ждут: RefCell<Vec<Value>>,
     процесс: RefCell<Option<std::process::Child>>,
 }
 
 impl Плеер {
     fn скажи(&self, команда: Value) {
-        if let Some(с) = self.сокет.borrow_mut().as_mut() {
-            let _ = writeln!(с, "{}", json!({ "command": команда }));
+        match self.сокет.borrow_mut().as_mut() {
+            Some(с) => {
+                let _ = writeln!(с, "{}", json!({ "command": команда }));
+            }
+            None => self.ждут.borrow_mut().push(команда),
+        }
+    }
+
+    fn подключён(&self, с: UnixStream) {
+        *self.сокет.borrow_mut() = Some(с);
+        let ждут = std::mem::take(&mut *self.ждут.borrow_mut());
+        for к in ждут {
+            self.скажи(к);
         }
     }
 }
@@ -100,7 +113,7 @@ impl Drop for Плеер {
 }
 
 /// Поднять mpv и подключиться к нему. Вести от него идут в канал
-fn подними_mpv() -> Result<(Плеер, async_channel::Receiver<Value>), String> {
+fn подними_mpv() -> Result<(Плеер, async_channel::Receiver<Value>, async_channel::Receiver<UnixStream>), String> {
     let папка = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
     let mut путь = format!("{папка}/glower-music-{}.sock", std::process::id());
     // Адрес сокета не длиннее 108 байт — иначе mpv его просто не заведёт
@@ -112,20 +125,27 @@ fn подними_mpv() -> Result<(Плеер, async_channel::Receiver<Value>), 
         .args(["--idle=yes", "--no-video", "--no-terminal", "--audio-display=no", &format!("--input-ipc-server={путь}")])
         .spawn()
         .map_err(|_| "На машине нет mpv — играть нечем".to_string())?;
-    let mut сокет = None;
-    for _ in 0..50 {
-        if let Ok(с) = UnixStream::connect(&путь) {
-            сокет = Some(с);
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(60));
-    }
-    let _ = std::fs::remove_file(&путь);
-    let сокет = сокет.ok_or_else(|| "mpv не отозвался".to_string())?;
-    let чтение = сокет.try_clone().map_err(|е| е.to_string())?;
+    // mpv поднимается не мгновенно: на слабой машине — секунды. Ждём его
+    // в стороне, окно тем временем живёт, а команды копятся
     let (куда, откуда) = async_channel::unbounded();
+    let (готов_куда, готов) = async_channel::bounded::<UnixStream>(1);
     std::thread::spawn(move || {
-        for строка in BufReader::new(чтение).lines() {
+        let mut сокет = None;
+        for _ in 0..200 {
+            if let Ok(с) = UnixStream::connect(&путь) {
+                сокет = Some(с);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let _ = std::fs::remove_file(&путь);
+        let Some(сокет) = сокет else {
+            let _ = куда.send_blocking(json!({ "event": "нет-mpv" }));
+            return;
+        };
+        let Ok(запись) = сокет.try_clone() else { return };
+        let _ = готов_куда.send_blocking(запись);
+        for строка in BufReader::new(сокет).lines() {
             let Ok(строка) = строка else { break };
             if let Ok(в) = serde_json::from_str::<Value>(&строка) {
                 if куда.send_blocking(в).is_err() {
@@ -134,12 +154,114 @@ fn подними_mpv() -> Result<(Плеер, async_channel::Receiver<Value>), 
             }
         }
     });
-    let п = Плеер { сокет: RefCell::new(Some(сокет)), процесс: RefCell::new(Some(процесс)) };
+    let п = Плеер { сокет: RefCell::new(None), ждут: RefCell::new(Vec::new()), процесс: RefCell::new(Some(процесс)) };
     // Где играет и сколько длится — mpv сам сообщает при каждой перемене
     п.скажи(json!(["observe_property", 1, "time-pos"]));
     п.скажи(json!(["observe_property", 2, "duration"]));
     п.скажи(json!(["observe_property", 3, "pause"]));
-    Ok((п, откуда))
+    Ok((п, откуда, готов))
+}
+
+/* ---------- MPRIS: «что играет» для всей системы ----------
+
+   Стандарт freedesktop: проигрыватель объявляет себя на шине сеанса, и
+   быстрые настройки, клавиши мультимедиа и любые другие программы видят,
+   что играет, и могут нажать «пауза» или «дальше». */
+
+const MPRIS: &str = r#"<node>
+  <interface name="org.mpris.MediaPlayer2">
+    <method name="Raise"/><method name="Quit"/>
+    <property name="CanQuit" type="b" access="read"/><property name="CanRaise" type="b" access="read"/>
+    <property name="HasTrackList" type="b" access="read"/><property name="Identity" type="s" access="read"/>
+    <property name="DesktopEntry" type="s" access="read"/>
+    <property name="SupportedUriSchemes" type="as" access="read"/><property name="SupportedMimeTypes" type="as" access="read"/>
+  </interface>
+  <interface name="org.mpris.MediaPlayer2.Player">
+    <method name="Next"/><method name="Previous"/><method name="Pause"/><method name="PlayPause"/>
+    <method name="Stop"/><method name="Play"/>
+    <property name="PlaybackStatus" type="s" access="read"/><property name="Metadata" type="a{sv}" access="read"/>
+    <property name="CanGoNext" type="b" access="read"/><property name="CanGoPrevious" type="b" access="read"/>
+    <property name="CanPlay" type="b" access="read"/><property name="CanPause" type="b" access="read"/>
+    <property name="CanControl" type="b" access="read"/><property name="CanSeek" type="b" access="read"/>
+  </interface>
+</node>"#;
+
+#[derive(Default, Clone)]
+struct ЧтоИграет {
+    статус: String,
+    название: String,
+    альбом: String,
+}
+
+static ИГРАЕТ: std::sync::Mutex<Option<ЧтоИграет>> = std::sync::Mutex::new(None);
+static ШИНА_MPRIS: std::sync::OnceLock<gtk::gio::DBusConnection> = std::sync::OnceLock::new();
+
+fn метаданные(ч: &ЧтоИграет) -> glib::Variant {
+    let словарь = glib::VariantDict::new(None);
+    словарь.insert_value("mpris:trackid", &glib::Variant::parse(Some(glib::VariantTy::OBJECT_PATH), "'/org/glower/music/track'").unwrap_or_else(|_| "/".to_variant()));
+    словарь.insert_value("xesam:title", &ч.название.to_variant());
+    словарь.insert_value("xesam:album", &ч.альбом.to_variant());
+    словарь.insert_value("xesam:artist", &vec![ч.альбом.clone()].to_variant());
+    словарь.end()
+}
+
+fn свойство_mpris(имя: &str) -> glib::Variant {
+    let ч = ИГРАЕТ.lock().ok().and_then(|ч| ч.clone()).unwrap_or_default();
+    match имя {
+        "PlaybackStatus" => (if ч.статус.is_empty() { "Stopped" } else { &ч.статус }).to_variant(),
+        "Metadata" => метаданные(&ч),
+        "Identity" => "Музыка".to_variant(),
+        "DesktopEntry" => "glower-music".to_variant(),
+        "SupportedUriSchemes" => vec!["file".to_string()].to_variant(),
+        "SupportedMimeTypes" => vec!["audio/mpeg".to_string(), "audio/ogg".to_string(), "audio/flac".to_string()].to_variant(),
+        "CanQuit" | "CanRaise" | "CanGoNext" | "CanGoPrevious" | "CanPlay" | "CanPause" | "CanControl" => true.to_variant(),
+        _ => false.to_variant(),
+    }
+}
+
+/// Сказать шине, что поменялось
+fn mpris_обнови(статус: &str, название: &str, альбом: &str) {
+    if let Ok(mut ч) = ИГРАЕТ.lock() {
+        *ч = Some(ЧтоИграет { статус: статус.into(), название: название.into(), альбом: альбом.into() });
+    }
+    let Some(шина) = ШИНА_MPRIS.get() else { return };
+    let перемены = glib::VariantDict::new(None);
+    перемены.insert_value("PlaybackStatus", &свойство_mpris("PlaybackStatus"));
+    перемены.insert_value("Metadata", &свойство_mpris("Metadata"));
+    let доводы = ("org.mpris.MediaPlayer2.Player", перемены.end(), Vec::<String>::new()).to_variant();
+    let _ = шина.emit_signal(None, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties", "PropertiesChanged", Some(&доводы));
+}
+
+/// Поднять службу; просьбы с шины приходят словами в канал
+fn mpris_служба() -> async_channel::Receiver<String> {
+    let (куда, откуда) = async_channel::unbounded::<String>();
+    let куда = std::sync::Arc::new(куда);
+    gtk::gio::bus_own_name(
+        gtk::gio::BusType::Session,
+        &format!("org.mpris.MediaPlayer2.glower_music.instance{}", std::process::id()),
+        gtk::gio::BusNameOwnerFlags::NONE,
+        move |шина, _| {
+            let Ok(узел) = gtk::gio::DBusNodeInfo::for_xml(MPRIS) else { return };
+            let _ = ШИНА_MPRIS.set(шина.clone());
+            for имя in ["org.mpris.MediaPlayer2", "org.mpris.MediaPlayer2.Player"] {
+                let Some(описание) = узел.lookup_interface(имя) else { continue };
+                let куда = куда.clone();
+                let _ = шина.register_object(
+                    "/org/mpris/MediaPlayer2",
+                    &описание,
+                    move |_, _, _, _, метод, _, ответ| {
+                        let _ = куда.send_blocking(метод.to_string());
+                        ответ.return_value(None);
+                    },
+                    |_, _, _, _, свойство| свойство_mpris(свойство),
+                    |_, _, _, _, _, _| false,
+                );
+            }
+        },
+        |_, _| {},
+        |_, _| {},
+    );
+    откуда
 }
 
 struct Музыка {
@@ -219,6 +341,7 @@ fn играй(м: &М, i: usize) {
     м.окно.set_title(&format!("{} — Музыка", название(&путь)));
     м.пп.set_label("⏸");
     нарисуй_список(м);
+    mpris_обнови("Playing", &название(&путь), &м.подпись.text());
 }
 
 fn пауза(м: &М) {
@@ -350,11 +473,11 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     листание.add(&список);
     колонка.add(&листание);
 
-    let (плеер, вести) = match подними_mpv() {
-        Ok((п, в)) => (Some(п), Some(в)),
+    let (плеер, вести, готов) = match подними_mpv() {
+        Ok((п, в, г)) => (Some(п), Some(в), Some(г)),
         Err(е) => {
             подпись.set_text(&е);
-            (None, None)
+            (None, None, None)
         }
     };
     let м: М = Rc::new(Музыка {
@@ -442,6 +565,14 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         });
     }
 
+    if let Some(готов) = готов {
+        let м = м.clone();
+        glib::MainContext::default().spawn_local(async move {
+            if let (Ok(с), Some(п)) = (готов.recv().await, м.плеер.as_ref()) {
+                п.подключён(с);
+            }
+        });
+    }
     if let Some(вести) = вести {
         let м = м.clone();
         glib::MainContext::default().spawn_local(async move {
@@ -464,10 +595,32 @@ pub fn запусти(доводы: Vec<String>) -> ! {
                         if м.номер.get().is_some() {
                             м.играет.set(!пауза);
                             м.пп.set_label(if пауза { "▶" } else { "⏸" });
+                            mpris_обнови(if пауза { "Paused" } else { "Playing" }, &м.заголовок.text(), &м.подпись.text());
                         }
                     }
+                    (Some("нет-mpv"), _) => м.подпись.set_text("mpv не отозвался — играть нечем"),
                     // Трек доиграл сам — следующий; остановленный нами — нет
                     (Some("end-file"), _) if в["reason"].as_str() == Some("eof") => сосед(&м, 1),
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    // Просьбы с шины: клавиши мультимедиа, быстрые настройки
+    {
+        let м = м.clone();
+        let просьбы = mpris_служба();
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok(метод) = просьбы.recv().await {
+                match метод.as_str() {
+                    "PlayPause" => пауза(&м),
+                    "Play" if !м.играет.get() => пауза(&м),
+                    "Pause" | "Stop" if м.играет.get() => пауза(&м),
+                    "Next" => сосед(&м, 1),
+                    "Previous" => сосед(&м, -1),
+                    "Raise" => м.окно.present(),
+                    "Quit" => м.окно.close(),
                     _ => {}
                 }
             }

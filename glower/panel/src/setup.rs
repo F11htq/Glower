@@ -32,7 +32,7 @@ window.setup, window.setup * { color: rgba(255, 255, 255, 0.95); font-family: sa
 .setup .s-title { font-size: 26px; font-weight: 300; }
 .setup .s-sub { color: rgba(255, 255, 255, 0.65); font-size: 13px; }
 .setup .dots label { font-size: 9px; color: rgba(255, 255, 255, 0.25); }
-.setup .dots label.on { color: #6c9bff; }
+.setup .dots label.on { color: @glower_accent; }
 .setup .dots label.was { color: rgba(255, 255, 255, 0.6); }
 .setup button {
   background-image: none;
@@ -43,10 +43,10 @@ window.setup, window.setup * { color: rgba(255, 255, 255, 0.95); font-family: sa
   padding: 8px 16px;
 }
 .setup button:hover { background-color: rgba(255, 255, 255, 0.14); }
-.setup button.next { background-color: #3a6df0; font-weight: bold; padding: 8px 26px; }
-.setup button.next:hover { background-color: #4b7cff; }
+.setup button.next { background-color: @glower_accent; font-weight: bold; padding: 8px 26px; }
+.setup button.next:hover { background-color: @glower_accent; }
 .setup button.row { border-radius: 10px; padding: 8px 12px; }
-.setup button.row.on { background-color: rgba(58, 109, 240, 0.35); box-shadow: inset 0 0 0 1px #6c9bff; }
+.setup button.row.on { background-color: alpha(@glower_accent, 0.35); box-shadow: inset 0 0 0 1px @glower_accent; }
 .setup .code { font-weight: bold; color: rgba(255, 255, 255, 0.6); min-width: 34px; }
 .setup .hint { color: rgba(255, 255, 255, 0.5); font-size: 12px; }
 .setup .err { color: #ff8a8a; font-size: 12px; }
@@ -65,7 +65,7 @@ window.setup, window.setup * { color: rgba(255, 255, 255, 0.95); font-family: sa
 .setup button.wall { min-width: 120px; min-height: 72px; padding: 0; border-radius: 12px; }
 .setup button.wall.on { box-shadow: inset 0 0 0 3px white; }
 .setup button.big { min-width: 180px; padding: 16px; border-radius: 14px; }
-.setup button.big.on { background-color: rgba(58, 109, 240, 0.35); box-shadow: inset 0 0 0 1px #6c9bff; }
+.setup button.big.on { background-color: alpha(@glower_accent, 0.35); box-shadow: inset 0 0 0 1px @glower_accent; }
 .setup .glyph { font-size: 22px; }
 .setup list, .setup scrolledwindow, .setup viewport { background-color: transparent; }
 .setup list row { padding: 2px 0; background-color: transparent; }

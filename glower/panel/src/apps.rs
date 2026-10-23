@@ -10,45 +10,45 @@ use std::path::PathBuf;
 
 /// Вид программ — те же тёмные поверхности, что у окон системы на странице.
 const СТИЛЬ: &str = r#"
-window.glower-app { background-color: #161821; }
+window.glower-app { background-color: @glower_bg; }
 window.glower-app, window.glower-app * {
-  color: #e8eaf2;
+  color: @glower_fg;
   font-family: sans-serif;
   text-shadow: none;
   -gtk-icon-shadow: none;
 }
-.glower-app .toolbar { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
-.glower-app .findbar { padding: 6px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); background-color: #1b1e28; }
+.glower-app .toolbar { padding: 8px 10px; border-bottom: 1px solid alpha(@glower_fg, 0.07); }
+.glower-app .findbar { padding: 6px 10px; border-bottom: 1px solid alpha(@glower_fg, 0.07); background-color: @glower_bg3; }
 .glower-app button {
   background-image: none;
-  background-color: rgba(255, 255, 255, 0.07);
+  background-color: alpha(@glower_fg, 0.07);
   border: none;
   border-radius: 9px;
   box-shadow: none;
   padding: 5px 11px;
   min-height: 0;
 }
-.glower-app button:hover { background-color: rgba(255, 255, 255, 0.13); }
-.glower-app button.accent { background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); }
+.glower-app button:hover { background-color: alpha(@glower_fg, 0.13); }
+.glower-app button.accent { background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
 .glower-app button.tab-close { background: none; padding: 0 2px; }
 .glower-app entry {
-  background-color: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: alpha(@glower_fg, 0.06);
+  border: 1px solid alpha(@glower_fg, 0.12);
   border-radius: 9px;
   box-shadow: none;
   padding: 4px 9px;
   min-height: 0;
 }
-.glower-app entry:focus { border-color: rgba(120, 150, 255, 0.8); }
+.glower-app entry:focus { border-color: alpha(@glower_accent, 0.8); }
 .glower-app .muted { opacity: 0.6; }
-.glower-app textview, .glower-app textview text { background-color: #12141b; }
-.glower-app .statusbar { padding: 4px 12px; font-size: 12px; opacity: 0.65; border-top: 1px solid rgba(255, 255, 255, 0.07); }
-.glower-app notebook header { background-color: #161821; border: none; box-shadow: none; }
+.glower-app textview, .glower-app textview text { background-color: @glower_bg2; }
+.glower-app .statusbar { padding: 4px 12px; font-size: 12px; opacity: 0.65; border-top: 1px solid alpha(@glower_fg, 0.07); }
+.glower-app notebook header { background-color: @glower_bg; border: none; box-shadow: none; }
 .glower-app notebook tab { padding: 4px 10px; border: none; }
-.glower-app notebook tab:checked { background-color: #12141b; border-radius: 8px 8px 0 0; }
-.glower-app notebook stack { background-color: #12141b; }
-.glower-app switch { background-color: rgba(255, 255, 255, 0.15); border: none; }
-.glower-app switch:checked { background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); }
+.glower-app notebook tab:checked { background-color: @glower_bg2; border-radius: 8px 8px 0 0; }
+.glower-app notebook stack { background-color: @glower_bg2; }
+.glower-app switch { background-color: alpha(@glower_fg, 0.15); border: none; }
+.glower-app switch:checked { background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
 .glower-app switch slider { background-color: #ffffff; border: none; }
 "#;
 
@@ -61,9 +61,9 @@ pub fn подготовь(имя: &str, название: &str) {
         eprintln!("{имя}: нет экрана");
         std::process::exit(1);
     }
-    if let Some(н) = gtk::Settings::default() {
-        н.set_gtk_application_prefer_dark_theme(true);
-    }
+    crate::i18n::подключи();
+    // Тема и акцент — до своего стиля: в нём имена цветов, а не цвета
+    crate::theme::подключи();
     let стиль = gtk::CssProvider::new();
     стиль.load_from_data(СТИЛЬ.as_bytes()).expect("стиль программ");
     gtk::StyleContext::add_provider_for_screen(
@@ -90,4 +90,39 @@ pub fn папка_документов() -> PathBuf {
         }
     }
     дом
+}
+
+/// Данные программ — файлом в ~/.config/glower: календарь, будильники,
+/// дела. Их читает и рабочий стол (напоминания, виджеты), поэтому не в
+/// памяти программы, а на диске
+pub fn файл_данных(имя: &str) -> PathBuf {
+    glib::user_config_dir().join("glower").join(имя)
+}
+
+pub fn читай_данные(имя: &str) -> serde_json::Value {
+    std::fs::read_to_string(файл_данных(имя)).ok().and_then(|т| serde_json::from_str(&т).ok()).unwrap_or(serde_json::Value::Null)
+}
+
+/// Записать целиком: сперва во временный файл, потом подменой
+pub fn пиши_данные(имя: &str, что: &serde_json::Value) {
+    let путь = файл_данных(имя);
+    if let Some(р) = путь.parent() {
+        let _ = std::fs::create_dir_all(р);
+    }
+    let временный = путь.with_extension("new");
+    if std::fs::write(&временный, serde_json::to_vec_pretty(что).unwrap_or_default()).is_ok() {
+        let _ = std::fs::rename(&временный, &путь);
+    }
+}
+
+/// Папка «Изображения» системы
+pub fn папка_изображений() -> PathBuf {
+    let дом = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
+    let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| дом.join("GlowerOS"));
+    for п in [корень.join("Изображения"), дом.join("Изображения"), дом.join("Pictures")] {
+        if п.is_dir() {
+            return п;
+        }
+    }
+    корень.join("Изображения")
 }

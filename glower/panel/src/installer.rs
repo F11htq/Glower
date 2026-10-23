@@ -20,19 +20,19 @@ use std::time::Duration;
 
 const СТИЛЬ: &str = r#"
 .installer .body { padding: 34px 40px 10px 40px; }
-.installer .foot { padding: 14px 20px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.installer .foot { padding: 14px 20px; border-top: 1px solid alpha(@glower_fg, 0.07); }
 .installer .h1 { font-size: 26px; font-weight: 300; }
 .installer .h2 { font-size: 20px; font-weight: 300; }
 .installer .lead { opacity: 0.8; }
-.installer .note { background-color: rgba(91, 140, 255, 0.12); border-radius: 10px; padding: 10px 14px; }
+.installer .note { background-color: alpha(@glower_accent, 0.12); border-radius: 10px; padding: 10px 14px; }
 .installer .warn { background-color: rgba(255, 90, 90, 0.14); border-radius: 10px; padding: 10px 14px; color: #ffb4b4; }
 .installer button.disk { padding: 12px 14px; border-radius: 12px; }
-.installer button.disk.on { background-color: rgba(91, 140, 255, 0.30); box-shadow: inset 0 0 0 1px #6c9bff; }
+.installer button.disk.on { background-color: alpha(@glower_accent, 0.30); box-shadow: inset 0 0 0 1px @glower_accent; }
 .installer .big { font-size: 26px; }
 .installer button:disabled { opacity: 0.4; }
 .installer .sum-k { opacity: 0.6; }
-.installer progressbar trough { min-height: 10px; border-radius: 5px; background-color: rgba(255, 255, 255, 0.08); }
-.installer progressbar progress { min-height: 10px; border-radius: 5px; background-image: linear-gradient(90deg, #5b8cff, #8b5cf6); }
+.installer progressbar trough { min-height: 10px; border-radius: 5px; background-color: alpha(@glower_fg, 0.08); }
+.installer progressbar progress { min-height: 10px; border-radius: 5px; background-image: linear-gradient(90deg, @glower_accent, @glower_accent2); }
 .installer textview, .installer textview text { background-color: #0f1117; font-family: monospace; font-size: 11px; }
 "#;
 
