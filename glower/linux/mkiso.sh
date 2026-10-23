@@ -191,11 +191,27 @@ Acquire::http::Timeout "30";
 Acquire::https::Timeout "30";
 Acquire::Retries "5";
 APTCONF
+# И запрет запускать службы. Скрипты пакетов (cups, avahi, bluez и другие)
+# при установке зовут invoke-rc.d, а в chroot без этого файла он честно
+# поднимает настоящий демон. Демон наследует вывод установки, труба не
+# закрывается, и сборка молчит до отмены — так стояли v11.32 и v11.33.
+# Файл убираем перед сжатием вместе с настройками apt.
+printf '#!/bin/sh\nexit 101\n' > "$ROOTFS/usr/sbin/policy-rc.d"
+chmod 755 "$ROOTFS/usr/sbin/policy-rc.d"
+
+# Сторож: если шаг затянулся, раз в пять минут показываем, что сейчас
+# делают apt и dpkg, — чтобы журнал отвечал, где именно стоим.
+( while sleep 300; do
+    echo "  … всё ещё идёт установка; сейчас работают:"
+    ps -eo etime=,args= | grep -E 'apt|dpkg|postinst|preinst|\.config|frontend|update-' \
+      | grep -v grep | cut -c1-160 | head -15 | sed 's/^/    /'
+  done ) &
+STOROZH=$!
 
 mount --bind /dev "$ROOTFS/dev" 2>/dev/null || true
 mount -t proc proc "$ROOTFS/proc" 2>/dev/null || true
 mount -t sysfs sys "$ROOTFS/sys" 2>/dev/null || true
-cleanup(){ umount -l "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys" 2>/dev/null || true; }
+cleanup(){ kill "$STOROZH" 2>/dev/null || true; umount -l "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys" 2>/dev/null || true; }
 trap cleanup EXIT
 
 # Ставим строго то, что перечислено: рекомендации тянут за собой половину
@@ -257,7 +273,10 @@ for try in 1 2 3; do
   [ "$try" = 3 ] && exit 1
   sleep 15
 done
-apt-get install -y --no-install-recommends \
+# Вывод не прячем за tail: если что-то встанет, последняя строка журнала
+# скажет, на каком пакете. Вход — /dev/null, чтобы скрипт пакета не съел
+# остаток этого сценария, и общий срок — сорок минут (обычно хватает пяти).
+timeout 2400 apt-get install -y --no-install-recommends -o Dpkg::Progress-Fancy=0 \
   systemd systemd-sysv dbus ca-certificates \
   linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
   linux-firmware \
@@ -297,7 +316,8 @@ apt-get install -y --no-install-recommends \
   xwayland qtwayland5 qt6-wayland libxcb-cursor0 \
   libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 \
   grim slurp maim xclip sound-theme-freedesktop \
-  2>&1 | tail -2
+  </dev/null 2>&1 | grep -E '^(Setting up|Unpacking|Get:|E:|W:|dpkg)' | cut -c1-120 || true
+test -x /usr/bin/labwc || { echo "основные пакеты не установились" >&2; exit 1; }
 
 # Необязательные программы ставим отдельно и поштучно. Причина простая и
 # дорого выученная: apt при одном ненайденном имени отменяет установку
@@ -1041,6 +1061,7 @@ chroot "$ROOTFS" systemctl set-default graphical.target >/dev/null 2>&1 || true
 # сборки стояла в чужом облаке, и её зеркало человеку за компьютером не
 # ближе и не быстрее прочих.
 rm -f "$ROOTFS/etc/apt/apt.conf.d/80glower-build"
+rm -f "$ROOTFS/usr/sbin/policy-rc.d"
 cat > "$ROOTFS/etc/apt/sources.list" <<EOF
 deb $MIRROR_OUT $SUITE main universe restricted multiverse
 deb $MIRROR_OUT $SUITE-updates main universe restricted multiverse
