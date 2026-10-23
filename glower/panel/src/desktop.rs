@@ -297,6 +297,38 @@ fn в_виджетах(x: f64, y: f64) -> bool {
     x >= а.x() as f64 && x <= (а.x() + а.width()) as f64 && y >= а.y() as f64 && y <= (а.y() + а.height()) as f64
 }
 
+/// Который по счёту виджет под курсором
+fn виджет_под(x: f64, y: f64) -> Option<usize> {
+    let с = стол()?;
+    let с = с.borrow();
+    с.виджеты.children().iter().position(|в| {
+        let а = в.allocation();
+        x >= а.x() as f64 && x <= (а.x() + а.width()) as f64 && y >= а.y() as f64 && y <= (а.y() + а.height()) as f64
+    })
+}
+
+/// Меню над виджетом. Раньше его не было вовсе: виджет, однажды
+/// добавленный, со стола было не убрать ничем, кроме правки настроек руками
+fn меню_виджета(е: &gtk::gdk::EventButton, номер: Option<usize>) {
+    let меню = gtk::Menu::new();
+    if let Some(н) = номер {
+        пункт(&меню, "Убрать виджет", move || убери_виджет(н));
+    }
+    пункт(&меню, "Скрыть все виджеты", || core::задай("showDeskWidgets", json!(false)));
+    меню.show_all();
+    let событие: &gtk::gdk::Event = е;
+    меню.popup_at_pointer(Some(событие));
+}
+
+/// Убрать н-й из показанных виджетов. Показаны только записи с полем «t»,
+/// поэтому и считаем только их — иначе ушёл бы соседний
+fn убери_виджет(н: usize) {
+    let mut список: Vec<Value> = core::настройка("deskWidgets").as_array().cloned().unwrap_or_default();
+    let Some(где) = список.iter().enumerate().filter(|(_, в)| в["t"].is_string()).map(|(i, _)| i).nth(н) else { return };
+    список.remove(где);
+    core::задай("deskWidgets", Value::Array(список));
+}
+
 fn данные_значка(имя: &str) -> Option<Value> {
     let с = стол()?;
     let с = с.borrow();
@@ -309,6 +341,9 @@ fn нажатие(е: &gtk::gdk::EventButton) {
         eprintln!("glower-panel: стол: нажатие {} в {x:.0},{y:.0}", е.button());
     }
     if в_виджетах(x, y) {
+        if е.button() == 3 && е.event_type() == gtk::gdk::EventType::ButtonPress {
+            меню_виджета(е, виджет_под(x, y));
+        }
         return;
     }
     let Some(с) = стол() else { return };
@@ -669,6 +704,14 @@ fn меню_стола(е: &gtk::gdk::EventButton) {
     let добавить = gtk::MenuItem::with_label("Добавить виджет");
     добавить.set_submenu(Some(&виджеты));
     меню.append(&добавить);
+    let есть = core::настройка("deskWidgets").as_array().is_some_and(|с| с.iter().any(|в| в["t"].is_string()));
+    if есть {
+        if core::настройка("showDeskWidgets").as_bool() == Some(false) {
+            пункт(&меню, "Показать виджеты", || core::задай("showDeskWidgets", json!(true)));
+        } else {
+            пункт(&меню, "Скрыть виджеты", || core::задай("showDeskWidgets", json!(false)));
+        }
+    }
     черта(&меню);
     пункт(&меню, "Сменить обои…", || {
         core::открой_параметры("person");

@@ -54,10 +54,18 @@ pub fn позови<F>(метод: &str, доводы: Value, дело: F)
 where
     F: FnOnce(Result<Value, String>) + 'static,
 {
+    позови_за(метод, доводы, 10, дело);
+}
+
+/// То же, но со своим сроком ответа — для вызовов, которые сами ходят в сеть.
+pub fn позови_за<F>(метод: &str, доводы: Value, срок: u64, дело: F)
+where
+    F: FnOnce(Result<Value, String>) + 'static,
+{
     let (куда, откуда) = async_channel::bounded(1);
     let метод = метод.to_string();
     std::thread::spawn(move || {
-        let _ = куда.send_blocking(зов(&метод, доводы, 10));
+        let _ = куда.send_blocking(зов(&метод, доводы, срок));
     });
     glib::MainContext::default().spawn_local(async move {
         if let Ok(ответ) = откуда.recv().await {
