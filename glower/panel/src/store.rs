@@ -96,6 +96,8 @@ struct Окно {
     ход_текст: gtk::Label,
     ход_полоса: gtk::ProgressBar,
     витрина: Cell<usize>,
+    /// Есть ли интернет: None — ещё проверяем
+    сеть: Cell<Option<bool>>,
 }
 
 type П = Rc<Окно>;
@@ -546,11 +548,104 @@ fn убери(п: &П, имя: String, источник: String, названи�
 
 /* ---------- экраны ---------- */
 
+/// Есть ли выход в сеть: достучаться до Flathub или архива Ubuntu. Только
+/// из рабочего потока — имя ищется и соединение ждёт
+fn есть_сеть() -> bool {
+    use std::net::{TcpStream, ToSocketAddrs};
+    ["dl.flathub.org:443", "archive.ubuntu.com:80", "1.1.1.1:443"].iter().any(|адрес| {
+        адрес.to_socket_addrs().ok().and_then(|mut а| а.next()).is_some_and(|а| TcpStream::connect_timeout(&а, Duration::from_secs(4)).is_ok())
+    })
+}
+
+/// Проверить сеть и перерисовать, если ответ изменился
+fn проверь_сеть(п: &П) {
+    let (куда, откуда) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let _ = куда.send_blocking(есть_сеть());
+    });
+    let п2 = Rc::downgrade(п);
+    glib::MainContext::default().spawn_local(async move {
+        let Ok(есть) = откуда.recv().await else { return };
+        let Some(п) = п2.upgrade() else { return };
+        if п.сеть.replace(Some(есть)) != Some(есть) {
+            рисуй(&п);
+        }
+    });
+}
+
+/// Без сети Магазину показать нечего: подборка — это лишь названия, а
+/// поставить ни одну программу не выйдет. Раньше здесь всё равно рисовались
+/// карточки, и человек жал на них впустую. Теперь — честный экран, а сеть
+/// проверяется снова каждые пять секунд: появилась — витрина вернётся сама
+fn без_сети(п: &П) {
+    let к = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    к.set_valign(gtk::Align::Center);
+    к.set_halign(gtk::Align::Center);
+    к.set_vexpand(true);
+    к.set_margin_top(90);
+    let знак = ярлык("📡", "h");
+    знак.style_context().add_class("ico-big");
+    знак.set_xalign(0.5);
+    к.add(&знак);
+    let з = ярлык("Нет подключения к интернету", "h");
+    з.set_xalign(0.5);
+    к.add(&з);
+    let т = ярлык("Магазину нужна сеть, чтобы показывать и устанавливать программы. Подключитесь к Wi-Fi или кабелю — витрина появится сама.", "note");
+    т.set_xalign(0.5);
+    т.set_justify(gtk::Justification::Center);
+    т.set_line_wrap(true);
+    т.set_max_width_chars(60);
+    к.add(&т);
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    ряд.set_halign(gtk::Align::Center);
+    let снова = gtk::Button::with_label("Повторить");
+    снова.style_context().add_class("big");
+    let п2 = п.clone();
+    снова.connect_clicked(move |_| проверь_сеть(&п2));
+    ряд.add(&снова);
+    let сеть = gtk::Button::with_label("Настройки сети");
+    сеть.style_context().add_class("big");
+    сеть.connect_clicked(|_| crate::core::открой_параметры("net"));
+    ряд.add(&сеть);
+    let моё = gtk::Button::with_label("Мои программы");
+    моё.style_context().add_class("big");
+    let п2 = п.clone();
+    моё.connect_clicked(move |_| иди(&п2, Экран::Моё));
+    ряд.add(&моё);
+    к.add(&ряд);
+    п.тело.add(&к);
+    let (п2, поколение) = (Rc::downgrade(п), п.поколение.get());
+    glib::timeout_add_local(Duration::from_secs(5), move || {
+        let Some(п) = п2.upgrade() else { return glib::ControlFlow::Break };
+        if п.поколение.get() != поколение {
+            return glib::ControlFlow::Break;
+        }
+        проверь_сеть(&п);
+        glib::ControlFlow::Continue
+    });
+}
+
+fn ждём_сеть(п: &П) {
+    let к = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    к.set_halign(gtk::Align::Center);
+    к.set_margin_top(160);
+    let к_ = gtk::Spinner::new();
+    к_.start();
+    к.add(&к_);
+    к.add(&ярлык("Проверяю подключение…", "note"));
+    п.тело.add(&к);
+}
+
 fn рисуй(п: &П) {
     п.поколение.set(п.поколение.get() + 1);
     очисти(&п.тело);
     let экран = п.экран.borrow().clone();
-    match &экран {
+    // Своё на машине видно и без сети; остальное — только из сети
+    let нужна_сеть = !matches!(экран, Экран::Моё);
+    match п.сеть.get() {
+        Some(false) if нужна_сеть => без_сети(п),
+        None if нужна_сеть => ждём_сеть(п),
+        _ => match &экран {
         Экран::Обзор => обзор(п),
         Экран::Разделы => разделы(п),
         Экран::Раздел(id) => раздел(п, id),
@@ -558,6 +653,7 @@ fn рисуй(п: &П) {
         Экран::Поиск(что) => поиск(п, что),
         Экран::Обновления => обновления(п),
         Экран::Моё => моё(п),
+        },
     }
     п.окно.set_title(&match &экран {
         Экран::Программа(прога) => format!("{} — Магазин", прога.имя),
@@ -1249,6 +1345,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         ход_текст,
         ход_полоса,
         витрина: Cell::new(0),
+        сеть: Cell::new(None),
     });
 
     {
@@ -1318,6 +1415,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.show_all();
     п.ход.set_reveal_child(false);
     рисуй(&п);
+    проверь_сеть(&п);
     gtk::main();
     std::process::exit(0);
 }

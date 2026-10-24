@@ -36,6 +36,72 @@ thread_local! {
     static МЕНЮ: RefCell<Option<Rc<RefCell<Меню>>>> = const { RefCell::new(None) };
     static СПИСОК: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
     static ДАННЫЕ: RefCell<Value> = const { RefCell::new(Value::Null) };
+    /// Насколько меню проявилось: 0 — нет, 1 — целиком. Фон и содержимое
+    /// рисуются с этой долей, пока идёт появление или уход
+    static ПОКАЗ: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+    /// Куда идёт показ: true — появляется, false — уходит. Нажали снова
+    /// посреди анимации — она просто разворачивается с того же места
+    static КУДА: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static ИДЁТ: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Длительности: появление чуть дольше ухода — так меню кажется лёгким
+const ПОЯВЛЕНИЕ_МС: f64 = 200.0;
+const УХОД_МС: f64 = 140.0;
+/// На сколько точек сетка съезжает сверху, пока проявляется
+const СДВИГ: f64 = 26.0;
+
+fn плавно(t: f64) -> f64 {
+    1.0 - (1.0 - t).powi(3)
+}
+
+/// Применить долю показа: прозрачность содержимого, сдвиг и фон
+fn примени_показ(м: &Меню, п: f64) {
+    if let Some(колонка) = м.окно.child().and_then(|ф| ф.downcast::<gtk::Bin>().ok()).and_then(|ф| ф.child()) {
+        колонка.set_opacity(п);
+        колонка.set_margin_top(52 + (СДВИГ * (1.0 - плавно(п))) as i32);
+    }
+    м.окно.queue_draw();
+}
+
+/// Повести показ к открытому или закрытому виду
+fn веди_показ(м: &Rc<RefCell<Меню>>, открыть: bool) {
+    КУДА.with(|к| к.set(открыть));
+    if std::env::var_os("GLOWER_WM_NO_ANIM").is_some() {
+        ПОКАЗ.with(|п| п.set(if открыть { 1.0 } else { 0.0 }));
+        примени_показ(&м.borrow(), if открыть { 1.0 } else { 0.0 });
+        if !открыть {
+            м.borrow().окно.hide();
+        }
+        return;
+    }
+    if ИДЁТ.with(|и| и.replace(true)) {
+        return;
+    }
+    let окно = м.borrow().окно.clone();
+    let м = м.clone();
+    let прошлое = Rc::new(std::cell::Cell::new(0i64));
+    окно.add_tick_callback(move |_, часы| {
+        let сейчас = часы.frame_time();
+        let было = прошлое.replace(сейчас);
+        let шаг = if было == 0 { 16.0 } else { ((сейчас - было) as f64 / 1000.0).clamp(1.0, 50.0) };
+        let открыть = КУДА.with(|к| к.get());
+        let п = ПОКАЗ.with(|п| {
+            let н = if открыть { (п.get() + шаг / ПОЯВЛЕНИЕ_МС).min(1.0) } else { (п.get() - шаг / УХОД_МС).max(0.0) };
+            п.set(н);
+            н
+        });
+        примени_показ(&м.borrow(), п);
+        let конец = (открыть && п >= 1.0) || (!открыть && п <= 0.0);
+        if конец {
+            ИДЁТ.with(|и| и.set(false));
+            if !открыть {
+                м.borrow().окно.hide();
+            }
+            return glib::ControlFlow::Break;
+        }
+        glib::ControlFlow::Continue
+    });
 }
 
 /// Стол рассказал о своих программах.
@@ -63,13 +129,16 @@ fn меню_если_есть() -> Option<Rc<RefCell<Меню>>> {
     МЕНЮ.with(|м| м.borrow().clone())
 }
 
+/// Открыто — и не уходит: уходящее меню второе нажатие должно вернуть
 pub fn открыто() -> bool {
-    меню_если_есть().is_some_and(|м| м.borrow().окно.is_visible())
+    меню_если_есть().is_some_and(|м| м.borrow().окно.is_visible()) && КУДА.with(|к| к.get())
 }
 
 pub fn закрой() {
     if let Some(м) = меню_если_есть() {
-        м.borrow().окно.hide();
+        if м.borrow().окно.is_visible() {
+            веди_показ(&м, false);
+        }
     }
 }
 
@@ -103,7 +172,13 @@ pub fn переключи(что: &Value) {
     // Свежее о столах и окнах — у стола: ответ придёт следом и дорисует
     скажи("обзор-дай", json!(true));
     let окно = м.borrow().окно.clone();
+    let уже_видно = окно.is_visible();
+    if !уже_видно {
+        ПОКАЗ.with(|п| п.set(0.0));
+        примени_показ(&м.borrow(), 0.0);
+    }
     окно.show_all();
+    веди_показ(&м, true);
     let м_ = м.borrow();
     м_.поиск.set_visible(!задачи);
     м_.окна.set_visible(!задачи);
@@ -147,9 +222,12 @@ fn создай() -> Rc<RefCell<Меню>> {
     // Фон заливаем сами. Окно объявлено самоотрисовываемым (иначе нет
     // прозрачности), и GTK его фон не рисует вовсе: меню выходило
     // совсем прозрачным, и значки терялись на пёстрых обоях
-    окно.connect_draw(|_, к| {
+    // Под glower-wm фон за меню размыт, и плотная заливка его бы спрятала —
+    // поэтому там она прозрачнее. Доля показа — от анимации появления
+    let плотность = if std::env::var_os("GLOWER_WM_BLUR").is_some() { 0.55 } else { 0.86 };
+    окно.connect_draw(move |_, к| {
         к.set_operator(gtk::cairo::Operator::Source);
-        к.set_source_rgba(0.04, 0.047, 0.08, 0.86);
+        к.set_source_rgba(0.04, 0.047, 0.08, плотность * ПОКАЗ.with(|п| п.get()));
         let _ = к.paint();
         glib::Propagation::Proceed
     });

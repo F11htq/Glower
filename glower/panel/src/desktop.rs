@@ -51,6 +51,8 @@ struct Стол {
     слепок: String,
     обои_css: String,
     стиль_обоев: Option<gtk::CssProvider>,
+    /// Обои, уже нарисованные в картинку размером с окно
+    кэш_обоев: Option<(i32, i32, gtk::cairo::ImageSurface)>,
     жест: Жест,
     виджеты: gtk::Box,
     слепок_виджетов: String,
@@ -132,6 +134,51 @@ fn картинка_в_файл(адрес: &str) -> Option<String> {
     Some(путь)
 }
 
+/// Размер экрана в настоящих точках — под него готовим картинку обоев
+fn размер_экрана() -> (i32, i32) {
+    let Some(дисплей) = gtk::gdk::Display::default() else { return (1920, 1080) };
+    let Some(м) = дисплей.monitor(0) else { return (1920, 1080) };
+    let г = м.geometry();
+    let к = м.scale_factor().max(1);
+    ((г.width() * к).max(1), (г.height() * к).max(1))
+}
+
+/// Обои заранее ужимаем ровно под экран. GTK рисует «cover» сам, но делает
+/// это на каждой перерисовке: фото 4000×3000 пересчитывается целиком на
+/// каждый шаг мыши, и рамка выделения на столе тормозила. Картинка размером
+/// с экран рисуется один к одному — это просто копирование.
+fn подгони_под_экран(путь: &str, (ш, в): (i32, i32)) -> Option<String> {
+    use std::hash::{Hash, Hasher};
+    let мета = std::fs::metadata(путь).ok()?;
+    let mut х = std::collections::hash_map::DefaultHasher::new();
+    (путь, мета.len(), мета.modified().ok(), ш, в).hash(&mut х);
+    let папка = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
+    let куда = format!("{папка}/glower-oboi-{:016x}.jpg", х.finish());
+    if std::path::Path::new(&куда).exists() {
+        return Some(куда);
+    }
+    let к = gtk::gdk_pixbuf::Pixbuf::from_file(путь).ok()?;
+    let (иш, ив) = (к.width() as f64, к.height() as f64);
+    if иш < 1.0 || ив < 1.0 {
+        return None;
+    }
+    let м = (ш as f64 / иш).max(в as f64 / ив);
+    let (нш, нв) = (((иш * м).ceil() as i32).max(ш), ((ив * м).ceil() as i32).max(в));
+    let большая = к.scale_simple(нш, нв, gtk::gdk_pixbuf::InterpType::Bilinear)?;
+    let кусок = большая.new_subpixbuf((нш - ш) / 2, (нв - в) / 2, ш, в);
+    кусок.savev(&куда, "jpeg", &[("quality", "92")]).ok()?;
+    // Прежние подогнанные копии больше не нужны
+    if let Ok(список) = std::fs::read_dir(&папка) {
+        for ф in список.flatten() {
+            let имя = ф.file_name().to_string_lossy().to_string();
+            if имя.starts_with("glower-oboi-") && ф.path().to_string_lossy() != куда {
+                let _ = std::fs::remove_file(ф.path());
+            }
+        }
+    }
+    Some(куда)
+}
+
 fn поставь_обои(css: &str) {
     let Some(с) = стол() else { return };
     if с.borrow().обои_css == css {
@@ -142,9 +189,11 @@ fn поставь_обои(css: &str) {
     // Картинка: url(...) — из сети агента или прямо в строке
     let адрес = css.trim().strip_prefix("url(").and_then(|х| х.strip_suffix(')')).map(|х| х.trim_matches(|c| c == '"' || c == '\'').to_string());
     if let Some(адрес) = адрес {
+        let экран = размер_экрана();
         let (куда, откуда) = async_channel::bounded(1);
         std::thread::spawn(move || {
-            let _ = куда.send_blocking(картинка_в_файл(&адрес));
+            let путь = картинка_в_файл(&адрес);
+            let _ = куда.send_blocking(путь.map(|п| подгони_под_экран(&п, экран).unwrap_or(п)));
         });
         glib::MainContext::default().spawn_local(async move {
             if let Ok(Some(путь)) = откуда.recv().await {
@@ -174,6 +223,8 @@ fn примени_стиль(css: &str) {
     }
     контекст.add_provider(&новый, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 2);
     с.стиль_обоев = Some(новый);
+    с.кэш_обоев = None;
+    с.обои.queue_draw();
 }
 
 // ------------------------------------------------------------- поверхность
@@ -198,6 +249,38 @@ pub fn создай() {
             | gtk::gdk::EventMask::BUTTON_MOTION_MASK
             | gtk::gdk::EventMask::KEY_PRESS_MASK,
     );
+
+    // Обои рисуем сами, из готовой картинки. Фон стола — градиент в
+    // несколько слоёв или фото — GTK пересчитывал на каждую перерисовку, и
+    // рамка выделения, перерисовывая экран на каждый шаг мыши, тормозила.
+    // Теперь фон считается один раз (и заново — при смене обоев или
+    // размера), а дальше только копируется
+    окно.set_app_paintable(true);
+    окно.connect_draw(|о, к| {
+        let (ш, в) = (о.allocated_width(), о.allocated_height());
+        let Some(с) = стол() else { return glib::Propagation::Proceed };
+        let Ok(mut с) = с.try_borrow_mut() else { return glib::Propagation::Proceed };
+        let годен = с.кэш_обоев.as_ref().is_some_and(|(кш, кв, _)| *кш == ш && *кв == в);
+        if !годен {
+            с.кэш_обоев = None;
+            // На экране с увеличением — в настоящих точках, иначе обои мылятся
+            let м = о.scale_factor().max(1);
+            if let Ok(картинка) = gtk::cairo::ImageSurface::create(gtk::cairo::Format::Rgb24, ш.max(1) * м, в.max(1) * м) {
+                картинка.set_device_scale(м as f64, м as f64);
+                if let Ok(ик) = gtk::cairo::Context::new(&картинка) {
+                    gtk::render_background(&о.style_context(), &ик, 0.0, 0.0, ш as f64, в as f64);
+                }
+                картинка.flush();
+                с.кэш_обоев = Some((ш, в, картинка));
+            }
+        }
+        if let Some((_, _, картинка)) = с.кэш_обоев.as_ref() {
+            if к.set_source_surface(картинка, 0.0, 0.0).is_ok() {
+                let _ = к.paint();
+            }
+        }
+        glib::Propagation::Proceed
+    });
 
     let поле = gtk::Fixed::new();
     // Рамку выделения рисуем под значками, прямо на поле
@@ -258,6 +341,7 @@ pub fn создай() {
         слепок: String::new(),
         обои_css: String::new(),
         стиль_обоев: None,
+        кэш_обоев: None,
         жест: Жест::Нет,
         виджеты,
         слепок_виджетов: String::new(),
@@ -430,9 +514,15 @@ fn движение((x, y): (f64, f64)) {
             }
         }
         Жест::Рамка { x0, y0, x1, y1 } => {
+            // Перерисовываем только то, где рамка была и где стала, а не весь
+            // экран с обоями на каждый шаг мыши
+            let (бx, бy) = (*x1, *y1);
             *x1 = x;
             *y1 = y;
             let (лево, верх, право, низ) = (x0.min(x), y0.min(y), x0.max(x), y0.max(y));
+            let (зл, зв) = (лево.min(x0.min(бx)), верх.min(y0.min(бy)));
+            let (зп, зн) = (право.max(x0.max(бx)), низ.max(y0.max(бy)));
+            let область = ((зл - 2.0) as i32, (зв - 2.0) as i32, (зп - зл + 5.0) as i32, (зн - зв + 5.0) as i32);
             let выбранные: Vec<String> = с_
                 .значки
                 .iter()
@@ -442,9 +532,12 @@ fn движение((x, y): (f64, f64)) {
                 })
                 .map(|з| з.имя.clone())
                 .collect();
+            let тот_же = выбранные == с_.выбор;
             drop(с_);
-            поле.queue_draw();
-            выдели(выбранные);
+            поле.queue_draw_area(область.0, область.1, область.2, область.3);
+            if !тот_же {
+                выдели(выбранные);
+            }
         }
         Жест::Нет => {}
     }
