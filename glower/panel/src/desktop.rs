@@ -387,6 +387,27 @@ fn виджет_под(x: f64, y: f64) -> Option<usize> {
     })
 }
 
+/// Куда ведёт виджет: погода — на страницу с прогнозом для своего города,
+/// остальные — в свою программу. Заметку пишут прямо на столе, ей некуда
+fn открой_виджет(t: &str) {
+    match t {
+        "weather" => {
+            let город = core::погода()["город"].as_str().map(String::from)
+                .or_else(|| core::настройка("city").as_str().map(String::from))
+                .unwrap_or_else(|| "Москва".into());
+            let адрес = format!("https://www.google.com/search?q={}", glib::Uri::escape_string(&format!("погода {город}"), None, false));
+            if gio::AppInfo::launch_default_for_uri(&адрес, None::<&gio::AppLaunchContext>).is_err() {
+                core::запусти("browser", "приложение");
+            }
+        }
+        "clock" => core::запусти("clock", "приложение"),
+        "calendar" => core::запусти("calendar", "приложение"),
+        "todo" => core::запусти("todo", "приложение"),
+        "system" => core::запусти("taskmgr", "приложение"),
+        _ => {}
+    }
+}
+
 /// Записи показанных виджетов: только с полем «t», как и при показе
 fn записи_виджетов() -> (Vec<Value>, Vec<usize>) {
     let список: Vec<Value> = core::настройка("deskWidgets").as_array().cloned().unwrap_or_default();
@@ -616,6 +637,13 @@ fn отпускание() {
             core::задай("iconPos", Value::Object(места));
         }
         Жест::Рамка { .. } => с.borrow().поле.queue_draw(),
+        // Щёлкнули, не сдвинув, — открыть то, что за виджетом стоит
+        Жест::Виджет { номер, сдвинули: false, .. } => {
+            let (список, где) = записи_виджетов();
+            if let Some(t) = где.get(номер).and_then(|&i| список[i]["t"].as_str()) {
+                открой_виджет(t);
+            }
+        }
         Жест::Виджет { номер, сдвинули: true, .. } => {
             let место = {
                 let с_ = с.borrow();
@@ -866,16 +894,19 @@ fn меню_стола(е: &gtk::gdk::EventButton) {
     let добавить = gtk::MenuItem::with_label("Добавить виджет");
     добавить.set_submenu(Some(&виджеты));
     меню.append(&добавить);
+    // «Вид» — как в Windows: галочками, что показывать на столе
+    let вид = gtk::Menu::new();
+    for (ключ, текст) in [("showDesktopIcons", "Показывать значки рабочего стола"), ("showDeskWidgets", "Показывать виджеты")] {
+        let п = gtk::CheckMenuItem::with_label(текст);
+        п.set_active(core::настройка(ключ).as_bool() != Some(false));
+        п.connect_toggled(move |п| core::задай(ключ, json!(п.is_active())));
+        вид.append(&п);
+    }
+    let пункт_вид = gtk::MenuItem::with_label("Вид");
+    пункт_вид.set_submenu(Some(&вид));
+    меню.append(&пункт_вид);
     if core::настройка("deskThisPC").as_bool() == Some(false) {
         пункт(&меню, "Показать «Этот компьютер»", || core::задай("deskThisPC", json!(true)));
-    }
-    let есть = core::настройка("deskWidgets").as_array().is_some_and(|с| с.iter().any(|в| в["t"].is_string()));
-    if есть {
-        if core::настройка("showDeskWidgets").as_bool() == Some(false) {
-            пункт(&меню, "Показать виджеты", || core::задай("showDeskWidgets", json!(true)));
-        } else {
-            пункт(&меню, "Скрыть виджеты", || core::задай("showDeskWidgets", json!(false)));
-        }
     }
     черта(&меню);
     пункт(&меню, "Сменить обои…", || {
