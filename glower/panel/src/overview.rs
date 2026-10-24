@@ -226,6 +226,8 @@ fn создай() -> Rc<RefCell<Меню>> {
     // поэтому там она прозрачнее. Доля показа — от анимации появления
     let плотность = if std::env::var_os("GLOWER_WM_BLUR").is_some() { 0.55 } else { 0.86 };
     окно.connect_draw(move |_, к| {
+        // Прозрачность выключена в «Персонализации» — фон плотный
+        let плотность = if crate::theme::прозрачно() { плотность } else { 0.97 };
         к.set_operator(gtk::cairo::Operator::Source);
         к.set_source_rgba(0.04, 0.047, 0.08, плотность * ПОКАЗ.with(|п| п.get()));
         let _ = к.paint();

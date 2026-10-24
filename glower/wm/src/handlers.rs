@@ -264,10 +264,18 @@ impl XdgShellHandler for Glower {
                 self.разверни(&о);
             }
         } else {
-            // Ещё не показано: просто запомним, что хочет во весь рабочий экран
+            // Ещё не показано: сразу даём размер рабочей области, чтобы
+            // первый же кадр был нужного размера
+            let область = self.главный_экран().map(|э| self.рабочая_область(&э));
             surface.with_pending_state(|с| {
                 с.states.set(xdg_toplevel::State::Maximized);
+                if let Some(о) = область {
+                    с.size = Some(о.size);
+                }
             });
+            if surface.is_initial_configure_sent() {
+                surface.send_pending_configure();
+            }
         }
     }
 
@@ -286,9 +294,17 @@ impl XdgShellHandler for Glower {
                 return;
             }
         }
+        // Ещё не показано: размер экрана сразу, место — при первом кадре
+        let экран = self.главный_экран().and_then(|э| self.space.output_geometry(&э));
         surface.with_pending_state(|с| {
             с.states.set(xdg_toplevel::State::Fullscreen);
+            if let Some(г) = экран {
+                с.size = Some(г.size);
+            }
         });
+        if surface.is_initial_configure_sent() {
+            surface.send_pending_configure();
+        }
     }
 
     fn unfullscreen_request(&mut self, surface: ToplevelSurface) {

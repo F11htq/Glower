@@ -409,16 +409,40 @@ impl Glower {
         let ступень = (self.space.elements().count() as i32 % 6) * 28;
         let x = область.loc.x + ((область.size.w - размер.w) / 2).max(0) + ступень - 70;
         let y = область.loc.y + ((область.size.h - размер.h) / 3).max(0) + ступень - 42;
-        let место = Point::from((x.max(область.loc.x), y.max(область.loc.y)));
+        // Программа могла попросить «во весь экран» или «развернуть» ещё до
+        // первого кадра — так делает установщик. Раньше эта просьба
+        // терялась, и окно вставало посередине обычным
+        let (весь, развёрнуто) = окно
+            .toplevel()
+            .map(|t| t.with_pending_state(|с| (с.states.contains(xdg_toplevel::State::Fullscreen), с.states.contains(xdg_toplevel::State::Maximized))))
+            .unwrap_or((false, false));
+        let экран_гео = self.space.output_geometry(&экран).unwrap_or(область);
+        let место = if весь {
+            экран_гео.loc
+        } else if развёрнуто {
+            область.loc
+        } else {
+            Point::from((x.max(область.loc.x), y.max(область.loc.y)))
+        };
+        let обычное = Rectangle::new(Point::from((x.max(область.loc.x), y.max(область.loc.y))), размер);
         self.окна.push(Запись {
             окно: окно.clone(),
             стол: self.стол,
             свёрнуто: false,
             место,
-            прежнее: None,
-            развёрнуто: false,
-            во_весь_экран: false,
+            прежнее: (весь || развёрнуто).then_some(обычное),
+            развёрнуто: развёрнуто && !весь,
+            во_весь_экран: весь,
         });
+        if весь || развёрнуто {
+            if let Some(t) = окно.toplevel() {
+                let нужно = if весь { экран_гео.size } else { область.size };
+                if t.with_pending_state(|с| с.size) != Some(нужно) {
+                    t.with_pending_state(|с| с.size = Some(нужно));
+                    t.send_pending_configure();
+                }
+            }
+        }
         self.space.map_element(окно.clone(), место, true);
         self.анимации.появилось(&окно);
         self.foreign_toplevel_state.новое(&self.display_handle, &окно);
@@ -742,6 +766,22 @@ impl Glower {
         None
     }
 
+    /// Верхнее окно во весь экран: тогда полоса панели (слой Top) уходит
+    /// под него — и в картинке, и для мыши. Слой Overlay (меню программ,
+    /// экран блокировки) остаётся сверху всегда
+    pub fn во_весь_экран_сверху(&self) -> bool {
+        self.space.elements().last().and_then(|о| self.запись(о)).is_some_and(|з| з.во_весь_экран && !з.свёрнуто)
+    }
+
+    /// Слои над окнами — с учётом окна во весь экран
+    pub fn слои_над_окнами(&self) -> &'static [WlrLayer] {
+        if self.во_весь_экран_сверху() {
+            &[WlrLayer::Overlay]
+        } else {
+            &[WlrLayer::Overlay, WlrLayer::Top]
+        }
+    }
+
     pub fn под_мышью(&self, точка: Point<f64, Logical>) -> Option<(Фокус, Point<f64, Logical>)> {
         if let Some(з) = self.замок.as_ref() {
             let экран = self.space.output_under(точка).next()?;
@@ -749,7 +789,7 @@ impl Glower {
             let (_, п) = з.поверхности.iter().find(|(о, _)| о == экран)?;
             return Some((Фокус::Wl(п.wl_surface().clone()), гео.loc.to_f64()));
         }
-        if let Some((ф, м, _)) = self.слой_под(точка, &[WlrLayer::Overlay, WlrLayer::Top]) {
+        if let Some((ф, м, _)) = self.слой_под(точка, self.слои_над_окнами()) {
             return Some((ф, м));
         }
         if let Some((окно, место)) = self.space.element_under(точка) {

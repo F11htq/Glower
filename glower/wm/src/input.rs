@@ -276,7 +276,7 @@ impl Glower {
         let где = self.мышь;
         if состояние == ButtonState::Pressed && !у.is_grabbed() && self.замок.is_none() && self.inhibitor_state.кто.is_none() {
             // Слои панели сверху — им и клавиатуру, если просят
-            if let Some((_, _, слой)) = self.слой_под(где, &[WlrLayer::Overlay, WlrLayer::Top]) {
+            if let Some((_, _, слой)) = self.слой_под(где, self.слои_над_окнами()) {
                 if слой.cached_state().keyboard_interactivity != KeyboardInteractivity::None {
                     self.фокус_слою(&слой);
                 }

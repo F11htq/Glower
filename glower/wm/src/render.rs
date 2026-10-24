@@ -101,7 +101,19 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
     let mut низ: Vec<Элемент> = vec![];
     let mut слои_верх: Vec<(Элемент, Option<(smithay::reexports::wayland_server::protocol::wl_surface::WlSurface, Rectangle<i32, Physical>)>)> = vec![];
 
+    // Окно во весь экран сверху — полоса панели уходит под него
+    let весь_экран = состояние.во_весь_экран_сверху();
+    let mut под_окном: Vec<Элемент> = vec![];
     for слой in [Layer::Overlay, Layer::Top] {
+        if весь_экран && слой == Layer::Top {
+            for л in карта.layers_on(слой).rev() {
+                let Some(где) = карта.layer_geometry(л) else { continue };
+                let физ = где.loc.to_physical_precise_round(масштаб);
+                let элементы: Vec<WaylandSurfaceRenderElement<GlesRenderer>> = л.render_elements(renderer, физ, масштаб, 1.0);
+                под_окном.extend(элементы.into_iter().map(Элемент::Поверхность));
+            }
+            continue;
+        }
         for л in карта.layers_on(слой).rev() {
             let Some(где) = карта.layer_geometry(л) else { continue };
             let физ = где.loc.to_physical_precise_round(масштаб);
@@ -183,6 +195,7 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
         всё.extend(слои_верх.into_iter().filter(|(_, б)| б.is_none()).map(|(э, _)| э));
     }
     всё.extend(окна_эл);
+    всё.extend(под_окном);
     всё.extend(низ);
     всё
 }

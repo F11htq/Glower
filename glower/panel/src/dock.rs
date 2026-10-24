@@ -105,7 +105,7 @@ pub fn создай() {
         к.arc(р, р, р, std::f64::consts::PI, 1.5 * std::f64::consts::PI);
         к.close_path();
         let п = 1.0 - (1.0 - ПОКАЗ.with(|п| п.0.get())).powi(3);
-        к.set_source_rgba(0.08, 0.09, 0.12, 0.84 * п);
+        к.set_source_rgba(0.08, 0.09, 0.12, if crate::theme::прозрачно() { 0.84 } else { 1.0 } * п);
         let _ = к.fill_preserve();
         к.set_source_rgba(1.0, 1.0, 1.0, 0.10 * п);
         к.set_line_width(1.0);

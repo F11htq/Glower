@@ -19,6 +19,49 @@ thread_local! {
     static ИСТОЧНИК: RefCell<Option<gtk::CssProvider>> = const { RefCell::new(None) };
     static СЛЕЖКА: RefCell<Option<gio::FileMonitor>> = const { RefCell::new(None) };
     static БЫЛО: RefCell<String> = const { RefCell::new(String::new()) };
+    static ПЛОТНО: RefCell<Option<gtk::CssProvider>> = const { RefCell::new(None) };
+    static ПРОЗРАЧНО: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// Без прозрачности: панель, меню, док, виджеты и уведомления — плотные.
+/// Кому-то полупрозрачное мешает читать, а на слабой видеокарте размытие
+/// под ним ещё и стоит кадров
+const ПЛОТНЫЙ: &str = r#"
+window.bar { background-color: rgb(20, 22, 30); }
+.menu, .toast { background-color: @glower_bg; }
+.widget { background-color: rgb(22, 24, 34); }
+.overview button.task { background-color: rgb(30, 33, 46); }
+"#;
+
+/// Включена ли прозрачность оболочки (по умолчанию — да). Док и меню
+/// программ рисуют фон сами и спрашивают здесь
+pub fn прозрачно() -> bool {
+    ПРОЗРАЧНО.with(|п| п.get())
+}
+
+fn примени_прозрачность(s: &Value) {
+    let да = s["transparency"].as_bool() != Some(false);
+    if ПРОЗРАЧНО.with(|п| п.replace(да)) == да && (да || ПЛОТНО.with(|п| п.borrow().is_some())) {
+        return;
+    }
+    let Some(э) = gtk::gdk::Screen::default() else { return };
+    ПЛОТНО.with(|п| {
+        let mut п = п.borrow_mut();
+        if let Some(старый) = п.take() {
+            gtk::StyleContext::remove_provider_for_screen(&э, &старый);
+        }
+        if !да {
+            let новый = gtk::CssProvider::new();
+            if новый.load_from_data(ПЛОТНЫЙ.as_bytes()).is_ok() {
+                gtk::StyleContext::add_provider_for_screen(&э, &новый, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 3);
+                *п = Some(новый);
+            }
+        }
+    });
+    // Фон, нарисованный руками (док, меню программ), — перерисовать
+    for о in gtk::Window::list_toplevels() {
+        о.queue_draw();
+    }
 }
 
 fn путь_настроек() -> std::path::PathBuf {
@@ -60,6 +103,7 @@ pub fn цвета(светлая: bool, акцент: &(String, String)) -> Stri
 
 fn примени() {
     let s = настройки();
+    примени_прозрачность(&s);
     let светлая = s["theme"].as_str() == Some("light");
     let css = цвета(светлая, &акцент(&s));
     if БЫЛО.with(|б| *б.borrow() == css) {
