@@ -511,6 +511,94 @@ pub fn батарея(кнопка: &gtk::Button) {
     });
 }
 
+// ---------------------------------------------------------------- раскладки
+
+/// Имя раскладки по-человечески. XKB называет их по-английски («Russian»,
+/// «English (US)»), под labwc известны только коды («ru», «us»)
+pub fn имя_раскладки(имя: &str) -> (String, &'static str) {
+    const ИМЕНА: &[(&str, &str, &str, &str)] = &[
+        ("English (US)", "us", "EN", "Английский (США)"),
+        ("English (UK)", "gb", "EN", "Английский (Великобритания)"),
+        ("English", "", "EN", "Английский"),
+        ("Russian", "ru", "RU", "Русский"),
+        ("Ukrainian", "ua", "UK", "Украинский"),
+        ("Belarusian", "by", "BE", "Белорусский"),
+        ("Kazakh", "kz", "KK", "Казахский"),
+        ("German", "de", "DE", "Немецкий"),
+        ("French", "fr", "FR", "Французский"),
+        ("Spanish", "es", "ES", "Испанский"),
+        ("Italian", "it", "IT", "Итальянский"),
+        ("Portuguese", "pt", "PT", "Португальский"),
+        ("Polish", "pl", "PL", "Польский"),
+        ("Turkish", "tr", "TR", "Турецкий"),
+    ];
+    match ИМЕНА.iter().find(|(н, к, _, _)| имя.starts_with(н) || (!к.is_empty() && имя == *к)) {
+        Some((_, _, код, по_русски)) => (код.to_string(), по_русски),
+        None => (имя.chars().filter(|с| с.is_alphabetic()).take(2).collect::<String>().to_uppercase(), ""),
+    }
+}
+
+/// Меню раскладок под значком языка — как в Windows: все раскладки, текущая
+/// отмечена, щелчок переключает. Раньше значок открывал «Параметры», а это
+/// не то, чего ждёшь от щелчка по «EN»
+pub fn раскладки(кнопка: &gtk::Button) {
+    popup::открой(кнопка, "раскладки", Где::Справа, 250, |меню| {
+        // Свой сервер знает и список, и текущую, и умеет переключать
+        let от_сервера = crate::core::скажи_серверу("layouts").filter(|о| !о.is_empty() && !о.starts_with("не понимаю"));
+        let (сейчас, имена, можно): (usize, Vec<String>, bool) = match от_сервера {
+            Some(о) => {
+                let mut ч = о.split('\t');
+                let сейчас = ч.next().and_then(|н| н.parse().ok()).unwrap_or(0);
+                (сейчас, ч.map(String::from).collect(), true)
+            }
+            // labwc текущую раскладку не рассказывает — показываем набор
+            None => {
+                let файл = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".config/glower/keyboard");
+                let коды = std::fs::read_to_string(файл).unwrap_or_else(|_| "us,ru".into());
+                (0, коды.trim().split(',').filter(|к| !к.is_empty()).map(String::from).collect(), false)
+            }
+        };
+        for (i, имя) in имена.iter().enumerate() {
+            let (код, по_русски) = имя_раскладки(имя);
+            let б = gtk::Button::new();
+            б.style_context().add_class("row");
+            let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+            let к = gtk::Label::new(Some(&код));
+            к.style_context().add_class("kb-code");
+            ряд.add(&к);
+            let н = gtk::Label::new(Some(if по_русски.is_empty() { имя.as_str() } else { по_русски }));
+            н.set_xalign(0.0);
+            н.set_hexpand(true);
+            н.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            ряд.add(&н);
+            if i + 1 == сейчас {
+                б.style_context().add_class("kb-on");
+                let г = gtk::Label::new(Some("✓"));
+                г.style_context().add_class("kb-check");
+                ряд.add(&г);
+            }
+            б.add(&ряд);
+            if можно {
+                б.connect_clicked(move |_| {
+                    crate::core::скажи_серверу(&format!("layout-set {}", i + 1));
+                    popup::закрой();
+                });
+            } else {
+                б.set_sensitive(false);
+            }
+            меню.add(&б);
+        }
+        if !можно {
+            popup::тихо(меню, "Переключение — Alt + Shift");
+        }
+        меню.add(&gtk::Separator::new(gtk::Orientation::Horizontal));
+        popup::строка(меню, "Параметры раскладки…", false, || {
+            popup::закрой();
+            crate::core::открой_параметры("time");
+        });
+    });
+}
+
 // ---------------------------------------------------------------- питание
 
 /// Слова — те, что понимает агент: lock, logout, suspend, reboot, poweroff.

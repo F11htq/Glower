@@ -139,6 +139,13 @@ window.bar button.updates { color: #8cc8ff; }
 .menu .now-playing button { padding: 4px 8px; }
 .menu .title { font-weight: 700; font-size: 14px; padding: 4px 6px 6px; }
 .menu .quiet { opacity: 0.65; padding: 12px; }
+.menu .kb-code {
+  font-weight: 700; font-size: 11px; min-width: 30px; padding: 3px 0;
+  border-radius: 6px; background-color: alpha(@glower_fg, 0.10);
+}
+.menu button.kb-on .kb-code { background-color: @glower_accent; color: #ffffff; }
+.menu button.kb-on { background-color: alpha(@glower_fg, 0.07); }
+.menu .kb-check { color: @glower_accent; font-weight: 700; }
 .menu .small { font-size: 11px; opacity: 0.55; padding: 0 10px 6px; }
 .menu .pair { padding: 8px 10px; }
 .menu .value { opacity: 0.75; }
@@ -546,7 +553,7 @@ fn main() {
     полоса.pack_end(&быстрые, false, false, 0);
     let язык = gtk::Button::with_label("ENG");
     язык.set_tooltip_text(Some("Раскладка"));
-    язык.connect_clicked(|_| скажи("покажи", json!("раскладка")));
+    язык.connect_clicked(|к| menus::раскладки(к));
     полоса.pack_end(&язык, false, false, 0);
     полоса.pack_end(&tray::лоток(), false, false, 2);
     следи_за_раскладкой(&язык);

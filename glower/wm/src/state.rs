@@ -305,6 +305,37 @@ impl Glower {
         self.запиши_раскладку();
     }
 
+    /// Номер текущей раскладки (с единицы) и имена всех — для меню на панели
+    pub fn раскладки(&mut self) -> Vec<String> {
+        let Some(клавиатура) = self.seat.get_keyboard() else { return Vec::new() };
+        клавиатура.with_xkb_state(self, |к| {
+            let xkb = к.xkb().lock().unwrap();
+            let сейчас = xkb.active_layout();
+            let имена: Vec<String> = xkb.layouts().map(|р| xkb.layout_name(р).to_string()).collect();
+            let номер = xkb.layouts().position(|р| р == сейчас).map(|н| н + 1).unwrap_or(1);
+            std::iter::once(номер.to_string()).chain(имена).collect()
+        })
+    }
+
+    /// Включить раскладку по номеру (с нуля) — щелчок в меню раскладок
+    pub fn включи_раскладку(&mut self, номер: usize) -> bool {
+        let Some(клавиатура) = self.seat.get_keyboard() else { return false };
+        let есть = клавиатура.with_xkb_state(self, |mut к| {
+            let нужная = к.xkb().lock().unwrap().layouts().nth(номер);
+            match нужная {
+                Some(р) => {
+                    к.set_layout(р);
+                    true
+                }
+                None => false,
+            }
+        });
+        if есть {
+            self.запиши_раскладку();
+        }
+        есть
+    }
+
     /// Какая раскладка сейчас — в файл, его читает панель. Так значок языка
     /// на панели показывает текущую раскладку, а не весь их список
     pub fn запиши_раскладку(&mut self) {
