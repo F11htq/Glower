@@ -277,7 +277,12 @@ fn значки_стола(я: &Ядро) -> Vec<Value> {
         return Vec::new();
     }
     let места = я.s["iconPos"].clone();
-    let mut значки: Vec<Value> = vec![json!({ "n": "Этот компьютер", "g": "💻", "вид": "система" })];
+    // «Этот компьютер» — по умолчанию на столе, но и его можно убрать
+    let mut значки: Vec<Value> = if я.s["deskThisPC"].as_bool() == Some(false) {
+        Vec::new()
+    } else {
+        vec![json!({ "n": "Этот компьютер", "g": "💻", "вид": "система" })]
+    };
     for id in я.s["deskApps"].as_array().cloned().unwrap_or_default() {
         if let Some(н) = id.as_str().and_then(наша) {
             значки.push(json!({ "n": н.имя, "g": н.знак, "вид": "приложение", "ярлык": н.id }));

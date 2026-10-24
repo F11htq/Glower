@@ -41,6 +41,8 @@ enum Жест {
     Тянем { x0: f64, y0: f64, где: Vec<(String, f64, f64)>, сдвинули: bool },
     /// Ведём рамку выделения от угла.
     Рамка { x0: f64, y0: f64, x1: f64, y1: f64 },
+    /// Тянем виджет: какой, где за него взялись внутри и откуда начали
+    Виджет { номер: usize, dx: f64, dy: f64, x0: f64, y0: f64, сдвинули: bool },
 }
 
 struct Стол {
@@ -55,6 +57,9 @@ struct Стол {
     кэш_обоев: Option<(i32, i32, gtk::cairo::ImageSurface)>,
     жест: Жест,
     виджеты: gtk::Box,
+    /// Все показанные виджеты по порядку: и в колонке у края, и
+    /// перенесённые человеком в своё место на столе
+    все_виджеты: Vec<gtk::Box>,
     слепок_виджетов: String,
 }
 
@@ -344,6 +349,7 @@ pub fn создай() {
         кэш_обоев: None,
         жест: Жест::Нет,
         виджеты,
+        все_виджеты: Vec::new(),
         слепок_виджетов: String::new(),
     }));
     СТОЛ.with(|я| *я.borrow_mut() = Some(с));
@@ -371,24 +377,39 @@ fn под_курсором(x: f64, y: f64) -> Option<String> {
 }
 
 /// Над виджетами стол своими жестами не распоряжается
-fn в_виджетах(x: f64, y: f64) -> bool {
-    let Some(с) = стол() else { return false };
-    let с = с.borrow();
-    if !с.виджеты.is_visible() || с.виджеты.children().is_empty() {
-        return false;
-    }
-    let а = с.виджеты.allocation();
-    x >= а.x() as f64 && x <= (а.x() + а.width()) as f64 && y >= а.y() as f64 && y <= (а.y() + а.height()) as f64
-}
-
 /// Который по счёту виджет под курсором
 fn виджет_под(x: f64, y: f64) -> Option<usize> {
     let с = стол()?;
     let с = с.borrow();
-    с.виджеты.children().iter().position(|в| {
+    с.все_виджеты.iter().position(|в| {
         let а = в.allocation();
-        x >= а.x() as f64 && x <= (а.x() + а.width()) as f64 && y >= а.y() as f64 && y <= (а.y() + а.height()) as f64
+        в.is_visible() && x >= а.x() as f64 && x <= (а.x() + а.width()) as f64 && y >= а.y() as f64 && y <= (а.y() + а.height()) as f64
     })
+}
+
+/// Записи показанных виджетов: только с полем «t», как и при показе
+fn записи_виджетов() -> (Vec<Value>, Vec<usize>) {
+    let список: Vec<Value> = core::настройка("deskWidgets").as_array().cloned().unwrap_or_default();
+    let где = список.iter().enumerate().filter(|(_, в)| в["t"].is_string()).map(|(i, _)| i).collect();
+    (список, где)
+}
+
+/// Запомнить место виджета (или забыть — тогда он вернётся в колонку)
+fn место_виджета(н: usize, место: Option<(f64, f64)>) {
+    let (mut список, где) = записи_виджетов();
+    let Some(&i) = где.get(н) else { return };
+    let Some(запись) = список[i].as_object_mut() else { return };
+    match место {
+        Some((x, y)) => {
+            запись.insert("x".into(), json!(x.round()));
+            запись.insert("y".into(), json!(y.round()));
+        }
+        None => {
+            запись.remove("x");
+            запись.remove("y");
+        }
+    }
+    core::задай("deskWidgets", Value::Array(список));
 }
 
 /// Меню над виджетом. Раньше его не было вовсе: виджет, однажды
@@ -397,6 +418,10 @@ fn меню_виджета(е: &gtk::gdk::EventButton, номер: Option<usize>
     let меню = gtk::Menu::new();
     if let Some(н) = номер {
         пункт(&меню, "Убрать виджет", move || убери_виджет(н));
+        let (список, где) = записи_виджетов();
+        if где.get(н).is_some_and(|&i| список[i]["x"].is_number()) {
+            пункт(&меню, "Вернуть к краю экрана", move || место_виджета(н, None));
+        }
     }
     пункт(&меню, "Скрыть все виджеты", || core::задай("showDeskWidgets", json!(false)));
     меню.show_all();
@@ -424,9 +449,18 @@ fn нажатие(е: &gtk::gdk::EventButton) {
     if отладка() {
         eprintln!("glower-panel: стол: нажатие {} в {x:.0},{y:.0}", е.button());
     }
-    if в_виджетах(x, y) {
-        if е.button() == 3 && е.event_type() == gtk::gdk::EventType::ButtonPress {
-            меню_виджета(е, виджет_под(x, y));
+    if let Some(н) = виджет_под(x, y) {
+        if е.event_type() == gtk::gdk::EventType::ButtonPress {
+            if е.button() == 3 {
+                меню_виджета(е, Some(н));
+            } else if е.button() == 1 {
+                // Виджет берут за любое место, кроме кнопок и полей внутри:
+                // те забирают нажатие себе раньше, чем оно дойдёт сюда
+                if let Some(с) = стол() {
+                    let а = с.borrow().все_виджеты[н].allocation();
+                    с.borrow_mut().жест = Жест::Виджет { номер: н, dx: x - а.x() as f64, dy: y - а.y() as f64, x0: x, y0: y, сдвинули: false };
+                }
+            }
         }
         return;
     }
@@ -539,6 +573,28 @@ fn движение((x, y): (f64, f64)) {
                 выдели(выбранные);
             }
         }
+        Жест::Виджет { номер, dx, dy, x0, y0, сдвинули } => {
+            if !*сдвинули && (x - *x0).hypot(y - *y0) < 5.0 {
+                return;
+            }
+            *сдвинули = true;
+            let (н, dx, dy) = (*номер, *dx, *dy);
+            let Some(в) = с_.все_виджеты.get(н).cloned() else { return };
+            let колонка = с_.виджеты.clone();
+            let окно = с_.обои.clone();
+            drop(с_);
+            // Из колонки у края — на свободное место стола
+            if в.parent().as_ref() == Some(колонка.upcast_ref::<gtk::Widget>()) {
+                let а = в.allocation();
+                колонка.remove(&в);
+                поле.put(&в, а.x(), а.y());
+                в.show_all();
+            }
+            let (ш, вс) = (окно.allocated_width() as f64, окно.allocated_height() as f64);
+            let нx = (x - dx).clamp(0.0, (ш - 60.0).max(0.0));
+            let нy = (y - dy).clamp(30.0, (вс - 60.0).max(30.0));
+            поле.move_(&в, нx as i32, нy as i32);
+        }
         Жест::Нет => {}
     }
 }
@@ -560,6 +616,15 @@ fn отпускание() {
             core::задай("iconPos", Value::Object(места));
         }
         Жест::Рамка { .. } => с.borrow().поле.queue_draw(),
+        Жест::Виджет { номер, сдвинули: true, .. } => {
+            let место = {
+                let с_ = с.borrow();
+                с_.все_виджеты.get(номер).map(|в| (с_.поле.child_x(в) as f64, с_.поле.child_y(в) as f64))
+            };
+            if let Some(м) = место {
+                место_виджета(номер, Some(м));
+            }
+        }
         _ => {}
     }
 }
@@ -715,6 +780,7 @@ fn удали() {
             }
             "приложение" => crate::core::убери_со_стола(з["ярлык"].as_str().unwrap_or(""), "приложение"),
             "машина" => crate::core::убери_со_стола(з["ярлык"].as_str().unwrap_or(""), "машина"),
+            "система" => core::задай("deskThisPC", json!(false)),
             _ => {}
         }
     }
@@ -772,6 +838,9 @@ fn меню_значков(е: &gtk::gdk::EventButton) {
     } else if вид == "приложение" || вид == "машина" {
         черта(&меню);
         пункт(&меню, "Убрать с рабочего стола", удали);
+    } else if вид == "система" {
+        черта(&меню);
+        пункт(&меню, "Убрать с рабочего стола", || core::задай("deskThisPC", json!(false)));
     }
     меню.show_all();
     let событие: &gtk::gdk::Event = е;
@@ -797,6 +866,9 @@ fn меню_стола(е: &gtk::gdk::EventButton) {
     let добавить = gtk::MenuItem::with_label("Добавить виджет");
     добавить.set_submenu(Some(&виджеты));
     меню.append(&добавить);
+    if core::настройка("deskThisPC").as_bool() == Some(false) {
+        пункт(&меню, "Показать «Этот компьютер»", || core::задай("deskThisPC", json!(true)));
+    }
     let есть = core::настройка("deskWidgets").as_array().is_some_and(|с| с.iter().any(|в| в["t"].is_string()));
     if есть {
         if core::настройка("showDeskWidgets").as_bool() == Some(false) {
@@ -955,11 +1027,12 @@ fn сегодня_ключ() -> String {
 pub fn обнови_виджеты() {
     let Some(с) = стол() else { return };
     let показывать = core::настройка("showDeskWidgets").as_bool() != Some(false);
-    let список: Vec<String> = if показывать {
-        core::настройка("deskWidgets").as_array().cloned().unwrap_or_default().iter().filter_map(|в| в["t"].as_str().map(String::from)).collect()
+    let записи: Vec<Value> = if показывать {
+        core::настройка("deskWidgets").as_array().cloned().unwrap_or_default().into_iter().filter(|в| в["t"].is_string()).collect()
     } else {
         Vec::new()
     };
+    let список: Vec<String> = записи.iter().map(|в| format!("{}@{}:{}", в["t"].as_str().unwrap_or(""), в["x"], в["y"])).collect();
     // Дела и события дня тоже видны на столе: поменялись — перерисовать
     let слепок = format!(
         "{}|{}|{}|{}|{}",
@@ -974,18 +1047,36 @@ pub fn обнови_виджеты() {
     }
     с.borrow_mut().слепок_виджетов = слепок;
     let коробка = с.borrow().виджеты.clone();
+    let поле = с.borrow().поле.clone();
     for р in коробка.children() {
         коробка.remove(&р);
     }
-    for t in список {
+    let старые = std::mem::take(&mut с.borrow_mut().все_виджеты);
+    for в in старые {
+        if в.parent().as_ref() == Some(поле.upcast_ref::<gtk::Widget>()) {
+            поле.remove(&в);
+        }
+    }
+    let mut все = Vec::new();
+    for запись in записи {
+        let t = запись["t"].as_str().unwrap_or("").to_string();
         let к = gtk::Box::new(gtk::Orientation::Vertical, 4);
         к.style_context().add_class("widget");
         к.set_size_request(240, -1);
         к.set_widget_name(&format!("w-{t}"));
         наполни_виджет(&к, &t);
-        коробка.add(&к);
+        // Перенесённый человеком — на своём месте, остальные — колонкой у края
+        match (запись["x"].as_f64(), запись["y"].as_f64()) {
+            (Some(x), Some(y)) => {
+                поле.put(&к, x.max(0.0) as i32, y.max(30.0) as i32);
+                к.show_all();
+            }
+            _ => коробка.add(&к),
+        }
+        все.push(к);
     }
     коробка.show_all();
+    с.borrow_mut().все_виджеты = все;
 }
 
 fn строка_виджета(к: &gtk::Box, текст: &str, класс: &str) -> gtk::Label {
@@ -1140,9 +1231,8 @@ fn наполни_виджет(к: &gtk::Box, t: &str) {
 /// Раз в секунду — часы, раз в две — система
 fn тик_виджетов() {
     let Some(с) = стол() else { return };
-    let коробка = с.borrow().виджеты.clone();
-    for виджет in коробка.children() {
-        let Some(к) = виджет.downcast_ref::<gtk::Box>() else { continue };
+    let все = с.borrow().все_виджеты.clone();
+    for к in все {
         for р in к.children() {
             match р.widget_name().as_str() {
                 "время" => {
