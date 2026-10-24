@@ -389,8 +389,21 @@ fn виджет_под(x: f64, y: f64) -> Option<usize> {
 
 /// Куда ведёт виджет: погода — на страницу с прогнозом для своего города,
 /// остальные — в свою программу. Заметку пишут прямо на столе, ей некуда
-fn открой_виджет(t: &str) {
-    match t {
+fn открой_виджет(запись: &Value) {
+    match запись["t"].as_str().unwrap_or("") {
+        // Свой — туда, куда сказал человек: адрес открывается в браузере,
+        // всё остальное считается командой
+        "custom" => {
+            let куда = запись["open"].as_str().unwrap_or("").trim().to_string();
+            if куда.is_empty() {
+            } else if куда.contains("://") {
+                if gio::AppInfo::launch_default_for_uri(&куда, None::<&gio::AppLaunchContext>).is_err() {
+                    notify::покажи("Свой виджет", &format!("Не открылось: {куда}"), "⚠️");
+                }
+            } else {
+                let _ = std::process::Command::new("sh").args(["-c", &куда]).spawn();
+            }
+        }
         "weather" => {
             let город = core::погода()["город"].as_str().map(String::from)
                 .or_else(|| core::настройка("city").as_str().map(String::from))
@@ -406,6 +419,138 @@ fn открой_виджет(t: &str) {
         "system" => core::запусти("taskmgr", "приложение"),
         _ => {}
     }
+}
+
+/// Создать свой виджет (None) или поправить н-й. Свой виджет — название,
+/// значок и содержимое: либо простой текст, либо вывод команды, который
+/// обновляется сам. По щелчку — ссылка или команда, если задана
+fn правь_свой_виджет(н: Option<usize>) {
+    let (mut список, где) = записи_виджетов();
+    let было = н.and_then(|н| где.get(н)).map(|&i| список[i].clone()).unwrap_or_else(|| json!({}));
+    let д = gtk::Dialog::with_buttons(
+        Some(if н.is_some() { "Свой виджет" } else { "Новый виджет" }),
+        None::<&gtk::Window>,
+        gtk::DialogFlags::MODAL,
+        &[("Отмена", gtk::ResponseType::Cancel), ("Готово", gtk::ResponseType::Accept)],
+    );
+    д.style_context().add_class("glower-app");
+    let сетка = gtk::Grid::new();
+    сетка.set_row_spacing(10);
+    сетка.set_column_spacing(12);
+    сетка.set_margin(16);
+    let подпись = |текст: &str, ряд: i32| {
+        let л = gtk::Label::new(Some(текст));
+        л.set_xalign(1.0);
+        сетка.attach(&л, 0, ряд, 1, 1);
+    };
+    let поле = |ряд: i32, ключ: &str, пусто: &str| {
+        let п = gtk::Entry::new();
+        п.set_text(было[ключ].as_str().unwrap_or(""));
+        п.set_placeholder_text(Some(пусто));
+        п.set_width_chars(38);
+        // Enter в поле — то же, что «Готово»
+        п.set_activates_default(true);
+        сетка.attach(&п, 1, ряд, 1, 1);
+        п
+    };
+    подпись("Название", 0);
+    let имя = поле(0, "name", "Например: Курс доллара");
+    подпись("Значок", 1);
+    let знак = поле(1, "icon", "Любой эмодзи: 💵");
+    подпись("Показывать", 2);
+    let вид = gtk::ComboBoxText::new();
+    вид.append(Some("text"), "Свой текст");
+    вид.append(Some("cmd"), "Вывод команды");
+    вид.set_active_id(Some(было["kind"].as_str().unwrap_or("text")));
+    сетка.attach(&вид, 1, 2, 1, 1);
+    подпись("Текст или команда", 3);
+    let тело = gtk::TextView::new();
+    тело.set_wrap_mode(gtk::WrapMode::WordChar);
+    тело.buffer().map(|б| б.set_text(было["body"].as_str().unwrap_or("")));
+    let рамка = gtk::ScrolledWindow::new(gtk::Adjustment::NONE, gtk::Adjustment::NONE);
+    рамка.set_min_content_height(90);
+    рамка.set_shadow_type(gtk::ShadowType::In);
+    рамка.add(&тело);
+    сетка.attach(&рамка, 1, 3, 1, 1);
+    подпись("Обновлять, сек", 4);
+    let раз = gtk::SpinButton::with_range(5.0, 86400.0, 5.0);
+    раз.set_value(было["every"].as_f64().unwrap_or(60.0));
+    сетка.attach(&раз, 1, 4, 1, 1);
+    подпись("По щелчку открыть", 5);
+    let куда = поле(5, "open", "Адрес https://… или команда — необязательно");
+    let пояснение = gtk::Label::new(Some("Команда выполняется от вашего имени, как в терминале: например, «date +%A» или «curl -s wttr.in/?format=3». Показываются первые строки её вывода."));
+    пояснение.set_line_wrap(true);
+    пояснение.set_max_width_chars(52);
+    пояснение.set_xalign(0.0);
+    пояснение.style_context().add_class("dim-label");
+    сетка.attach(&пояснение, 0, 6, 2, 1);
+    {
+        let раз = раз.clone();
+        let обнови = move |в: &gtk::ComboBoxText| раз.set_sensitive(в.active_id().as_deref() == Some("cmd"));
+        обнови(&вид);
+        вид.connect_changed(обнови);
+    }
+    д.content_area().add(&сетка);
+    д.set_default_response(gtk::ResponseType::Accept);
+    д.show_all();
+    let ответ = д.run();
+    let текст = тело.buffer().and_then(|б| б.text(&б.start_iter(), &б.end_iter(), false)).map(|т| т.to_string()).unwrap_or_default();
+    let запись = json!({
+        "t": "custom",
+        "name": имя.text().trim(),
+        "icon": знак.text().trim(),
+        "kind": вид.active_id().map(|в| в.to_string()).unwrap_or_else(|| "text".into()),
+        "body": текст.trim(),
+        "every": раз.value().round() as u64,
+        "open": куда.text().trim(),
+    });
+    unsafe { д.destroy() };
+    if ответ != gtk::ResponseType::Accept {
+        return;
+    }
+    match н.and_then(|н| где.get(н)) {
+        Some(&i) => {
+            // Место на столе, если его переносили, остаётся прежним
+            let mut новая = запись;
+            for к in ["x", "y"] {
+                if !было[к].is_null() {
+                    новая[к] = было[к].clone();
+                }
+            }
+            список[i] = новая;
+        }
+        None => список.push(запись),
+    }
+    core::задай("deskWidgets", Value::Array(список));
+    core::задай("showDeskWidgets", json!(true));
+}
+
+/// Вывод команды своего виджета: в своём потоке и не дольше десяти секунд —
+/// зависшая команда не должна держать рабочий стол
+fn выполни_для_виджета(команда: String, куда: glib::WeakRef<gtk::Label>) {
+    let (отправить, принять) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let вывод = std::process::Command::new("timeout")
+            .args(["10", "sh", "-c", &команда])
+            .stdin(std::process::Stdio::null())
+            .output();
+        let текст = match вывод {
+            Ok(в) => {
+                let т = String::from_utf8_lossy(&в.stdout).to_string();
+                let т = if т.trim().is_empty() { String::from_utf8_lossy(&в.stderr).to_string() } else { т };
+                т.lines().take(12).collect::<Vec<_>>().join("\n").chars().take(600).collect::<String>()
+            }
+            Err(е) => format!("Не запустилась: {е}"),
+        };
+        let _ = отправить.send_blocking(текст);
+    });
+    glib::MainContext::default().spawn_local(async move {
+        if let Ok(текст) = принять.recv().await {
+            if let Some(л) = куда.upgrade() {
+                л.set_text(if текст.trim().is_empty() { "—" } else { текст.trim() });
+            }
+        }
+    });
 }
 
 /// Записи показанных виджетов: только с полем «t», как и при показе
@@ -438,8 +583,11 @@ fn место_виджета(н: usize, место: Option<(f64, f64)>) {
 fn меню_виджета(е: &gtk::gdk::EventButton, номер: Option<usize>) {
     let меню = gtk::Menu::new();
     if let Some(н) = номер {
-        пункт(&меню, "Убрать виджет", move || убери_виджет(н));
         let (список, где) = записи_виджетов();
+        if где.get(н).is_some_and(|&i| список[i]["t"] == "custom") {
+            пункт(&меню, "Изменить…", move || правь_свой_виджет(Some(н)));
+        }
+        пункт(&меню, "Убрать виджет", move || убери_виджет(н));
         if где.get(н).is_some_and(|&i| список[i]["x"].is_number()) {
             пункт(&меню, "Вернуть к краю экрана", move || место_виджета(н, None));
         }
@@ -640,8 +788,8 @@ fn отпускание() {
         // Щёлкнули, не сдвинув, — открыть то, что за виджетом стоит
         Жест::Виджет { номер, сдвинули: false, .. } => {
             let (список, где) = записи_виджетов();
-            if let Some(t) = где.get(номер).and_then(|&i| список[i]["t"].as_str()) {
-                открой_виджет(t);
+            if let Some(&i) = где.get(номер) {
+                открой_виджет(&список[i]);
             }
         }
         Жест::Виджет { номер, сдвинули: true, .. } => {
@@ -815,9 +963,17 @@ fn удали() {
     выдели(Vec::new());
 }
 
+/// Пункт меню. Дело выполняется после того, как меню закрылось: пока оно
+/// открыто, оно держит мышь, и окно, открытое прямо из пункта («Изменить…»,
+/// «Переименовать»), не получало щелчков — печатать в нём было можно, а
+/// нажать «Готово» нельзя
 fn пункт(меню: &gtk::Menu, текст: &str, дело: impl Fn() + 'static) {
     let п = gtk::MenuItem::with_label(текст);
-    п.connect_activate(move |_| дело());
+    let дело = Rc::new(дело);
+    п.connect_activate(move |_| {
+        let дело = дело.clone();
+        glib::idle_add_local_once(move || дело());
+    });
     меню.append(&п);
 }
 
@@ -891,6 +1047,8 @@ fn меню_стола(е: &gtk::gdk::EventButton) {
             core::задай("showDeskWidgets", json!(true));
         });
     }
+    черта(&виджеты);
+    пункт(&виджеты, "🧩 Свой виджет…", || правь_свой_виджет(None));
     let добавить = gtk::MenuItem::with_label("Добавить виджет");
     добавить.set_submenu(Some(&виджеты));
     меню.append(&добавить);
@@ -1063,7 +1221,7 @@ pub fn обнови_виджеты() {
     } else {
         Vec::new()
     };
-    let список: Vec<String> = записи.iter().map(|в| format!("{}@{}:{}", в["t"].as_str().unwrap_or(""), в["x"], в["y"])).collect();
+    let список: Vec<String> = записи.iter().map(|в| в.to_string()).collect();
     // Дела и события дня тоже видны на столе: поменялись — перерисовать
     let слепок = format!(
         "{}|{}|{}|{}|{}",
@@ -1095,7 +1253,7 @@ pub fn обнови_виджеты() {
         к.style_context().add_class("widget");
         к.set_size_request(240, -1);
         к.set_widget_name(&format!("w-{t}"));
-        наполни_виджет(&к, &t);
+        наполни_виджет(&к, &t, &запись);
         // Перенесённый человеком — на своём месте, остальные — колонкой у края
         match (запись["x"].as_f64(), запись["y"].as_f64()) {
             (Some(x), Some(y)) => {
@@ -1123,8 +1281,38 @@ fn сейчас() -> glib::DateTime {
     crate::menus::сейчас()
 }
 
-fn наполни_виджет(к: &gtk::Box, t: &str) {
+fn наполни_виджет(к: &gtk::Box, t: &str, запись: &Value) {
     match t {
+        "custom" => {
+            let имя = запись["name"].as_str().filter(|и| !и.is_empty()).unwrap_or("Свой виджет");
+            let знак = запись["icon"].as_str().unwrap_or("");
+            строка_виджета(к, &if знак.is_empty() { имя.to_string() } else { format!("{знак} {имя}") }, "w-t");
+            let тело = запись["body"].as_str().unwrap_or("").to_string();
+            if запись["kind"] == "cmd" {
+                let л = строка_виджета(к, "…", "w-sub");
+                л.set_selectable(false);
+                if тело.is_empty() {
+                    л.set_text("Команда не задана");
+                    return;
+                }
+                выполни_для_виджета(тело.clone(), л.downgrade());
+                // Обновляется сам, пока жива подпись: перестроили виджеты —
+                // старая подпись ушла, и с ней останавливается обновление
+                let раз = запись["every"].as_u64().unwrap_or(60).clamp(5, 86400) as u32;
+                let слабая = л.downgrade();
+                glib::timeout_add_seconds_local(раз, move || {
+                    match слабая.upgrade() {
+                        Some(л) if л.parent().is_some() => {
+                            выполни_для_виджета(тело.clone(), л.downgrade());
+                            glib::ControlFlow::Continue
+                        }
+                        _ => glib::ControlFlow::Break,
+                    }
+                });
+            } else {
+                строка_виджета(к, if тело.is_empty() { "Пусто — правый щелчок, «Изменить…»" } else { &тело }, "w-sub");
+            }
+        }
         "clock" => {
             строка_виджета(к, "Часы", "w-t");
             let (в, _) = crate::menus::время_и_дата();
