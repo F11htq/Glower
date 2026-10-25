@@ -9,3 +9,8 @@ button-layout='appmenu:minimize,maximize,close'
 # указывает Ubuntu, у нас нет, и программы брали значки из запасной темы.
 [org.gnome.desktop.interface]
 icon-theme='Adwaita'
+
+# Окно «Сохранить/Открыть файл»: без сохранённого размера GTK раскрывает его
+# почти на весь экран, и окно программы за ним пропадает
+[org.gtk.Settings.FileChooser]
+window-size=(900, 580)

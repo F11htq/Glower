@@ -63,6 +63,8 @@ pub(crate) fn значок_инструмента(имя: &str) -> gtk::Widget {
     холст.connect_draw(move |в, к| {
         let цвет = в.style_context().color(в.state_flags());
         к.set_source_rgba(цвет.red(), цвет.green(), цвет.blue(), цвет.alpha());
+        // Область растягивается по кнопке, рисунок 16×16 ставим в середину
+        к.translate(((в.allocated_width() - 16) / 2) as f64, ((в.allocated_height() - 16) / 2) as f64);
         к.set_line_width(1.6);
         к.set_line_cap(cairo::LineCap::Round);
         match имя.as_str() {
