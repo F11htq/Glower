@@ -18,7 +18,7 @@ use smithay::{
             Bind, Color32F, Frame, Offscreen, Renderer,
         },
     },
-    desktop::{layer_map_for_output, Window},
+    desktop::{layer_map_for_output, PopupManager, Window},
     input::pointer::{CursorImageStatus, CursorImageSurfaceData},
     output::Output,
     render_elements,
@@ -131,11 +131,24 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
             }
         }
     }
+    // Меню стола — поверх окон, как в Windows: сам стол внизу, а его меню
+    // (правая кнопка, «Вид», «Добавить виджет») — над всем, иначе оно
+    // открывалось под окном Проводника
+    let mut меню_низа: Vec<Элемент> = vec![];
     for слой in [Layer::Bottom, Layer::Background] {
         for л in карта.layers_on(слой).rev() {
             let Some(где) = карта.layer_geometry(л) else { continue };
             let физ = где.loc.to_physical_precise_round(масштаб);
-            let элементы: Vec<WaylandSurfaceRenderElement<GlesRenderer>> = л.render_elements(renderer, физ, масштаб, 1.0);
+            for (попап, сдвиг) in PopupManager::popups_for_surface(л.wl_surface()) {
+                let место = (где.loc + сдвиг - попап.geometry().loc).to_physical_precise_round(масштаб);
+                меню_низа.extend(
+                    render_elements_from_surface_tree(renderer, попап.wl_surface(), место, масштаб, 1.0, Kind::Unspecified)
+                        .into_iter()
+                        .map(Элемент::Поверхность),
+                );
+            }
+            let элементы: Vec<WaylandSurfaceRenderElement<GlesRenderer>> =
+                render_elements_from_surface_tree(renderer, л.wl_surface(), физ, масштаб, 1.0, Kind::Unspecified);
             низ.extend(элементы.into_iter().map(Элемент::Поверхность));
         }
     }
@@ -198,6 +211,7 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
     } else {
         всё.extend(слои_верх.into_iter().filter(|(_, б)| б.is_none()).map(|(э, _)| э));
     }
+    всё.extend(меню_низа);
     всё.extend(окна_эл);
     всё.extend(под_окном);
     всё.extend(низ);

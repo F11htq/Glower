@@ -811,6 +811,25 @@ impl Glower {
         None
     }
 
+    /// Всплывающее меню нижних слоёв (стола) под точкой
+    fn меню_низа_под(&self, точка: Point<f64, Logical>) -> Option<(Фокус, Point<f64, Logical>)> {
+        let экран = self.space.output_under(точка).next()?;
+        let гео = self.space.output_geometry(экран)?;
+        let карта = layer_map_for_output(экран);
+        for слой in [WlrLayer::Bottom, WlrLayer::Background] {
+            for л in карта.layers_on(слой) {
+                let Some(где) = карта.layer_geometry(л) else { continue };
+                for (попап, сдвиг) in smithay::desktop::PopupManager::popups_for_surface(л.wl_surface()) {
+                    let начало = гео.loc + где.loc + сдвиг - попап.geometry().loc;
+                    if let Some((с, м)) = smithay::desktop::utils::under_from_surface_tree(попап.wl_surface(), точка, начало, WindowSurfaceType::ALL) {
+                        return Some((Фокус::Wl(с), м.to_f64()));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Верхнее окно во весь экран: тогда полоса панели (слой Top) уходит
     /// под него — и в картинке, и для мыши. Слой Overlay (меню программ,
     /// экран блокировки) остаётся сверху всегда
@@ -836,6 +855,10 @@ impl Glower {
         }
         if let Some((ф, м, _)) = self.слой_под(точка, self.слои_над_окнами()) {
             return Some((ф, м));
+        }
+        // Меню стола рисуется над окнами — и мышь в нём раньше окон
+        if let Some(п) = self.меню_низа_под(точка) {
+            return Some(п);
         }
         if let Some((окно, место)) = self.space.element_under(точка) {
             if let Some((с, м)) = окно.surface_under(точка - место.to_f64(), WindowSurfaceType::ALL) {
