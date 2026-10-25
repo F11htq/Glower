@@ -318,7 +318,9 @@ fn значки_стола(я: &Ядро) -> Vec<Value> {
     let mut занято: Vec<(i64, i64)> = Vec::new();
     for з in &значки {
         if let Some(м) = места.get(з["n"].as_str().unwrap_or("")) {
-            занято.push((м["x"].as_i64().unwrap_or(0), м["y"].as_i64().unwrap_or(0)));
+            // Места пишутся дробными (970.0): as_i64 их не читает, и значок
+            // будто стоял в углу — первое место столбца пустело зря
+            занято.push((м["x"].as_f64().unwrap_or(0.0) as i64, м["y"].as_f64().unwrap_or(0.0) as i64));
         }
     }
     let mut номер = 0i64;
@@ -508,6 +510,26 @@ pub fn открой_параметры(раздел: &str) {
         None => {
             запусти_команду("glower-settings", &[раздел]);
         }
+    }
+}
+
+/// Открыть файлы программой — их бросили на её значок, как в Windows.
+/// false — эта программа файлов не открывает
+pub fn открой_файлы_программой(id: &str, вид: &str, пути: &[std::path::PathBuf]) -> bool {
+    if пути.is_empty() {
+        return false;
+    }
+    let файлы: Vec<gio::File> = пути.iter().map(gio::File::for_path).collect();
+    let чужой = |д: gio::DesktopAppInfo| д.launch(&файлы, None::<&gio::AppLaunchContext>).is_ok();
+    if вид == "машина" {
+        return gio::DesktopAppInfo::new(id).or_else(|| gio::DesktopAppInfo::new(&format!("{id}.desktop"))).is_some_and(чужой);
+    }
+    let доводы: Vec<String> = пути.iter().map(|п| п.to_string_lossy().to_string()).collect();
+    let доводы: Vec<&str> = доводы.iter().map(String::as_str).collect();
+    match id {
+        "browser" => БРАУЗЕРЫ.iter().find_map(|я| gio::DesktopAppInfo::new(я)).is_some_and(чужой),
+        "files" | "notepad" | "photos" | "paint" | "music" => наша(id).is_some_and(|н| запусти_команду(н.окно, &доводы)),
+        _ => false,
     }
 }
 

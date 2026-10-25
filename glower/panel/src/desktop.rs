@@ -61,6 +61,11 @@ struct Стол {
     /// перенесённые человеком в своё место на столе
     все_виджеты: Vec<gtk::Box>,
     слепок_виджетов: String,
+    /// Значки стола, которые сейчас унесли мышью: где за них взялись и где
+    /// они стояли. Брошены на тот же стол — просто встают на новое место
+    свой_перенос: Option<(f64, f64, Vec<(String, f64, f64)>)>,
+    /// Папка или программа на столе, над которой держат файлы
+    под_переносом: Option<String>,
 }
 
 thread_local! {
@@ -329,9 +334,10 @@ pub fn создай() {
         glib::Propagation::Stop
     });
     окно.connect_motion_notify_event(|_, е| {
-        движение(е.position());
+        движение(е);
         glib::Propagation::Stop
     });
+    подключи_перенос(&окно);
     окно.connect_button_release_event(|_, _| {
         отпускание();
         glib::Propagation::Stop
@@ -351,6 +357,8 @@ pub fn создай() {
         виджеты,
         все_виджеты: Vec::new(),
         слепок_виджетов: String::new(),
+        свой_перенос: None,
+        под_переносом: None,
     }));
     СТОЛ.with(|я| *я.borrow_mut() = Some(с));
     примени_стиль("window.desktop { background-image: linear-gradient(#0b0d1a, #05060c); }");
@@ -366,14 +374,7 @@ pub fn создай() {
 fn под_курсором(x: f64, y: f64) -> Option<String> {
     let с = стол()?;
     let с = с.borrow();
-    с.значки
-        .iter()
-        .rev()
-        .find(|з| {
-            let (ш, в) = (з.вид.allocated_width() as f64, з.вид.allocated_height() as f64);
-            x >= з.x && x <= з.x + ш && y >= з.y && y <= з.y + в
-        })
-        .map(|з| з.имя.clone())
+    под_курсором_в(&с, x, y)
 }
 
 /// Над виджетами стол своими жестами не распоряжается
@@ -695,10 +696,39 @@ fn нажатие(е: &gtk::gdk::EventButton) {
     }
 }
 
-fn движение((x, y): (f64, f64)) {
+fn движение(е: &gtk::gdk::EventMotion) {
+    let (x, y) = е.position();
     let Some(с) = стол() else { return };
     let mut с_ = с.borrow_mut();
     let поле = с_.поле.clone();
+    // Файлы и папки уносим настоящим переносом — его поймут Проводник,
+    // корзина в доке, браузер и сам стол. Программы и «Этот компьютер» —
+    // не файлы, их просто двигаем по столу, как раньше
+    let файлы_в_руке = match &с_.жест {
+        Жест::Тянем { x0, y0, где, сдвинули: false } if (x - *x0).hypot(y - *y0) >= 5.0 => с_
+            .значки
+            .iter()
+            .any(|з| где.iter().any(|(н, ..)| н == &з.имя) && путь_файла(&з.данные).is_some())
+            .then(|| (*x0, *y0, где.clone())),
+        _ => None,
+    };
+    if let Some((x0, y0, где)) = файлы_в_руке {
+        с_.жест = Жест::Нет;
+        с_.свой_перенос = Some((x0, y0, где));
+        let окно = с_.обои.clone();
+        drop(с_);
+        let цели = gtk::TargetList::new(&crate::fileops::цели_переноса());
+        let событие: &gtk::gdk::Event = е;
+        окно.drag_begin_with_coordinates(
+            &цели,
+            gtk::gdk::DragAction::COPY | gtk::gdk::DragAction::MOVE,
+            1,
+            Some(событие),
+            x0 as i32,
+            y0 as i32,
+        );
+        return;
+    }
     match &mut с_.жест {
         Жест::Тянем { x0, y0, где, сдвинули } => {
             let (dx, dy) = (x - *x0, y - *y0);
@@ -803,6 +833,190 @@ fn отпускание() {
         }
         _ => {}
     }
+}
+
+// ------------------------------------------------------------- перенос мышью
+
+/// Значки на новые места и запомнить их. где — имя и место, откуда
+/// начали; сдвиг — насколько унесли
+fn поставь_значки(где: &[(String, f64, f64)], dx: f64, dy: f64) {
+    let Some(с) = стол() else { return };
+    let mut с_ = с.borrow_mut();
+    let поле = с_.поле.clone();
+    let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
+    for з in с_.значки.iter_mut() {
+        if let Some((_, ix, iy)) = где.iter().find(|(n, ..)| n == &з.имя) {
+            з.x = (ix + dx).max(0.0);
+            з.y = (iy + dy).max(30.0);
+            поле.move_(&з.вид, з.x as i32, з.y as i32);
+            места.insert(з.имя.clone(), json!({ "x": з.x.round(), "y": з.y.round() }));
+        }
+    }
+    drop(с_);
+    core::задай("iconPos", Value::Object(места));
+}
+
+/// Куда бросают на столе: папка или программа под курсором — но не из
+/// тех значков, что сами в руке
+fn цель_на_столе(x: f64, y: f64) -> Option<Value> {
+    let имя = под_курсором(x, y)?;
+    let с = стол()?;
+    if с.borrow().свой_перенос.as_ref().is_some_and(|(_, _, где)| где.iter().any(|(н, ..)| н == &имя)) {
+        return None;
+    }
+    let з = данные_значка(&имя)?;
+    matches!(з["вид"].as_str(), Some("папка") | Some("приложение") | Some("машина")).then_some(з)
+}
+
+fn подсвети(имя: Option<String>) {
+    let Some(с) = стол() else { return };
+    let mut с_ = с.borrow_mut();
+    if с_.под_переносом == имя {
+        return;
+    }
+    for з in &с_.значки {
+        if Some(&з.имя) == имя.as_ref() {
+            з.вид.style_context().add_class("drop");
+        } else {
+            з.вид.style_context().remove_class("drop");
+        }
+    }
+    с_.под_переносом = имя;
+}
+
+fn сообщи_о_бедах(итог: &crate::fileops::Итог) {
+    if !итог.беды.is_empty() {
+        notify::покажи("Не всё удалось", &итог.беды.join("\n"), "⚠️");
+    }
+}
+
+/// Бросили файлы на стол (из Проводника, браузера или со стола же)
+fn брошено_на_стол(пути: Vec<PathBuf>, x: f64, y: f64) -> bool {
+    let Some(с) = стол() else { return false };
+    let свой = с.borrow().свой_перенос.clone();
+    if let Some(цель) = цель_на_столе(x, y) {
+        return match цель["вид"].as_str().unwrap_or("") {
+            // На папку — внутрь неё
+            "папка" => match путь_файла(&цель) {
+                Some(папка) => {
+                    crate::fileops::брось(пути, папка, |итог| сообщи_о_бедах(&итог));
+                    true
+                }
+                None => false,
+            },
+            // На программу — открыть ею, как в Windows
+            вид => core::открой_файлы_программой(цель["ярлык"].as_str().unwrap_or(""), вид, &пути),
+        };
+    }
+    // Свои значки, брошенные на пустое место, — просто на новое место
+    if let Some((x0, y0, где)) = свой {
+        поставь_значки(&где, x - x0, y - y0);
+        return true;
+    }
+    let папка = core::папка_стола();
+    let _ = std::fs::create_dir_all(&папка);
+    // Уже лежат на столе (Проводник открыт на папке стола) — только место
+    let (здесь, чужие): (Vec<PathBuf>, Vec<PathBuf>) = пути.into_iter().partition(|п| п.parent() == Some(папка.as_path()));
+    let место = move |н: usize| (x - 40.0, y - 36.0 + н as f64 * 96.0);
+    if !здесь.is_empty() {
+        let где: Vec<(String, f64, f64)> = здесь
+            .iter()
+            .enumerate()
+            .filter_map(|(н, п)| п.file_name().map(|и| (и.to_string_lossy().to_string(), место(н).0, место(н).1)))
+            .collect();
+        поставь_значки(&где, 0.0, 0.0);
+    }
+    if чужие.is_empty() {
+        return true;
+    }
+    let от = здесь.len();
+    crate::fileops::брось(чужие, папка, move |итог| {
+        сообщи_о_бедах(&итог);
+        // Новые значки встают там, куда их бросили, а не в общий ряд
+        let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
+        for (н, п) in итог.новые.iter().enumerate() {
+            if let Some(имя) = п.file_name() {
+                let (нx, нy) = место(от + н);
+                места.insert(имя.to_string_lossy().to_string(), json!({ "x": нx.max(0.0).round(), "y": нy.max(30.0).round() }));
+            }
+        }
+        core::задай("iconPos", Value::Object(места));
+    });
+    true
+}
+
+fn подключи_перенос(окно: &gtk::Window) {
+    use gtk::gdk::DragAction;
+    // Откуда: значки стола
+    окно.connect_drag_begin(|_, ctx| {
+        let Some(с) = стол() else { return };
+        let с_ = с.borrow();
+        let Some((x0, y0, где)) = с_.свой_перенос.as_ref() else { return };
+        let файлов = с_.значки.iter().filter(|з| где.iter().any(|(н, ..)| н == &з.имя) && путь_файла(&з.данные).is_some()).count();
+        let взяли = под_курсором_в(&с_, *x0, *y0).or_else(|| где.first().map(|(н, ..)| н.clone()));
+        if let Some(з) = взяли.and_then(|н| с_.значки.iter().find(|з| з.имя == н)) {
+            if let Some(картинка) = crate::fileops::картинка_переноса(з.вид.upcast_ref(), файлов, (x0 - з.x, y0 - з.y)) {
+                ctx.drag_set_icon_surface(&картинка);
+            }
+        }
+    });
+    окно.connect_drag_data_get(|_, _, данные, _, _| {
+        let пути: Vec<PathBuf> = выбранные().iter().filter_map(путь_файла).collect();
+        let ссылки = crate::fileops::ссылки(&пути);
+        let с: Vec<&str> = ссылки.iter().map(String::as_str).collect();
+        данные.set_uris(&с);
+    });
+    окно.connect_drag_end(|_, _| {
+        if let Some(с) = стол() {
+            с.borrow_mut().свой_перенос = None;
+        }
+        подсвети(None);
+    });
+
+    // Куда: файлы на стол, в папку на столе, на программу
+    окно.drag_dest_set(gtk::DestDefaults::empty(), &crate::fileops::цели_переноса(), DragAction::COPY | DragAction::MOVE);
+    окно.connect_drag_motion(|_, ctx, x, y, время| {
+        let (x, y) = (x as f64, y as f64);
+        let цель = цель_на_столе(x, y);
+        подсвети(цель.as_ref().and_then(|з| з["n"].as_str().map(String::from)));
+        let действие = if цель.as_ref().is_some_and(|з| з["вид"] != "папка") { DragAction::COPY } else { DragAction::MOVE };
+        ctx.drag_status(действие, время);
+        true
+    });
+    окно.connect_drag_leave(|_, _, _| подсвети(None));
+    окно.connect_drag_drop(|о, ctx, _, _, время| {
+        о.drag_get_data(ctx, &crate::fileops::атом_ссылок(), время);
+        true
+    });
+    окно.connect_drag_data_received(|_, ctx, x, y, данные, _, время| {
+        let пути = crate::fileops::пути_из_ссылок(&данные.uris());
+        let ok = !пути.is_empty() && брошено_на_стол(пути, x as f64, y as f64);
+        подсвети(None);
+        ctx.drag_finish(ok, false, время);
+    });
+}
+
+fn под_курсором_в(с: &Стол, x: f64, y: f64) -> Option<String> {
+    с.значки
+        .iter()
+        .rev()
+        .find(|з| {
+            let (ш, в) = (з.вид.allocated_width() as f64, з.вид.allocated_height() as f64);
+            x >= з.x && x <= з.x + ш && y >= з.y && y <= з.y + в
+        })
+        .map(|з| з.имя.clone())
+}
+
+/// Вставить из буфера на стол (Ctrl+V, «Вставить» в меню)
+fn вставь_на_стол() {
+    let папка = core::папка_стола();
+    let _ = std::fs::create_dir_all(&папка);
+    crate::fileops::вставь_из_буфера(папка, |итог| сообщи_о_бедах(&итог));
+}
+
+fn в_буфер(вырезать: bool) {
+    let пути: Vec<PathBuf> = выбранные().iter().filter_map(путь_файла).collect();
+    crate::fileops::в_буфер(пути, вырезать);
 }
 
 // ------------------------------------------------------------- выделение
@@ -1001,6 +1215,8 @@ fn меню_значков(е: &gtk::gdk::EventButton) {
     let файлы: Vec<PathBuf> = выбор.iter().filter_map(путь_файла).collect();
     if !файлы.is_empty() {
         черта(&меню);
+        пункт(&меню, "Вырезать", || в_буфер(true));
+        пункт(&меню, "Копировать", || в_буфер(false));
         let пути = файлы.iter().map(|п| п.to_string_lossy().to_string()).collect::<Vec<_>>().join("\n");
         пункт(&меню, "Копировать путь", move || gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).set_text(&пути));
         if один {
@@ -1033,6 +1249,10 @@ fn меню_значков(е: &gtk::gdk::EventButton) {
 
 fn меню_стола(е: &gtk::gdk::EventButton) {
     let меню = gtk::Menu::new();
+    if crate::fileops::в_буфере_файлы() {
+        пункт(&меню, "Вставить", вставь_на_стол);
+        черта(&меню);
+    }
     пункт(&меню, "Создать папку", || создай_на_столе(true));
     пункт(&меню, "Создать текстовый файл", || создай_на_столе(false));
     черта(&меню);
@@ -1093,6 +1313,12 @@ fn клавиша(е: &gtk::gdk::EventKey) -> glib::Propagation {
         for з in выбранные() {
             открой(з["n"].as_str().unwrap_or(""));
         }
+    } else if ctrl && crate::notepad::латинская(е) == "c" {
+        в_буфер(false);
+    } else if ctrl && crate::notepad::латинская(е) == "x" {
+        в_буфер(true);
+    } else if ctrl && crate::notepad::латинская(е) == "v" {
+        вставь_на_стол();
     } else if ctrl && crate::notepad::латинская(е) == "a" {
         let все: Vec<String> = стол().map(|с| с.borrow().значки.iter().map(|з| з.имя.clone()).collect()).unwrap_or_default();
         выдели(все);

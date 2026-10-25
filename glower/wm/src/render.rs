@@ -74,6 +74,10 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
         let где = состояние.мышь - гео.loc.to_f64();
         if Rectangle::from_size(гео.size).to_f64().contains(где) {
             верх.extend(указатель(состояние, renderer, где, масштаб, для.указатели));
+            if let Some((з, сдвиг)) = состояние.значок_переноса.as_ref() {
+                let место = (где + сдвиг.to_f64()).to_physical_precise_round(масштаб);
+                верх.extend(render_elements_from_surface_tree(renderer, з, место, масштаб, 0.85, Kind::Unspecified).into_iter().map(Элемент::Поверхность));
+            }
         }
     }
 

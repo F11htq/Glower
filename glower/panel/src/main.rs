@@ -24,6 +24,7 @@ mod core;
 mod desktop;
 mod dock;
 mod explorer;
+mod fileops;
 mod i18n;
 mod icons;
 mod installer;
@@ -269,6 +270,7 @@ window.dock .no-dot { min-width: 5px; min-height: 5px; }
 window.dock separator.dock-sep { background-color: rgba(255, 255, 255, 0.16); min-width: 1px; margin: 8px 5px 10px; }
 window.desktop .di { border-radius: 10px; padding: 6px 4px; }
 window.desktop .di.sel { background-color: alpha(@glower_accent, 0.28); box-shadow: inset 0 0 0 1px rgba(160, 190, 255, 0.55); }
+window.desktop .di.drop { background-color: alpha(@glower_accent, 0.45); box-shadow: inset 0 0 0 2px rgba(160, 190, 255, 0.9); }
 window.desktop .di-glyph { font-size: 40px; min-height: 48px; }
 window.desktop image.di-plate { min-width: 52px; min-height: 52px; border-radius: 14px; color: #ffffff; }
 window.desktop .di-label {

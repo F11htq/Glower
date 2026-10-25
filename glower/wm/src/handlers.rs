@@ -21,14 +21,14 @@ use smithay::{
     reexports::{
         wayland_protocols::xdg::{decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode as DecorationMode, shell::server::xdg_toplevel},
         wayland_server::{
-            protocol::{wl_buffer::WlBuffer, wl_output::WlOutput, wl_seat::WlSeat, wl_surface::WlSurface},
+            protocol::{wl_buffer::WlBuffer, wl_data_source::WlDataSource, wl_output::WlOutput, wl_seat::WlSeat, wl_surface::WlSurface},
             Client, Resource,
         },
     },
     utils::{Logical, Rectangle, Serial},
     wayland::{
         buffer::BufferHandler,
-        compositor::{get_parent, is_sync_subsurface, with_states, CompositorClientState, CompositorHandler, CompositorState},
+        compositor::{get_parent, is_sync_subsurface, with_states, CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes},
         fractional_scale::{with_fractional_scale, FractionalScaleHandler},
         idle_notify::{IdleNotifierHandler, IdleNotifierState},
         output::OutputHandler,
@@ -77,6 +77,17 @@ impl CompositorHandler for Glower {
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
         self.нужен_кадр = true;
+
+        // Значок переноса сдвигает себя сам (attach с x, y): так программа
+        // ставит точку, за которую «держат» значок
+        if let Some((з, сдвиг)) = self.значок_переноса.as_mut() {
+            if з == surface {
+                let дельта = with_states(surface, |с| с.cached_state.get::<SurfaceAttributes>().current().buffer_delta.take());
+                if let Some(д) = дельта {
+                    *сдвиг += д;
+                }
+            }
+        }
 
         if !is_sync_subsurface(surface) {
             let mut корень = surface.clone();
@@ -467,7 +478,18 @@ impl DataDeviceHandler for Glower {
         &self.data_device_state
     }
 }
-impl ClientDndGrabHandler for Glower {}
+// Перенос мышью между программами сам по себе ведёт smithay; наше дело —
+// рисовать у указателя значок, который дала программа
+impl ClientDndGrabHandler for Glower {
+    fn started(&mut self, _source: Option<WlDataSource>, icon: Option<WlSurface>, _seat: Seat<Self>) {
+        self.значок_переноса = icon.map(|з| (з, (0, 0).into()));
+        self.нужен_кадр = true;
+    }
+    fn dropped(&mut self, _target: Option<WlSurface>, _validated: bool, _seat: Seat<Self>) {
+        self.значок_переноса = None;
+        self.нужен_кадр = true;
+    }
+}
 impl ServerDndGrabHandler for Glower {}
 
 impl PrimarySelectionHandler for Glower {

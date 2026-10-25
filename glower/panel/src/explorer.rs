@@ -97,7 +97,6 @@ struct Проводник {
     цели: RefCell<Vec<Место>>,
     таблицей: Cell<bool>,
     скрытые: Cell<bool>,
-    буфер: RefCell<Option<(Vec<PathBuf>, bool)>>,
     корень: PathBuf,
     значки: RefCell<HashMap<(String, i32), Option<Pixbuf>>>,
 }
@@ -130,71 +129,7 @@ fn дата_текстом(с: i64) -> String {
         .unwrap_or_default()
 }
 
-/// Свободное имя в папке: «имя», а занято — «имя (2)», «имя (3)»…
-fn свободное_имя(папка: &Path, имя: &str) -> PathBuf {
-    let п = папка.join(имя);
-    if !п.exists() && п.symlink_metadata().is_err() {
-        return п;
-    }
-    let (основа, хвост) = match имя.rfind('.') {
-        Some(т) if т > 0 => (&имя[..т], &имя[т..]),
-        _ => (имя, ""),
-    };
-    (2..).map(|н| папка.join(format!("{основа} ({н}){хвост}"))).find(|п| !п.exists()).unwrap()
-}
-
-fn скопируй(откуда: &Path, куда: &Path) -> std::io::Result<()> {
-    let м = откуда.symlink_metadata()?;
-    if м.file_type().is_symlink() {
-        std::os::unix::fs::symlink(std::fs::read_link(откуда)?, куда)
-    } else if м.is_dir() {
-        std::fs::create_dir(куда)?;
-        for з in std::fs::read_dir(откуда)? {
-            let з = з?;
-            скопируй(&з.path(), &куда.join(з.file_name()))?;
-        }
-        Ok(())
-    } else {
-        std::fs::copy(откуда, куда).map(|_| ())
-    }
-}
-
-fn перенеси(откуда: &Path, куда: &Path) -> std::io::Result<()> {
-    match std::fs::rename(откуда, куда) {
-        Ok(()) => Ok(()),
-        // Другой диск: переименованием не перенести — копируем и убираем
-        Err(е) if е.raw_os_error() == Some(18) => {
-            скопируй(откуда, куда)?;
-            if откуда.is_dir() && !откуда.symlink_metadata()?.file_type().is_symlink() {
-                std::fs::remove_dir_all(откуда)
-            } else {
-                std::fs::remove_file(откуда)
-            }
-        }
-        Err(е) => Err(е),
-    }
-}
-
-/// Вставить пути в папку: копией или переносом. Что не вышло — списком.
-fn вставь(пути: &[PathBuf], папка: &Path, вырезать: bool) -> Vec<String> {
-    let mut беды = Vec::new();
-    for п in пути {
-        let имя = п.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
-        if папка.starts_with(п) {
-            беды.push(format!("«{имя}»: папку нельзя положить в саму себя"));
-            continue;
-        }
-        if вырезать && п.parent() == Some(папка) {
-            continue;
-        }
-        let куда = свободное_имя(папка, &имя);
-        let итог = if вырезать { перенеси(п, &куда) } else { скопируй(п, &куда) };
-        if let Err(е) = итог {
-            беды.push(format!("«{имя}»: {е}"));
-        }
-    }
-    беды
-}
+use crate::fileops::{перенеси, свободное_имя};
 
 fn папка_корзины() -> PathBuf {
     glib::user_data_dir().join("Trash")
@@ -816,35 +751,22 @@ fn в_буфер(п: &П, вырезать: bool) {
         return;
     }
     let пути: Vec<PathBuf> = выбранные(п, &в).into_iter().map(|з| з.путь).collect();
-    if пути.is_empty() {
-        return;
-    }
-    // Пути — и в общий буфер обмена: вставятся в терминал или письмо
-    let текст = пути.iter().map(|п| п.to_string_lossy().to_string()).collect::<Vec<_>>().join("\n");
-    gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).set_text(&текст);
-    *п.буфер.borrow_mut() = Some((пути, вырезать));
+    // Общий буфер системы: вставится и на стол, и в другое окно Проводника
+    crate::fileops::в_буфер(пути, вырезать);
 }
 
 fn вставь_сюда(п: &П, папка: PathBuf) {
-    let Some((пути, вырезать)) = п.буфер.borrow().clone() else { return };
-    if вырезать {
-        *п.буфер.borrow_mut() = None;
-    }
-    let (куда, откуда) = async_channel::bounded(1);
-    std::thread::spawn(move || {
-        let _ = куда.send_blocking(вставь(&пути, &папка, вырезать));
-    });
     let п2 = п.clone();
-    glib::MainContext::default().spawn_local(async move {
-        if let Ok(беды) = откуда.recv().await {
-            if !беды.is_empty() {
-                сообщи(&п2, "Не всё удалось", &беды.join("\n"));
-            }
-            if let Some(в) = текущая(&п2) {
-                загрузи(&п2, &в, true);
-            }
-        }
-    });
+    crate::fileops::вставь_из_буфера(папка, move |итог| готово_вставить(&п2, итог));
+}
+
+fn готово_вставить(п: &П, итог: crate::fileops::Итог) {
+    if !итог.беды.is_empty() {
+        сообщи(п, "Не всё удалось", &итог.беды.join("\n"));
+    }
+    if let Some(в) = текущая(п) {
+        загрузи(п, &в, true);
+    }
 }
 
 fn удали(п: &П, навсегда: bool) {
@@ -1109,7 +1031,7 @@ fn меню_записей(п: &П, событие: &gtk::gdk::EventButton) {
         пункт(&меню, "Копировать", true, move || в_буфер(&п1, false));
         if let Some(з) = первая.clone().filter(|з| з.папка && одна) {
             let п1 = п_();
-            пункт(&меню, "Вставить в папку", п.буфер.borrow().is_some(), move || вставь_сюда(&п1, з.путь.clone()));
+            пункт(&меню, "Вставить в папку", crate::fileops::в_буфере_файлы(), move || вставь_сюда(&п1, з.путь.clone()));
         }
         let пути = записи.iter().map(|з| з.путь.to_string_lossy().to_string()).collect::<Vec<_>>().join("\n");
         пункт(&меню, "Копировать путь", true, move || gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD).set_text(&пути));
@@ -1143,7 +1065,7 @@ fn меню_папки(п: &П, событие: &gtk::gdk::EventButton) {
         пункт(&меню, "Создать текстовый файл", true, move || создай(&п1, false));
         let п1 = п.clone();
         let папка = текущая_папка(п).unwrap();
-        пункт(&меню, "Вставить", п.буфер.borrow().is_some(), move || вставь_сюда(&п1, папка.clone()));
+        пункт(&меню, "Вставить", crate::fileops::в_буфере_файлы(), move || вставь_сюда(&п1, папка.clone()));
         черта(&меню);
     }
     let порядок = gtk::Menu::new();
@@ -1212,17 +1134,14 @@ fn включи_перенос(сетка: &gtk::IconView, таблица: &gtk:
 
 /// Бросили файлы: в папку под курсором, а мимо папок — в текущую.
 /// В пределах одного диска — переносим, с другого — копируем; с Ctrl — копия
-fn брошено(п: &П, uris: Vec<glib::GString>, папка_под: Option<PathBuf>, копия: bool) -> bool {
+fn брошено(п: &П, uris: Vec<glib::GString>, папка_под: Option<PathBuf>) -> bool {
     let Some(папка) = папка_под.or_else(|| текущая_папка(п)) else { return false };
-    let пути: Vec<PathBuf> = uris.iter().filter_map(|u| gio::File::for_uri(u).path()).filter(|п2| *п2 != папка).collect();
+    let пути: Vec<PathBuf> = crate::fileops::пути_из_ссылок(&uris).into_iter().filter(|п2| *п2 != папка).collect();
     if пути.is_empty() {
         return false;
     }
-    use std::os::unix::fs::MetadataExt;
-    let диск = |п2: &Path| std::fs::metadata(п2).map(|м| м.dev()).ok();
-    let вырезать = !копия && пути.iter().all(|п2| диск(п2) == диск(&папка));
-    *п.буфер.borrow_mut() = Some((пути, вырезать));
-    вставь_сюда(п, папка);
+    let п2 = п.clone();
+    crate::fileops::брось(пути, папка, move |итог| готово_вставить(&п2, итог));
     true
 }
 
@@ -1247,8 +1166,7 @@ fn подключи_перетаскивание<W: IsA<gtk::Widget>>(п: &П, �
             .map(|и| запись_из(&в.модель, &и))
             .filter(|з| з.папка)
             .map(|з| з.путь);
-        let копия = gtk::current_event_state().is_some_and(|с| с.contains(gtk::gdk::ModifierType::CONTROL_MASK));
-        let ok = брошено(&п, данные.uris(), папка_под, копия);
+        let ok = брошено(&п, данные.uris(), папка_под);
         ctx.drag_finish(ok, false, время);
     });
 }
@@ -1628,7 +1546,6 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         цели: RefCell::new(Vec::new()),
         таблицей: Cell::new(таблицей),
         скрытые: Cell::new(false),
-        буфер: RefCell::new(None),
         корень: корень.clone(),
         значки: RefCell::new(HashMap::new()),
     });
@@ -1913,27 +1830,5 @@ mod проверки {
     fn раскодирует_путь_корзины() {
         assert_eq!(раскодируй("/home/%D0%94%D0%BE%D0%BA/a%20b.txt"), "/home/Док/a b.txt");
         assert_eq!(раскодируй("100%"), "100%");
-    }
-
-    #[test]
-    fn копирует_переносит_и_не_затирает() {
-        let корень = std::env::temp_dir().join(format!("glower-files-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&корень);
-        let (а, б) = (корень.join("а"), корень.join("б"));
-        std::fs::create_dir_all(а.join("внутри")).unwrap();
-        std::fs::create_dir_all(&б).unwrap();
-        std::fs::write(а.join("внутри").join("x.txt"), "привет").unwrap();
-        std::fs::write(б.join("x.txt"), "старое").unwrap();
-        // Копия папки — со всем, что внутри
-        assert!(вставь(&[а.join("внутри")], &б, false).is_empty());
-        assert_eq!(std::fs::read_to_string(б.join("внутри").join("x.txt")).unwrap(), "привет");
-        // Занятое имя не затираем — рядом встаёт «x (2).txt»
-        assert!(вставь(&[а.join("внутри").join("x.txt")], &б, true).is_empty());
-        assert_eq!(std::fs::read_to_string(б.join("x.txt")).unwrap(), "старое");
-        assert_eq!(std::fs::read_to_string(б.join("x (2).txt")).unwrap(), "привет");
-        assert!(!а.join("внутри").join("x.txt").exists());
-        // Папку в саму себя — нельзя
-        assert_eq!(вставь(&[б.clone()], &б.join("внутри"), false).len(), 1);
-        let _ = std::fs::remove_dir_all(&корень);
     }
 }

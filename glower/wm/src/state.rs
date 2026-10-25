@@ -117,6 +117,9 @@ pub struct Glower {
 
     pub seat: Seat<Glower>,
     pub cursor_status: CursorImageStatus,
+    /// Значок того, что тащат мышью между программами (файл из Проводника),
+    /// и его сдвиг от острия указателя
+    pub значок_переноса: Option<(WlSurface, Point<i32, Logical>)>,
     /// Где мышь. Своя копия: у указателя спрашивать нельзя, пока идёт
     /// захват — его замок уже взят, и сервер повис бы
     pub мышь: Point<f64, Logical>,
@@ -231,6 +234,7 @@ impl Glower {
             gamma_state,
             seat,
             cursor_status: CursorImageStatus::default_named(),
+            значок_переноса: None,
             мышь: Point::from((640.0, 400.0)),
             замок: None,
             сочетания: vec![],
@@ -861,6 +865,9 @@ impl Glower {
         }
         if let CursorImageStatus::Surface(с) = &self.cursor_status {
             smithay::desktop::utils::send_frames_surface_tree(с, экран, время, Some(Duration::ZERO), тот_же);
+        }
+        if let Some((з, _)) = &self.значок_переноса {
+            smithay::desktop::utils::send_frames_surface_tree(з, экран, время, Some(Duration::ZERO), тот_же);
         }
     }
 
