@@ -376,7 +376,7 @@ fn наполни_быстрые(меню: &gtk::Box) {
         ряд.style_context().add_class("now-playing");
         let текст = gtk::Box::new(gtk::Orientation::Vertical, 0);
         текст.set_hexpand(true);
-        let н = gtk::Label::new(Some(&format!("♫ {}", if и.название.is_empty() { "Без названия" } else { &и.название })));
+        let н = gtk::Label::new(Some(if и.название.is_empty() { "Без названия" } else { &и.название }));
         н.set_xalign(0.0);
         н.set_ellipsize(gtk::pango::EllipsizeMode::End);
         н.set_max_width_chars(24);
@@ -391,7 +391,7 @@ fn наполни_быстрые(меню: &gtk::Box) {
         }
         ряд.add(&текст);
         for (знак, метод) in [("⏮", "Previous"), (if и.статус == "Playing" { "⏸" } else { "▶" }, "PlayPause"), ("⏭", "Next")] {
-            let б = gtk::Button::with_label(знак);
+            let б = crate::apps::значок_кнопка(знак);
             let м = меню.clone();
             б.connect_clicked(move |_| {
                 crate::media::нажми(метод);
@@ -448,7 +448,7 @@ fn наполни_быстрые(меню: &gtk::Box) {
 fn сети_wifi(меню: &gtk::Box) {
     popup::очисти(меню);
     let м = меню.clone();
-    popup::строка(меню, "‹  Wi-Fi", false, move || наполни_быстрые(&м));
+    popup::строка(меню, "‹ Wi-Fi", false, move || наполни_быстрые(&м));
     let ищу = popup::тихо(меню, "Ищу сети…");
     меню.show_all();
     let м = меню.clone();

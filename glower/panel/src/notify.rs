@@ -235,7 +235,7 @@ fn карточка(у: &Уведомление, в_центре: bool) -> gtk::
     }
     к.add(&т);
     if !в_центре {
-        let крест = gtk::Button::with_label("×");
+        let крест = crate::apps::значок_кнопка("×");
         крест.style_context().add_class("toast-close");
         крест.set_valign(gtk::Align::Start);
         let номер = у.номер;
@@ -346,7 +346,7 @@ fn обнови_колокол() {
     КОЛОКОЛ.with(|к| {
         if let Some(к) = к.borrow().as_ref() {
             let знак = if тихо() { "🔕" } else { "🔔" };
-            к.set_label(&if н > 0 { format!("{знак} {н}") } else { знак.to_string() });
+            crate::apps::знак_кнопки(к, &if н > 0 { format!("{знак} {н}") } else { знак.to_string() });
             if н > 0 {
                 к.style_context().add_class("unread");
             } else {
@@ -358,7 +358,7 @@ fn обнови_колокол() {
 
 /// Кнопка в полосе: колокольчик и число непрочитанных
 pub fn колокол() -> gtk::Button {
-    let б = gtk::Button::with_label("🔔");
+    let б = crate::apps::значок_кнопка("🔔");
     б.set_tooltip_text(Some("Уведомления"));
     б.style_context().add_class("bell");
     б.connect_clicked(|б| центр(б));

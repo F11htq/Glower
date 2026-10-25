@@ -66,6 +66,7 @@ OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
             usr/share/applications/glower-exe.desktop
+            usr/share/glib-2.0/schemas/90_glower.gschema.override
             etc/glower-release"
 
 found=0
@@ -90,7 +91,7 @@ ARCH=all
 DEPS_EXTRA=
 if [ -e "$BUILD/usr/bin/glower-panel" ]; then
   ARCH=amd64
-  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, wtype, wlsunset, swayidle"
+  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, librsvg2-common, wtype, wlsunset, swayidle"
 fi
 # Свой оконный сервер рисует прямо на видеокарте и сам открывает устройства
 if [ -e "$BUILD/usr/bin/glower-wm" ]; then

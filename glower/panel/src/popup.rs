@@ -137,14 +137,16 @@ pub fn очисти(меню: &gtk::Box) {
 
 /// Строка-кнопка меню.
 pub fn строка<F: Fn() + 'static>(меню: &gtk::Box, текст: &str, опасно: bool, дело: F) -> gtk::Button {
-    let б = gtk::Button::with_label(текст);
+    let б = gtk::Button::new();
+    crate::apps::знак_кнопки(&б, текст);
     б.style_context().add_class("row");
     if опасно {
         б.style_context().add_class("danger");
     }
     if let Some(п) = б.child() {
-        if let Ok(п) = п.downcast::<gtk::Label>() {
-            п.set_xalign(0.0);
+        match п.downcast::<gtk::Label>() {
+            Ok(п) => п.set_xalign(0.0),
+            Err(п) => п.set_halign(gtk::Align::Start),
         }
     }
     б.connect_clicked(move |_| дело());

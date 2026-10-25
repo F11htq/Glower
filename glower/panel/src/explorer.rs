@@ -621,7 +621,8 @@ fn обнови_крошки(п: &П) {
     let Some(в) = текущая(п) else { return };
     let м = в.место.borrow().clone();
     let кнопка_к = |текст: &str, куда: Option<Место>| {
-        let б = gtk::Button::with_label(текст);
+        let б = gtk::Button::new();
+        crate::apps::знак_кнопки(&б, текст);
         б.set_relief(gtk::ReliefStyle::None);
         if let Some(куда) = куда {
             let (п2, в2) = (п.clone(), в.clone());
@@ -666,7 +667,7 @@ fn обнови_всё(п: &П) {
     п.корзина.set_reveal_child(м == Место::Корзина);
     п.новая.set_sensitive(matches!(м, Место::Папка(_)));
     в.стопка.set_visible_child_name(if п.таблицей.get() { "таблица" } else { "сетка" });
-    п.вид.set_label(if п.таблицей.get() { "▦" } else { "☰" });
+    crate::apps::знак_кнопки(&п.вид, if п.таблицей.get() { "▦" } else { "☰" });
     // Сбоку — то место, где мы
     let цели = п.цели.borrow();
     match цели.iter().position(|ц| *ц == м) {
@@ -1402,7 +1403,7 @@ fn новая_вкладка(п: &П, место: Место) -> Rc<Вкладк
     // Ярлык вкладки с крестиком
     let шапка = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     шапка.add(&в.ярлык);
-    let крест = gtk::Button::with_label("×");
+    let крест = crate::apps::значок_кнопка("×");
     крест.style_context().add_class("tab-close");
     {
         let пв = Rc::downgrade(п);
@@ -1447,7 +1448,7 @@ fn собери_места(п: &П) {
     let mut цели = Vec::new();
     let mut ряд = |знак: &str, текст: &str, цель: Место| {
         let р = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        р.add(&gtk::Label::new(Some(знак)));
+        р.add(&crate::apps::значок_эмодзи(знак, 16));
         let л = gtk::Label::new(Some(текст));
         л.set_ellipsize(gtk::pango::EllipsizeMode::End);
         л.set_xalign(0.0);
@@ -1530,7 +1531,8 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     let к_вид = кнопка("☰", "Сетка или таблица");
     панель.add(&к_вид);
     let поиск = gtk::Entry::new();
-    поиск.set_placeholder_text(Some("🔎 Поиск"));
+    поиск.set_placeholder_text(Some("Поиск"));
+    поиск.set_icon_from_icon_name(gtk::EntryIconPosition::Primary, Some("edit-find-symbolic"));
     поиск.set_width_chars(20);
     панель.add(&поиск);
     колонка.add(&панель);

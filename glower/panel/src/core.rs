@@ -1285,16 +1285,49 @@ fn напомни() {
     let мин = (н.hour() * 60 + н.minute()) as i64;
     let сегодня = crate::calendar::ключ(н.year(), н.month() as u32, н.day_of_month() as u32);
 
-    // События календаря со временем
+    // События календаря со временем — в срок или заранее (remind — за
+    // сколько минут, −1 — не напоминать), с повторами. Напомнить «за день»
+    // значит напомнить сегодня о завтрашнем, поэтому смотрим оба дня.
+    // Отметка «done_on» — день, о котором уже напомнили: у повторяющегося
+    // события их много, и каждый раз — свой
     let mut кал = crate::apps::читай_данные(crate::calendar::ФАЙЛ);
     let mut менял = false;
-    if let Some(список) = кал.get_mut(&сегодня).and_then(|с| с.as_array_mut()) {
-        for е in список.iter_mut() {
-            let срок = е["time"].as_str().unwrap_or("").to_string();
-            if е["done"].as_bool() != Some(true) && пора(&срок, мин) {
-                е["done"] = json!(true);
-                менял = true;
-                notify::из_шины(&json!({ "заголовок": е["t"], "текст": format!("Событие в {срок}"), "значок": "📅", "откуда": "Календарь", "звук": true }));
+    let сейчас = н.to_unix() / 60;
+    let завтра = н.add_days(1).map(|з| crate::calendar::ключ(з.year(), з.month() as u32, з.day_of_month() as u32)).unwrap_or_default();
+    let _ = мин;
+    if let Some(дни) = кал.as_object_mut() {
+        for (начало, список) in дни.iter_mut() {
+            let Some(список) = список.as_array_mut() else { continue };
+            for е in список.iter_mut() {
+                let срок = е["time"].as_str().unwrap_or("").to_string();
+                let за = е["remind"].as_i64().unwrap_or(0);
+                if !crate::calendar::время_годно(&срок) || за < 0 {
+                    continue;
+                }
+                for день in [&сегодня, &завтра] {
+                    if !crate::calendar::бывает(начало, е, день) {
+                        continue;
+                    }
+                    // Старый формат: «done» без дня — значит, о дне начала
+                    if е["done_on"].as_str() == Some(день.as_str()) || (е["done"].as_bool() == Some(true) && день == начало && е["done_on"].is_null()) {
+                        continue;
+                    }
+                    let Some((г, м, д)) = crate::calendar::разбери(день) else { continue };
+                    let (ч, мн) = срок.split_once(':').map(|(ч, м)| (ч.parse().unwrap_or(0), м.parse().unwrap_or(0))).unwrap_or((0, 0));
+                    let Ok(когда) = glib::DateTime::from_local(г, м as i32, д as i32, ч, мн, 0.0) else { continue };
+                    let в_срок = когда.to_unix() / 60;
+                    let момент = в_срок - за;
+                    if сейчас >= момент && сейчас - момент < 10 && сейчас <= в_срок + 10 {
+                        е["done_on"] = json!(день.as_str());
+                        менял = true;
+                        let текст = match в_срок - сейчас {
+                            о if о >= 1440 - 10 && за >= 1440 => format!("Завтра в {срок}"),
+                            о if о >= 1 => format!("Через {о} мин, в {срок}"),
+                            _ => format!("Событие в {срок}"),
+                        };
+                        notify::из_шины(&json!({ "заголовок": е["t"], "текст": текст, "значок": "📅", "откуда": "Календарь", "звук": true }));
+                    }
+                }
             }
         }
     }

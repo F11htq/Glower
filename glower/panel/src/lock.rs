@@ -452,7 +452,7 @@ fn окно(монитор: &gtk::gdk::Monitor, главное: bool, режим
     поле.set_visibility(false);
     поле.set_placeholder_text(Some("Пароль"));
     поле.set_input_purpose(gtk::InputPurpose::Password);
-    let вперёд = gtk::Button::with_label("→");
+    let вперёд = crate::apps::значок_кнопка("→");
     вперёд.style_context().add_class("go");
     вперёд.set_tooltip_text(Some("Войти"));
     строка.add(&поле);

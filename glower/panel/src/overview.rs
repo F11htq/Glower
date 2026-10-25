@@ -609,7 +609,7 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
         стол.add(&б);
         // Убрать можно любой стол, кроме последнего: окна с него переедут
         if сколько > 1 && д["можно-убрать"].as_bool() != Some(false) {
-            let крестик = gtk::Button::with_label("×");
+            let крестик = crate::apps::значок_кнопка("×");
             крестик.style_context().add_class("desk-x");
             крестик.set_halign(gtk::Align::End);
             крестик.set_valign(gtk::Align::Start);
@@ -620,7 +620,7 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
         столы.add(&стол);
     }
     if д["можно-ещё"].as_bool() != Some(false) && сколько < 8 {
-        let плюс = gtk::Button::with_label("+");
+        let плюс = crate::apps::значок_кнопка("+");
         плюс.style_context().add_class("desk");
         плюс.style_context().add_class("desk-plus");
         плюс.set_tooltip_text(Some("Новый рабочий стол"));
@@ -705,7 +705,7 @@ fn карточка_окна(о: &Value) -> gtk::Widget {
         });
     }
     слой.add(&б);
-    let крестик = gtk::Button::with_label("×");
+    let крестик = crate::apps::значок_кнопка("×");
     крестик.style_context().add_class("desk-x");
     крестик.set_halign(gtk::Align::End);
     крестик.set_valign(gtk::Align::Start);

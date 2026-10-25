@@ -96,6 +96,10 @@ pub fn подготовь(имя: &str, название: &str) {
     // закрыть. Без этого GTK оставлял одну «закрыть»
     if let Some(н) = gtk::Settings::default() {
         н.set_gtk_decoration_layout(Some("menu:minimize,maximize,close"));
+        // Значки кнопок — из Adwaita, она стоит в системе всегда. Без этого
+        // GTK шёл по общей настройке (в Ubuntu там Yaru, которой у нас нет)
+        // и брал цветные значки из запасной темы вперемешку с пустыми
+        н.set_gtk_icon_theme_name(Some("Adwaita"));
     }
     // Тема и акцент — до своего стиля: в нём имена цветов, а не цвета
     crate::theme::подключи();
@@ -123,18 +127,177 @@ pub fn строка_заголовка(окно: &gtk::Window) {
     имя.set_ellipsize(gtk::pango::EllipsizeMode::End);
     имя.set_xalign(0.0);
     окно.bind_property("title", &имя, "label").build();
+    // Строка заголовка отдаёт левой части только её наименьшую ширину, и с
+    // многоточием это ноль: в узком окне (Калькулятор) имя пропадало вовсе.
+    // Просим ширину по длине имени, но не больше 28 знаков
+    let ширина = |имя: &gtk::Label| имя.set_width_chars(имя.text().chars().count().min(28) as i32);
+    ширина(&имя);
+    имя.connect_label_notify(ширина);
     строка.pack_start(&имя);
     // Пустая середина — иначе GTK поставил бы туда имя второй раз
     строка.set_custom_title(Some(&gtk::Box::new(gtk::Orientation::Horizontal, 0)));
     строка.show_all();
+    // Ставя свою строку, GTK стирает заголовок окна — возвращаем его, иначе
+    // окна, назвавшие себя заранее (Календарь, Paint, Музыка), оставались
+    // без имени и в строке, и в панели задач
+    let было = окно.title();
     окно.set_titlebar(Some(&строка));
+    if окно.title().is_none() {
+        if let Some(т) = было {
+            окно.set_title(&т);
+        }
+    }
 }
 
 pub fn кнопка(текст: &str, подсказка: &str) -> gtk::Button {
-    let б = gtk::Button::with_label(текст);
-    б.set_tooltip_text(Some(подсказка));
+    let б = gtk::Button::new();
+    знак_кнопки(&б, текст);
+    if !подсказка.is_empty() {
+        б.set_tooltip_text(Some(подсказка));
+    }
     б.set_valign(gtk::Align::Center);
     б
+}
+
+/// Кнопка только со значком (без подсказки)
+pub fn значок_кнопка(текст: &str) -> gtk::Button {
+    кнопка(текст, "")
+}
+
+/// Значки кнопок — настоящие, из темы Adwaita, а не символы шрифта: «⏮»,
+/// «💾», «‹» в разных шрифтах выходили разного размера, съезжали с
+/// середины и выглядели чужими. Символ в начале надписи — только имя
+/// значка: «💾 Сохранить» становится значком сохранения и словом
+fn значок_по_символу(символ: &str) -> Option<&'static str> {
+    Some(match символ.trim_end_matches('\u{fe0f}') {
+        "‹" => "go-previous-symbolic",
+        "›" | "→" => "go-next-symbolic",
+        "↑" => "go-up-symbolic",
+        "↓" => "go-down-symbolic",
+        "＋" | "➕" | "+" => "list-add-symbolic",
+        "⊕" => "zoom-in-symbolic",
+        "⊖" | "−" => "zoom-out-symbolic",
+        "☰" => "view-list-symbolic",
+        "▦" => "view-grid-symbolic",
+        "↩" | "↶" => "edit-undo-symbolic",
+        "↷" => "edit-redo-symbolic",
+        "🧹" => "edit-clear-all-symbolic",
+        "⏮" => "media-skip-backward-symbolic",
+        "▶" => "media-playback-start-symbolic",
+        "⏸" => "media-playback-pause-symbolic",
+        "⏭" => "media-skip-forward-symbolic",
+        "📁" => "folder-symbolic",
+        "📂" => "document-open-symbolic",
+        "💾" => "document-save-symbolic",
+        "🔎" | "🔍" => "edit-find-symbolic",
+        "📄" => "document-new-symbolic",
+        "⤢" => "zoom-fit-best-symbolic",
+        "⟲" => "object-rotate-left-symbolic",
+        "⟳" => "object-rotate-right-symbolic",
+        "🖼" => "image-x-generic-symbolic",
+        "🗑" => "user-trash-symbolic",
+        "⛶" => "view-fullscreen-symbolic",
+        "✂" => "edit-cut-symbolic",
+        "🖥" => "video-display-symbolic",
+        "📋" => "edit-copy-symbolic",
+        "…" => "document-save-as-symbolic",
+        "×" => "window-close-symbolic",
+        "💻" => "computer-symbolic",
+        "🖴" => "drive-harddisk-symbolic",
+        "⬆" => "software-update-available-symbolic",
+        "🔔" => "preferences-system-notifications-symbolic",
+        "🔕" => "notifications-disabled-symbolic",
+        _ => return None,
+    })
+}
+
+/// Значок раздела, места или строки настроек вместо эмодзи: те же причины,
+/// что у кнопок. Для эмодзи, которым в теме пары нет, остаётся сам символ
+pub fn значок_эмодзи(знак: &str, размер: i32) -> gtk::Widget {
+    let имя = match знак.trim_end_matches('\u{fe0f}') {
+        "💻" => "computer-symbolic",
+        "🖥" => "video-display-symbolic",
+        "🏠" => "go-home-symbolic",
+        "🎨" => "preferences-desktop-appearance-symbolic",
+        "🧱" | "🧩" => "view-app-grid-symbolic",
+        "🔊" => "audio-volume-high-symbolic",
+        "💡" => "display-brightness-symbolic",
+        "📶" => "network-wireless-symbolic",
+        "💾" => "drive-removable-media-symbolic",
+        "🖴" => "drive-harddisk-symbolic",
+        "🖨" => "printer-symbolic",
+        "🎧" => "bluetooth-active-symbolic",
+        "🔔" => "preferences-system-notifications-symbolic",
+        "📦" => "system-software-install-symbolic",
+        "👤" => "avatar-default-symbolic",
+        "🌍" => "preferences-desktop-locale-symbolic",
+        "⌨" => "input-keyboard-symbolic",
+        "🔐" => "channel-secure-symbolic",
+        "⬆" => "software-update-available-symbolic",
+        "ℹ" => "help-about-symbolic",
+        "🗑" => "user-trash-symbolic",
+        "📄" => "folder-documents-symbolic",
+        "🖼" => "folder-pictures-symbolic",
+        "🎵" => "folder-music-symbolic",
+        "⬇" => "folder-download-symbolic",
+        "🎮" => "input-gaming-symbolic",
+        "📚" => "view-list-bullet-symbolic",
+        "🌙" => "weather-clear-night-symbolic",
+        "✨" => "starred-symbolic",
+        "🔀" => "media-playlist-shuffle-symbolic",
+        "🔄" | "♻" => "view-refresh-symbolic",
+        "🌐" => "web-browser-symbolic",
+        "🕐" | "⏱" => "preferences-system-time-symbolic",
+        "🚀" => "system-run-symbolic",
+        "🗂" => "folder-symbolic",
+        "🪟" => "preferences-desktop-display-symbolic",
+        "📤" => "mail-send-symbolic",
+        "🎬" => "applications-multimedia-symbolic",
+        "🛠" => "applications-utilities-symbolic",
+        "🧑\u{200d}💻" => "utilities-terminal-symbolic",
+        _ => {
+            return gtk::Label::new(Some(знак)).upcast();
+        }
+    };
+    let к = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Button);
+    к.set_pixel_size(размер);
+    к.upcast()
+}
+
+/// Поставить на кнопку надпись, а символ в её начале — значком. Годится и
+/// для смены на ходу («▶» ↔ «⏸»): прежнее содержимое кнопки убирается
+pub fn знак_кнопки(б: &gtk::Button, текст: &str) {
+    // Переводим целиком, вместе с символом: так строки лежат в словарях
+    let текст = crate::i18n::tr(текст);
+    if let Some(было) = б.child() {
+        б.remove(&было);
+    }
+    let (символ, остаток) = match текст.split_once(' ') {
+        Some((с, о)) if !с.chars().any(|ч| ч.is_alphanumeric()) => (с, о.trim()),
+        _ if !текст.chars().any(|ч| ч.is_alphanumeric()) => (текст.as_str(), ""),
+        _ => ("", текст.as_str()),
+    };
+    match значок_по_символу(символ) {
+        Some(имя) => {
+            let картинка = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Button);
+            if остаток.is_empty() {
+                б.add(&картинка);
+                б.style_context().add_class("image-button");
+            } else {
+                let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+                ряд.set_halign(gtk::Align::Center);
+                ряд.add(&картинка);
+                ряд.add(&gtk::Label::new(Some(остаток)));
+                б.add(&ряд);
+                б.style_context().remove_class("image-button");
+            }
+        }
+        None => {
+            б.add(&gtk::Label::new(Some(&текст)));
+            б.style_context().remove_class("image-button");
+        }
+    }
+    б.show_all();
 }
 
 /// Где по умолчанию открывать и сохранять: документы системы

@@ -680,7 +680,7 @@ fn рисуй_полосу(п: &П) {
         }
         let б = gtk::Button::new();
         let к = gtk::Box::new(gtk::Orientation::Vertical, 2);
-        let з = gtk::Label::new(Some(знак));
+        let з = crate::apps::значок_эмодзи(знак, 20);
         з.style_context().add_class("z");
         let п_ = gtk::Label::new(Some(имя));
         п_.style_context().add_class("p");
@@ -816,7 +816,11 @@ fn обзор(п: &П) {
     чипы.set_selection_mode(gtk::SelectionMode::None);
     чипы.set_margin_top(16);
     for р in п.каталог["разделы"].as_array().cloned().unwrap_or_default() {
-        let б = gtk::Button::with_label(&format!("{}  {}", строка(&р, "знак"), строка(&р, "имя")));
+        let б = gtk::Button::new();
+        let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        ряд.add(&crate::apps::значок_эмодзи(&строка(&р, "знак"), 16));
+        ряд.add(&gtk::Label::new(Some(&строка(&р, "имя"))));
+        б.add(&ряд);
         б.style_context().add_class("chip");
         let (п2, id) = (п.clone(), строка(&р, "id"));
         б.connect_clicked(move |_| иди(&п2, Экран::Раздел(id.clone())));
@@ -872,7 +876,7 @@ fn разделы(п: &П) {
 }
 
 fn кнопка_назад(п: &П) {
-    let б = gtk::Button::with_label("‹ Назад");
+    let б = crate::apps::значок_кнопка("‹ Назад");
     б.set_halign(gtk::Align::Start);
     let п2 = п.clone();
     б.connect_clicked(move |_| {
@@ -1155,7 +1159,7 @@ fn обновления(п: &П) {
             let з = ярлык(&format!("Программы Flathub · {}", флатхаб.len()), "h");
             з.set_hexpand(true);
             ш.add(&з);
-            let б = gtk::Button::with_label("⬆ Обновить");
+            let б = crate::apps::значок_кнопка("⬆ Обновить");
             б.style_context().add_class("accent");
             б.set_valign(gtk::Align::Center);
             б.set_sensitive(!п1.работа.get());

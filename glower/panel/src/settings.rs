@@ -171,7 +171,7 @@ fn карта(п: &П, заголовок: &str) -> gtk::Box {
 fn ряд(значок: &str, текст: &str, подпись: &str, управление: Option<&gtk::Widget>) -> gtk::Box {
     let р = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     р.style_context().add_class("row");
-    let з = gtk::Label::new(Some(значок));
+    let з = crate::apps::значок_эмодзи(значок, 18);
     з.style_context().add_class("emo");
     з.set_valign(gtk::Align::Center);
     р.add(&з);
@@ -390,7 +390,7 @@ fn перейди(п: &П, id: &'static str) {
 }
 
 fn ссылка(п: &П, к: &gtk::Box, знак: &str, текст: &str, подпись: &str, куда: &'static str) {
-    let б = gtk::Button::with_label("›");
+    let б = crate::apps::значок_кнопка("›");
     let п2 = п.clone();
     б.connect_clicked(move |_| перейди(&п2, куда));
     добавь(к, знак, текст, подпись, Some(б.upcast_ref()));
@@ -417,7 +417,12 @@ fn рисуй(п: &П) {
     let id = п.текущий.get();
     let раздел = РАЗДЕЛЫ.iter().find(|р| р.id == id).copied().unwrap_or(РАЗДЕЛЫ[0]);
     п.окно.set_title(&format!("{} — Параметры", раздел.имя));
-    п.страница.add(&ярлык(&format!("{} {}", раздел.знак, раздел.имя), "h1"));
+    let шапка = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let знак = crate::apps::значок_эмодзи(раздел.знак, 24);
+    знак.set_valign(gtk::Align::Center);
+    шапка.add(&знак);
+    шапка.add(&ярлык(раздел.имя, "h1"));
+    п.страница.add(&шапка);
     match id {
         "home" => главная(п),
         "system" => система(п),
@@ -2398,7 +2403,7 @@ fn заполни_список(п: &П, что: &str) {
             continue;
         }
         let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        ряд.add(&gtk::Label::new(Some(р.знак)));
+        ряд.add(&crate::apps::значок_эмодзи(р.знак, 16));
         let л = gtk::Label::new(Some(р.имя));
         л.set_xalign(0.0);
         ряд.add(&л);

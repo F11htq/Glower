@@ -293,7 +293,7 @@ timeout 2400 apt-get install -y --no-install-recommends -o Dpkg::Progress-Fancy=
   bluez bluez-tools \
   cups cups-filters cups-browsed cups-pdf avahi-daemon printer-driver-gutenprint \
   locales language-pack-ru language-pack-gnome-ru \
-  libgtk-3-0t64 libgtk-layer-shell0 adwaita-icon-theme \
+  libgtk-3-0t64 libgtk-layer-shell0 adwaita-icon-theme librsvg2-common \
   xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vmware xserver-xorg-video-fbdev \
   x11-utils \
   xserver-xorg-video-vesa xserver-xorg-input-libinput xinit x11-xserver-utils \
@@ -405,6 +405,9 @@ install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 # пробный режим с флешки: Esc в установщике снимает маски быстрой загрузки
 install -m 755 "$SRC/linux/glower-try" "$ROOTFS/usr/bin/glower-try"
+# кнопки окна у всех программ GTK, Firefox тоже: свернуть, развернуть, закрыть
+install -m 644 "$SRC/linux/90_glower.gschema.override" "$ROOTFS/usr/share/glib-2.0/schemas/90_glower.gschema.override"
+chroot "$ROOTFS" glib-compile-schemas /usr/share/glib-2.0/schemas >/dev/null 2>&1 || true
 # открыть скачанный файл-установщик: передаёт его оболочке, а та спрашивает
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
 # Посредник для снимков экрана: его зовёт оконный сервер по сочетанию клавиш

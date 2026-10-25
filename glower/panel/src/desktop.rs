@@ -1229,7 +1229,7 @@ pub fn обнови_виджеты() {
         core::погода(),
         core::настройка("tz"),
         crate::apps::читай_данные(crate::todo::ФАЙЛ),
-        crate::apps::читай_данные(crate::calendar::ФАЙЛ)[&сегодня_ключ()]
+        serde_json::Value::Array(crate::calendar::события(&crate::apps::читай_данные(crate::calendar::ФАЙЛ), &сегодня_ключ()))
     );
     if с.borrow().слепок_виджетов == слепок {
         return;

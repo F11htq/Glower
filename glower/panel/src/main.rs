@@ -409,6 +409,9 @@ fn main() {
     }
 
     crate::theme::подключи();
+    if let Some(н) = gtk::Settings::default() {
+        н.set_gtk_icon_theme_name(Some("Adwaita"));
+    }
     let стиль = gtk::CssProvider::new();
     стиль.load_from_data(СТИЛЬ.as_bytes()).expect("стиль панели");
     gtk::StyleContext::add_provider_for_screen(

@@ -339,7 +339,7 @@ fn играй(м: &М, i: usize) {
     м.заголовок.set_text(&название(&путь));
     м.подпись.set_text(&путь.parent().and_then(|р| р.file_name()).map(|и| и.to_string_lossy().to_string()).unwrap_or_default());
     м.окно.set_title(&format!("{} — Музыка", название(&путь)));
-    м.пп.set_label("⏸");
+    crate::apps::знак_кнопки(&м.пп, "⏸");
     нарисуй_список(м);
     mpris_обнови("Playing", &название(&путь), &м.подпись.text());
 }
@@ -354,7 +354,7 @@ fn пауза(м: &М) {
                 п.скажи(json!(["set_property", "pause", !теперь]));
             }
             м.играет.set(теперь);
-            м.пп.set_label(if теперь { "⏸" } else { "▶" });
+            crate::apps::знак_кнопки(&м.пп, if теперь { "⏸" } else { "▶" });
         }
     }
 }
@@ -595,7 +595,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
                         let пауза = в["data"].as_bool() == Some(true);
                         if м.номер.get().is_some() {
                             м.играет.set(!пауза);
-                            м.пп.set_label(if пауза { "▶" } else { "⏸" });
+                            crate::apps::знак_кнопки(&м.пп, if пауза { "▶" } else { "⏸" });
                             mpris_обнови(if пауза { "Paused" } else { "Playing" }, &м.заголовок.text(), &м.подпись.text());
                         }
                     }
