@@ -43,7 +43,10 @@ pub fn запусти(цикл: &mut EventLoop<'static, Glower>, состоян�
     );
     let режим = Mode { size: размер, refresh: ЧАСТОТА };
     let _ = экран.create_global::<Glower>(&состояние.display_handle);
-    экран.change_current_state(Some(режим), Some(Transform::Flipped180), None, Some((0, 0).into()));
+    // Переворот нужен только окну-хозяину (у OpenGL начало внизу), поэтому
+    // он в трекере вывода, а не у экрана: программы видят обычный экран, и
+    // grim не переворачивает снимки
+    экран.change_current_state(Some(режим), Some(Transform::Normal), None, Some((0, 0).into()));
     экран.set_preferred(режим);
     состояние.space.map_output(&экран, (0, 0));
 
@@ -63,14 +66,15 @@ pub fn запусти(цикл: &mut EventLoop<'static, Glower>, состоян�
             }
         }
     };
-    let трекер = OutputDamageTracker::from_output(&экран);
+    let трекер = OutputDamageTracker::new(размер, 1.0, Transform::Flipped180);
     состояние.бэкенд = Some(Бэкенд::Winit(Winit { backend, экран, трекер, указатели: Указатели::new(), размыватель }));
 
     цикл.handle().insert_source(источник, |событие, _, с| match событие {
         WinitEvent::Resized { size, .. } => {
-            if let Some(Бэкенд::Winit(w)) = с.бэкенд.as_ref() {
+            if let Some(Бэкенд::Winit(w)) = с.бэкенд.as_mut() {
                 let э = w.экран.clone();
                 э.change_current_state(Some(Mode { size, refresh: ЧАСТОТА }), None, None, None);
+                w.трекер = OutputDamageTracker::new(size, 1.0, Transform::Flipped180);
                 smithay::desktop::layer_map_for_output(&э).arrange();
             }
             с.нужен_кадр = true;

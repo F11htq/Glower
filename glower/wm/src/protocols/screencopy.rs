@@ -10,7 +10,7 @@ use smithay::{
             damage::OutputDamageTracker,
             element::RenderElement,
             gles::{GlesRenderer, GlesTexture},
-            Bind, Color32F, ExportMem, Offscreen, TextureMapping,
+            Bind, Color32F, ExportMem, Offscreen,
         },
     },
     output::Output,
@@ -207,10 +207,13 @@ fn сними_один<E: RenderElement<GlesRenderer>>(
         .render_output(renderer, &mut цель, 0, элементы, Color32F::new(0.0, 0.0, 0.0, 1.0))
         .map_err(|е| format!("{е:?}"))?;
     let о = з.данные.область;
+    // Кадр в текстуре лежит сверху вниз, как на экране: smithay рисует в
+    // текстуру без переворота. Его flipped() здесь всегда true — верить ему
+    // нельзя: с таким переворотом снимки на настоящем железе выходили вверх
+    // ногами (а на стенде это скрывал grim, переворачивая по Flipped180)
     let отображение = renderer
         .copy_framebuffer(&цель, Rectangle::new((о.loc.x, о.loc.y).into(), (о.size.w, о.size.h).into()), Fourcc::Abgr8888)
         .map_err(|е| е.to_string())?;
-    let перевёрнуто = отображение.flipped();
     let пиксели = renderer.map_texture(&отображение).map_err(|е| е.to_string())?;
     let (ш, в) = (о.size.w as usize, о.size.h as usize);
     with_buffer_contents_mut(&з.буфер, |указатель, длина, д| {
@@ -222,8 +225,7 @@ fn сними_один<E: RenderElement<GlesRenderer>>(
         // Safety: границы проверены выше, буфер принадлежит программе и жив
         let цель = unsafe { std::slice::from_raw_parts_mut(указатель.add(начало), шаг * в) };
         for y in 0..в {
-            let строка = if перевёрнуто { в - 1 - y } else { y };
-            let из = &пиксели[строка * ш * 4..(строка + 1) * ш * 4];
+            let из = &пиксели[y * ш * 4..(y + 1) * ш * 4];
             let в_строку = &mut цель[y * шаг..y * шаг + ш * 4];
             // RGBA → BGRA: в памяти wl_shm XRGB8888 лежит как B, G, R, X
             for (п, к) in из.chunks_exact(4).zip(в_строку.chunks_exact_mut(4)) {
