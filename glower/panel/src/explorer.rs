@@ -1545,7 +1545,19 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     let адрес = gtk::Entry::new();
     let адресная = gtk::Stack::new();
     let крошки_место = gtk::EventBox::new();
-    крошки_место.add(&крошки);
+    // Длинный путь не растягивает окно шире экрана: строка прокручивается
+    // внутри себя (без видимой полосы), к концу — туда, где текущая папка
+    let крошки_листание = gtk::ScrolledWindow::new(gtk::Adjustment::NONE, gtk::Adjustment::NONE);
+    крошки_листание.set_policy(gtk::PolicyType::External, gtk::PolicyType::Never);
+    крошки_листание.add(&крошки);
+    {
+        let л = крошки_листание.clone();
+        крошки.connect_size_allocate(move |_, _| {
+            let г = л.hadjustment();
+            glib::idle_add_local_once(move || г.set_value(г.upper() - г.page_size()));
+        });
+    }
+    крошки_место.add(&крошки_листание);
     адресная.add_named(&крошки_место, "крошки");
     адресная.add_named(&адрес, "адрес");
     адресная.set_hexpand(true);
