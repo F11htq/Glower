@@ -19,6 +19,7 @@ const СТИЛЬ: &str = r#"
 .clock .big { font-size: 46px; font-weight: 300; font-feature-settings: "tnum"; }
 .clock .sub { opacity: 0.6; }
 .clock stackswitcher button { padding: 6px 16px; }
+.clock stackswitcher button:checked { background-image: none; background-color: alpha(@glower_accent, 0.55); color: #ffffff; }
 .clock .row { padding: 10px 12px; border-radius: 10px; background-color: alpha(@glower_fg, 0.05); }
 .clock .row-time { font-size: 24px; font-weight: 300; }
 .clock button.day { min-width: 30px; padding: 2px 4px; border-radius: 8px; }
@@ -479,13 +480,15 @@ fn таймер() -> gtk::Widget {
         });
     }
     {
-        let (о, п, пуск) = (осталось_до_паузы.clone(), пошёл.clone(), пуск.clone());
+        let (в, о, п, пуск) = (всего.clone(), осталось_до_паузы.clone(), пошёл.clone(), пуск.clone());
         glib::timeout_add_local(Duration::from_millis(200), move || {
             let с = осталось();
             цифры.set_text(&сек_строкой((с.as_millis() as u64 + 999) / 1000));
             if п.get().is_some() && с.is_zero() {
                 п.set(None);
-                о.set(Duration::ZERO);
+                // Как в Windows: сработал — снова заданное время, «Старт»
+                // запускает его ещё раз без «Сброса»
+                о.set(в.get());
                 пуск.set_label("Старт");
                 скажи("уведомление", json!({ "заголовок": "Таймер", "текст": "Время вышло", "значок": "⏰", "откуда": "Часы", "звук": true }));
             }

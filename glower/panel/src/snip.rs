@@ -22,7 +22,7 @@ use std::time::Duration;
 
 const СТИЛЬ: &str = r#"
 .snip .stage { background-color: #0b0c10; }
-.snip .color { min-width: 22px; min-height: 22px; border-radius: 11px; padding: 0; border: 2px solid transparent; }
+.snip .color { min-width: 22px; min-height: 22px; border-radius: 11px; padding: 0; border: 2px solid rgba(255, 255, 255, 0.18); }
 .snip .color.on { border-color: #ffffff; }
 .snip button.on { background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); }
 .snip .note { font-size: 12px; opacity: 0.7; }
