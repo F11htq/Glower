@@ -265,6 +265,18 @@ trap cleanup EXIT
 # а рекомендованное мы не ставим, — и без него кнопки всех наших программ
 # оставались без значков вовсе.
 #
+# Ядро — HWE, а не исходное 6.8 из 24.04. Исходное не знает многих
+# Wi-Fi-карт последних лет: новых ревизий Realtek 8852BE (8852BE-VT /
+# 8852BT), 8851BE, Wi-Fi 7 (Realtek 8922AE, MediaTek MT7925, Intel BE200),
+# USB-свистков Realtek 8812AU/8821AU, — и человек видел «беспроводных
+# устройств нет» на ноутбуке, где Windows сеть видит. HWE-ядро идёт из того
+# же 24.04 и обновляется вместе с ним; прошивки к этим картам уже лежат в
+# linux-firmware из noble-updates.
+#
+# firmware-sof-signed — прошивка звука почти всех ноутбуков Intel последних
+# лет. linux-firmware её только «рекомендует», и без явного имени ноутбук
+# оставался без звука: карта видна, а играть нечем.
+#
 # Внутрь самой команды комментарии не ставить: строки склеены обратными
 # слешами, и комментарий посреди списка съедает всё, что после него, —
 # пакеты молча не попадают в образ, а bash -n такого не замечает.
@@ -283,8 +295,8 @@ done
 # остаток этого сценария, и общий срок — сорок минут (обычно хватает пяти).
 timeout 2400 apt-get install -y --no-install-recommends -o Dpkg::Progress-Fancy=0 \
   systemd systemd-sysv dbus ca-certificates \
-  linux-image-generic live-boot live-boot-initramfs-tools initramfs-tools \
-  linux-firmware \
+  linux-image-generic-hwe-24.04 live-boot live-boot-initramfs-tools initramfs-tools \
+  linux-firmware firmware-sof-signed \
   pciutils usbutils \
   plymouth plymouth-label plymouth-themes \
   labwc wlrctl wlr-randr wtype wlsunset swayidle libseat1 libinput10 libgbm1 libxkbcommon0 foot seatd greetd swaylock i3lock libgl1 libegl1 libgles2 libgl1-mesa-dri mesa-vulkan-drivers \
@@ -370,6 +382,26 @@ cat > /etc/sysctl.d/60-glower-userns.conf <<'SYSCTL'
 -kernel.apparmor_restrict_unprivileged_userns=0
 -kernel.unprivileged_userns_clone=1
 SYSCTL
+
+# Wi-Fi-карты Realtek (rtw88, rtw89 — 8821CE, 8822CE, 8852AE/BE/CE и
+# родня) с энергосбережением PCIe то не находят сети, то теряют её через
+# минуту: известная беда этих драйверов. Выключаем у них ASPM и глубокий
+# сон — на скорость не влияет, батареи берёт чуть больше. Неизвестный
+# параметр (у старого ядра) модуль просто пропустит
+cat > /etc/modprobe.d/glower-wifi.conf <<'MOD'
+options rtw89_pci disable_aspm_l1=y disable_aspm_l1ss=y
+options rtw89_core disable_ps_mode=y
+options rtw88_pci disable_aspm=y
+options rtw88_core disable_lps_deep=y
+MOD
+
+# И NetworkManager не усыпляет Wi-Fi: с энергосбережением те же карты
+# (и многие другие) роняют связь и медленно отвечают
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/glower-wifi.conf <<'NM'
+[connection]
+wifi.powersave = 2
+NM
 
 cat > /etc/modprobe.d/glower-vmwgfx.conf <<'MOD'
 install vmwgfx /bin/sh -c 'grep -qi virtualbox /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null || exec modprobe --ignore-install vmwgfx "$@"'
@@ -767,16 +799,19 @@ printf '127.0.0.1\tlocalhost\n127.0.1.1\tGlowerOS\n' > /etc/hosts
 # нужен вовсе. Заголовки ядра оставляем в системе намеренно: после
 # обновления ядра драйверы должны пересобраться сами, иначе Wi-Fi отвалится
 # ровно в тот день, когда человек нажмёт «Обновить».
-apt-get install -y --no-install-recommends linux-headers-generic dkms || true
+# Списки пакетов здесь могут оказаться пустыми — их чистят выше после
+# сборки glower-toplevels, — и тогда заголовки с драйверами молча не встали бы
+apt-get update -qq || true
+apt-get install -y --no-install-recommends linux-headers-generic-hwe-24.04 dkms || true
 
 # Broadcom. BCM43142 и родня — единственные карты, к которым не подходит
 # ни один открытый драйвер. При этом Bluetooth в той же железке работает
 # через общий драйвер, и со стороны кажется, что Wi-Fi-карты нет вовсе.
 # Стоит в множестве ноутбуков Lenovo и HP тех лет.
 #
-# Realtek. Карты 8821CE, 8812AU, 88x2BU в ядро не вошли: в мейнлайне для
-# них либо ничего нет, либо есть драйвер, который их не узнаёт. Очень
-# частые — и внутри ноутбуков, и в виде USB-свистков.
+# Realtek 8821CE, 8812AU, 88x2BU отдельных драйверов больше не просят:
+# HWE-ядро знает их само (rtw88), а прежние пакеты rtl*-dkms в 24.04 и не
+# существовали — сборка молча их пропускала.
 #
 # Broadcom b43. Старые карты, где сам драйвер в ядре есть, а прошивку
 # нельзя распространять: пакет выкачивает её у производителя и режет на
@@ -786,17 +821,17 @@ apt-get install -y --no-install-recommends linux-headers-generic dkms || true
 # без них железка видна ядру, но хода ей нет, и человек читает «адаптера
 # нет», глядя на живую машину. Пакет маленький, ставится всегда.
 # lsusb для опознания адаптера у нас уже есть — usbutils стоит выше.
+# Не собравшийся драйвер убираем сразу: недонастроенный пакет оставил бы
+# dpkg в поломанном состоянии, и следующие apt-get падали бы один за другим
 for drv in bluez-firmware \
                bcmwl-kernel-source \
-               rtl8821ce-dkms \
-               rtl8812au-dkms \
-               rtl88x2bu-dkms \
                firmware-b43-installer \
                firmware-b43legacy-installer; do
   if apt-get install -y --no-install-recommends "$drv" >/dev/null 2>&1; then
     echo "  драйвер $drv: встал"
   else
     echo "  драйвер $drv: не поставился — карты этого вида останутся без сети"
+    apt-get purge -y "$drv" >/dev/null 2>&1 || dpkg --remove --force-remove-reinstreq "$drv" >/dev/null 2>&1 || true
   fi
 done
 
