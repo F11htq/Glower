@@ -379,10 +379,15 @@ fn добавь(м: &М) {
     if д.run() != gtk::ResponseType::Accept {
         return;
     }
+    let пути: Vec<PathBuf> = д.files().iter().filter_map(|ф| ф.path()).collect();
+    добавь_файлы(м, пути);
+}
+
+/// Положить файлы в папку музыки и показать в списке
+fn добавь_файлы(м: &М, пути: Vec<PathBuf>) {
     let папка = папка_музыки();
     let _ = std::fs::create_dir_all(&папка);
-    for файл in д.files() {
-        let Some(путь) = файл.path() else { continue };
+    for путь in пути {
         if путь.parent() == Some(папка.as_path()) {
             continue;
         }
@@ -502,6 +507,14 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         п.скажи(json!(["set_property", "volume", 80]));
     }
 
+    {
+        let мв = Rc::downgrade(&м);
+        crate::fileops::принимай_в_окно(&м.окно, move |пути| {
+            if let Some(м) = мв.upgrade() {
+                добавь_файлы(&м, пути);
+            }
+        });
+    }
     let переданные: Vec<PathBuf> = доводы.iter().filter(|д| !д.starts_with("--")).map(PathBuf::from).collect();
     перечитай(&м, &переданные);
 

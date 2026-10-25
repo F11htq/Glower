@@ -804,15 +804,11 @@ fn отпускание() {
     match жест {
         // Новое место запоминает ядро — в настройках, iconPos
         Жест::Тянем { где, сдвинули: true, .. } => {
-            let с_ = с.borrow();
-            let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
-            for (n, _, _) in &где {
-                if let Some(з) = с_.значки.iter().find(|з| &з.имя == n) {
-                    места.insert(n.clone(), json!({ "x": з.x.round(), "y": з.y.round() }));
-                }
+            // Где оказался первый из тянутых — на столько и сдвинули всех
+            let сдвиг = где.first().and_then(|(n, ix, iy)| с.borrow().значки.iter().find(|з| &з.имя == n).map(|з| (з.x - ix, з.y - iy)));
+            if let Some((dx, dy)) = сдвиг {
+                поставь_значки(&где, dx, dy);
             }
-            drop(с_);
-            core::задай("iconPos", Value::Object(места));
         }
         Жест::Рамка { .. } => с.borrow().поле.queue_draw(),
         // Щёлкнули, не сдвинув, — открыть то, что за виджетом стоит
@@ -844,17 +840,42 @@ fn поставь_значки(где: &[(String, f64, f64)], dx: f64, dy: f64) 
     let mut с_ = с.borrow_mut();
     let поле = с_.поле.clone();
     let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
-    let (ш, в) = в_пределах_стола(&с_);
-    for з in с_.значки.iter_mut() {
-        if let Some((_, ix, iy)) = где.iter().find(|(n, ..)| n == &з.имя) {
-            з.x = (ix + dx).clamp(0.0, ш);
-            з.y = (iy + dy).clamp(30.0, в);
-            поле.move_(&з.вид, з.x as i32, з.y as i32);
-            места.insert(з.имя.clone(), json!({ "x": з.x.round(), "y": з.y.round() }));
-        }
+    let пределы = в_пределах_стола(&с_);
+    // Занято теми, кого не двигаем; двигаемые встают по очереди
+    let mut занято: Vec<(f64, f64)> = с_.значки.iter().filter(|з| !где.iter().any(|(н, ..)| н == &з.имя)).map(|з| (з.x, з.y)).collect();
+    for (имя, ix, iy) in где {
+        let Some(з) = с_.значки.iter_mut().find(|з| &з.имя == имя) else { continue };
+        let (x, y) = клетка_рядом(&занято, ix + dx, iy + dy, пределы);
+        занято.push((x, y));
+        з.x = x;
+        з.y = y;
+        поле.move_(&з.вид, x as i32, y as i32);
+        места.insert(з.имя.clone(), json!({ "x": x.round(), "y": y.round() }));
     }
     drop(с_);
     core::задай("iconPos", Value::Object(места));
+}
+
+/// Сетка стола — та же, по которой ядро расставляет значки сами. Как в
+/// Windows с «Выровнять по сетке»: значок встаёт в ближайшую свободную
+/// клетку и не налезает на соседа
+fn клетка_рядом(занято: &[(f64, f64)], x: f64, y: f64, (ш, в): (f64, f64)) -> (f64, f64) {
+    let столбцов = ((ш - 16.0) / 100.0).floor().max(0.0) as i32 + 1;
+    let строк = ((в - 44.0) / 104.0).floor().max(0.0) as i32 + 1;
+    let mut лучшая: Option<(f64, f64, f64)> = None;
+    for c in 0..столбцов {
+        for r in 0..строк {
+            let (кx, кy) = (16.0 + c as f64 * 100.0, 44.0 + r as f64 * 104.0);
+            if занято.iter().any(|(зx, зy)| (зx - кx).abs() < 60.0 && (зy - кy).abs() < 60.0) {
+                continue;
+            }
+            let д = (кx - x).hypot(кy - y);
+            if лучшая.is_none_or(|(лд, ..)| д < лд) {
+                лучшая = Some((д, кx, кy));
+            }
+        }
+    }
+    лучшая.map(|(_, кx, кy)| (кx, кy)).unwrap_or((x.clamp(0.0, ш), y.clamp(30.0, в)))
 }
 
 /// Докуда может встать левый верхний угол значка, чтобы весь значок
@@ -942,11 +963,15 @@ fn брошено_на_стол(пути: Vec<PathBuf>, x: f64, y: f64) -> bool 
         сообщи_о_бедах(&итог);
         // Новые значки встают там, куда их бросили, а не в общий ряд
         let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
-        let (ш, в) = стол().map(|с| в_пределах_стола(&с.borrow())).unwrap_or((1e9, 1e9));
+        let Some(с) = стол() else { return };
+        let пределы = в_пределах_стола(&с.borrow());
+        let mut занято: Vec<(f64, f64)> = с.borrow().значки.iter().map(|з| (з.x, з.y)).collect();
         for (н, п) in итог.новые.iter().enumerate() {
             if let Some(имя) = п.file_name() {
                 let (нx, нy) = место(от + н);
-                места.insert(имя.to_string_lossy().to_string(), json!({ "x": нx.clamp(0.0, ш).round(), "y": нy.clamp(30.0, в).round() }));
+                let (x, y) = клетка_рядом(&занято, нx, нy, пределы);
+                занято.push((x, y));
+                места.insert(имя.to_string_lossy().to_string(), json!({ "x": x.round(), "y": y.round() }));
             }
         }
         core::задай("iconPos", Value::Object(места));

@@ -595,8 +595,22 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             по_размеру();
         });
     }
-    {
+    // Открыть картинку: кнопкой «Открыть» или бросив файл в окно
+    let открой_картинку: Rc<dyn Fn(PathBuf)> = {
         let (х, по_размеру, окно2) = (х.clone(), по_размеру.clone(), окно.clone());
+        Rc::new(move |п: PathBuf| {
+            if let Ok(к) = Pixbuf::from_file(&п) {
+                запомни(&х);
+                *х.картинка.borrow_mut() = из_картинки(&к);
+                окно2.set_title(&format!("{} — Paint", п.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default()));
+                *х.файл.borrow_mut() = Some(п);
+                х.изменён.set(false);
+                по_размеру();
+            }
+        })
+    };
+    {
+        let (окно2, открой) = (окно.clone(), открой_картинку.clone());
         открыть.connect_clicked(move |_| {
             let д = gtk::FileChooserNative::new(Some("Открыть картинку"), Some(&окно2), gtk::FileChooserAction::Open, Some("Открыть"), Some("Отмена"));
             д.set_current_folder(папка_изображений());
@@ -606,15 +620,16 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             д.add_filter(ф);
             if д.run() == gtk::ResponseType::Accept {
                 if let Some(п) = д.filename() {
-                    if let Ok(к) = Pixbuf::from_file(&п) {
-                        запомни(&х);
-                        *х.картинка.borrow_mut() = из_картинки(&к);
-                        окно2.set_title(&format!("{} — Paint", п.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default()));
-                        *х.файл.borrow_mut() = Some(п);
-                        х.изменён.set(false);
-                        по_размеру();
-                    }
+                    открой(п);
                 }
+            }
+        });
+    }
+    {
+        let открой = открой_картинку.clone();
+        crate::fileops::принимай_в_окно(&окно, move |пути| {
+            if let Some(п) = пути.into_iter().next() {
+                открой(п);
             }
         });
     }

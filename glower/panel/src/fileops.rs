@@ -168,6 +168,18 @@ pub fn атом_ссылок() -> gdk::Atom {
     gdk::Atom::intern("text/uri-list")
 }
 
+/// Окно программы принимает брошенные в него файлы — «открыть их»,
+/// как в Windows: бросил картинку на Paint — она открылась
+pub fn принимай_в_окно<W: IsA<gtk::Widget>>(в: &W, открой: impl Fn(Vec<PathBuf>) + 'static) {
+    в.drag_dest_set(gtk::DestDefaults::ALL, &цели_переноса(), gdk::DragAction::COPY);
+    в.connect_drag_data_received(move |_, _, _, _, данные, _, _| {
+        let пути = пути_из_ссылок(&данные.uris());
+        if !пути.is_empty() {
+            открой(пути);
+        }
+    });
+}
+
 /* ---------- буфер обмена ---------- */
 
 const ФАЙЛЫ_GNOME: &str = "x-special/gnome-copied-files";

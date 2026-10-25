@@ -277,6 +277,14 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         тянем: Cell::new(None),
         весь_экран: Cell::new(false),
     });
+    {
+        let фв = Rc::downgrade(&ф);
+        crate::fileops::принимай_в_окно(&окно, move |пути| {
+            if let (Some(ф), Some(п)) = (фв.upgrade(), пути.first()) {
+                открой_путь(&ф, п);
+            }
+        });
+    }
 
     {
         let ф1 = ф.clone();

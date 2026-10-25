@@ -98,6 +98,25 @@ fn новая_вкладка(б: &Б, путь: Option<PathBuf>, текст: &st
     вид.set_bottom_margin(10);
     вид.set_wrap_mode(if б.перенос.get() { gtk::WrapMode::WordChar } else { gtk::WrapMode::None });
     вид.style_context().add_provider(&б.шрифт, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    // Файл, брошенный в текст, открывается вкладкой, а не вставляется
+    // строкой «file:///…»; обычный текст GTK вставит сам
+    вид.drag_dest_add_uri_targets();
+    {
+        let бв = Rc::downgrade(б);
+        вид.connect_drag_data_received(move |в, ctx, _, _, данные, _, время| {
+            let пути = crate::fileops::пути_из_ссылок(&данные.uris());
+            if пути.is_empty() {
+                return;
+            }
+            в.stop_signal_emission_by_name("drag-data-received");
+            ctx.drag_finish(true, false, время);
+            if let Some(б) = бв.upgrade() {
+                for п in пути {
+                    открой_файл(&б, п);
+                }
+            }
+        });
+    }
     let страница = gtk::ScrolledWindow::new(gtk::Adjustment::NONE, gtk::Adjustment::NONE);
     страница.add(&вид);
 
@@ -450,6 +469,16 @@ pub fn запусти(файлы: Vec<String>) -> ! {
         размер: Cell::new(14),
         шрифт: gtk::CssProvider::new(),
     });
+    {
+        let бв = Rc::downgrade(&б);
+        crate::fileops::принимай_в_окно(&окно, move |пути| {
+            if let Some(б) = бв.upgrade() {
+                for п in пути {
+                    открой_файл(&б, п);
+                }
+            }
+        });
+    }
     примени_шрифт(&б);
 
     // Действия
