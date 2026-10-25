@@ -62,6 +62,97 @@ fn открой_корзину() {
     }
 }
 
+/// Курсор (или несомый файл) над доком: не прятать
+fn останься() {
+    с_доком(|д| {
+        д.у_курсора = true;
+        if let Some(у) = д.уход.take() {
+            у.remove();
+        }
+    });
+}
+
+/// Файл несут к нижнему краю: док выезжает. Если до него так и не
+/// дотянулись — через пару секунд уезжает обратно
+pub fn выезжай_для_переноса() {
+    останься();
+    обнови_видимость();
+    с_доком(|д| {
+        д.уход = Some(glib::timeout_add_local_once(Duration::from_millis(2000), || {
+            с_доком(|д| {
+                д.уход = None;
+                д.у_курсора = false;
+            });
+            обнови_видимость();
+        }));
+    });
+}
+
+/// Курсор ушёл: прятать с небольшой паузой — курсор, соскользнувший с края
+/// на миг, не должен прятать док, к которому человек тянулся
+fn уйди_позже() {
+    с_доком(|д| {
+        if let Some(у) = д.уход.take() {
+            у.remove();
+        }
+        д.уход = Some(glib::timeout_add_local_once(Duration::from_millis(700), || {
+            с_доком(|д| {
+                д.уход = None;
+                д.у_курсора = false;
+            });
+            обнови_видимость();
+        }));
+    });
+}
+
+/// Кнопка дока принимает файлы, как панель задач Windows: бросили —
+/// «бросили»; задержали над кнопкой — «задержали» (окно выходит наверх)
+fn принимай_файлы(б: &gtk::Button, задержали: Option<Box<dyn Fn()>>, бросили: impl Fn(Vec<std::path::PathBuf>) -> bool + 'static, действие: gtk::gdk::DragAction) {
+    use std::rc::Rc;
+    б.drag_dest_set(gtk::DestDefaults::empty(), &crate::fileops::цели_переноса(), gtk::gdk::DragAction::COPY | gtk::gdk::DragAction::MOVE);
+    let ждём: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let задержали: Option<Rc<dyn Fn()>> = задержали.map(Rc::from);
+    {
+        let ждём = ждём.clone();
+        б.connect_drag_motion(move |к, ctx, _, _, время| {
+            останься();
+            к.style_context().add_class("drop");
+            if let (Some(дело), true) = (задержали.clone(), ждём.borrow().is_none()) {
+                let ждём2 = ждём.clone();
+                *ждём.borrow_mut() = Some(glib::timeout_add_local_once(Duration::from_millis(700), move || {
+                    ждём2.borrow_mut().take();
+                    дело();
+                }));
+            }
+            ctx.drag_status(действие, время);
+            true
+        });
+    }
+    {
+        let ждём = ждём.clone();
+        б.connect_drag_leave(move |к, _, _| {
+            к.style_context().remove_class("drop");
+            if let Some(з) = ждём.borrow_mut().take() {
+                з.remove();
+            }
+        });
+    }
+    б.connect_drag_drop(|к, ctx, _, _, время| {
+        к.drag_get_data(ctx, &crate::fileops::атом_ссылок(), время);
+        true
+    });
+    б.connect_drag_data_received(move |к, ctx, _, _, данные, _, время| {
+        к.style_context().remove_class("drop");
+        if let Some(з) = ждём.borrow_mut().take() {
+            з.remove();
+        }
+        let пути = crate::fileops::пути_из_ссылок(&данные.uris());
+        let ok = !пути.is_empty() && бросили(пути);
+        ctx.drag_finish(ok, false, время);
+        уйди_позже();
+    });
+}
+
 fn дело_стола(что: &str, доводы: Value) {
     let mut тело = доводы;
     тело["что"] = json!(что);
@@ -134,22 +225,16 @@ pub fn создай() {
         if с.detail() == gtk::gdk::NotifyType::Inferior {
             return glib::Propagation::Proceed;
         }
-        с_доком(|д| {
-            if let Some(у) = д.уход.take() {
-                у.remove();
-            }
-            // Небольшая пауза: курсор, соскользнувший с края на миг, не
-            // должен прятать док, к которому человек тянулся
-            д.уход = Some(glib::timeout_add_local_once(Duration::from_millis(700), || {
-                с_доком(|д| {
-                    д.уход = None;
-                    д.у_курсора = false;
-                });
-                обнови_видимость();
-            }));
-        });
+        уйди_позже();
         glib::Propagation::Proceed
     });
+    // Пока над доком несут файл, обычных «вошёл/ушёл» нет — держим док сами
+    окно.drag_dest_set(gtk::DestDefaults::empty(), &crate::fileops::цели_переноса(), gtk::gdk::DragAction::COPY | gtk::gdk::DragAction::MOVE);
+    окно.connect_drag_motion(|_, _, _, _, _| {
+        останься();
+        false
+    });
+    окно.connect_drag_leave(|_, _, _| уйди_позже());
 
     // Полоска у нижнего края: невидимая, в пару точек, ловит курсор
     let полоска = gtk::Window::new(gtk::WindowType::Toplevel);
@@ -162,7 +247,7 @@ pub fn создай() {
     }
     полоска.set_exclusive_zone(0);
     полоска.set_keyboard_mode(KeyboardMode::None);
-    полоска.set_size_request(-1, 2);
+    полоска.set_size_request(-1, 3);
     полоска.connect_draw(|_, к| {
         к.set_operator(gtk::cairo::Operator::Source);
         к.set_source_rgba(0.0, 0.0, 0.0, 0.0);
@@ -170,6 +255,12 @@ pub fn создай() {
         glib::Propagation::Stop
     });
     полоска.add_events(gtk::gdk::EventMask::ENTER_NOTIFY_MASK);
+    // Файл поднесли к нижнему краю — док выезжает, как от курсора
+    полоска.drag_dest_set(gtk::DestDefaults::empty(), &crate::fileops::цели_переноса(), gtk::gdk::DragAction::COPY | gtk::gdk::DragAction::MOVE);
+    полоска.connect_drag_motion(|_, _, _, _, _| {
+        выезжай_для_переноса();
+        false
+    });
     полоска.connect_enter_notify_event(|_, _| {
         с_доком(|д| д.у_курсора = true);
         обнови_видимость();
@@ -317,6 +408,14 @@ fn родное(app_id: &str) -> Option<(&'static str, &'static str, &'static st
     // Свои программы — это окна с именами из списка ядра: glower-notepad,
     // glower-paint и остальные
     crate::core::НАШИ.iter().find(|н| !н.окно.is_empty() && н.окно == app_id).map(|н| (н.id, н.знак, н.фон))
+}
+
+/// Окно наверх (свёрнутое — достать), не сворачивая его
+fn к_окну(w: &Value) {
+    let действие = if w["состояние"]["свёрнуто"].as_bool() == Some(true) { "restore" } else { "focus" };
+    позови("sys.window", json!({ "action": действие, "appId": w["appId"], "title": w["title"] }), |_| {
+        glib::timeout_add_local_once(Duration::from_millis(250), опроси_чужие);
+    });
 }
 
 /// Переключить настоящее окно, как в любой панели задач: в работе —
@@ -488,6 +587,19 @@ fn перерисуй() {
         черта(&ряд);
         let корзина = кнопка(overview::наш_значок("🗑️", "rgba(255,255,255,0.10)"), "Корзина", false, false);
         корзина.connect_clicked(|_| открой_корзину());
+        // Бросили на корзину — в корзину, как в Windows
+        принимай_файлы(
+            &корзина,
+            None,
+            |пути| {
+                let беды = crate::fileops::в_корзину(&пути);
+                if !беды.is_empty() {
+                    crate::notify::покажи("Не всё удалось", &беды.join("\n"), "⚠️");
+                }
+                true
+            },
+            gtk::gdk::DragAction::MOVE,
+        );
         по_правой(&корзина, |к, с| {
             меню(
                 vec![
@@ -530,6 +642,18 @@ fn добавь_своё(ряд: &gtk::Box, п: &Value, закреплена: bo
             Some(w) => переключи_окно(w),
             None => дело_стола("запусти", json!({ "id": id, "вид": "приложение" })),
         });
+    }
+    {
+        // Файлы на значок — открыть ими; задержали над запущенной —
+        // её окно выходит наверх, чтобы бросить прямо в него
+        let окно = родные.first().cloned();
+        let id2 = id.clone();
+        принимай_файлы(
+            &б,
+            окно.map(|w| Box::new(move || к_окну(&w)) as Box<dyn Fn()>),
+            move |пути| crate::core::открой_файлы_программой(&id2, "приложение", &пути),
+            gtk::gdk::DragAction::COPY,
+        );
     }
     по_правой(&б, move |к, с| {
         let mut пункты: Vec<(String, Box<dyn Fn()>)> = Vec::new();
@@ -579,6 +703,16 @@ fn добавь_чужое(ряд: &gtk::Box, w: &Value) {
                 glib::timeout_add_local_once(Duration::from_millis(250), опроси_чужие);
             });
         });
+    }
+    {
+        let w2 = w.clone();
+        let app_id2 = app_id.clone();
+        принимай_файлы(
+            &б,
+            Some(Box::new(move || к_окну(&w2))),
+            move |пути| crate::core::открой_файлы_программой(&app_id2, "машина", &пути),
+            gtk::gdk::DragAction::COPY,
+        );
     }
     по_правой(&б, move |к, с| {
         let (окно_id, окно_имя) = (app_id.clone(), заголовок.clone());

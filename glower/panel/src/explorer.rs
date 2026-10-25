@@ -1421,6 +1421,66 @@ fn собери_места(п: &П) {
     п.места.show_all();
 }
 
+/// Места слева принимают файлы: брошенное на «Документы» уходит туда,
+/// на «Корзину» — в корзину
+fn подключи_места(п: &П) {
+    use gtk::gdk::DragAction;
+    let места = п.места.clone();
+    места.drag_dest_set(gtk::DestDefaults::empty(), &crate::fileops::цели_переноса(), DragAction::COPY | DragAction::MOVE);
+    let пв = Rc::downgrade(п);
+    let цель = Rc::new(move |y: i32| -> Option<(gtk::ListBoxRow, Место)> {
+        let п = пв.upgrade()?;
+        let ряд = п.места.row_at_y(y)?;
+        let м = п.цели.borrow().get(ряд.index() as usize).cloned()?;
+        Some((ряд, м))
+    });
+    {
+        let цель = цель.clone();
+        места.connect_drag_motion(move |м, ctx, _, y, время| {
+            match цель(y) {
+                Some((ряд, Место::Папка(_) | Место::Корзина)) => {
+                    м.drag_highlight_row(&ряд);
+                    ctx.drag_status(DragAction::MOVE, время);
+                }
+                _ => {
+                    м.drag_unhighlight_row();
+                    ctx.drag_status(DragAction::empty(), время);
+                }
+            }
+            true
+        });
+    }
+    места.connect_drag_leave(|м, _, _| м.drag_unhighlight_row());
+    места.connect_drag_drop(|м, ctx, _, _, время| {
+        м.drag_get_data(ctx, &crate::fileops::атом_ссылок(), время);
+        true
+    });
+    let пв = Rc::downgrade(п);
+    места.connect_drag_data_received(move |м, ctx, _, y, данные, _, время| {
+        м.drag_unhighlight_row();
+        let пути = crate::fileops::пути_из_ссылок(&данные.uris());
+        let (Some(п), Some((_, место))) = (пв.upgrade(), цель(y)) else {
+            ctx.drag_finish(false, false, время);
+            return;
+        };
+        let ok = !пути.is_empty()
+            && match место {
+                Место::Папка(папка) => {
+                    let п2 = п.clone();
+                    crate::fileops::брось(пути, папка, move |итог| готово_вставить(&п2, итог));
+                    true
+                }
+                Место::Корзина => {
+                    let беды = crate::fileops::в_корзину(&пути);
+                    готово_вставить(&п, crate::fileops::Итог { новые: Vec::new(), беды });
+                    true
+                }
+                _ => false,
+            };
+        ctx.drag_finish(ok, false, время);
+    });
+}
+
 fn латинская(е: &gtk::gdk::EventKey) -> String {
     crate::notepad::латинская(е)
 }
@@ -1550,6 +1610,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         значки: RefCell::new(HashMap::new()),
     });
     собери_места(&п);
+    подключи_места(&п);
     {
         let монитор = gio::VolumeMonitor::get();
         let пв = Rc::downgrade(&п);

@@ -258,6 +258,7 @@ window.dock button.dock-item {
 window.dock button.dock-item:hover { background-color: rgba(255, 255, 255, 0.12); }
 window.dock button.dock-item.active { background-color: rgba(255, 255, 255, 0.16); }
 window.dock button.dock-item.minimized .dock-ico { opacity: 0.55; }
+window.dock button.dock-item.drop { background-color: alpha(@glower_accent, 0.45); box-shadow: inset 0 0 0 2px rgba(160, 190, 255, 0.9); }
 window.dock .glyph {
   font-size: 22px;
   border-radius: 11px;

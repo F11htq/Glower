@@ -68,7 +68,8 @@ impl Glower {
                     let под = self.под_мышью(новое);
                     let под = self.без_рамки(новое, под);
                     let под = self.только_разрешённым(под);
-                    у.motion(self, под, &MotionEvent { location: новое, serial, time: event.time_msec() });
+                    у.motion(self, под.clone(), &MotionEvent { location: новое, serial, time: event.time_msec() });
+                    self.дошли_до_новой(&у, под, новое, event.time_msec());
                 }
                 у.frame(self);
                 self.нужен_кадр = true;
@@ -83,7 +84,8 @@ impl Glower {
                 let под = self.без_рамки(где, под);
                 let под = self.только_разрешённым(под);
                 if let Some(у) = self.seat.get_pointer() {
-                    у.motion(self, под, &MotionEvent { location: где, serial, time: event.time_msec() });
+                    у.motion(self, под.clone(), &MotionEvent { location: где, serial, time: event.time_msec() });
+                    self.дошли_до_новой(&у, под, где, event.time_msec());
                     у.frame(self);
                 }
                 self.нужен_кадр = true;
@@ -151,6 +153,24 @@ impl Glower {
             return None;
         }
         под
+    }
+
+    /// Пока мышь захвачена (несут файл), новой поверхности сервер шлёт
+    /// только «вошли» — а GTK отвечает лишь на «двинулись». Влетел курсор
+    /// на тонкую полоску у края одним рывком и замер — программа ничего и
+    /// не узнала (док не выезжал под файлом). Досылаем движение сразу
+    fn дошли_до_новой(
+        &mut self,
+        у: &smithay::input::pointer::PointerHandle<Self>,
+        под: Option<(Фокус, Point<f64, Logical>)>,
+        где: Point<f64, Logical>,
+        время: u32,
+    ) {
+        let новая = под.as_ref().and_then(|(ф, _)| ф.wl_surface().map(|с| с.into_owned()));
+        if у.is_grabbed() && новая.is_some() && новая != self.фокус_захвата {
+            у.motion(self, под, &MotionEvent { location: где, serial: SERIAL_COUNTER.next_serial(), time: время });
+        }
+        self.фокус_захвата = новая;
     }
 
     /// Ввод заперт замком — мышь видит только его

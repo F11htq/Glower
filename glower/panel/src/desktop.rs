@@ -844,16 +844,24 @@ fn поставь_значки(где: &[(String, f64, f64)], dx: f64, dy: f64) 
     let mut с_ = с.borrow_mut();
     let поле = с_.поле.clone();
     let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
+    let (ш, в) = в_пределах_стола(&с_);
     for з in с_.значки.iter_mut() {
         if let Some((_, ix, iy)) = где.iter().find(|(n, ..)| n == &з.имя) {
-            з.x = (ix + dx).max(0.0);
-            з.y = (iy + dy).max(30.0);
+            з.x = (ix + dx).clamp(0.0, ш);
+            з.y = (iy + dy).clamp(30.0, в);
             поле.move_(&з.вид, з.x as i32, з.y as i32);
             места.insert(з.имя.clone(), json!({ "x": з.x.round(), "y": з.y.round() }));
         }
     }
     drop(с_);
     core::задай("iconPos", Value::Object(места));
+}
+
+/// Докуда может встать левый верхний угол значка, чтобы весь значок
+/// остался на экране
+fn в_пределах_стола(с: &Стол) -> (f64, f64) {
+    let (ш, в) = (с.обои.allocated_width() as f64, с.обои.allocated_height() as f64);
+    ((ш - 96.0).max(0.0), (в - 100.0).max(30.0))
 }
 
 /// Куда бросают на столе: папка или программа под курсором — но не из
@@ -934,10 +942,11 @@ fn брошено_на_стол(пути: Vec<PathBuf>, x: f64, y: f64) -> bool 
         сообщи_о_бедах(&итог);
         // Новые значки встают там, куда их бросили, а не в общий ряд
         let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
+        let (ш, в) = стол().map(|с| в_пределах_стола(&с.borrow())).unwrap_or((1e9, 1e9));
         for (н, п) in итог.новые.iter().enumerate() {
             if let Some(имя) = п.file_name() {
                 let (нx, нy) = место(от + н);
-                места.insert(имя.to_string_lossy().to_string(), json!({ "x": нx.max(0.0).round(), "y": нy.max(30.0).round() }));
+                места.insert(имя.to_string_lossy().to_string(), json!({ "x": нx.clamp(0.0, ш).round(), "y": нy.clamp(30.0, в).round() }));
             }
         }
         core::задай("iconPos", Value::Object(места));
@@ -975,7 +984,11 @@ fn подключи_перенос(окно: &gtk::Window) {
 
     // Куда: файлы на стол, в папку на столе, на программу
     окно.drag_dest_set(gtk::DestDefaults::empty(), &crate::fileops::цели_переноса(), DragAction::COPY | DragAction::MOVE);
-    окно.connect_drag_motion(|_, ctx, x, y, время| {
+    окно.connect_drag_motion(|о, ctx, x, y, время| {
+        // Файл у самого нижнего края — показать док с корзиной
+        if y >= о.allocated_height() - 4 {
+            crate::dock::выезжай_для_переноса();
+        }
         let (x, y) = (x as f64, y as f64);
         let цель = цель_на_столе(x, y);
         подсвети(цель.as_ref().and_then(|з| з["n"].as_str().map(String::from)));

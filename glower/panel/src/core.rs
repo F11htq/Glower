@@ -310,10 +310,10 @@ fn значки_стола(я: &Ядро) -> Vec<Value> {
         значки.push(json!({ "n": имя, "g": if папка { "📁" } else { знак_файла(&тип) }, "вид": if папка { "папка" } else { "файл" }, "значок": значок }));
     }
     // Места: запомненные — как есть, остальные — столбиками сверху вниз
-    let высота = gtk::gdk::Display::default()
+    let (ширина, высота) = gtk::gdk::Display::default()
         .and_then(|д| д.primary_monitor().or_else(|| д.monitor(0)))
-        .map(|м| м.geometry().height())
-        .unwrap_or(800) as i64;
+        .map(|м| (м.geometry().width() as i64, м.geometry().height() as i64))
+        .unwrap_or((1280, 800));
     let в_столбце = ((высота - 140) / 104).max(3);
     let mut занято: Vec<(i64, i64)> = Vec::new();
     for з in &значки {
@@ -327,8 +327,10 @@ fn значки_стола(я: &Ядро) -> Vec<Value> {
     for з in значки.iter_mut() {
         let имя = з["n"].as_str().unwrap_or("").to_string();
         if let Some(м) = места.get(&имя) {
-            з["x"] = м["x"].clone();
-            з["y"] = м["y"].clone();
+            // Значок целиком на экране, даже если место запомнено с
+            // экрана побольше
+            з["x"] = json!(м["x"].as_f64().unwrap_or(0.0).clamp(0.0, (ширина - 96) as f64));
+            з["y"] = json!(м["y"].as_f64().unwrap_or(0.0).clamp(30.0, (высота - 100) as f64));
             continue;
         }
         loop {
