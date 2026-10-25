@@ -104,6 +104,17 @@ type П = Rc<Окно>;
 
 /* ---------- мелочи ---------- */
 
+/// Стоит ли программа: агент пишет сюда версию (стоит), null или false
+/// (не стоит). Раньше «не пусто» значило «стоит», и поиск, где агент
+/// отвечает false, показывал «уже стоит» у каждой найденной программы
+fn стоит(в: &Value) -> bool {
+    match в {
+        Value::String(с) => !с.is_empty(),
+        Value::Bool(б) => *б,
+        _ => false,
+    }
+}
+
 fn строка(в: &Value, k: &str) -> String {
     match &в[k] {
         Value::String(с) => с.clone(),
@@ -208,7 +219,17 @@ fn значок(п: &П, прога: &Прога, большой: bool) -> gtk::
     let размер = if большой { 96 } else { 48 };
     let место = gtk::Stack::new();
     место.set_valign(gtk::Align::Center);
-    let знак = gtk::Label::new(Some(if прога.знак.is_empty() { "📦" } else { &прога.знак }));
+    // Пока настоящий значок программы не пришёл — значок темы по её роду
+    // (символ шрифта — только если пары в теме нет)
+    let символ = if прога.знак.is_empty() { "📦" } else { прога.знак.as_str() };
+    let знак: gtk::Widget = match crate::apps::имя_значка(символ) {
+        Some(имя) => {
+            let к = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Dialog);
+            к.set_pixel_size(if большой { 48 } else { 24 });
+            к.upcast()
+        }
+        None => gtk::Label::new(Some(символ)).upcast(),
+    };
     знак.style_context().add_class("ico");
     if большой {
         знак.style_context().add_class("ico-big");
@@ -351,7 +372,12 @@ fn можно_ставить(с: &Value) -> Result<(), String> {
 /// Сведения о программе — у машины: описание, размер, версия, стоит ли
 fn сведения(п: &П, прога: &Прога, заново: bool, дело: impl FnOnce(&П, Value) + 'static) {
     if !заново {
-        if let Some(с) = п.сведения.borrow().get(&прога.пакет).cloned() {
+        // Запись из выдачи поиска — неполная: в ней ещё нет версии и размера,
+        // и страница программы показывала «Версия: false». Такую не берём
+        let есть = п.сведения.borrow().get(&прога.пакет).cloned().filter(|с| {
+            с.get("candidate").is_some() || с["нет"].as_bool() == Some(true) || стоит(&с["installed"])
+        });
+        if let Some(с) = есть {
             return дело(п, с);
         }
     }
@@ -374,7 +400,7 @@ fn сведения(п: &П, прога: &Прога, заново: bool, дел
         std::thread::spawn(move || {
             let итог = if флатпак {
                 match зов("pkg.info", json!({ "name": прога.пакет, "source": "flatpak" }), 60) {
-                    Ok(ф) if !ф["candidate"].is_null() || !ф["installed"].is_null() => ф,
+                    Ok(ф) if !ф["candidate"].is_null() || стоит(&ф["installed"]) => ф,
                     _ => json!({ "нет": true, "почему": if флатхаб_есть { "на Flathub такого нет" } else { "Flathub ещё не подключён — подключим при установке" } }),
                 }
             } else {
@@ -385,7 +411,7 @@ fn сведения(п: &П, прога: &Прога, заново: bool, дел
                     }
                 }
                 let mut о = зов("pkg.info", json!({ "name": прога.пакет }), 60).unwrap_or(Value::Null);
-                if о["candidate"].is_null() && о["installed"].is_null() {
+                if о["candidate"].is_null() && !стоит(&о["installed"]) {
                     // Под записанным именем может не быть: ищем похожее
                     if let Ok(р) = зов("pkg.search", json!({ "query": прога.пакет }), 60) {
                         let список = р["list"].as_array().cloned().unwrap_or_default();
@@ -400,7 +426,7 @@ fn сведения(п: &П, прога: &Прога, заново: bool, дел
                         }
                     }
                 }
-                if о["candidate"].is_null() && о["installed"].is_null() {
+                if о["candidate"].is_null() && !стоит(&о["installed"]) {
                     json!({ "нет": true, "почему": "в репозиториях такого нет" })
                 } else {
                     о
@@ -938,10 +964,10 @@ fn программа(п: &П, прога: &Прога) {
             ниже2.show_all();
             return;
         }
-        let стоит = !о["installed"].is_null();
+        let стоит = стоит(&о["installed"]);
         let имя = { let и = строка(&о, "name"); if и.is_empty() { прога2.пакет.clone() } else { и } };
         let источник = строка(&о, "source");
-        let кн = gtk::Button::with_label(if стоит { "🗑 Удалить" } else { "⬇ Установить" });
+        let кн = crate::apps::значок_кнопка(if стоит { "🗑 Удалить" } else { "⬇ Установить" });
         кн.style_context().add_class("big");
         if !стоит {
             кн.style_context().add_class("accent");
@@ -983,7 +1009,7 @@ fn программа(п: &П, прога: &Прога) {
             факты.add(&ф);
         };
         факт("Источник", if источник == "flatpak" { "Flathub" } else { "Ubuntu" });
-        let версия = [строка(&о, "installed"), строка(&о, "candidate")].into_iter().find(|в| !в.is_empty()).unwrap_or_default();
+        let версия = [&о["installed"], &о["candidate"]].into_iter().filter_map(|в| в.as_str()).find(|в| !в.is_empty()).unwrap_or_default().to_string();
         факт("Версия", &версия);
         let р = размер(о["size"].as_u64().unwrap_or(0));
         факт("Размер", &if р.is_empty() { р } else { format!("{}{р}", if источник == "flatpak" { "скачает " } else { "займёт " }) });
@@ -1048,30 +1074,22 @@ fn поиск(п: &П, что: &str) {
             место2.add(&ж);
             место2.show_all();
         }
+        // Только сама выдача: имя, строка о программе и стоит ли она. Раньше
+        // следом по одной спрашивались подробности каждой из 24 программ —
+        // по паре секунд на каждую, и результат человек ждал по минуте.
+        // Версию и размер страница программы спросит сама, когда её откроют
         let (куда, откуда) = async_channel::bounded::<Result<Vec<Value>, String>>(1);
         std::thread::spawn(move || {
             if !списки && зов("pkg.update", json!({}), 30).is_ok() {
                 жди_работу_блокируя();
             }
-            let итог = зов("pkg.search", json!({ "query": что }), 90).map(|р| {
-                р["list"].as_array().cloned().unwrap_or_default().into_iter().take(24).map(|mut х| {
-                    if let Ok(и) = зов("pkg.info", json!({ "name": строка(&х, "name"), "source": строка(&х, "source") }), 60) {
-                        if let (Some(х), Some(и)) = (х.as_object_mut(), и.as_object()) {
-                            for (к, в) in и {
-                                if !в.is_null() {
-                                    х.insert(к.clone(), в.clone());
-                                }
-                            }
-                        }
-                    }
-                    х
-                }).collect()
-            });
+            let итог = зов("pkg.search", json!({ "query": что }), 90)
+                .map(|р| р["list"].as_array().cloned().unwrap_or_default().into_iter().take(24).collect::<Vec<Value>>());
             let _ = куда.send_blocking(итог);
         });
         let п2 = п.clone();
         glib::MainContext::default().spawn_local(async move {
-            let Ok(итог) = откуда.recv().await else { return };
+          while let Ok(итог) = откуда.recv().await {
             if списки == false {
                 *п2.состояние.borrow_mut() = None;
             }
@@ -1089,7 +1107,7 @@ fn поиск(п: &П, что: &str) {
                         п2.сведения.borrow_mut().insert(имя.clone(), х.clone());
                         let флатпак = строка(&х, "source") == "flatpak";
                         let mut про: Vec<String> = vec![строка(&х, "about"), if флатпак { "Flathub".into() } else { "Ubuntu".into() }];
-                        if !х["installed"].is_null() {
+                        if стоит(&х["installed"]) {
                             про.push("уже стоит".into());
                         }
                         про.push(размер(х["size"].as_u64().unwrap_or(0)));
@@ -1108,6 +1126,7 @@ fn поиск(п: &П, что: &str) {
                 }
             }
             место2.show_all();
+          }
         });
     });
 }
