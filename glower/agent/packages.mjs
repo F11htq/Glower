@@ -436,10 +436,22 @@ export function packages(allowPackages){
   const запустиFlatpak = (action, name, args, свой = false) => {
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
             error:null, log:'', слышно:Date.now(), pid:null };
-    const p = spawn(свой ? 'flatpak' : 'sudo', свой ? args : ['-n', 'flatpak', ...args], {
-      stdio:['ignore', 'pipe', 'pipe'], detached:true,
-      env:{ ...process.env, LC_ALL:'C' }
-    });
+    /* Проценты flatpak печатает, только когда видит терминал, — без него
+       полоса в Магазине стояла на двух процентах и прыгала сразу к ста.
+       Терминал даёт script (bsdutils, есть в любой Ubuntu); нет его —
+       запускаем как раньше, просто без хода. */
+    const команда = свой ? ['flatpak', ...args] : ['sudo', '-n', 'flatpak', ...args];
+    const вКавычках = с => "'" + String(с).replace(/'/g, "'\\''") + "'";
+    const черезТерминал = existsSync('/usr/bin/script');
+    const p = черезТерминал
+      ? spawn('script', ['-qfec', команда.map(вКавычках).join(' '), '/dev/null'], {
+          stdio:['ignore', 'pipe', 'pipe'], detached:true,
+          env:{ ...process.env, LC_ALL:'C', TERM:'dumb', COLUMNS:'120' }
+        })
+      : spawn(команда[0], команда.slice(1), {
+          stdio:['ignore', 'pipe', 'pipe'], detached:true,
+          env:{ ...process.env, LC_ALL:'C' }
+        });
     job.pid = p.pid;
     const принять = кусок => {
       const t = String(кусок);
@@ -460,7 +472,14 @@ export function packages(allowPackages){
     p.on('exit', code => {
       job.done = true;
       if (code === 0){ job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null; }
-      else if (!job.error) job.error = 'flatpak завершился с кодом ' + code;
+      else if (!job.error){
+        /* Через терминал ошибка приходит не отдельным потоком, а в общем
+           выводе — берём последнюю осмысленную строку, без служебных кодов */
+        const строки = job.log.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split(/[\r\n]+/)
+          .map(с => с.trim()).filter(с => с && !/^\d{1,3}%$/.test(с));
+        const ошибка = строки.reverse().find(с => /error|ошибка|not found|failed/i.test(с)) || строки[0];
+        job.error = ошибка || ('flatpak завершился с кодом ' + code);
+      }
     });
     return { started:true, name, action, source:'flatpak' };
   };

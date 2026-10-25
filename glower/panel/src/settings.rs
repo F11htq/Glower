@@ -312,6 +312,16 @@ fn кн(текст: &str, главная: bool, дело: impl Fn(&gtk::Button) 
     б
 }
 
+/// Кнопка-переключатель программы: значок и имя
+fn кнопка_программы(пр: &Value) -> gtk::Button {
+    let б = gtk::Button::new();
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    ряд.add(&crate::apps::значок_эмодзи(&строка(пр, "знак"), 16));
+    ряд.add(&gtk::Label::new(Some(&строка(пр, "имя"))));
+    б.add(&ряд);
+    б
+}
+
 fn ряд_кнопок(кнопки: &[&gtk::Button]) -> gtk::Widget {
     let р = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     for б in кнопки {
@@ -816,7 +826,7 @@ fn док(п: &П) {
     let в_доке: Vec<String> = s(п, "dockApps").as_array().map(|с| с.iter().filter_map(|х| х.as_str().map(String::from)).collect()).unwrap_or_default();
     for пр in п.сост.borrow()["программы"].as_array().cloned().unwrap_or_default() {
         let id = строка(&пр, "id");
-        let б = gtk::Button::with_label(&format!("{} {}", строка(&пр, "знак"), строка(&пр, "имя")));
+        let б = кнопка_программы(&пр);
         if в_доке.contains(&id) {
             б.style_context().add_class("on");
         }
@@ -1667,7 +1677,7 @@ fn приложения(п: &П) {
     let сами: Vec<String> = s(п, "autostart").as_array().map(|с| с.iter().filter_map(|х| х.as_str().map(String::from)).collect()).unwrap_or_default();
     for пр in п.сост.borrow()["программы"].as_array().cloned().unwrap_or_default() {
         let id = строка(&пр, "id");
-        let б = gtk::Button::with_label(&format!("{} {}", строка(&пр, "знак"), строка(&пр, "имя")));
+        let б = кнопка_программы(&пр);
         if сами.contains(&id) {
             б.style_context().add_class("on");
         }

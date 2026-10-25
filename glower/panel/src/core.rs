@@ -451,15 +451,23 @@ fn бренд_полное() -> String {
 }
 
 pub fn версия() -> String {
-    // Версию системы знает пакет: dpkg пишет её в свою базу
-    std::process::Command::new("dpkg-query")
-        .args(["-W", "-f=${Version}", "glower"])
-        .output()
-        .ok()
-        .filter(|в| в.status.success())
-        .map(|в| String::from_utf8_lossy(&в.stdout).trim().to_string())
-        .filter(|в| !в.is_empty())
-        .unwrap_or_else(|| "12".into())
+    // Версию системы знает пакет: dpkg пишет её в свою базу. Спрашиваем
+    // один раз: рассказ о состоянии идёт при каждой смене настройки, и
+    // запуск dpkg-query каждый раз подвешивал панель на десятки миллисекунд.
+    // За сеанс версия не меняется — новая заработает после нового входа
+    static ВЕРСИЯ: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ВЕРСИЯ
+        .get_or_init(|| {
+            std::process::Command::new("dpkg-query")
+                .args(["-W", "-f=${Version}", "glower"])
+                .output()
+                .ok()
+                .filter(|в| в.status.success())
+                .map(|в| String::from_utf8_lossy(&в.stdout).trim().to_string())
+                .filter(|в| !в.is_empty())
+                .unwrap_or_else(|| "12".into())
+        })
+        .clone()
 }
 
 pub(crate) fn язык_сейчас() -> String {

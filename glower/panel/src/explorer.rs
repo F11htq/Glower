@@ -447,27 +447,51 @@ fn добавь_строку(п: &П, в: &Вкладка, з: &Запись) {
     );
 }
 
-/// Картинки показываем самими картинками — по одной за проход, чтобы
-/// большая папка с фотографиями не подвешивала окно
+/// Картинки показываем самими картинками. Раскрывает их отдельный поток:
+/// большой JPEG раскрывается десятые доли секунды, и пока это делал
+/// главный поток, окно с папкой фотографий замирало на каждом файле.
+/// Готовая миниатюра приезжает пикселями, картинку из них собираем здесь
 fn миниатюры(в: &Rc<Вкладка>) {
     let поколение = в.поколение.get();
-    let в = в.clone();
-    let номер = Cell::new(0);
-    glib::idle_add_local(move || {
-        if в.поколение.get() != поколение {
-            return glib::ControlFlow::Break;
-        }
-        let Some(и) = в.модель.iter_nth_child(None, номер.get()) else { return glib::ControlFlow::Break };
-        номер.set(номер.get() + 1);
+    let mut работа: Vec<(i32, String)> = Vec::new();
+    let mut н = 0;
+    while let Some(и) = в.модель.iter_nth_child(None, н) {
         let путь = в.модель.value(&и, ПУТЬ as i32).get::<String>().unwrap_or_default();
         let байт = в.модель.value(&и, БАЙТ as i32).get::<u64>().unwrap_or_default();
-        let тип = угадай_тип(&путь);
-        if тип.starts_with("image/") && байт < 30 << 20 && !в.модель.value(&и, ПАПКА as i32).get::<bool>().unwrap_or_default() {
-            if let Ok(м) = Pixbuf::from_file_at_scale(&путь, 64, 64, true) {
-                в.модель.set_value(&и, ЗНАЧОК, &м.to_value());
+        let папка = в.модель.value(&и, ПАПКА as i32).get::<bool>().unwrap_or_default();
+        if !папка && байт < 30 << 20 && угадай_тип(&путь).starts_with("image/") {
+            работа.push((н, путь));
+        }
+        н += 1;
+    }
+    if работа.is_empty() {
+        return;
+    }
+    let (отправить, принять) = async_channel::unbounded::<(i32, String, glib::Bytes, i32, i32, i32, bool)>();
+    std::thread::spawn(move || {
+        for (н, путь) in работа {
+            let Ok(м) = Pixbuf::from_file_at_scale(&путь, 64, 64, true) else { continue };
+            let кадр = (н, путь, м.read_pixel_bytes(), м.width(), м.height(), м.rowstride(), м.has_alpha());
+            if отправить.send_blocking(кадр).is_err() {
+                break;
             }
         }
-        glib::ControlFlow::Continue
+    });
+    let в = Rc::downgrade(в);
+    glib::MainContext::default().spawn_local(async move {
+        while let Ok((н, путь, пиксели, ш, вс, шаг, прозрачность)) = принять.recv().await {
+            let Some(в) = в.upgrade() else { break };
+            // Ушли в другую папку — эти миниатюры уже не нужны
+            if в.поколение.get() != поколение {
+                break;
+            }
+            let Some(и) = в.модель.iter_nth_child(None, н) else { continue };
+            if в.модель.value(&и, ПУТЬ as i32).get::<String>().ok().as_deref() != Some(путь.as_str()) {
+                continue;
+            }
+            let м = Pixbuf::from_bytes(&пиксели, gtk::gdk_pixbuf::Colorspace::Rgb, прозрачность, 8, ш, вс, шаг);
+            в.модель.set_value(&и, ЗНАЧОК, &м.to_value());
+        }
     });
 }
 
@@ -1558,7 +1582,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     прокрутка.add(&места);
     прокрутка.set_vexpand(true);
     бок.add(&прокрутка);
-    бок.set_size_request(190, -1);
+    бок.set_size_request(220, -1);
     середина.pack1(&бок, false, false);
     let вкладки = gtk::Notebook::new();
     вкладки.set_scrollable(true);

@@ -404,7 +404,10 @@ fn строка_выбора(код: &str, имя: &str, подпись: &str, �
     let п = gtk::Label::new(Some(подпись));
     п.style_context().add_class("hint");
     ряд.add(&п);
-    let г = gtk::Label::new(Some(if вкл { "✓" } else { "" }));
+    let г = gtk::Image::new();
+    if вкл {
+        г.set_from_icon_name(Some("object-select-symbolic"), gtk::IconSize::Button);
+    }
     г.set_size_request(16, -1);
     ряд.add(&г);
     б.add(&ряд);
@@ -607,7 +610,7 @@ fn шаг_оформление(место: &gtk::Box) {
     let (тема, акцент) = с_мастером(|м| (м.выбор.тема.clone(), м.выбор.акцент)).unwrap_or_default();
     let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 12);
     ряд.set_halign(gtk::Align::Center);
-    for (v, имя, подпись, знак) in [("dark", "Тёмная", "тёмные поверхности", "●"), ("light", "Светлая", "светлые поверхности", "○")] {
+    for (v, имя, подпись, знак) in [("dark", "Тёмная", "тёмные поверхности", "🌙"), ("light", "Светлая", "светлые поверхности", "☀")] {
         let б = gtk::Button::new();
         б.style_context().add_class("big");
         if тема == v {
