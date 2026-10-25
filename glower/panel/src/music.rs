@@ -24,6 +24,7 @@ const СТИЛЬ: &str = r#"
   min-height: 160px;
   border-radius: 24px;
   background-image: linear-gradient(140deg, #f472b6, #a855f7);
+  color: #ffffff;
 }
 .music .m-title { font-size: 18px; font-weight: bold; }
 .music button.pp { min-width: 54px; min-height: 54px; border-radius: 27px; font-size: 20px; background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
@@ -313,7 +314,7 @@ fn нарисуй_список(м: &М) {
     }
     for (i, т) in треки.iter().enumerate() {
         let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-        let знак = gtk::Label::new(Some(if Some(i) == м.номер.get() { "▶" } else { "🎵" }));
+        let знак = gtk::Image::from_icon_name(Some(if Some(i) == м.номер.get() { "media-playback-start-symbolic" } else { "audio-x-generic-symbolic" }), gtk::IconSize::Button);
         ряд.add(&знак);
         let и = gtk::Label::new(Some(&название(т)));
         и.set_xalign(0.0);
@@ -420,7 +421,8 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     колонка.set_margin_end(18);
     окно.add(&колонка);
 
-    let обложка = gtk::Label::new(Some("🎵"));
+    let обложка = gtk::Image::from_icon_name(Some("audio-x-generic-symbolic"), gtk::IconSize::Dialog);
+    обложка.set_pixel_size(56);
     обложка.style_context().add_class("art");
     обложка.set_halign(gtk::Align::Center);
     колонка.add(&обложка);
@@ -463,7 +465,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     громкость.set_draw_value(false);
     громкость.set_hexpand(true);
     громкость.set_tooltip_text(Some("Громкость"));
-    ряд.add(&gtk::Label::new(Some("🔊")));
+    ряд.add(&gtk::Image::from_icon_name(Some("audio-volume-high-symbolic"), gtk::IconSize::Button));
     ряд.add(&громкость);
     колонка.add(&ряд);
 

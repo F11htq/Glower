@@ -295,7 +295,16 @@ fn числа_равны(а: &Value, б: &Value) -> bool {
 }
 
 fn кн(текст: &str, главная: bool, дело: impl Fn(&gtk::Button) + 'static) -> gtk::Button {
-    let б = gtk::Button::with_label(текст);
+    // Символ в начале надписи — значком, как у всех кнопок системы; кнопки
+    // без символа остаются обычными (их надпись читают и меняют на ходу)
+    let с_символом = текст.split_once(' ').is_some_and(|(с, _)| !с.chars().any(|ч| ч.is_alphanumeric()));
+    let б = if с_символом {
+        let б = gtk::Button::new();
+        crate::apps::знак_кнопки(&б, текст);
+        б
+    } else {
+        gtk::Button::with_label(текст)
+    };
     if главная {
         б.style_context().add_class("accent");
     }
@@ -747,7 +756,7 @@ fn поставь_пакет(п: &П, б: &gtk::Button, пакет: &str, под
     позови("pkg.install", json!({ "name": пакет, "source": "apt" }), move |о| {
         if let Err(е) = о {
             б1.set_sensitive(true);
-            б1.set_label(&format!("⬇ {подпись}"));
+            crate::apps::знак_кнопки(&б1, &format!("⬇ {подпись}"));
             return сообщи(&п1, "Не вышло поставить", &е);
         }
         следи_за_работой(&п1, move |п, итог| {

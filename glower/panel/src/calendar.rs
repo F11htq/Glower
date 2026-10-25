@@ -292,7 +292,6 @@ fn рисуй(к: &Rc<Кал>) {
         let сд = события(&все, &ключ(год, мес, день));
         for е in сд.iter().take(2) {
             let т = format!("{}{}", е["time"].as_str().filter(|т| !т.is_empty()).map(|т| format!("{т} ")).unwrap_or_default(), е["t"].as_str().unwrap_or(""));
-            let т = if е["repeat"].as_str().unwrap_or("").is_empty() { т } else { format!("🔁 {т}") };
             let л = gtk::Label::new(Some(&т));
             л.style_context().add_class("ev");
             л.set_xalign(0.0);
@@ -366,23 +365,33 @@ fn бок(к: &Rc<Кал>) {
         н.set_xalign(0.0);
         н.set_ellipsize(gtk::pango::EllipsizeMode::End);
         столбик.add(&н);
-        let mut подробно: Vec<String> = Vec::new();
+        // Повтор и напоминание — мелко, со значками
+        let подробно = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        подробно.style_context().add_class("ev-sub");
+        let mut есть = false;
+        let мелко = |значок: &str, текст: &str| {
+            let к = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Menu);
+            к.set_pixel_size(12);
+            подробно.add(&к);
+            let л = gtk::Label::new(Some(текст));
+            л.set_margin_end(8);
+            подробно.add(&л);
+        };
         if let Some((_, имя)) = ПОВТОРЫ.iter().find(|(к, _)| !к.is_empty() && е["repeat"].as_str() == Some(к)) {
-            подробно.push(format!("🔁 {имя}"));
+            мелко("view-refresh-symbolic", имя);
+            есть = true;
         }
         if !е["time"].as_str().unwrap_or("").is_empty() {
             let за = е["remind"].as_i64().unwrap_or(0);
             if let Some((_, имя)) = НАПОМИНАНИЯ.iter().find(|(м, _)| *м == за) {
                 if за >= 0 {
-                    подробно.push(format!("🔔 {}", имя.to_lowercase()));
+                    мелко("preferences-system-notifications-symbolic", &имя.to_lowercase());
+                    есть = true;
                 }
             }
         }
-        if !подробно.is_empty() {
-            let п = gtk::Label::new(Some(&подробно.join(" · ")));
-            п.style_context().add_class("ev-sub");
-            п.set_xalign(0.0);
-            столбик.add(&п);
+        if есть {
+            столбик.add(&подробно);
         }
         столбик.set_hexpand(true);
         ряд.add(&столбик);

@@ -359,13 +359,29 @@ fn создай() -> Rc<RefCell<Меню>> {
 /// Значок нашей программы: знак на цветной плашке — тот же, что у
 /// страницы. Фон приходит готовой строкой CSS, её и отдаём GTK.
 pub(crate) fn наш_значок(знак: &str, фон: &str) -> gtk::Widget {
-    let з = gtk::Label::new(Some(if знак.is_empty() { "▢" } else { знак }));
+    // Белый значок темы на цветной плашке — как у программ в Windows 11 и
+    // macOS. Раньше на плашке был эмодзи, и каждый шрифт рисовал его
+    // по-своему. Размер значка — по размеру плашки: в доке, в меню
+    // программ и мелкий на карточке окна
+    let з: gtk::Widget = match crate::apps::имя_значка(if знак.is_empty() { "▢" } else { знак }) {
+        Some(имя) => {
+            let к = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Dialog);
+            к.set_pixel_size(28);
+            к.connect_realize(|к| {
+                let мелкий = к.style_context().has_class("small");
+                let в_доке = к.toplevel().is_some_and(|в| в.style_context().has_class("dock"));
+                к.set_pixel_size(if мелкий { 14 } else if в_доке { 22 } else { 28 });
+            });
+            к.upcast()
+        }
+        None => gtk::Label::new(Some(знак)).upcast(),
+    };
     з.style_context().add_class("glyph");
     let стиль = gtk::CssProvider::new();
     let css = if фон.trim_start().starts_with("linear-gradient") || фон.trim_start().starts_with("radial-gradient") {
-        format!("label {{ background-image: {фон}; }}")
+        format!("* {{ background-image: {фон}; }}")
     } else if !фон.is_empty() {
-        format!("label {{ background-color: {фон}; }}")
+        format!("* {{ background-color: {фон}; }}")
     } else {
         String::new()
     };
@@ -541,7 +557,7 @@ fn меню_программы(кнопка: &gtk::Button, id: &str, вид: &st
 
     let меню = gtk::Menu::new();
     let пункт = |текст: &str, что: &'static str, закрыть: bool| {
-        let п = gtk::MenuItem::with_label(текст);
+        let п = crate::apps::пункт_меню(&текст);
         let доводы = json!({ "id": id, "вид": вид, "имя": имя });
         п.connect_activate(move |_| {
             if закрыть {

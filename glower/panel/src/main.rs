@@ -212,6 +212,7 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
   background-color: rgba(255, 255, 255, 0.12);
 }
 .overview .glyph.small { font-size: 14px; border-radius: 7px; min-width: 24px; min-height: 24px; }
+.overview image.glyph, window.dock image.glyph { color: #ffffff; }
 .overview button.desk {
   background-color: rgba(255, 255, 255, 0.08);
   min-width: 128px;
@@ -269,6 +270,7 @@ window.dock separator.dock-sep { background-color: rgba(255, 255, 255, 0.16); mi
 window.desktop .di { border-radius: 10px; padding: 6px 4px; }
 window.desktop .di.sel { background-color: alpha(@glower_accent, 0.28); box-shadow: inset 0 0 0 1px rgba(160, 190, 255, 0.55); }
 window.desktop .di-glyph { font-size: 40px; min-height: 48px; }
+window.desktop image.di-plate { min-width: 52px; min-height: 52px; border-radius: 14px; color: #ffffff; }
 window.desktop .di-label {
   color: #ffffff;
   font-family: sans-serif;

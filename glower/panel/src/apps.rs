@@ -207,61 +207,128 @@ fn значок_по_символу(символ: &str) -> Option<&'static str> 
         "⬆" => "software-update-available-symbolic",
         "🔔" => "preferences-system-notifications-symbolic",
         "🔕" => "notifications-disabled-symbolic",
+        другой => return имя_значка(другой),
+    })
+}
+
+/// Какой значок темы стоит за эмодзи — одна таблица на всю систему:
+/// разделы, места, строки настроек, программы, уведомления
+pub fn имя_значка(знак: &str) -> Option<&'static str> {
+    Some(match знак.trim_end_matches('\u{fe0f}') {
+        "💻" => "computer-symbolic",
+        "🖥" => "video-display-symbolic",
+        "🏠" => "go-home-symbolic",
+        "🎨" | "🖌" => "applications-graphics-symbolic",
+        "🧱" | "🧩" => "view-app-grid-symbolic",
+        "🔊" | "🎚" => "audio-volume-high-symbolic",
+        "🔈" => "audio-volume-low-symbolic",
+        "🔇" => "audio-volume-muted-symbolic",
+        "💡" | "☀" => "display-brightness-symbolic",
+        "📶" => "network-wireless-symbolic",
+        "📡" => "network-transmit-receive-symbolic",
+        "💾" | "🫙" => "drive-removable-media-symbolic",
+        "🖴" => "drive-harddisk-symbolic",
+        "💽" => "drive-optical-symbolic",
+        "🖨" => "printer-symbolic",
+        "🎧" => "audio-headphones-symbolic",
+        "🔵" => "bluetooth-symbolic",
+        "🔔" => "preferences-system-notifications-symbolic",
+        "🔕" | "📭" => "notifications-disabled-symbolic",
+        "📦" => "package-x-generic-symbolic",
+        "🛍" => "system-software-install-symbolic",
+        "👤" | "🙂" => "avatar-default-symbolic",
+        "👥" => "system-users-symbolic",
+        "🌍" | "🗣" => "preferences-desktop-locale-symbolic",
+        "⌨" => "input-keyboard-symbolic",
+        "🔐" | "🛡" => "security-high-symbolic",
+        "🔒" => "system-lock-screen-symbolic",
+        "🔑" => "dialog-password-symbolic",
+        "⬆" => "software-update-available-symbolic",
+        "⬇" => "folder-download-symbolic",
+        "ℹ" => "help-about-symbolic",
+        "🗑" => "user-trash-symbolic",
+        "📄" => "x-office-document-symbolic",
+        "🖼" => "image-x-generic-symbolic",
+        "🎵" => "audio-x-generic-symbolic",
+        "🎬" => "applications-multimedia-symbolic",
+        "🎮" => "input-gaming-symbolic",
+        "📚" => "view-list-bullet-symbolic",
+        "🌙" | "🌗" => "weather-clear-night-symbolic",
+        "🌤" => "weather-few-clouds-symbolic",
+        "✨" => "starred-symbolic",
+        "🔀" => "media-playlist-shuffle-symbolic",
+        "🔁" | "🔄" | "♻" => "view-refresh-symbolic",
+        "🌐" => "web-browser-symbolic",
+        "🕐" | "⏱" => "preferences-system-time-symbolic",
+        "⏰" => "alarm-symbolic",
+        "📅" => "x-office-calendar-symbolic",
+        "🚀" => "system-run-symbolic",
+        "🗂" | "📁" => "folder-symbolic",
+        "🪟" => "preferences-desktop-display-symbolic",
+        "📤" => "mail-send-symbolic",
+        "🛠" | "🔧" => "applications-utilities-symbolic",
+        "🧪" => "applications-science-symbolic",
+        "🧑\u{200d}💻" => "utilities-terminal-symbolic",
+        "⚠" => "dialog-warning-symbolic",
+        "✅" | "✓" => "object-select-symbolic",
+        "✂" => "edit-cut-symbolic",
+        "🔌" => "ac-adapter-symbolic",
+        "🔋" => "battery-full-symbolic",
+        "🪫" => "battery-low-symbolic",
+        "🚫" | "✖" => "action-unavailable-symbolic",
+        "📴" => "airplane-mode-symbolic",
+        "📷" => "camera-photo-symbolic",
+        "🏷" => "computer-symbolic",
+        "🏙" => "preferences-desktop-wallpaper-symbolic",
+        "🔗" => "insert-link-symbolic",
+        "🔍" | "🔎" => "system-search-symbolic",
+        "🎯" => "find-location-symbolic",
+        "📝" => "accessories-text-editor-symbolic",
+        "⚙" => "emblem-system-symbolic",
+        "🧮" => "accessories-calculator-symbolic",
+        "📊" | "🧠" => "view-continuous-symbolic",
+        "🎉" => "emblem-ok-symbolic",
+        "💵" => "emblem-documents-symbolic",
+        "↔" => "object-flip-horizontal-symbolic",
+        "🖇" | "🧲" => "insert-link-symbolic",
+        "🐧" | "▢" => "application-x-executable-symbolic",
         _ => return None,
     })
 }
 
-/// Значок раздела, места или строки настроек вместо эмодзи: те же причины,
-/// что у кнопок. Для эмодзи, которым в теме пары нет, остаётся сам символ
+/// Значок вместо эмодзи нужного размера; без пары в теме — сам символ
 pub fn значок_эмодзи(знак: &str, размер: i32) -> gtk::Widget {
-    let имя = match знак.trim_end_matches('\u{fe0f}') {
-        "💻" => "computer-symbolic",
-        "🖥" => "video-display-symbolic",
-        "🏠" => "go-home-symbolic",
-        "🎨" => "preferences-desktop-appearance-symbolic",
-        "🧱" | "🧩" => "view-app-grid-symbolic",
-        "🔊" => "audio-volume-high-symbolic",
-        "💡" => "display-brightness-symbolic",
-        "📶" => "network-wireless-symbolic",
-        "💾" => "drive-removable-media-symbolic",
-        "🖴" => "drive-harddisk-symbolic",
-        "🖨" => "printer-symbolic",
-        "🎧" => "bluetooth-active-symbolic",
-        "🔔" => "preferences-system-notifications-symbolic",
-        "📦" => "system-software-install-symbolic",
-        "👤" => "avatar-default-symbolic",
-        "🌍" => "preferences-desktop-locale-symbolic",
-        "⌨" => "input-keyboard-symbolic",
-        "🔐" => "channel-secure-symbolic",
-        "⬆" => "software-update-available-symbolic",
-        "ℹ" => "help-about-symbolic",
-        "🗑" => "user-trash-symbolic",
-        "📄" => "folder-documents-symbolic",
-        "🖼" => "folder-pictures-symbolic",
-        "🎵" => "folder-music-symbolic",
-        "⬇" => "folder-download-symbolic",
-        "🎮" => "input-gaming-symbolic",
-        "📚" => "view-list-bullet-symbolic",
-        "🌙" => "weather-clear-night-symbolic",
-        "✨" => "starred-symbolic",
-        "🔀" => "media-playlist-shuffle-symbolic",
-        "🔄" | "♻" => "view-refresh-symbolic",
-        "🌐" => "web-browser-symbolic",
-        "🕐" | "⏱" => "preferences-system-time-symbolic",
-        "🚀" => "system-run-symbolic",
-        "🗂" => "folder-symbolic",
-        "🪟" => "preferences-desktop-display-symbolic",
-        "📤" => "mail-send-symbolic",
-        "🎬" => "applications-multimedia-symbolic",
-        "🛠" => "applications-utilities-symbolic",
-        "🧑\u{200d}💻" => "utilities-terminal-symbolic",
-        _ => {
-            return gtk::Label::new(Some(знак)).upcast();
+    match имя_значка(знак) {
+        Some(имя) => {
+            let к = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Button);
+            к.set_pixel_size(размер);
+            к.upcast()
         }
-    };
-    let к = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Button);
-    к.set_pixel_size(размер);
-    к.upcast()
+        None => gtk::Label::new(Some(знак)).upcast(),
+    }
+}
+
+/// Пункт меню: символ в начале надписи — значком, как у кнопок
+pub fn пункт_меню(текст: &str) -> gtk::MenuItem {
+    let текст = crate::i18n::tr(текст);
+    let п = gtk::MenuItem::new();
+    match текст.split_once(' ') {
+        Some((с, о)) if !с.chars().any(|ч| ч.is_alphanumeric()) && значок_по_символу(с).is_some() => {
+            let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let к = gtk::Image::from_icon_name(значок_по_символу(с), gtk::IconSize::Menu);
+            ряд.add(&к);
+            let л = gtk::Label::new(Some(о.trim()));
+            л.set_xalign(0.0);
+            ряд.add(&л);
+            п.add(&ряд);
+        }
+        _ => {
+            let л = gtk::Label::new(Some(&текст));
+            л.set_xalign(0.0);
+            п.add(&л);
+        }
+    }
+    п
 }
 
 /// Поставить на кнопку надпись, а символ в её начале — значком. Годится и

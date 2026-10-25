@@ -272,7 +272,7 @@ fn нарисуй() {
                                 б.style_context().add_class("on");
                             }
                             let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 14);
-                            let з = gtk::Label::new(Some(if д["removable"].as_bool() == Some(true) { "🔌" } else { "💽" }));
+                            let з = crate::apps::значок_эмодзи(if д["removable"].as_bool() == Some(true) { "💾" } else { "🖴" }, 24);
                             з.style_context().add_class("big");
                             ряд.add(&з);
                             let к = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -329,7 +329,10 @@ fn нарисуй() {
             });
             let строка = |r: i32, з: &str, имя: &str, пояснение: &str, поле: &gtk::Widget| {
                 let л = gtk::Box::new(gtk::Orientation::Vertical, 2);
-                л.add(&метка(&format!("{з}  {имя}"), ""));
+                let шапка = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                шапка.add(&crate::apps::значок_эмодзи(з, 16));
+                шапка.add(&метка(имя, ""));
+                л.add(&шапка);
                 let п = метка(пояснение, "muted");
                 // Ширина с самого начала: узкая колонка с переносом просит
                 // у окна огромную высоту, и кнопки уезжают за край экрана

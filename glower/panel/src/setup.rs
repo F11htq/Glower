@@ -614,7 +614,7 @@ fn шаг_оформление(место: &gtk::Box) {
             б.style_context().add_class("on");
         }
         let к = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        let з = gtk::Label::new(Some(знак));
+        let з = crate::apps::значок_эмодзи(знак, 22);
         з.style_context().add_class("glyph");
         к.add(&з);
         к.add(&gtk::Label::new(Some(имя)));
@@ -688,7 +688,7 @@ fn шаг_тайна(место: &gtk::Box) {
         ("🔍", "Проверяется", "Система открыта: весь код лежит рядом и читается глазами."),
     ] {
         let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 14);
-        let з = gtk::Label::new(Some(знак));
+        let з = crate::apps::значок_эмодзи(знак, 22);
         з.style_context().add_class("glyph");
         з.set_valign(gtk::Align::Start);
         ряд.add(&з);
@@ -718,7 +718,7 @@ fn шаг_итог(место: &gtk::Box) {
     сетка.set_row_spacing(10);
     сетка.set_column_spacing(14);
     for (i, (знак, ключ, что)) in [("🗣", "Язык", язык.to_string()), ("⌨️", "Раскладки", раскладки), ("🏙", "Город", город), ("👤", "Пользователь", в.имя.trim().to_string()), ("🎨", "Тема", тема.to_string())].into_iter().enumerate() {
-        сетка.attach(&gtk::Label::new(Some(знак)), 0, i as i32, 1, 1);
+        сетка.attach(&crate::apps::значок_эмодзи(знак, 18), 0, i as i32, 1, 1);
         let к = gtk::Label::new(Some(ключ));
         к.style_context().add_class("hint");
         к.set_xalign(0.0);

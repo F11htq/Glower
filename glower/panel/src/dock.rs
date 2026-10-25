@@ -358,7 +358,7 @@ fn значок_чужого(app_id: &str) -> gtk::Widget {
             }
         }
     }
-    overview::наш_значок("🪟", "rgba(255,255,255,0.12)")
+    overview::наш_значок("▢", "rgba(255,255,255,0.12)")
 }
 
 /// Кнопка дока: значок и точка под ним, если программа запущена.
@@ -385,7 +385,7 @@ fn кнопка(значок: gtk::Widget, подсказка: &str, запущ�
 fn меню(пункты: Vec<(String, Box<dyn Fn()>)>, кнопка: &gtk::Button, событие: &gtk::gdk::EventButton) {
     let меню = gtk::Menu::new();
     for (текст, дело) in пункты {
-        let п = gtk::MenuItem::with_label(&текст);
+        let п = crate::apps::пункт_меню(&текст);
         п.connect_activate(move |_| дело());
         меню.append(&п);
     }

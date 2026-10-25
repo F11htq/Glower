@@ -573,7 +573,7 @@ pub fn раскладки(кнопка: &gtk::Button) {
             ряд.add(&н);
             if i + 1 == сейчас {
                 б.style_context().add_class("kb-on");
-                let г = gtk::Label::new(Some("✓"));
+                let г = gtk::Image::from_icon_name(Some("object-select-symbolic"), gtk::IconSize::Button);
                 г.style_context().add_class("kb-check");
                 ряд.add(&г);
             }

@@ -1036,7 +1036,7 @@ fn свойства(п: &П, записи: &[Запись]) {
 /* ---------- меню ---------- */
 
 fn пункт(меню: &gtk::Menu, текст: &str, можно: bool, дело: impl Fn() + 'static) {
-    let п = gtk::MenuItem::with_label(текст);
+    let п = crate::apps::пункт_меню(&текст);
     п.set_sensitive(можно);
     п.connect_activate(move |_| дело());
     меню.append(&п);

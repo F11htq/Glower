@@ -968,7 +968,7 @@ fn удали() {
 /// «Переименовать»), не получало щелчков — печатать в нём было можно, а
 /// нажать «Готово» нельзя
 fn пункт(меню: &gtk::Menu, текст: &str, дело: impl Fn() + 'static) {
-    let п = gtk::MenuItem::with_label(текст);
+    let п = crate::apps::пункт_меню(&текст);
     let дело = Rc::new(дело);
     п.connect_activate(move |_| {
         let дело = дело.clone();
@@ -1122,6 +1122,29 @@ fn значок_картинкой(з: &Value) -> gtk::Widget {
     let тема = з["значок"].as_str().unwrap_or("");
     if (вид == "файл" || вид == "папка") && !тема.is_empty() && gtk::IconTheme::default().is_some_and(|т| т.has_icon(тема)) {
         let к = gtk::Image::from_icon_name(Some(if вид == "папка" { "folder" } else { тема }), gtk::IconSize::Dialog);
+        к.set_pixel_size(48);
+        return к.upcast();
+    }
+    // Наша программа — та же плашка, что в доке и в меню, только крупнее
+    if вид == "приложение" {
+        if let Some(н) = core::НАШИ.iter().find(|н| н.id == ярлык) {
+            let п = crate::overview::наш_значок(н.знак, н.фон);
+            п.style_context().add_class("di-plate");
+            if let Ok(к) = п.clone().downcast::<gtk::Image>() {
+                к.connect_realize(|к| к.set_pixel_size(30));
+            }
+            return п;
+        }
+    }
+    // «Этот компьютер» и запасные значки файлов — из темы, цветные
+    let из_темы = match вид {
+        "система" => Some("computer"),
+        "папка" => Some("folder"),
+        "файл" => Some("text-x-generic"),
+        _ => None,
+    };
+    if let Some(имя) = из_темы.filter(|и| gtk::IconTheme::default().is_some_and(|т| т.has_icon(и))) {
+        let к = gtk::Image::from_icon_name(Some(имя), gtk::IconSize::Dialog);
         к.set_pixel_size(48);
         return к.upcast();
     }
@@ -1392,7 +1415,7 @@ fn наполни_виджет(к: &gtk::Box, t: &str, запись: &Value) {
             let все = crate::todo::дела();
             let открытые: Vec<(usize, serde_json::Value)> = все.iter().cloned().enumerate().filter(|(_, д)| д["d"].as_bool() != Some(true)).collect();
             if открытые.is_empty() {
-                строка_виджета(к, "Всё сделано 🎉", "w-sub");
+                строка_виджета(к, "Всё сделано", "w-sub");
             }
             for (i, д) in открытые.into_iter().take(5) {
                 let г = gtk::CheckButton::with_label(д["t"].as_str().unwrap_or(""));

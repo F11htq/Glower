@@ -181,9 +181,10 @@ fn значок_уведомления(з: &str) -> gtk::Widget {
             return и.upcast();
         }
     }
-    let л = gtk::Label::new(Some(if з.is_empty() || з.is_ascii() { "🔔" } else { з }));
-    л.style_context().add_class("toast-emoji");
-    л.upcast()
+    let знак = if з.is_empty() || з.is_ascii() { "🔔" } else { з };
+    let в = crate::apps::значок_эмодзи(знак, 24);
+    в.style_context().add_class("toast-emoji");
+    в
 }
 
 fn карточка(у: &Уведомление, в_центре: bool) -> gtk::Widget {
