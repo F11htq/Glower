@@ -165,6 +165,7 @@ pub fn запусти() -> ! {
     окно.set_default_size(340, 500);
     окно.set_icon_name(Some("accessories-calculator"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("calc");
 
     let колонка = gtk::Box::new(gtk::Orientation::Vertical, 0);

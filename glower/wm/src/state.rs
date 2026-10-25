@@ -492,14 +492,40 @@ impl Glower {
                 t.send_pending_configure();
             }
         }
-        let фокус = окно.and_then(|о| match о.x11_surface() {
-            Some(x) => Some(Фокус::X11(x.clone())),
-            None => о.toplevel().map(|t| Фокус::Wl(t.wl_surface().clone())),
-        });
-        if let Some(к) = self.seat.get_keyboard() {
-            к.set_focus(self, фокус, serial);
+        // Пока открыт слой, который держит клавиатуру (меню программ, экран
+        // выделения для снимка), окно её не забирает — даже новое. Иначе
+        // программа, догрузившаяся под открытым меню, уводила Esc себе, и
+        // меню было уже не закрыть с клавиатуры
+        if let Some(л) = self.слой_с_клавиатурой() {
+            self.фокус_слою(&л);
+        } else {
+            let фокус = окно.and_then(|о| match о.x11_surface() {
+                Some(x) => Some(Фокус::X11(x.clone())),
+                None => о.toplevel().map(|t| Фокус::Wl(t.wl_surface().clone())),
+            });
+            if let Some(к) = self.seat.get_keyboard() {
+                к.set_focus(self, фокус, serial);
+            }
         }
         self.foreign_toplevel_state.обнови_все(&self.space, &self.окна);
+    }
+
+    /// Слой поверх окон, который держит клавиатуру всегда (меню панели)
+    pub fn слой_с_клавиатурой(&self) -> Option<LayerSurface> {
+        self.space.outputs().find_map(|экран| {
+            let карта = layer_map_for_output(экран);
+            let найдено = карта
+                .layers()
+                .rev()
+                .find(|л| {
+                    л.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive
+                        && matches!(л.layer(), WlrLayer::Top | WlrLayer::Overlay)
+                        // Скрытое меню остаётся в списке, но без кадра — оно не в счёт
+                        && smithay::backend::renderer::utils::with_renderer_surface_state(л.wl_surface(), |с| с.buffer().is_some()).unwrap_or(false)
+                })
+                .cloned();
+            найдено
+        })
     }
 
     /// Слою панели — клавиатуру, если он о ней просит
@@ -522,19 +548,7 @@ impl Glower {
             return;
         }
         // Слой, который держит клавиатуру всегда (меню панели), — первым
-        let слой = self.space.outputs().find_map(|экран| {
-            let карта = layer_map_for_output(экран);
-            let найдено = карта
-                .layers()
-                .rev()
-                .find(|л| {
-                    л.cached_state().keyboard_interactivity == KeyboardInteractivity::Exclusive
-                        && matches!(л.layer(), WlrLayer::Top | WlrLayer::Overlay)
-                })
-                .cloned();
-            найдено
-        });
-        if let Some(л) = слой {
+        if let Some(л) = self.слой_с_клавиатурой() {
             self.фокус_слою(&л);
             return;
         }

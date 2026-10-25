@@ -70,6 +70,7 @@ pub fn запусти(_доводы: Vec<String>) -> ! {
     окно.set_default_size(560, 600);
     окно.set_icon_name(Some("alarm-symbolic"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("clock");
     окно.connect_destroy(|_| gtk::main_quit());
 

@@ -84,6 +84,7 @@ fn окно_свойств(путь: &Path) {
     окно.set_title(&format!("Свойства: {имя}"));
     окно.set_default_size(420, -1);
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("props");
     ОКОН.with(|о| о.set(о.get() + 1));
     окно.connect_destroy(|_| {

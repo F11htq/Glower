@@ -442,6 +442,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_title("Ножницы");
     окно.set_icon_name(Some("applets-screenshooter"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("snip");
     let колонка = gtk::Box::new(gtk::Orientation::Vertical, 0);
     окно.add(&колонка);

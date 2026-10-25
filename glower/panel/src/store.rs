@@ -1277,6 +1277,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_default_size(1060, 700);
     окно.set_icon_name(Some("system-software-install"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("store");
 
     let середина = gtk::Box::new(gtk::Orientation::Horizontal, 0);

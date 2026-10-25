@@ -219,6 +219,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_default_size(1000, 700);
     окно.set_icon_name(Some("image-viewer"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("photos");
     let колонка = gtk::Box::new(gtk::Orientation::Vertical, 0);
     окно.add(&колонка);

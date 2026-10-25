@@ -2422,6 +2422,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_default_size(980, 680);
     окно.set_icon_name(Some("preferences-system"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("settings");
 
     let середина = gtk::Box::new(gtk::Orientation::Horizontal, 0);

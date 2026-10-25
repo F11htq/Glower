@@ -27,7 +27,7 @@ use crate::{
 };
 
 /// Высота заголовка, который сервер рисует окнам X11
-pub const ЗАГОЛОВОК: i32 = 30;
+pub const ЗАГОЛОВОК: i32 = 34;
 const КНОПКА: i32 = 46;
 
 pub fn запусти(состояние: &mut Glower) {
@@ -78,7 +78,8 @@ pub fn рамка(x: &X11Surface, где: Point<i32, Physical>, масштаб: 
     let в = (ЗАГОЛОВОК as f64 * масштаб.y).round() as i32;
     let кн = (КНОПКА as f64 * масштаб.x).round() as i32;
     let верх: Point<i32, Physical> = Point::from((где.x, где.y - в));
-    let фон = if активно { Color32F::new(0.12, 0.14, 0.19, 1.0) } else { Color32F::new(0.17, 0.18, 0.22, 1.0) };
+    // Тот же цвет, что у строки окон GTK и терминала (#12141b)
+    let фон = Color32F::new(0.071, 0.078, 0.106, 1.0);
     let знак = Color32F::new(0.92, 0.93, 0.96, if активно { 1.0 } else { 0.6 });
     let прямо = |x: i32, y: i32, w: i32, h: i32, цвет: Color32F| {
         SolidColorRenderElement::new(Id::new(), Rectangle::new(Point::from((x, y)), Size::from((w, h))), 0usize, цвет, Kind::Unspecified)

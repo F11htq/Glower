@@ -409,6 +409,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_default_size(460, 640);
     окно.set_icon_name(Some("audio-x-generic"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("music");
     окно.connect_destroy(|_| gtk::main_quit());
 

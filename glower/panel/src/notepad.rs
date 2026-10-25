@@ -375,6 +375,7 @@ pub fn запусти(файлы: Vec<String>) -> ! {
     окно.set_default_size(760, 560);
     окно.set_icon_name(Some("accessories-text-editor"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
 
     let колонка = gtk::Box::new(gtk::Orientation::Vertical, 0);
     окно.add(&колонка);

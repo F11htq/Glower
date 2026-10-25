@@ -94,6 +94,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_icon_name(Some("drive-harddisk"));
     окно.set_default_size(760, 580);
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("installer");
     окно.connect_destroy(|_| gtk::main_quit());
     // Пока идёт запись на диск, окно не закрыть: оборванная установка

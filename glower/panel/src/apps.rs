@@ -11,6 +11,36 @@ use std::path::PathBuf;
 /// Вид программ — те же тёмные поверхности, что у окон системы на странице.
 const СТИЛЬ: &str = r#"
 window.glower-app { background-color: @glower_bg; }
+/* Верхняя строка окна — одна на всю систему: та же высота, цвет и кнопки
+   «свернуть, развернуть, закрыть», что у терминала (foot.ini, [csd]) и у
+   рамки, которую оконный сервер рисует программам X11 */
+window.glower-app headerbar.titlebar, window.glower-app .titlebar.default-decoration {
+  background-image: none;
+  background-color: #12141b;
+  min-height: 34px;
+  padding: 0 0 0 10px;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: inset 0 -1px rgba(255, 255, 255, 0.06);
+}
+window.glower-app headerbar.titlebar *, window.glower-app .titlebar.default-decoration * { color: #e8eaf2; }
+window.glower-app headerbar.titlebar .title { font-weight: 600; font-size: 13px; margin-left: 2px; }
+window.glower-app headerbar.titlebar:backdrop .title { opacity: 0.6; }
+window.glower-app headerbar.titlebar button.titlebutton,
+window.glower-app .titlebar.default-decoration button.titlebutton {
+  background-image: none;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 46px;
+  min-height: 34px;
+  padding: 0;
+  margin: 0;
+}
+window.glower-app headerbar.titlebar button.titlebutton:hover { background-color: rgba(255, 255, 255, 0.10); }
+window.glower-app headerbar.titlebar button.titlebutton.close:hover { background-color: #e81123; }
 window.glower-app, window.glower-app * {
   color: @glower_fg;
   font-family: sans-serif;
@@ -62,6 +92,11 @@ pub fn подготовь(имя: &str, название: &str) {
         std::process::exit(1);
     }
     crate::i18n::подключи();
+    // Кнопки окна — как в Windows и как у терминала: свернуть, развернуть,
+    // закрыть. Без этого GTK оставлял одну «закрыть»
+    if let Some(н) = gtk::Settings::default() {
+        н.set_gtk_decoration_layout(Some("menu:minimize,maximize,close"));
+    }
     // Тема и акцент — до своего стиля: в нём имена цветов, а не цвета
     crate::theme::подключи();
     let стиль = gtk::CssProvider::new();
@@ -71,6 +106,28 @@ pub fn подготовь(имя: &str, название: &str) {
         &стиль,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+}
+
+/// Своя верхняя строка окна: имя слева, кнопки справа — как в Windows и
+/// как у терминала (свою строку foot рисует сам и ставит имя слева, а GTK
+/// по умолчанию — посередине). Зовётся сразу после создания окна: строку
+/// можно поставить только до того, как окно появилось на экране
+pub fn строка_заголовка(окно: &gtk::Window) {
+    if окно.window_type() != gtk::WindowType::Toplevel || окно.is_realized() || !окно.is_decorated() || окно.titlebar().is_some() {
+        return;
+    }
+    let строка = gtk::HeaderBar::new();
+    строка.set_show_close_button(true);
+    let имя = gtk::Label::new(окно.title().as_deref());
+    имя.style_context().add_class("title");
+    имя.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    имя.set_xalign(0.0);
+    окно.bind_property("title", &имя, "label").build();
+    строка.pack_start(&имя);
+    // Пустая середина — иначе GTK поставил бы туда имя второй раз
+    строка.set_custom_title(Some(&gtk::Box::new(gtk::Orientation::Horizontal, 0)));
+    строка.show_all();
+    окно.set_titlebar(Some(&строка));
 }
 
 pub fn кнопка(текст: &str, подсказка: &str) -> gtk::Button {

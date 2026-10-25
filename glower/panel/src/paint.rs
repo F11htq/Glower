@@ -266,6 +266,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.set_default_size(1000, 700);
     окно.set_icon_name(Some("applications-graphics"));
     окно.style_context().add_class("glower-app");
+    crate::apps::строка_заголовка(&окно);
     окно.style_context().add_class("paint");
 
     let открыть_файл = доводы.iter().find(|д| !д.starts_with("--")).map(PathBuf::from);
