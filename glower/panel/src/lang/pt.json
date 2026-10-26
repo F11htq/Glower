@@ -1324,5 +1324,10 @@
 "🗑 Корзина": "🗑 Lixeira",
 "🗑 Удалить": "🗑 Excluir",
 "🧩 Свой виджет…": "🧩 Widget personalizado…",
-"🧹 Очистить корзину": "🧹 Esvaziar lixeira"
+"🧹 Очистить корзину": "🧹 Esvaziar lixeira",
+"Включить сеть": "Ligar a rede",
+"Сеть выключена": "A rede está desligada",
+"Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "O serviço de rede não está em execução — isso acontece ao iniciar pelo pendrive de instalação: o instalador não precisa de rede. Ligue-a e o Wi-Fi e o cabo funcionarão.",
+"Включаю сеть…": "Ligando a rede…",
+"Сеть не включилась": "A rede não ligou"
 }

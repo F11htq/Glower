@@ -1,0 +1,29 @@
+#!/bin/sh
+# ==========================================================================
+#  Быстрая загрузка с установочной флешки
+#
+#  Меню загрузки флешки пишет в строку ядра glower.fast. Тогда на этот запуск
+#  выключаем всё, что установщику не нужно: сеть, печать, обновления.
+#
+#  Раньше маски шли прямо в строке ядра (systemd.mask=…), и пробный режим
+#  («сначала попробовать») снять их не мог: systemd при перезагрузке
+#  настроек снова читает строку ядра и маскирует всё заново. В пробной
+#  системе так и не было сети — ни Wi-Fi, ни кабеля, «NetworkManager не
+#  запущен». Генератор же слушается флажка: появился /run/glower-try —
+#  ничего не маскирует, и при перезагрузке настроек службы оживают.
+#
+#  Генератор зовут с тремя каталогами; маски кладём в «ранний» — у него
+#  старшинство над всеми остальными.
+# ==========================================================================
+grep -qw glower.fast /proc/cmdline 2>/dev/null || exit 0
+[ -e /run/glower-try ] && exit 0
+dir="${2:-$1}"
+[ -n "$dir" ] || exit 0
+mkdir -p "$dir"
+for u in NetworkManager.service NetworkManager-wait-online.service systemd-networkd-wait-online.service \
+         ufw.service cups.service cups-browsed.service avahi-daemon.service ModemManager.service \
+         packagekit.service unattended-upgrades.service e2scrub_reap.service \
+         apt-daily.timer apt-daily-upgrade.timer man-db.timer snapd.service snapd.seeded.service; do
+  ln -sf /dev/null "$dir/$u"
+done
+exit 0

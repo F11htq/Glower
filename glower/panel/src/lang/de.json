@@ -1324,5 +1324,10 @@
 "🗑 Корзина": "🗑 Papierkorb",
 "🗑 Удалить": "🗑 Löschen",
 "🧩 Свой виджет…": "🧩 Eigenes Widget…",
-"🧹 Очистить корзину": "🧹 Papierkorb leeren"
+"🧹 Очистить корзину": "🧹 Papierkorb leeren",
+"Включить сеть": "Netzwerk einschalten",
+"Сеть выключена": "Netzwerk ist aus",
+"Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Der Netzwerkdienst läuft nicht — das passiert beim Start vom Installations-USB-Stick: Der Installer braucht kein Netzwerk. Schalten Sie es ein, dann funktionieren WLAN und Kabel.",
+"Включаю сеть…": "Netzwerk wird eingeschaltet…",
+"Сеть не включилась": "Netzwerk ließ sich nicht einschalten"
 }

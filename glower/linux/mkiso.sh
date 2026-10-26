@@ -442,6 +442,7 @@ install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 # пробный режим с флешки: Esc в установщике снимает маски быстрой загрузки
 install -m 755 "$SRC/linux/glower-try" "$ROOTFS/usr/bin/glower-try"
+install -D -m 755 "$SRC/linux/glower-fast-generator" "$ROOTFS/usr/lib/systemd/system-generators/glower-fast"
 # кнопки окна у всех программ GTK, Firefox тоже: свернуть, развернуть, закрыть
 install -m 644 "$SRC/linux/90_glower.gschema.override" "$ROOTFS/usr/share/glib-2.0/schemas/90_glower.gschema.override"
 chroot "$ROOTFS" glib-compile-schemas /usr/share/glib-2.0/schemas >/dev/null 2>&1 || true
@@ -1245,7 +1246,9 @@ set default=0
 # Имя переменной латиницей. GRUB раскрывает только [A-Za-z0-9_]; с
 # кириллическим именем он молча подставил бы пустоту, и все эти маски
 # просто не доехали бы до ядра — а на вид всё было бы в порядке.
-set fast="systemd.mask=NetworkManager.service systemd.mask=NetworkManager-wait-online.service systemd.mask=systemd-networkd-wait-online.service systemd.mask=ufw.service systemd.mask=cups.service systemd.mask=cups-browsed.service systemd.mask=avahi-daemon.service systemd.mask=ModemManager.service systemd.mask=packagekit.service systemd.mask=unattended-upgrades.service systemd.mask=e2scrub_reap.service systemd.mask=apt-daily.timer systemd.mask=apt-daily-upgrade.timer systemd.mask=man-db.timer systemd.mask=snapd.service systemd.mask=snapd.seeded.service"
+# Сами маски кладёт генератор glower-fast по метке glower.fast — так их
+# можно снять в пробном режиме (см. linux/glower-fast-generator)
+set fast="glower.fast"
 
 menuentry "Установка GlowerOS" {
   linux /live/vmlinuz boot=live components quiet splash glower.install=1 $fast

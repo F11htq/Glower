@@ -1324,5 +1324,10 @@
 "🗑 Корзина": "🗑 Cestino",
 "🗑 Удалить": "🗑 Elimina",
 "🧩 Свой виджет…": "🧩 Widget personalizzato…",
-"🧹 Очистить корзину": "🧹 Svuota cestino"
+"🧹 Очистить корзину": "🧹 Svuota cestino",
+"Включить сеть": "Attiva la rete",
+"Сеть выключена": "La rete è disattivata",
+"Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Il servizio di rete non è in esecuzione: succede avviando dalla chiavetta di installazione, perché all’installer la rete non serve. Attivala e Wi-Fi e cavo funzioneranno.",
+"Включаю сеть…": "Attivazione della rete…",
+"Сеть не включилась": "La rete non si è attivata"
 }

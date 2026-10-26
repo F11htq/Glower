@@ -1324,5 +1324,10 @@
 "🗑 Корзина": "🗑 Papelera",
 "🗑 Удалить": "🗑 Eliminar",
 "🧩 Свой виджет…": "🧩 Widget propio…",
-"🧹 Очистить корзину": "🧹 Vaciar papelera"
+"🧹 Очистить корзину": "🧹 Vaciar papelera",
+"Включить сеть": "Activar la red",
+"Сеть выключена": "La red está desactivada",
+"Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "El servicio de red no se está ejecutando: ocurre al arrancar desde el USB de instalación, porque el instalador no necesita red. Actívela y funcionarán el Wi-Fi y el cable.",
+"Включаю сеть…": "Activando la red…",
+"Сеть не включилась": "No se pudo activar la red"
 }

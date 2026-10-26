@@ -1324,5 +1324,10 @@
 "🗑 Корзина": "🗑 Corbeille",
 "🗑 Удалить": "🗑 Supprimer",
 "🧩 Свой виджет…": "🧩 Widget personnalisé…",
-"🧹 Очистить корзину": "🧹 Vider la corbeille"
+"🧹 Очистить корзину": "🧹 Vider la corbeille",
+"Включить сеть": "Activer le réseau",
+"Сеть выключена": "Le réseau est désactivé",
+"Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Le service réseau n’est pas lancé — cela arrive au démarrage depuis la clé d’installation : l’installateur n’a pas besoin du réseau. Activez-le et le Wi-Fi comme le câble fonctionneront.",
+"Включаю сеть…": "Activation du réseau…",
+"Сеть не включилась": "Le réseau ne s’est pas activé"
 }

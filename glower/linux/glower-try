@@ -2,27 +2,34 @@
 # ==========================================================================
 #  Пробный режим: с установочной флешки — на рабочий стол
 #
-#  Флешка грузится быстро потому, что меню загрузки выключает на этот запуск
-#  всё, что установщику не нужно: сеть, печать, обновления (systemd.mask=…
-#  в строке ядра). Человеку, который решил сначала попробовать систему,
-#  всё это нужно. Перезагружаться ради этого незачем: маски из строки ядра
-#  живут в /run, их можно снять и поднять службы прямо сейчас.
+#  Флешка грузится быстро потому, что на этот запуск выключено всё, что
+#  установщику не нужно: сеть, печать, обновления. Выключает генератор
+#  glower-fast по метке glower.fast в строке ядра. Человеку, который решил
+#  сначала попробовать систему, всё это нужно — и перезагружаться ради
+#  этого незачем.
+#
+#  Флажок /run/glower-try говорит генератору «больше не маскировать», а
+#  перезагрузка настроек systemd убирает его прежние маски. Просто удалить
+#  маски было мало: при перезагрузке настроек systemd снова прогоняет
+#  генераторы, и всё маскировалось заново — пробная система оставалась без
+#  сети («NetworkManager не запущен»).
 # ==========================================================================
 set -u
 [ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
 
+touch /run/glower-try
+
+# Флешки прежних выпусков писали маски прямо в строку ядра (systemd.mask=…)
 UNITS=""
 for w in $(cat /proc/cmdline); do
   case "$w" in systemd.mask=*) UNITS="$UNITS ${w#systemd.mask=}" ;; esac
 done
-
 for u in $UNITS; do
-  # Маску из строки ядра кладёт генератор — ссылкой на /dev/null
   for d in /run/systemd/generator.early /run/systemd/generator /run/systemd/system /run/systemd/transient; do
     [ "$(readlink "$d/$u" 2>/dev/null)" = /dev/null ] && rm -f "$d/$u"
   done
-  systemctl unmask --runtime "$u" >/dev/null 2>&1 || true
 done
+
 systemctl daemon-reload
 
 # Поднимаем то, что пригодится в пробной системе. Обновления и снапы — нет:
@@ -30,4 +37,12 @@ systemctl daemon-reload
 for u in NetworkManager.service avahi-daemon.service cups.service cups-browsed.service ModemManager.service; do
   systemctl start --no-block "$u" >/dev/null 2>&1 || true
 done
-echo "пробный режим: службы запущены"
+
+# Проверяем, что сеть и правда поднялась, — и говорим, если нет
+sleep 2
+if systemctl is-active --quiet NetworkManager.service; then
+  echo "пробный режим: службы запущены"
+else
+  echo "пробный режим: NetworkManager не запустился — $(systemctl is-enabled NetworkManager.service 2>&1)" >&2
+  exit 1
+fi

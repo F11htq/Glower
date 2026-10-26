@@ -1054,7 +1054,55 @@ fn полоски(с: u64) -> &'static str {
     }
 }
 
+/// NetworkManager не запущен — так бывает при быстрой загрузке с флешки:
+/// установщику сеть не нужна, и её на этот запуск не поднимают
+fn сеть_спит() -> bool {
+    std::process::Command::new("systemctl")
+        .args(["is-active", "--quiet", "NetworkManager.service"])
+        .status()
+        .is_ok_and(|с| !с.success())
+}
+
+/// Поднять сеть: на флешке — пробным режимом (он снимает маски быстрой
+/// загрузки), в установленной системе — просто запустить NetworkManager
+fn разбуди_сеть(п: &П, место: &gtk::Box) {
+    let команда = if std::path::Path::new("/usr/bin/glower-try").exists() && std::fs::read_to_string("/proc/cmdline").is_ok_and(|с| с.contains("glower.fast")) {
+        vec!["-n", "/usr/bin/glower-try"]
+    } else {
+        vec!["-n", "systemctl", "start", "NetworkManager.service"]
+    };
+    ждём(место, "Включаю сеть…");
+    let (куда, откуда) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let итог = std::process::Command::new("sudo").args(&команда).output();
+        let _ = куда.send_blocking(итог.map(|о| (о.status.success(), String::from_utf8_lossy(&о.stderr).trim().to_string())));
+    });
+    let (п1, место1) = (п.clone(), место.clone());
+    glib::MainContext::default().spawn_local(async move {
+        match откуда.recv().await {
+            Ok(Ok((true, _))) => {
+                // NetworkManager нужно пару секунд, чтобы найти карты
+                glib::timeout_add_local_once(std::time::Duration::from_secs(3), move || вайфай(&п1, &место1));
+            }
+            Ok(Ok((false, е))) => беда(&место1, "Сеть не включилась", &е),
+            Ok(Err(е)) => беда(&место1, "Сеть не включилась", &е.to_string()),
+            Err(_) => {}
+        }
+    });
+}
+
 fn вайфай(п: &П, место: &gtk::Box) {
+    if сеть_спит() {
+        очисти(место);
+        let (п1, место1) = (п.clone(), место.clone());
+        let вкл = кн("Включить сеть", true, move |б| {
+            б.set_sensitive(false);
+            разбуди_сеть(&п1, &место1);
+        });
+        добавь(место, "📴", "Сеть выключена", "Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.", Some(вкл.upcast_ref()));
+        место.show_all();
+        return;
+    }
     ждём(место, "Спрашиваю систему…");
     let (место2, п1) = (место.clone(), п.clone());
     спроси(п, "sys.wifi.state", json!({}), move |о| {
