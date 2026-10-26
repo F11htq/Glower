@@ -8,6 +8,8 @@
 //!   glower-snip           — окно
 //!   glower-snip экран     — снять экран целиком (PrintScreen)
 //!   glower-snip область   — выделить область (Win+Shift+S)
+//!   glower-snip запись    — записать видео с экрана (Win+Shift+R); если
+//!                           запись уже идёт — остановить её
 
 use crate::apps::{кнопка, подготовь};
 use gtk::gdk_pixbuf::Pixbuf;
@@ -26,6 +28,8 @@ const СТИЛЬ: &str = r#"
 .snip .color.on { border-color: #ffffff; }
 .snip button.on { background-image: linear-gradient(140deg, #5b8cff, #8b5cf6); }
 .snip .note { font-size: 12px; opacity: 0.7; }
+window.record-bar { border-radius: 14px; background-color: rgba(22, 24, 32, 0.95); }
+window.record-bar .dot { color: #ef4444; font-size: 16px; }
 "#;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -181,6 +185,15 @@ pub fn рамка_в_кадре(р: (f64, f64, f64, f64), экран: (f64, f64)
 
 /// Выделить область поверх застывшего кадра. Esc — передумали
 fn выдели(кадр: Pixbuf, готово: impl FnOnce(Option<Pixbuf>) + 'static) {
+    выдели_с_рамкой(кадр, false, move |итог| готово(итог.map(|(к, _)| к)));
+}
+
+/// Рамка выделения в точках экрана: x, y, ширина, высота
+type Рамка = (i32, i32, i32, i32);
+
+/// То же, но отдаёт ещё и рамку на экране. «весь_по_щелчку» — щелчок без
+/// рамки выбирает весь экран (так начинают запись всего экрана)
+fn выдели_с_рамкой(кадр: Pixbuf, весь_по_щелчку: bool, готово: impl FnOnce(Option<(Pixbuf, Рамка)>) + 'static) {
     let окно = gtk::Window::new(gtk::WindowType::Toplevel);
     окно.init_layer_shell();
     окно.set_layer(gtk_layer_shell::Layer::Overlay);
@@ -194,7 +207,7 @@ fn выдели(кадр: Pixbuf, готово: impl FnOnce(Option<Pixbuf>) + 's
     холст.add_events(gtk::gdk::EventMask::BUTTON_PRESS_MASK | gtk::gdk::EventMask::BUTTON_RELEASE_MASK | gtk::gdk::EventMask::POINTER_MOTION_MASK);
     окно.add(&холст);
     let рамка: Rc<Cell<Option<(f64, f64, f64, f64)>>> = Rc::new(Cell::new(None));
-    let готово: Rc<RefCell<Option<Box<dyn FnOnce(Option<Pixbuf>)>>>> = Rc::new(RefCell::new(Some(Box::new(готово))));
+    let готово: Rc<RefCell<Option<Box<dyn FnOnce(Option<(Pixbuf, Рамка)>)>>>> = Rc::new(RefCell::new(Some(Box::new(готово))));
     {
         let (кадр_р, рамка_р) = (кадр.clone(), рамка.clone());
         холст.connect_draw(move |х, к| {
@@ -240,15 +253,23 @@ fn выдели(кадр: Pixbuf, готово: impl FnOnce(Option<Pixbuf>) + 's
         let (рамка2, окно2, готово2, кадр2) = (рамка.clone(), окно.clone(), готово.clone(), кадр.clone());
         холст.connect_button_release_event(move |х, _| {
             let Some((x1, y1, x2, y2)) = рамка2.get() else { return glib::Propagation::Stop };
-            let Some((л, в, ш, д)) = рамка_в_кадре((x1, y1, x2, y2), (х.allocated_width() as f64, х.allocated_height() as f64), (кадр2.width(), кадр2.height())) else {
-                рамка2.set(None);
-                х.queue_draw();
-                return glib::Propagation::Stop;
+            let (эш, эв) = (х.allocated_width() as f64, х.allocated_height() as f64);
+            let (x1, y1, x2, y2) = match рамка_в_кадре((x1, y1, x2, y2), (эш, эв), (кадр2.width(), кадр2.height())) {
+                Some(_) => (x1, y1, x2, y2),
+                None if весь_по_щелчку => (0.0, 0.0, эш, эв),
+                None => {
+                    рамка2.set(None);
+                    х.queue_draw();
+                    return glib::Propagation::Stop;
+                }
             };
+            let Some((л, в, ш, д)) = рамка_в_кадре((x1, y1, x2, y2), (эш, эв), (кадр2.width(), кадр2.height())) else { return glib::Propagation::Stop };
             let кусок = кадр2.new_subpixbuf(л, в, ш, д).copy();
+            // На экране — в точках экрана: их и ждёт wf-recorder
+            let на_экране = (x1.min(x2).round() as i32, y1.min(y2).round() as i32, (x2 - x1).abs().round() as i32, (y2 - y1).abs().round() as i32);
             unsafe { окно2.destroy() };
             if let Some(г) = готово2.borrow_mut().take() {
-                г(кусок);
+                г(кусок.map(|к| (к, на_экране)));
             }
             glib::Propagation::Stop
         });
@@ -269,6 +290,165 @@ fn выдели(кадр: Pixbuf, готово: impl FnOnce(Option<Pixbuf>) + 's
             о.set_cursor(Some(&курсор));
         }
     }
+}
+
+/* ---------- запись экрана ---------- */
+
+/// Где лежит номер процесса идущей записи: по нему второе Win+Shift+R
+/// находит её и останавливает
+fn метка_записи() -> PathBuf {
+    glib::user_runtime_dir().join("glower-record.pid")
+}
+
+fn папка_записей() -> PathBuf {
+    let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| glib::home_dir().join("GlowerOS"));
+    let видео = [корень.join("Видео"), glib::home_dir().join("Видео"), glib::home_dir().join("Videos")]
+        .into_iter()
+        .find(|п| п.is_dir())
+        .unwrap_or_else(|| корень.join("Видео"));
+    видео.join("Записи экрана")
+}
+
+/// Идёт запись — остановить. false — записи не было
+fn останови_запись() -> bool {
+    let Some(pid) = std::fs::read_to_string(метка_записи()).ok().and_then(|т| т.trim().parse::<i32>().ok()) else { return false };
+    // Процесс мог уже умереть, а метка — остаться
+    if !PathBuf::from(format!("/proc/{pid}")).exists() {
+        let _ = std::fs::remove_file(метка_записи());
+        return false;
+    }
+    // SIGINT — wf-recorder дописывает файл и выходит, видео не битое
+    let _ = std::process::Command::new("kill").args(["-INT", &pid.to_string()]).status();
+    true
+}
+
+/// Выбрать область (щелчок — весь экран) и записывать
+fn записывай(н: &Н) {
+    if останови_запись() {
+        return;
+    }
+    let видно = н.окно.is_visible();
+    н.окно.hide();
+    let н1 = н.clone();
+    glib::timeout_add_local_once(Duration::from_millis(300), move || match сними_экран() {
+        Err(е) => {
+            if видно {
+                н1.окно.show_all();
+            }
+            нечем_снимать(if видно { Some(&н1.окно) } else { None }, &е);
+            if !видно {
+                gtk::main_quit();
+            }
+        }
+        Ok(кадр) => {
+            let н2 = н1.clone();
+            выдели_с_рамкой(кадр, true, move |итог| match итог {
+                Some((_, рамка)) => начни_запись(&н2, рамка, видно),
+                None if видно => н2.окно.show_all(),
+                None => gtk::main_quit(),
+            });
+        }
+    });
+}
+
+fn начни_запись(н: &Н, (x, y, ш, в): Рамка, окно_было: bool) {
+    let папка = папка_записей();
+    let _ = std::fs::create_dir_all(&папка);
+    let имя = glib::DateTime::now_local().ok().and_then(|д| д.format("Запись %Y-%m-%d %H-%M-%S.mp4").ok()).map(|с| с.to_string()).unwrap_or_else(|| "Запись.mp4".into());
+    let файл = папка.join(имя);
+    // Кодеку нужны чётные стороны
+    let (ш, в) = (ш - ш % 2, в - в % 2);
+    let пошёл = std::process::Command::new("wf-recorder")
+        .args(["-y", "-g", &format!("{x},{y} {ш}x{в}"), "-f"])
+        .arg(&файл)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn();
+    let mut ребёнок = match пошёл {
+        Ok(р) => р,
+        Err(_) => {
+            let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Info, gtk::ButtonsType::Close, "Записывать нечем");
+            д.set_secondary_text(Some("Видео с экрана пишет программа «wf-recorder», а её нет на машине. Поставьте её в Магазине или командой sudo apt install wf-recorder."));
+            д.run();
+            unsafe { д.destroy() };
+            if окно_было { н.окно.show_all() } else { gtk::main_quit() }
+            return;
+        }
+    };
+    let _ = std::fs::write(метка_записи(), ребёнок.id().to_string());
+    let плашка = плашка_записи();
+    let (куда, откуда) = async_channel::bounded::<(bool, String)>(1);
+    std::thread::spawn(move || {
+        let mut ошибка = String::new();
+        if let Some(mut е) = ребёнок.stderr.take() {
+            use std::io::Read;
+            let _ = е.read_to_string(&mut ошибка);
+        }
+        let итог = ребёнок.wait().map(|с| с.success() || с.code().is_none()).unwrap_or(false);
+        let _ = куда.send_blocking((итог, ошибка));
+    });
+    let н1 = н.clone();
+    glib::MainContext::default().spawn_local(async move {
+        let (вышло, ошибка) = откуда.recv().await.unwrap_or((false, String::new()));
+        let _ = std::fs::remove_file(метка_записи());
+        unsafe { плашка.destroy() };
+        let есть = std::fs::metadata(&файл).is_ok_and(|м| м.len() > 0);
+        if есть {
+            crate::agent::скажи("уведомление", serde_json::json!({ "заголовок": "Запись сохранена", "текст": файл.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default(), "значок": "🎬", "откуда": "Ножницы" }));
+            // Показать в Проводнике — как Windows открывает готовую запись
+            let _ = std::process::Command::new("glower-files").arg(&файл).spawn();
+        } else if !вышло {
+            let хвост: String = ошибка.lines().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+            let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::Close, "Запись не получилась");
+            д.set_secondary_text(Some(&хвост));
+            д.run();
+            unsafe { д.destroy() };
+        }
+        if окно_было {
+            н1.окно.show_all();
+        } else {
+            gtk::main_quit();
+        }
+    });
+}
+
+/// Плашка сверху посередине: красная точка, время и «Стоп»
+fn плашка_записи() -> gtk::Window {
+    let окно = gtk::Window::new(gtk::WindowType::Toplevel);
+    окно.init_layer_shell();
+    окно.set_layer(gtk_layer_shell::Layer::Overlay);
+    окно.set_anchor(gtk_layer_shell::Edge::Top, true);
+    окно.set_layer_shell_margin(gtk_layer_shell::Edge::Top, 40);
+    окно.set_keyboard_mode(gtk_layer_shell::KeyboardMode::None);
+    окно.set_namespace("glower-record");
+    окно.style_context().add_class("glower-app");
+    окно.style_context().add_class("record-bar");
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    ряд.set_margin(8);
+    let точка = gtk::Label::new(Some("●"));
+    точка.style_context().add_class("dot");
+    let время = gtk::Label::new(Some("0:00"));
+    время.style_context().add_class("no-i18n");
+    let стоп = кнопка("⏹ Стоп", "Остановить запись (Win+Shift+R)");
+    стоп.connect_clicked(|б| {
+        б.set_sensitive(false);
+        останови_запись();
+    });
+    ряд.add(&точка);
+    ряд.add(&время);
+    ряд.add(&стоп);
+    окно.add(&ряд);
+    окно.show_all();
+    let начало = std::time::Instant::now();
+    let время = время.downgrade();
+    glib::timeout_add_local(Duration::from_millis(500), move || {
+        let Some(в) = время.upgrade() else { return glib::ControlFlow::Break };
+        let с = начало.elapsed().as_secs();
+        в.set_text(&format!("{}:{:02}", с / 60, с % 60));
+        glib::ControlFlow::Continue
+    });
+    окно
 }
 
 /* ---------- окно ---------- */
@@ -456,8 +636,10 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         задержка.append(Some(id), &crate::i18n::tr(имя));
     }
     задержка.set_active_id(Some("0"));
+    let к_запись = кнопка("⏺ Запись", "Записать видео с экрана (Win+Shift+R)");
     верх.add(&к_область);
     верх.add(&к_экран);
+    верх.add(&к_запись);
     верх.add(&задержка);
     let пустота = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     пустота.set_hexpand(true);
@@ -728,11 +910,22 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         gtk::main_quit();
         glib::Propagation::Proceed
     });
+    {
+        let н1 = н.clone();
+        к_запись.connect_clicked(move |_| записывай(&н1));
+    }
 
     // С доводом — сперва снимок, окно потом: в кадр оно не попадёт
     match доводы.first().map(String::as_str) {
         Some("экран") | Some("screen") => снимай(&н, false, 0),
         Some("область") | Some("area") => снимай(&н, true, 0),
+        Some("запись") | Some("record") => {
+            // Запись уже идёт — это просьба её остановить
+            if останови_запись() {
+                std::process::exit(0);
+            }
+            записывай(&н)
+        }
         _ => окно.show_all(),
     }
     gtk::main();

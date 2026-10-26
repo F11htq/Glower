@@ -1342,5 +1342,13 @@
 "Очистить всё": "Alle löschen",
 "Здесь появится то, что вы скопируете": "Hier erscheint, was Sie kopieren",
 "Закрепить": "Anheften",
-"Открепить": "Lösen"
+"Открепить": "Lösen",
+"Запись": "Aufnahme",
+"Записать видео с экрана (Win+Shift+R)": "Bildschirmvideo aufnehmen (Win+Shift+R)",
+"Стоп": "Stopp",
+"Остановить запись (Win+Shift+R)": "Aufnahme beenden (Win+Shift+R)",
+"Записывать нечем": "Kein Aufnahmeprogramm",
+"Видео с экрана пишет программа «wf-recorder», а её нет на машине. Поставьте её в Магазине или командой sudo apt install wf-recorder.": "Bildschirmvideos nimmt „wf-recorder“ auf, das nicht installiert ist. Installieren Sie es im Store oder mit sudo apt install wf-recorder.",
+"Запись не получилась": "Aufnahme fehlgeschlagen",
+"Запись сохранена": "Aufnahme gespeichert"
 }

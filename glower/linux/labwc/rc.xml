@@ -153,6 +153,11 @@
     <keybind key="XF86MonBrightnessDown"><action name="Execute" command="brightnessctl -q set 5%-" /></keybind>
     <!-- Снимок экрана. Сочетания держит оконный сервер: клавиши достаются
          окну в фокусе, и иначе Win+Shift+S уходил бы любой программе. -->
+    <!-- Win+Shift+R — запись видео с экрана (второе нажатие — стоп) -->
+    <keybind key="W-S-r">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-shot запись" />
+    </keybind>
     <!-- Win+V — история буфера обмена, как в Windows -->
     <keybind key="W-v">
       <action name="Execute" command="glower-menu отмени" />

@@ -332,7 +332,7 @@ timeout 2400 apt-get install -y --no-install-recommends -o Dpkg::Progress-Fancy=
   libopengl0 libglx0 libglu1-mesa \
   xwayland qtwayland5 qt6-wayland libxcb-cursor0 \
   libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 \
-  grim slurp maim xclip sound-theme-freedesktop \
+  grim slurp maim xclip wf-recorder libarchive-tools gvfs-backends sound-theme-freedesktop \
   </dev/null 2>&1 | grep -E '^(Setting up|Unpacking|Get:|E:|W:|dpkg)' | cut -c1-120 || true
 test -x /usr/bin/labwc || { echo "основные пакеты не установились" >&2; exit 1; }
 

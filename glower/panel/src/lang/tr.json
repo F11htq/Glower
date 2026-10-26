@@ -1342,5 +1342,13 @@
 "Очистить всё": "Tümünü temizle",
 "Здесь появится то, что вы скопируете": "Kopyaladıklarınız burada görünecek",
 "Закрепить": "Sabitle",
-"Открепить": "Sabitlemeyi kaldır"
+"Открепить": "Sabitlemeyi kaldır",
+"Запись": "Kaydet",
+"Записать видео с экрана (Win+Shift+R)": "Ekran videosu kaydet (Win+Shift+R)",
+"Стоп": "Durdur",
+"Остановить запись (Win+Shift+R)": "Kaydı durdur (Win+Shift+R)",
+"Записывать нечем": "Kaydedecek program yok",
+"Видео с экрана пишет программа «wf-recorder», а её нет на машине. Поставьте её в Магазине или командой sudo apt install wf-recorder.": "Ekran videosunu «wf-recorder» kaydeder, ancak kurulu değil. Mağazadan veya sudo apt install wf-recorder ile kurun.",
+"Запись не получилась": "Kayıt başarısız",
+"Запись сохранена": "Kayıt kaydedildi"
 }
