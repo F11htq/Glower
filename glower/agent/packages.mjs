@@ -1119,6 +1119,65 @@ export function packages(allowPackages){
       return пуск;
     },
 
+    /* Драйверы видеокарты — как «Дополнительные драйверы» Ubuntu и
+       установка драйвера NVIDIA в Windows: система сама узнаёт карту и
+       предлагает рекомендованный драйвер одной кнопкой.
+
+       Ставим не голый nvidia-driver-NNN, а вместе с готовыми модулями ядра
+       linux-modules-nvidia-NNN-…: они уже подписаны Canonical, работают при
+       включённом Secure Boot и ничего не собирают на машине. Так делает и
+       сама Ubuntu (ubuntu-drivers install). */
+    async 'sys.drivers'(){
+      let вывод = '';
+      try { вывод = (await run('ubuntu-drivers', ['devices'], { timeout:60000, env:{ ...process.env, LC_ALL:'C' } })).stdout; }
+      catch(e){
+        if (e.code === 'ENOENT') return { есть:false, почему:'нет ubuntu-drivers', устройства:[], можно:!!allowPackages };
+        вывод = String(e.stdout || '');
+      }
+      const устройства = [];
+      for (const кусок of вывод.split(/^== /m).slice(1)){
+        const модель = (кусок.match(/^model\s*:\s*(.+)$/m) || [])[1] || '';
+        const производитель = (кусок.match(/^vendor\s*:\s*(.+)$/m) || [])[1] || '';
+        const драйверы = [...кусок.matchAll(/^driver\s*:\s*(\S+)\s*-\s*(.*)$/gm)].map(м => ({
+          пакет:м[1], рекомендован:/recommended/.test(м[2]), открытый:/-open\b/.test(м[1]), свободный:/\bfree\b/.test(м[2]) && !/non-free/.test(м[2]) }));
+        if (драйверы.length) устройства.push({ модель, производитель, драйверы });
+      }
+      /* Что уже стоит */
+      let стоит = [];
+      try {
+        const { stdout } = await run('dpkg-query', ['-W', '-f=${Package} ${Status}\n', 'nvidia-driver-*'], { env:{ ...process.env, LC_ALL:'C' } });
+        стоит = stdout.split('\n').filter(с => / install ok installed$/.test(с)).map(с => с.split(' ')[0]);
+      } catch(e){ /* ничего не стоит */ }
+      return { есть:true, устройства, стоит, можно:!!allowPackages };
+    },
+
+    async 'sys.drivers.install'({ name } = {}){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      const пакет = проверьИмя(name);
+      if (!/^nvidia-driver-\d+(-open|-server|-server-open)?$/.test(пакет))
+        throw new Error('это не драйвер видеокарты: ' + пакет);
+      /* Готовые подписанные модули к этому драйверу — если для нашего ядра
+         они есть; нет — драйвер соберёт их сам (dkms) */
+      const ветка = пакет.replace(/^nvidia-driver-/, '');
+      const пакеты = [пакет];
+      try {
+        const { stdout } = await run('ubuntu-drivers', ['list'], { timeout:60000, env:{ ...process.env, LC_ALL:'C' } });
+        const м = stdout.split('\n').find(с => с.startsWith(пакет + ','))?.match(/provided by (linux-modules-nvidia-\S+?)\)/);
+        if (м && NAME.test(м[1])) пакеты.push(м[1]);
+      } catch(e){ /* обойдёмся dkms */ }
+      const пуск = запусти('install', пакет, ['install', '-y', ...пакеты]);
+      /* Под Wayland драйверу нужен modeset — иначе оконный сервер не увидит
+         экран. В свежих ветках он включён сам, в старых — нет */
+      job.потом = () => {
+        const п = spawn('sudo', ['-n', 'tee', '/etc/modprobe.d/glower-nvidia.conf'], { stdio:['pipe', 'ignore', 'ignore'] });
+        п.stdin.end('# GlowerOS: Wayland нужен modeset\noptions nvidia_drm modeset=1 fbdev=1\n');
+        п.on('close', () => { job.done = true; job.percent = 100; job.ok = true; job.error = null;
+          job.step = 'Готово — перезагрузите компьютер'; job.ветка = ветка; });
+      };
+      return пуск;
+    },
+
     /* Программы Windows: есть ли Wine и можно ли его поставить. */
     async 'pkg.windows'(){
       const в = await естьWine();

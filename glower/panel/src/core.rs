@@ -1601,6 +1601,28 @@ pub fn начни() {
     let данные: Value = serde_json::from_str(ДАННЫЕ).unwrap_or_default();
     Я.with(|я| *я.borrow_mut() = Some(Ядро { s: загрузи(), данные, ..Default::default() }));
 
+    // Видеокарта без своего драйвера — напоминаем, как Windows: раз за сеанс,
+    // через минуту после входа, чтобы не мешать первым шагам
+    glib::timeout_add_local_once(std::time::Duration::from_secs(60), || {
+        позови("sys.drivers", json!({}), |о| {
+            let Ok(д) = о else { return };
+            let стоит: Vec<&str> = д["стоит"].as_array().map(|а| а.iter().filter_map(|х| х.as_str()).collect()).unwrap_or_default();
+            for у in д["устройства"].as_array().into_iter().flatten() {
+                let варианты = у["драйверы"].as_array().cloned().unwrap_or_default();
+                let нужен = варианты.iter().any(|в| в["рекомендован"].as_bool() == Some(true) && в["свободный"].as_bool() != Some(true));
+                let уже = варианты.iter().any(|в| в["пакет"].as_str().is_some_and(|п| стоит.contains(&п)));
+                if нужен && !уже {
+                    notify::покажи(
+                        "Есть драйвер для видеокарты",
+                        &format!("{} будет работать быстрее. Поставить: Параметры → Обновления", у["модель"].as_str().unwrap_or("Видеокарта")),
+                        "🎮",
+                    );
+                    break;
+                }
+            }
+        });
+    });
+
     // Слушаем просьбы всех, кто прежде просил страницу
     let вести = слушай(
         &[],

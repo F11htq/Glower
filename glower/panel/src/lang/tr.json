@@ -1350,5 +1350,17 @@
 "Записывать нечем": "Kaydedecek program yok",
 "Видео с экрана пишет программа «wf-recorder», а её нет на машине. Поставьте её в Магазине или командой sudo apt install wf-recorder.": "Ekran videosunu «wf-recorder» kaydeder, ancak kurulu değil. Mağazadan veya sudo apt install wf-recorder ile kurun.",
 "Запись не получилась": "Kayıt başarısız",
-"Запись сохранена": "Kayıt kaydedildi"
+"Запись сохранена": "Kayıt kaydedildi",
+"Драйверы видеокарты": "Ekran kartı sürücüleri",
+"Смотрю, какая видеокарта…": "Ekran kartı denetleniyor…",
+"Не вышло узнать про драйверы": "Sürücüler denetlenemedi",
+"Подбор драйверов недоступен": "Sürücü algılama kullanılamıyor",
+"Отдельный драйвер не нужен": "Ek sürücü gerekmiyor",
+"Видеокарта этой машины работает на драйвере, встроенном в систему": "Ekran kartı sistemle gelen sürücüyle çalışıyor",
+"Установить драйвер": "Sürücüyü kur",
+"Ставлю драйвер — это несколько минут…": "Sürücü kuruluyor — birkaç dakika…",
+"Драйвер установлен": "Sürücü kuruldu",
+"Он заработает после перезагрузки": "Yeniden başlattıktan sonra çalışacak",
+"Драйвер не поставился": "Sürücü kurulamadı",
+"Есть драйвер для видеокарты": "Ekran kartınız için bir sürücü var"
 }

@@ -1350,5 +1350,17 @@
 "Записывать нечем": "Kein Aufnahmeprogramm",
 "Видео с экрана пишет программа «wf-recorder», а её нет на машине. Поставьте её в Магазине или командой sudo apt install wf-recorder.": "Bildschirmvideos nimmt „wf-recorder“ auf, das nicht installiert ist. Installieren Sie es im Store oder mit sudo apt install wf-recorder.",
 "Запись не получилась": "Aufnahme fehlgeschlagen",
-"Запись сохранена": "Aufnahme gespeichert"
+"Запись сохранена": "Aufnahme gespeichert",
+"Драйверы видеокарты": "Grafiktreiber",
+"Смотрю, какая видеокарта…": "Grafikkarte wird geprüft…",
+"Не вышло узнать про драйверы": "Treiber konnten nicht geprüft werden",
+"Подбор драйверов недоступен": "Treibererkennung nicht verfügbar",
+"Отдельный драйвер не нужен": "Kein zusätzlicher Treiber nötig",
+"Видеокарта этой машины работает на драйвере, встроенном в систему": "Die Grafikkarte nutzt den im System enthaltenen Treiber",
+"Установить драйвер": "Treiber installieren",
+"Ставлю драйвер — это несколько минут…": "Treiber wird installiert — das dauert einige Minuten…",
+"Драйвер установлен": "Treiber installiert",
+"Он заработает после перезагрузки": "Er funktioniert nach einem Neustart",
+"Драйвер не поставился": "Treiber wurde nicht installiert",
+"Есть драйвер для видеокарты": "Für Ihre Grafikkarte gibt es einen Treiber"
 }

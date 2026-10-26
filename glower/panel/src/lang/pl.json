@@ -1350,5 +1350,17 @@
 "Записывать нечем": "Brak programu do nagrywania",
 "Видео с экрана пишет программа «wf-recorder», а её нет на машине. Поставьте её в Магазине или командой sudo apt install wf-recorder.": "Wideo z ekranu nagrywa „wf-recorder”, którego nie ma w systemie. Zainstaluj go w Sklepie lub poleceniem sudo apt install wf-recorder.",
 "Запись не получилась": "Nagrywanie nie powiodło się",
-"Запись сохранена": "Nagranie zapisane"
+"Запись сохранена": "Nagranie zapisane",
+"Драйверы видеокарты": "Sterowniki grafiki",
+"Смотрю, какая видеокарта…": "Sprawdzam kartę graficzną…",
+"Не вышло узнать про драйверы": "Nie udało się sprawdzić sterowników",
+"Подбор драйверов недоступен": "Wykrywanie sterowników niedostępne",
+"Отдельный драйвер не нужен": "Dodatkowy sterownik niepotrzebny",
+"Видеокарта этой машины работает на драйвере, встроенном в систему": "Karta graficzna działa na wbudowanym sterowniku",
+"Установить драйвер": "Zainstaluj sterownik",
+"Ставлю драйвер — это несколько минут…": "Instaluję sterownik — to potrwa kilka minut…",
+"Драйвер установлен": "Sterownik zainstalowany",
+"Он заработает после перезагрузки": "Zadziała po ponownym uruchomieniu",
+"Драйвер не поставился": "Sterownik się nie zainstalował",
+"Есть драйвер для видеокарты": "Jest sterownik dla Twojej karty graficznej"
 }
