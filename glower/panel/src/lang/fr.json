@@ -1362,5 +1362,6 @@
 "Драйвер установлен": "Pilote installé",
 "Он заработает после перезагрузки": "Il fonctionnera après redémarrage",
 "Драйвер не поставился": "Le pilote ne s’est pas installé",
-"Есть драйвер для видеокарты": "Un pilote est disponible pour votre carte graphique"
+"Есть драйвер для видеокарты": "Un pilote est disponible pour votre carte graphique",
+"Не удалось открыть «{имя}»": "Impossible d’ouvrir « {имя} »"
 }

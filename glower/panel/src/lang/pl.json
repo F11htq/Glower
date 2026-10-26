@@ -1362,5 +1362,6 @@
 "Драйвер установлен": "Sterownik zainstalowany",
 "Он заработает после перезагрузки": "Zadziała po ponownym uruchomieniu",
 "Драйвер не поставился": "Sterownik się nie zainstalował",
-"Есть драйвер для видеокарты": "Jest sterownik dla Twojej karty graficznej"
+"Есть драйвер для видеокарты": "Jest sterownik dla Twojej karty graficznej",
+"Не удалось открыть «{имя}»": "Nie udało się otworzyć „{имя}”"
 }

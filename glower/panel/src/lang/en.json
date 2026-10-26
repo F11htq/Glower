@@ -1362,5 +1362,6 @@
 "Драйвер установлен": "Driver installed",
 "Он заработает после перезагрузки": "It will work after a restart",
 "Драйвер не поставился": "Driver installation failed",
-"Есть драйвер для видеокарты": "A driver is available for your graphics card"
+"Есть драйвер для видеокарты": "A driver is available for your graphics card",
+"Не удалось открыть «{имя}»": "Couldn’t open “{имя}”"
 }

@@ -1362,5 +1362,6 @@
 "Драйвер установлен": "Sürücü kuruldu",
 "Он заработает после перезагрузки": "Yeniden başlattıktan sonra çalışacak",
 "Драйвер не поставился": "Sürücü kurulamadı",
-"Есть драйвер для видеокарты": "Ekran kartınız için bir sürücü var"
+"Есть драйвер для видеокарты": "Ekran kartınız için bir sürücü var",
+"Не удалось открыть «{имя}»": "«{имя}» açılamadı"
 }

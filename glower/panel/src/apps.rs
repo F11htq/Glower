@@ -221,6 +221,10 @@ fn значок_по_символу(символ: &str) -> Option<&'static str> 
 pub fn имя_значка(знак: &str) -> Option<&'static str> {
     Some(match знак.trim_end_matches('\u{fe0f}') {
         "💻" => "computer-symbolic",
+        "📱" => "phone-symbolic",
+        "⏺" => "media-record-symbolic",
+        "⏹" => "media-playback-stop-symbolic",
+        "🗜" => "package-x-generic-symbolic",
         "🖥" => "video-display-symbolic",
         "🏠" => "go-home-symbolic",
         "🎨" | "🖌" => "applications-graphics-symbolic",
