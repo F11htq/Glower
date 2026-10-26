@@ -664,9 +664,17 @@ try {
   {
     const образ = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
     const строка = (образ.match(/^set fast=.*$/m) || [''])[0];
+    // Маски ставит генератор по метке glower.fast: из строки ядра
+    // пробный режим снять их не мог — systemd возвращал их при reload
+    const генератор = await readFile(join(root, 'linux', 'glower-fast-generator'), 'utf8');
+    const проба = await readFile(join(root, 'linux', 'glower-try'), 'utf8');
     check('в живой системе лишние службы выключены',
-      /NetworkManager\.service/.test(строка) && /ufw\.service/.test(строка)
-      && /cups\.service/.test(строка), строка.slice(0, 60));
+      /glower\.fast/.test(строка) && /NetworkManager\.service/.test(генератор)
+      && /ufw\.service/.test(генератор) && /cups\.service/.test(генератор)
+      && /system-generators\/glower-fast/.test(образ), строка.slice(0, 60));
+    check('пробный режим снимает маски и поднимает сеть',
+      /\/run\/glower-try/.test(генератор) && /touch \/run\/glower-try/.test(проба)
+      && /daemon-reload/.test(проба) && /NetworkManager\.service/.test(проба));
     const пункты = образ.split('menuentry').slice(1);
     const установка = пункты.filter(п => /glower\.install=1/.test(п));
     check('быстрый путь стоит в пунктах установки',
