@@ -1363,5 +1363,6 @@
 "Он заработает после перезагрузки": "Funzionerà dopo il riavvio",
 "Драйвер не поставился": "Il driver non si è installato",
 "Есть драйвер для видеокарты": "C’è un driver per la tua scheda grafica",
-"Не удалось открыть «{имя}»": "Impossibile aprire «{имя}»"
+"Не удалось открыть «{имя}»": "Impossibile aprire «{имя}»",
+"Два окна рядом (F3)": "Due finestre affiancate (F3)"
 }

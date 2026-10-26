@@ -1089,6 +1089,10 @@ fn меню_папки(п: &П, событие: &gtk::gdk::EventButton) {
     скрытые.connect_toggled(move |_| переключи_скрытые(&п1));
     меню.append(&скрытые);
     let п1 = п.clone();
+    {
+        let п1 = п.clone();
+        пункт(&меню, "Два окна рядом (F3)", true, move || два_окна(&п1));
+    }
     пункт(&меню, "Обновить", true, move || {
         if let Some(в) = текущая(&п1) {
             загрузи(&п1, &в, true);
@@ -1443,6 +1447,15 @@ fn собери_места(п: &П) {
     п.места.show_all();
 }
 
+/// F3 — два окна рядом, как в Windows (Win+←, Win+→): это — в левую
+/// половину экрана, второе, на той же папке, — в правую. Файлы между
+/// ними таскают мышью или копируют Ctrl+C / Ctrl+V
+fn два_окна(п: &П) {
+    let папка = текущая_папка(п).unwrap_or_else(|| п.корень.clone());
+    let _ = crate::core::скажи_серверу("snap left");
+    let _ = std::process::Command::new("glower-files").arg("--right").arg(&папка).spawn();
+}
+
 /// Подключить том (телефон, флешку) и открыть его
 fn подключи_том(п: &П, т: &gio::Volume) {
     let п1 = п.clone();
@@ -1585,6 +1598,13 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             let г = л.hadjustment();
             glib::idle_add_local_once(move || г.set_value(г.upper() - г.page_size()));
         });
+        // И когда сузилось само окно (два окна рядом) — путь тот же, а
+        // видимая часть меньше
+        let г = крошки_листание.hadjustment();
+        г.connect_page_size_notify(|г| {
+            let г = г.clone();
+            glib::idle_add_local_once(move || г.set_value(г.upper() - г.page_size()));
+        });
     }
     крошки_место.add(&крошки_листание);
     адресная.add_named(&крошки_место, "крошки");
@@ -1598,7 +1618,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     let поиск = gtk::Entry::new();
     поиск.set_placeholder_text(Some("Поиск"));
     поиск.set_icon_from_icon_name(gtk::EntryIconPosition::Primary, Some("edit-find-symbolic"));
-    поиск.set_width_chars(20);
+    поиск.set_width_chars(10);
     панель.add(&поиск);
     колонка.add(&панель);
 
@@ -1623,7 +1643,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     прокрутка.add(&места);
     прокрутка.set_vexpand(true);
     бок.add(&прокрутка);
-    бок.set_size_request(220, -1);
+    бок.set_size_request(180, -1);
     середина.pack1(&бок, false, false);
     let вкладки = gtk::Notebook::new();
     вкладки.set_scrollable(true);
@@ -1871,6 +1891,9 @@ pub fn запусти(доводы: Vec<String>) -> ! {
                     загрузи(&п1, &в, true);
                 }
                 true
+            } else if ключ == к::F3 {
+                два_окна(&п1);
+                true
             } else if в_поле {
                 false
             } else if ctrl && буква == "c" {
@@ -1927,6 +1950,8 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     // Что открыть: папку из доводов, а файл — его папку, с ним выделенным
     let mut первая = Место::Папка(корень.clone());
     let mut выделить = None;
+    let вправо = доводы.first().is_some_and(|д| д == "--right");
+    let доводы: Vec<String> = доводы.into_iter().filter(|д| д != "--right").collect();
     if доводы.first().is_some_and(|д| д == "--trash") {
         первая = Место::Корзина;
     } else if let Some(д) = доводы.first() {
@@ -1941,6 +1966,13 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         }
     }
     окно.show_all();
+    // Второе из «двух окон рядом» (F3) встаёт в правую половину, как
+    // только появится на экране
+    if вправо {
+        glib::timeout_add_local_once(std::time::Duration::from_millis(350), || {
+            let _ = crate::core::скажи_серверу("snap right");
+        });
+    }
     п.адресная.set_visible_child_name("крошки");
     п.корзина.set_reveal_child(false);
     let в = новая_вкладка(&п, первая);

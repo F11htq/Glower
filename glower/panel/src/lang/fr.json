@@ -1363,5 +1363,6 @@
 "Он заработает после перезагрузки": "Il fonctionnera après redémarrage",
 "Драйвер не поставился": "Le pilote ne s’est pas installé",
 "Есть драйвер для видеокарты": "Un pilote est disponible pour votre carte graphique",
-"Не удалось открыть «{имя}»": "Impossible d’ouvrir « {имя} »"
+"Не удалось открыть «{имя}»": "Impossible d’ouvrir « {имя} »",
+"Два окна рядом (F3)": "Deux fenêtres côte à côte (F3)"
 }
