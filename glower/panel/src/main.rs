@@ -195,6 +195,10 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
   caret-color: #ffffff;
 }
 .overview entry.search:focus { box-shadow: inset 0 0 0 1px alpha(@glower_accent, 0.8); }
+.overview list.files-found { background-color: rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 4px; }
+.overview list.files-found row { border-radius: 10px; color: #ffffff; }
+.overview list.files-found row:hover { background-color: rgba(255, 255, 255, 0.10); }
+.overview list.files-found .dim { font-size: 11px; opacity: 0.6; }
 .overview button {
   background: none;
   border: none;

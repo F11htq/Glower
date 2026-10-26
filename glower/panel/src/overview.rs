@@ -261,7 +261,7 @@ fn создай() -> Rc<RefCell<Меню>> {
     столы.set_halign(gtk::Align::Center);
 
     let поиск = gtk::Entry::new();
-    поиск.set_placeholder_text(Some("Поиск программ"));
+    поиск.set_placeholder_text(Some("Поиск программ и файлов"));
     поиск.set_width_chars(36);
     поиск.set_halign(gtk::Align::Center);
     поиск.style_context().add_class("search");
@@ -297,6 +297,24 @@ fn создай() -> Rc<RefCell<Меню>> {
 
     колонка.pack_start(&столы, false, false, 0);
     колонка.pack_start(&поиск, false, false, 0);
+    // Найденные файлы — над программами, как «Документы» в поиске Windows
+    let файлы = gtk::ListBox::new();
+    файлы.set_selection_mode(gtk::SelectionMode::None);
+    файлы.style_context().add_class("files-found");
+    файлы.set_halign(gtk::Align::Center);
+    файлы.set_size_request(560, -1);
+    файлы.set_no_show_all(true);
+    // Нажатие забираем себе: иначе оно уходит фону меню, а тот закрывает
+    // меню раньше, чем строка успевает открыть файл
+    файлы.connect_button_press_event(|с, е| {
+        if е.button() == 1 {
+            if let Some(р) = с.row_at_y(е.position().1 as i32) {
+                р.activate();
+            }
+        }
+        glib::Propagation::Stop
+    });
+    колонка.pack_start(&файлы, false, false, 0);
     колонка.pack_start(&окна, false, false, 0);
     колонка.pack_start(&листание, true, true, 0);
     колонка.pack_start(&карточки, true, true, 0);
@@ -314,14 +332,28 @@ fn создай() -> Rc<RefCell<Меню>> {
     }
     {
         let (строка, сетка) = (строка.clone(), сетка.clone());
+        let файлы = файлы.clone();
         поиск.connect_changed(move |п| {
             *строка.borrow_mut() = п.text().trim().to_lowercase();
             сетка.invalidate_filter();
+            ищи_файлы(&файлы, п.text().trim());
         });
     }
     {
-        let сетка = сетка.clone();
+        let (сетка, файлы) = (сетка.clone(), файлы.clone());
         поиск.connect_activate(move |_| {
+            // Программ не нашлось — Ввод открывает первый найденный файл
+            let есть_программы = сетка
+                .children()
+                .into_iter()
+                .filter_map(|р| р.downcast::<gtk::FlowBoxChild>().ok())
+                .any(|р| р.is_child_visible());
+            if !есть_программы {
+                if let Some(р) = файлы.row_at_index(0) {
+                    р.activate();
+                    return;
+                }
+            }
             let первый = сетка
                 .children()
                 .into_iter()
@@ -353,6 +385,141 @@ fn создай() -> Rc<RefCell<Меню>> {
     м
 }
 
+
+// ------------------------------------------------------------- поиск файлов
+
+thread_local! {
+    /// Номер поиска: ответ старого поиска, пришедший после нового, — мимо
+    static ПОИСК_ФАЙЛОВ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Найти файлы по имени в папках человека. Обходим в отдельном потоке и с
+/// пределом — меню не должно замирать даже на огромной домашней папке
+fn найди_файлы(что: &str, сколько: usize) -> Vec<std::path::PathBuf> {
+    let что = что.to_lowercase();
+    let mut корни = vec![crate::core::корень()];
+    let дом = glib::home_dir();
+    if !корни.contains(&дом) {
+        корни.push(дом);
+    }
+    let mut найдено: Vec<(usize, std::path::PathBuf)> = Vec::new();
+    let mut очередь: std::collections::VecDeque<(std::path::PathBuf, usize)> = корни.into_iter().map(|к| (к, 0)).collect();
+    let mut просмотрено = 0usize;
+    let mut виденные = std::collections::HashSet::new();
+    while let Some((папка, глубина)) = очередь.pop_front() {
+        if !виденные.insert(папка.clone()) {
+            continue;
+        }
+        let Ok(чтение) = std::fs::read_dir(&папка) else { continue };
+        for з in чтение.filter_map(|з| з.ok()) {
+            просмотрено += 1;
+            if просмотрено > 40_000 {
+                break;
+            }
+            let имя = з.file_name().to_string_lossy().to_string();
+            // Скрытое и служебное не ищем: там тысячи файлов программ
+            if имя.starts_with('.') || имя == "node_modules" || имя == "snap" {
+                continue;
+            }
+            let путь = з.path();
+            let папка_ли = з.file_type().map(|т| т.is_dir()).unwrap_or(false);
+            let малое = имя.to_lowercase();
+            if let Some(где) = малое.find(&что) {
+                // Совпало с начала имени — выше
+                найдено.push((if где == 0 { 0 } else { 1 } + глубина, путь.clone()));
+            }
+            if папка_ли && глубина < 8 {
+                очередь.push_back((путь, глубина + 1));
+            }
+        }
+    }
+    найдено.sort_by(|а, б| а.0.cmp(&б.0).then_with(|| а.1.cmp(&б.1)));
+    найдено.into_iter().take(сколько).map(|(_, п)| п).collect()
+}
+
+fn ищи_файлы(список: &gtk::ListBox, что: &str) {
+    let номер = ПОИСК_ФАЙЛОВ.with(|н| {
+        н.set(н.get() + 1);
+        н.get()
+    });
+    if что.chars().count() < 2 {
+        for р in список.children() {
+            список.remove(&р);
+        }
+        список.hide();
+        return;
+    }
+    let что = что.to_string();
+    let список = список.clone();
+    // Пауза — пока печатают, не обходить диск на каждую букву
+    glib::timeout_add_local_once(std::time::Duration::from_millis(220), move || {
+        if ПОИСК_ФАЙЛОВ.with(|н| н.get()) != номер {
+            return;
+        }
+        let (куда, откуда) = async_channel::bounded(1);
+        std::thread::spawn(move || {
+            let _ = куда.send_blocking(найди_файлы(&что, 6));
+        });
+        glib::MainContext::default().spawn_local(async move {
+            let Ok(пути) = откуда.recv().await else { return };
+            if ПОИСК_ФАЙЛОВ.with(|н| н.get()) != номер {
+                return;
+            }
+            for р in список.children() {
+                список.remove(&р);
+            }
+            for п in пути {
+                // Строки показываем сами: у списка стоит no_show_all, и его
+                // show_all не трогает детей
+                let р = строка_файла(&п);
+                р.show_all();
+                список.add(&р);
+            }
+            список.set_visible(!список.children().is_empty());
+        });
+    });
+}
+
+fn строка_файла(путь: &std::path::Path) -> gtk::ListBoxRow {
+    let р = gtk::ListBoxRow::new();
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    ряд.set_margin_start(10);
+    ряд.set_margin_end(10);
+    ряд.set_margin_top(5);
+    ряд.set_margin_bottom(5);
+    let значок = if путь.is_dir() {
+        gio::ThemedIcon::new("folder").upcast::<gio::Icon>()
+    } else {
+        gio::content_type_get_icon(&crate::core::тип_по_имени(&путь.to_string_lossy()))
+    };
+    let к = gtk::Image::from_gicon(&значок, gtk::IconSize::LargeToolbar);
+    к.set_pixel_size(24);
+    ряд.add(&к);
+    let столбик = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let имя = gtk::Label::new(путь.file_name().map(|и| и.to_string_lossy().to_string()).as_deref());
+    имя.set_xalign(0.0);
+    имя.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+    имя.set_max_width_chars(50);
+    имя.style_context().add_class("no-i18n");
+    let где = путь.parent().map(|п| п.to_string_lossy().replace(&glib::home_dir().to_string_lossy().to_string(), "~")).unwrap_or_default();
+    let папка = gtk::Label::new(Some(&где));
+    папка.set_xalign(0.0);
+    папка.set_ellipsize(gtk::pango::EllipsizeMode::Start);
+    папка.set_max_width_chars(60);
+    папка.set_width_chars(60);
+    папка.style_context().add_class("dim");
+    папка.style_context().add_class("no-i18n");
+    столбик.add(&имя);
+    столбик.add(&папка);
+    ряд.pack_start(&столбик, true, true, 0);
+    р.add(&ряд);
+    let путь = путь.to_path_buf();
+    р.connect_activate(move |_| {
+        закрой();
+        crate::core::открой_путь(&путь);
+    });
+    р
+}
 
 // ------------------------------------------------------------- значки
 
