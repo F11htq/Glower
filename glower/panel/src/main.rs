@@ -19,6 +19,7 @@ mod agent;
 mod apps;
 mod calc;
 mod calendar;
+mod cliphist;
 mod clock;
 mod core;
 mod desktop;
@@ -195,6 +196,14 @@ window.overview { background-color: rgba(10, 12, 20, 0.86); }
   caret-color: #ffffff;
 }
 .overview entry.search:focus { box-shadow: inset 0 0 0 1px alpha(@glower_accent, 0.8); }
+window.cliphist .card { background-color: rgba(22, 24, 32, 0.97); border-radius: 16px; padding: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); }
+window.cliphist .title { font-weight: 600; font-size: 15px; color: #ffffff; }
+window.cliphist list { background-color: transparent; }
+window.cliphist row { border-radius: 10px; margin: 2px 0; background-color: rgba(255, 255, 255, 0.05); color: #ffffff; }
+window.cliphist row:hover, window.cliphist row:selected { background-color: alpha(@glower_accent, 0.35); }
+window.cliphist .item { padding: 8px 6px 8px 12px; }
+window.cliphist button.on { color: @glower_accent; }
+window.cliphist .dim { opacity: 0.6; color: #ffffff; }
 .overview list.files-found { background-color: rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 4px; }
 .overview list.files-found row { border-radius: 10px; color: #ffffff; }
 .overview list.files-found row:hover { background-color: rgba(255, 255, 255, 0.10); }
@@ -574,6 +583,8 @@ fn main() {
 
     окно.show_all();
     dock::создай();
+    // Win+V: что копировали — слушаем буфер с самого начала сеанса
+    cliphist::следи();
     notify::служба();
     core::начни();
 

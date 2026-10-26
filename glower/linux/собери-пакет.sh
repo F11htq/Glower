@@ -57,7 +57,7 @@ trap 'rm -rf "$BUILD"' EXIT
 # вперемешку с системными, и шаблон «всё подряд» унёс бы чужое.
 OUR_DIRS="usr/share/glower usr/share/plymouth/themes/glower"
 OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
-            usr/bin/glower-open-package usr/bin/glower-shot
+            usr/bin/glower-open-package usr/bin/glower-shot usr/bin/glower-clip-note
             usr/bin/glower-menu usr/bin/glower-desk usr/bin/glower-exe
             usr/bin/glower-tray usr/bin/glower-greeter usr/bin/glower-panel
             usr/bin/glower-lock usr/bin/glower-login usr/bin/glower-notepad usr/bin/glower-calc usr/bin/glower-files usr/bin/glower-settings usr/bin/glower-store usr/bin/glower-taskmgr usr/bin/glower-photos usr/bin/glower-snip usr/bin/glower-installer usr/bin/glower-music

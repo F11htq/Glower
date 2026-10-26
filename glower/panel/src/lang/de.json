@@ -1337,5 +1337,10 @@
 "Чем открыть «{имя}»?": "Womit „{имя}“ öffnen?",
 "Всегда открывать этой программой": "Immer mit diesem Programm öffnen",
 "Найти программу в Магазине": "Programm im Store suchen",
-"Поиск программ и файлов": "Programme und Dateien suchen"
+"Поиск программ и файлов": "Programme und Dateien suchen",
+"Буфер обмена": "Zwischenablage",
+"Очистить всё": "Alle löschen",
+"Здесь появится то, что вы скопируете": "Hier erscheint, was Sie kopieren",
+"Закрепить": "Anheften",
+"Открепить": "Lösen"
 }

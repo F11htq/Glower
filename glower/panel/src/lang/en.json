@@ -1337,5 +1337,10 @@
 "Чем открыть «{имя}»?": "Open “{имя}” with?",
 "Всегда открывать этой программой": "Always open with this app",
 "Найти программу в Магазине": "Find an app in the Store",
-"Поиск программ и файлов": "Search apps and files"
+"Поиск программ и файлов": "Search apps and files",
+"Буфер обмена": "Clipboard",
+"Очистить всё": "Clear all",
+"Здесь появится то, что вы скопируете": "What you copy will appear here",
+"Закрепить": "Pin",
+"Открепить": "Unpin"
 }

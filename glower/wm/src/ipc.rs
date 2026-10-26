@@ -8,6 +8,10 @@
 //!     layouts   — все раскладки: номер текущей (с единицы), затем имена,
 //!                 через табуляцию — для меню раскладок на панели
 //!     layout-set N — включить раскладку N (с единицы)
+//!     paste     — вставить в окно в фокусе (Ctrl+V, в терминале —
+//!                 Ctrl+Shift+V): так история буфера Win+V вставляет
+//!                 выбранное. wtype тут не годится — модификаторы с его
+//!                 виртуальной клавиатуры до программы не доходили
 //!     reload    — перечитать rc.xml и environment
 //!     quit      — завершить сеанс
 
@@ -86,6 +90,10 @@ pub fn выполни(с: &mut Glower, команда: &str) -> String {
                 "нет такой раскладки".into()
             }
         }
+        ("paste", _) => {
+            вставь(с);
+            "ok".into()
+        }
         ("reload", _) => {
             с.перечитай_настройки();
             "ok".into()
@@ -96,4 +104,37 @@ pub fn выполни(с: &mut Glower, команда: &str) -> String {
         }
         _ => format!("не понимаю: {команда}"),
     }
+}
+
+/// Нажать Ctrl+V (или Ctrl+Shift+V в терминале) своей же клавиатурой —
+/// тем же путём, что и настоящие клавиши, мимо своих сочетаний
+fn вставь(с: &mut Glower) {
+    use smithay::backend::input::KeyState;
+    use smithay::input::keyboard::{FilterResult, Keycode};
+    use smithay::utils::SERIAL_COUNTER;
+    let терминал = с.окно_в_фокусе().and_then(|о| о.toplevel().cloned()).is_some_and(|t| {
+        smithay::wayland::compositor::with_states(t.wl_surface(), |д| {
+            д.data_map
+                .get::<smithay::wayland::shell::xdg::XdgToplevelSurfaceData>()
+                .and_then(|з| з.lock().ok()?.app_id.clone())
+                .is_some_and(|id| ["foot", "terminal", "Terminal", "kitty", "alacritty", "konsole"].iter().any(|т| id.contains(т)))
+        })
+    });
+    let Some(клавиатура) = с.seat.get_keyboard() else { return };
+    // Коды evdev + 8: левый Ctrl, левый Shift, V
+    let (ctrl, shift, v) = (Keycode::new(29 + 8), Keycode::new(42 + 8), Keycode::new(47 + 8));
+    let время = с.start_time.elapsed().as_millis() as u32;
+    let mut нажми = |код: Keycode, нажато: KeyState| {
+        клавиатура.input::<(), _>(с, код, нажато, SERIAL_COUNTER.next_serial(), время, |_, _, _| FilterResult::Forward);
+    };
+    нажми(ctrl, KeyState::Pressed);
+    if терминал {
+        нажми(shift, KeyState::Pressed);
+    }
+    нажми(v, KeyState::Pressed);
+    нажми(v, KeyState::Released);
+    if терминал {
+        нажми(shift, KeyState::Released);
+    }
+    нажми(ctrl, KeyState::Released);
 }

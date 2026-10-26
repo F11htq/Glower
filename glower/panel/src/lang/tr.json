@@ -1337,5 +1337,10 @@
 "Чем открыть «{имя}»?": "«{имя}» ne ile açılsın?",
 "Всегда открывать этой программой": "Her zaman bu uygulamayla aç",
 "Найти программу в Магазине": "Mağazada uygulama bul",
-"Поиск программ и файлов": "Uygulama ve dosya ara"
+"Поиск программ и файлов": "Uygulama ve dosya ara",
+"Буфер обмена": "Pano",
+"Очистить всё": "Tümünü temizle",
+"Здесь появится то, что вы скопируете": "Kopyaladıklarınız burada görünecek",
+"Закрепить": "Sabitle",
+"Открепить": "Sabitlemeyi kaldır"
 }

@@ -456,6 +456,7 @@ chroot "$ROOTFS" glib-compile-schemas /usr/share/glib-2.0/schemas >/dev/null 2>&
 install -m 755 "$SRC/linux/glower-open-package" "$ROOTFS/usr/bin/glower-open-package"
 # Посредник для снимков экрана: его зовёт оконный сервер по сочетанию клавиш
 install -m 755 "$SRC/linux/glower-shot" "$ROOTFS/usr/bin/glower-shot"
+install -m 755 "$SRC/linux/glower-clip-note" "$ROOTFS/usr/bin/glower-clip-note"
 # Такой же посредник для клавиши Win: она открывает меню программ. Клавиши
 # достаются окну в фокусе, поэтому Win держит оконный сервер, а не страница
 install -m 755 "$SRC/linux/glower-menu" "$ROOTFS/usr/bin/glower-menu"

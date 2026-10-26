@@ -1,0 +1,45 @@
+#!/bin/sh
+# ==========================================================================
+#  История буфера обмена (Win+V): запись одного скопированного
+#
+#  Панель держит «wl-paste --watch glower-clip-note» — и этот сценарий
+#  зовётся на каждое новое содержимое буфера, у кого бы ни был фокус.
+#  Кладём его файлом в каталог истории сеанса: текст — .txt, картинку —
+#  .png. Хранится 25 последних, как в Windows; после перезагрузки история
+#  пуста — каталог лежит в /run.
+#
+#  Имена переменных латиницей: dash кириллицу в именах не принимает.
+# ==========================================================================
+set -u
+DIR="${XDG_RUNTIME_DIR:-/tmp}/glower-clip"
+mkdir -p "$DIR" 2>/dev/null || exit 0
+chmod 700 "$DIR" 2>/dev/null || true
+
+TYPES="$(wl-paste --list-types 2>/dev/null || true)"
+# Пароль из менеджера паролей в историю не пишем — как Windows
+case "$TYPES" in *x-kde-passwordManagerHint*) exit 0 ;; esac
+
+STAMP="$(date +%s%N)"
+if printf '%s\n' "$TYPES" | grep -qx 'image/png'; then
+  OUT="$DIR/$STAMP.png"
+  wl-paste --no-newline --type image/png > "$OUT" 2>/dev/null || { rm -f "$OUT"; exit 0; }
+elif printf '%s\n' "$TYPES" | grep -q '^text/\|^UTF8_STRING$\|^STRING$\|^TEXT$'; then
+  OUT="$DIR/$STAMP.txt"
+  wl-paste --no-newline --type text > "$OUT" 2>/dev/null || { rm -f "$OUT"; exit 0; }
+else
+  exit 0
+fi
+[ -s "$OUT" ] || { rm -f "$OUT"; exit 0; }
+
+# То же самое уже есть — убираем старую копию: запись поднимается наверх,
+# а не повторяется (так бывает, когда вставляют из самой истории)
+for f in "$DIR"/*; do
+  [ "$f" = "$OUT" ] && continue
+  [ -f "$f" ] && cmp -s "$f" "$OUT" && rm -f "$f"
+done
+
+# 25 последних, закреплённые (*.pin) не считаем и не трогаем
+ls -1t "$DIR"/*.txt "$DIR"/*.png 2>/dev/null | tail -n +26 | while read -r f; do
+  [ -e "$f.pin" ] || rm -f "$f"
+done
+exit 0
