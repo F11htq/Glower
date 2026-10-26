@@ -1329,5 +1329,7 @@
 "Сеть выключена": "Netzwerk ist aus",
 "Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Der Netzwerkdienst läuft nicht — das passiert beim Start vom Installations-USB-Stick: Der Installer braucht kein Netzwerk. Schalten Sie es ein, dann funktionieren WLAN und Kabel.",
 "Включаю сеть…": "Netzwerk wird eingeschaltet…",
-"Сеть не включилась": "Netzwerk ließ sich nicht einschalten"
+"Сеть не включилась": "Netzwerk ließ sich nicht einschalten",
+"Вернуть не получится: файлы не попадут в корзину.": "Wiederherstellen ist nicht möglich: Die Dateien kommen nicht in den Papierkorb.",
+"Не всё удалось отменить": "Nicht alles ließ sich rückgängig machen"
 }

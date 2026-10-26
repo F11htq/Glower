@@ -1164,8 +1164,9 @@ fn создай_на_столе(папку: bool) {
         return notify::покажи("Имя уже занято", &format!("На столе уже есть «{имя}»"), "⚠️");
     }
     let итог = if папку { std::fs::create_dir(&путь) } else { std::fs::write(&путь, b"") };
-    if let Err(е) = итог {
-        notify::покажи("Не удалось создать", &е.to_string(), "⚠️");
+    match итог {
+        Ok(()) => crate::fileops::запомни(crate::fileops::Дело::Создание(vec![путь])),
+        Err(е) => notify::покажи("Не удалось создать", &е.to_string(), "⚠️"),
     }
 }
 
@@ -1184,6 +1185,7 @@ fn переименуй() {
     }
     match std::fs::rename(&путь, &куда) {
         Ok(()) => {
+            crate::fileops::запомни(crate::fileops::Дело::Перенос(vec![(путь.clone(), куда.clone())]));
             // Место значка переезжает вместе с именем
             let mut места = core::настройка("iconPos").as_object().cloned().unwrap_or_default();
             if let Some(м) = места.remove(&было) {
@@ -1197,20 +1199,49 @@ fn переименуй() {
 
 /// Удалить выделенное: файлы — в корзину, программы — со стола
 fn удали() {
+    let файлы: Vec<PathBuf> = выбранные().iter().filter_map(путь_файла).collect();
+    if !файлы.is_empty() {
+        let беды = crate::fileops::в_корзину(&файлы);
+        if !беды.is_empty() {
+            notify::покажи("Не удалось удалить", &беды.join("\n"), "⚠️");
+        }
+    }
     for з in выбранные() {
         match з["вид"].as_str().unwrap_or("") {
-            "файл" | "папка" => {
-                if let Some(п) = путь_файла(&з) {
-                    if let Err(е) = gio::File::for_path(&п).trash(gio::Cancellable::NONE) {
-                        notify::покажи("Не удалось удалить", &format!("«{}»: {е}", з["n"].as_str().unwrap_or("")), "⚠️");
-                    }
-                }
-            }
+            "файл" | "папка" => {}
             "приложение" => crate::core::убери_со_стола(з["ярлык"].as_str().unwrap_or(""), "приложение"),
             "машина" => crate::core::убери_со_стола(з["ярлык"].as_str().unwrap_or(""), "машина"),
             "система" => core::задай("deskThisPC", json!(false)),
             _ => {}
         }
+    }
+    выдели(Vec::new());
+}
+
+/// Shift+Delete: файлы — насовсем, мимо корзины, после вопроса
+fn удали_навсегда() {
+    let файлы: Vec<PathBuf> = выбранные().iter().filter_map(путь_файла).collect();
+    if файлы.is_empty() {
+        return удали();
+    }
+    let о_чём = match файлы.as_slice() {
+        [один] => format!("«{}»", один.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default()),
+        _ => format!("{} объектов", файлы.len()),
+    };
+    let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::None, &format!("Удалить {о_чём} навсегда?"));
+    д.style_context().add_class("glower-app");
+    д.set_secondary_text(Some("Вернуть не получится: файлы не попадут в корзину."));
+    д.add_button("Отмена", gtk::ResponseType::Cancel);
+    д.add_button("Удалить", gtk::ResponseType::Accept);
+    д.set_default_response(gtk::ResponseType::Cancel);
+    let ответ = д.run();
+    unsafe { д.destroy() };
+    if ответ != gtk::ResponseType::Accept {
+        return;
+    }
+    let беды = crate::fileops::удали_навсегда(&файлы);
+    if !беды.is_empty() {
+        notify::покажи("Не всё удалось удалить", &беды.join("\n"), "⚠️");
     }
     выдели(Vec::new());
 }
@@ -1341,9 +1372,20 @@ fn меню_стола(е: &gtk::gdk::EventButton) {
 
 fn клавиша(е: &gtk::gdk::EventKey) -> glib::Propagation {
     use gtk::gdk::keys::constants as к;
+    // Печатают в заметке или своём виджете — клавиши их, а не значков:
+    // Ctrl+Z там отменяет текст, Delete стирает букву, а не файл
+    let в_поле = стол()
+        .and_then(|с| с.borrow().обои.focused_widget())
+        .is_some_and(|ф| ф.is::<gtk::Entry>() || ф.is::<gtk::TextView>());
+    if в_поле {
+        return glib::Propagation::Proceed;
+    }
     let ключ = е.keyval();
     let ctrl = е.state().contains(gtk::gdk::ModifierType::CONTROL_MASK);
-    if ключ == к::Delete || ключ == к::KP_Delete {
+    let shift = е.state().contains(gtk::gdk::ModifierType::SHIFT_MASK);
+    if (ключ == к::Delete || ключ == к::KP_Delete) && shift {
+        удали_навсегда();
+    } else if ключ == к::Delete || ключ == к::KP_Delete {
         удали();
     } else if ключ == к::F2 {
         переименуй();
@@ -1351,6 +1393,11 @@ fn клавиша(е: &gtk::gdk::EventKey) -> glib::Propagation {
         for з in выбранные() {
             открой(з["n"].as_str().unwrap_or(""));
         }
+    } else if ctrl && crate::notepad::латинская(е) == "z" {
+        crate::fileops::отмени_последнее(|беды| match беды {
+            Some(беды) if !беды.is_empty() => notify::покажи("Не всё удалось отменить", &беды.join("\n"), "⚠️"),
+            _ => {}
+        });
     } else if ctrl && crate::notepad::латинская(е) == "c" {
         в_буфер(false);
     } else if ctrl && crate::notepad::латинская(е) == "x" {

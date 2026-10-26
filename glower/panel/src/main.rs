@@ -47,6 +47,7 @@ mod photos;
 mod theme;
 mod todo;
 mod tray;
+mod undo;
 
 use agent::{скажи, слушай};
 use gtk::glib;
@@ -406,6 +407,7 @@ fn main() {
         std::process::exit(1);
     }
     i18n::подключи();
+    undo::подключи();
     if !gtk_layer_shell::is_supported() {
         // Без слоёв рабочий стол не встанет ни под окнами, ни над ними:
         // такой оконный сервер нам не годится

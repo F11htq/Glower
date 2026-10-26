@@ -62,6 +62,8 @@ pub fn перенеси(откуда: &Path, куда: &Path) -> std::io::Result
 pub struct Итог {
     pub новые: Vec<PathBuf>,
     pub беды: Vec<String>,
+    /// Что откуда куда легло — для Ctrl+Z
+    pub пары: Vec<(PathBuf, PathBuf)>,
 }
 
 /// Вставить пути в папку: копией или переносом
@@ -80,7 +82,10 @@ pub fn вставь(пути: &[PathBuf], папка: &Path, вырезать: b
         let куда = свободное_имя(папка, &имя);
         let р = if вырезать { перенеси(п, &куда) } else { скопируй(п, &куда) };
         match р {
-            Ok(()) => итог.новые.push(куда),
+            Ok(()) => {
+                итог.пары.push((п.clone(), куда.clone()));
+                итог.новые.push(куда);
+            }
             Err(е) => итог.беды.push(format!("«{имя}»: {е}")),
         }
     }
@@ -96,6 +101,9 @@ pub fn вставь_в_фоне(пути: Vec<PathBuf>, папка: PathBuf, в�
     });
     glib::MainContext::default().spawn_local(async move {
         if let Ok(итог) = откуда.recv().await {
+            if !итог.пары.is_empty() {
+                запомни(if вырезать { Дело::Перенос(итог.пары.clone()) } else { Дело::Копия(итог.новые.clone()) });
+            }
             готово(итог);
         }
     });
@@ -141,13 +149,184 @@ pub fn брось(пути: Vec<PathBuf>, папка: PathBuf, готово: imp
 /// В корзину; что не вышло — списком
 pub fn в_корзину(пути: &[PathBuf]) -> Vec<String> {
     let mut беды = Vec::new();
+    let mut ушли = Vec::new();
     for п in пути {
-        if let Err(е) = gio::File::for_path(п).trash(gio::Cancellable::NONE) {
+        match gio::File::for_path(п).trash(gio::Cancellable::NONE) {
+            Ok(_) => ушли.push(п.clone()),
+            Err(е) => {
+                let имя = п.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+                беды.push(format!("«{имя}»: {е}"));
+            }
+        }
+    }
+    if !ушли.is_empty() {
+        запомни(Дело::Корзина(ушли));
+    }
+    беды
+}
+
+/// Удалить насовсем, мимо корзины (Shift+Delete). Вернуть нельзя
+pub fn удали_навсегда(пути: &[PathBuf]) -> Vec<String> {
+    let mut беды = Vec::new();
+    for п in пути {
+        let папка = п.symlink_metadata().map(|м| м.is_dir()).unwrap_or(false);
+        let р = if папка { std::fs::remove_dir_all(п) } else { std::fs::remove_file(п) };
+        if let Err(е) = р {
             let имя = п.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
             беды.push(format!("«{имя}»: {е}"));
         }
     }
     беды
+}
+
+/* ---------- Ctrl+Z для файлов ---------- */
+
+/// Что сделали с файлами — чтобы отменить, как в Проводнике Windows
+#[derive(Debug, Clone, PartialEq)]
+pub enum Дело {
+    /// Перенесли или переименовали: откуда → куда
+    Перенос(Vec<(PathBuf, PathBuf)>),
+    /// Сделали копии — отмена убирает их в корзину
+    Копия(Vec<PathBuf>),
+    /// Убрали в корзину — отмена достаёт обратно
+    Корзина(Vec<PathBuf>),
+    /// Создали папку или файл
+    Создание(Vec<PathBuf>),
+}
+
+/// Журнал общий для стола и всех окон Проводника — это разные программы,
+/// а Ctrl+Z должен отменить последнее, где бы его ни сделали. Лежит в
+/// каталоге сеанса: после перезагрузки отменять уже нечего, как в Windows
+fn путь_журнала() -> PathBuf {
+    glib::user_runtime_dir().join("glower-otmena.json")
+}
+
+fn в_json(д: &Дело) -> serde_json::Value {
+    let пути = |с: &[PathBuf]| serde_json::json!(с.iter().map(|п| п.to_string_lossy()).collect::<Vec<_>>());
+    match д {
+        Дело::Перенос(пары) => serde_json::json!({ "что": "перенос", "пары": пары.iter().map(|(а, б)| [а.to_string_lossy(), б.to_string_lossy()]).collect::<Vec<_>>() }),
+        Дело::Копия(с) => serde_json::json!({ "что": "копия", "пути": пути(с) }),
+        Дело::Корзина(с) => serde_json::json!({ "что": "корзина", "пути": пути(с) }),
+        Дело::Создание(с) => serde_json::json!({ "что": "создание", "пути": пути(с) }),
+    }
+}
+
+fn из_json(з: &serde_json::Value) -> Option<Дело> {
+    let пути = || -> Vec<PathBuf> { з["пути"].as_array().map(|а| а.iter().filter_map(|п| п.as_str().map(PathBuf::from)).collect()).unwrap_or_default() };
+    Some(match з["что"].as_str()? {
+        "перенос" => Дело::Перенос(
+            з["пары"]
+                .as_array()?
+                .iter()
+                .filter_map(|п| Some((PathBuf::from(п[0].as_str()?), PathBuf::from(п[1].as_str()?))))
+                .collect(),
+        ),
+        "копия" => Дело::Копия(пути()),
+        "корзина" => Дело::Корзина(пути()),
+        "создание" => Дело::Создание(пути()),
+        _ => return None,
+    })
+}
+
+fn прочти_журнал() -> Vec<serde_json::Value> {
+    std::fs::read_to_string(путь_журнала()).ok().and_then(|т| serde_json::from_str(&т).ok()).unwrap_or_default()
+}
+
+/// Записать дело в журнал (хранится полсотни последних)
+pub fn запомни(д: Дело) {
+    let mut ж = прочти_журнал();
+    ж.push(в_json(&д));
+    let лишних = ж.len().saturating_sub(50);
+    ж.drain(..лишних);
+    let _ = std::fs::write(путь_журнала(), serde_json::Value::Array(ж).to_string());
+}
+
+/// Достать из корзины то, что лежало по этому пути (последнее удалённое)
+fn верни_из_корзины(путь: &Path) -> Result<PathBuf, String> {
+    let корзина = glib::user_data_dir().join("Trash");
+    let искомое = путь.to_string_lossy().to_string();
+    let mut лучшее: Option<(String, String)> = None;
+    for з in std::fs::read_dir(корзина.join("info")).map_err(|е| е.to_string())?.filter_map(|з| з.ok()) {
+        let Ok(т) = std::fs::read_to_string(з.path()) else { continue };
+        let откуда = т.lines().find_map(|с| с.strip_prefix("Path=")).map(|с| glib::uri_unescape_string(с, None::<&str>).map(|г| г.to_string()).unwrap_or_else(|| с.to_string()));
+        if откуда.as_deref() != Some(искомое.as_str()) {
+            continue;
+        }
+        let когда = т.lines().find_map(|с| с.strip_prefix("DeletionDate=")).unwrap_or("").to_string();
+        let имя = з.file_name().to_string_lossy().trim_end_matches(".trashinfo").to_string();
+        if лучшее.as_ref().is_none_or(|(к, _)| когда > *к) {
+            лучшее = Some((когда, имя));
+        }
+    }
+    let (_, имя) = лучшее.ok_or("в корзине его уже нет")?;
+    let папка = путь.parent().ok_or("неизвестно, куда вернуть")?;
+    let _ = std::fs::create_dir_all(папка);
+    let куда = свободное_имя(папка, &путь.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default());
+    перенеси(&корзина.join("files").join(&имя), &куда).map_err(|е| е.to_string())?;
+    let _ = std::fs::remove_file(корзина.join("info").join(format!("{имя}.trashinfo")));
+    Ok(куда)
+}
+
+/// Выполнить обратное делу. Что не вышло — списком
+pub fn обрати(д: &Дело) -> Vec<String> {
+    let имя = |п: &Path| п.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+    let mut беды = Vec::new();
+    match д {
+        Дело::Перенос(пары) => {
+            for (откуда, куда) in пары.iter().rev() {
+                if !куда.exists() && куда.symlink_metadata().is_err() {
+                    беды.push(format!("«{}»: его уже нет на месте", имя(куда)));
+                    continue;
+                }
+                let назад = match откуда.parent() {
+                    Some(папка) if откуда.exists() => свободное_имя(папка, &имя(откуда)),
+                    _ => откуда.clone(),
+                };
+                if let Some(папка) = назад.parent() {
+                    let _ = std::fs::create_dir_all(папка);
+                }
+                if let Err(е) = перенеси(куда, &назад) {
+                    беды.push(format!("«{}»: {е}", имя(куда)));
+                }
+            }
+        }
+        Дело::Копия(с) | Дело::Создание(с) => {
+            for п in с {
+                if п.exists() {
+                    if let Err(е) = gio::File::for_path(п).trash(gio::Cancellable::NONE) {
+                        беды.push(format!("«{}»: {е}", имя(п)));
+                    }
+                }
+            }
+        }
+        Дело::Корзина(с) => {
+            for п in с {
+                if let Err(е) = верни_из_корзины(п) {
+                    беды.push(format!("«{}»: {е}", имя(п)));
+                }
+            }
+        }
+    }
+    беды
+}
+
+/// Ctrl+Z: отменить последнее дело с файлами. None — отменять нечего
+pub fn отмени_последнее(готово: impl FnOnce(Option<Vec<String>>) + 'static) {
+    let mut ж = прочти_журнал();
+    let Some(д) = ж.pop().as_ref().and_then(из_json) else {
+        let _ = std::fs::write(путь_журнала(), serde_json::Value::Array(ж).to_string());
+        return готово(None);
+    };
+    let _ = std::fs::write(путь_журнала(), serde_json::Value::Array(ж).to_string());
+    let (куда, откуда) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let _ = куда.send_blocking(обрати(&д));
+    });
+    glib::MainContext::default().spawn_local(async move {
+        if let Ok(беды) = откуда.recv().await {
+            готово(Some(беды));
+        }
+    });
 }
 
 /// Ссылки file:// — в пути; чужое (http и прочее) пропускаем
@@ -327,6 +506,25 @@ mod проверки {
         assert!(!а.join("внутри").join("x.txt").exists());
         // Папку в саму себя — нельзя
         assert_eq!(вставь(&[б.clone()], &б.join("внутри"), false).беды.len(), 1);
+        let _ = std::fs::remove_dir_all(&корень);
+    }
+
+    #[test]
+    fn отмена_переноса_и_копии() {
+        let корень = std::env::temp_dir().join(format!("glower-otmena-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&корень);
+        let (а, б) = (корень.join("а"), корень.join("б"));
+        std::fs::create_dir_all(&а).unwrap();
+        std::fs::create_dir_all(&б).unwrap();
+        std::fs::write(а.join("x.txt"), "1").unwrap();
+        let и = вставь(&[а.join("x.txt")], &б, true);
+        assert!(!а.join("x.txt").exists());
+        assert!(обрати(&Дело::Перенос(и.пары)).is_empty());
+        assert!(а.join("x.txt").exists() && !б.join("x.txt").exists());
+        // Журнал переживает запись и чтение
+        for д in [Дело::Перенос(vec![(а.clone(), б.clone())]), Дело::Копия(vec![а.clone()]), Дело::Корзина(vec![б.clone()]), Дело::Создание(vec![а.clone()])] {
+            assert_eq!(из_json(&в_json(&д)), Some(д));
+        }
         let _ = std::fs::remove_dir_all(&корень);
     }
 

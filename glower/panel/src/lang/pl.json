@@ -1329,5 +1329,7 @@
 "Сеть выключена": "Sieć jest wyłączona",
 "Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Usługa sieci nie działa — tak bywa przy uruchomieniu z instalacyjnego pendrive’a: instalator nie potrzebuje sieci. Włącz ją, a Wi-Fi i kabel zaczną działać.",
 "Включаю сеть…": "Włączanie sieci…",
-"Сеть не включилась": "Nie udało się włączyć sieci"
+"Сеть не включилась": "Nie udało się włączyć sieci",
+"Вернуть не получится: файлы не попадут в корзину.": "Nie da się tego cofnąć: pliki nie trafią do kosza.",
+"Не всё удалось отменить": "Nie wszystko udało się cofnąć"
 }

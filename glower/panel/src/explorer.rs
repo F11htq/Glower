@@ -783,6 +783,7 @@ fn удали(п: &П, навсегда: bool) {
         }
     }
     let mut беды = Vec::new();
+    let mut в_корзину = Vec::new();
     for з in &записи {
         let итог = if навсегда || в_корзине {
             let р = if з.папка && !з.путь.symlink_metadata().map(|м| м.file_type().is_symlink()).unwrap_or(false) {
@@ -795,11 +796,18 @@ fn удали(п: &П, навсегда: bool) {
             }
             р.map_err(|е| е.to_string())
         } else {
-            gio::File::for_path(&з.путь).trash(gio::Cancellable::NONE).map_err(|е| е.to_string())
+            let р = gio::File::for_path(&з.путь).trash(gio::Cancellable::NONE).map_err(|е| е.to_string());
+            if р.is_ok() {
+                в_корзину.push(з.путь.clone());
+            }
+            р.map(|_| ())
         };
         if let Err(е) = итог {
             беды.push(format!("«{}»: {е}", з.имя));
         }
+    }
+    if !в_корзину.is_empty() {
+        crate::fileops::запомни(crate::fileops::Дело::Корзина(в_корзину));
     }
     if !беды.is_empty() {
         сообщи(п, "Не всё удалось удалить", &беды.join("\n"));
@@ -867,6 +875,7 @@ fn переименуй(п: &П) {
     }
     match std::fs::rename(&з.путь, &куда) {
         Ok(()) => {
+            crate::fileops::запомни(crate::fileops::Дело::Перенос(vec![(з.путь.clone(), куда)]));
             *в.выделить.borrow_mut() = Some(имя);
             загрузи(п, &в, false);
         }
@@ -886,6 +895,7 @@ fn создай(п: &П, папку: bool) {
     let итог = if папку { std::fs::create_dir(&путь) } else { std::fs::write(&путь, b"") };
     match итог {
         Ok(()) => {
+            crate::fileops::запомни(crate::fileops::Дело::Создание(vec![путь.clone()]));
             *в.выделить.borrow_mut() = Some(имя);
             загрузи(п, &в, false);
         }
@@ -1472,7 +1482,7 @@ fn подключи_места(п: &П) {
                 }
                 Место::Корзина => {
                     let беды = crate::fileops::в_корзину(&пути);
-                    готово_вставить(&п, crate::fileops::Итог { новые: Vec::new(), беды });
+                    готово_вставить(&п, crate::fileops::Итог { беды, ..Default::default() });
                     true
                 }
                 _ => false,
@@ -1816,6 +1826,16 @@ pub fn запусти(доводы: Vec<String>) -> ! {
                 if let Some(папка) = текущая_папка(&п1) {
                     вставь_сюда(&п1, папка);
                 }
+                true
+            } else if ctrl && буква == "z" {
+                // Как в Проводнике Windows: отменить последнее с файлами —
+                // перенос, копию, удаление в корзину, переименование
+                let п2 = п1.clone();
+                crate::fileops::отмени_последнее(move |беды| {
+                    if let Some(беды) = беды {
+                        готово_вставить(&п2, crate::fileops::Итог { беды, ..Default::default() });
+                    }
+                });
                 true
             } else if ctrl && буква == "a" {
                 if let Some(в) = текущая(&п1) {

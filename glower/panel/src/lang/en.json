@@ -1329,5 +1329,7 @@
 "Сеть выключена": "Network is off",
 "Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "The network service is not running — this happens when booting from the installation USB: the installer does not need a network. Turn it on and Wi-Fi and cable will work.",
 "Включаю сеть…": "Turning on network…",
-"Сеть не включилась": "Network did not turn on"
+"Сеть не включилась": "Network did not turn on",
+"Вернуть не получится: файлы не попадут в корзину.": "This can’t be undone: the files won’t go to the trash.",
+"Не всё удалось отменить": "Not everything could be undone"
 }

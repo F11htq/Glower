@@ -1329,5 +1329,7 @@
 "Сеть выключена": "La rete è disattivata",
 "Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Il servizio di rete non è in esecuzione: succede avviando dalla chiavetta di installazione, perché all’installer la rete non serve. Attivala e Wi-Fi e cavo funzioneranno.",
 "Включаю сеть…": "Attivazione della rete…",
-"Сеть не включилась": "La rete non si è attivata"
+"Сеть не включилась": "La rete non si è attivata",
+"Вернуть не получится: файлы не попадут в корзину.": "Non si potrà recuperare: i file non andranno nel cestino.",
+"Не всё удалось отменить": "Non è stato possibile annullare tutto"
 }

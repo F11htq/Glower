@@ -1329,5 +1329,7 @@
 "Сеть выключена": "Ağ kapalı",
 "Служба сети не запущена — так бывает при загрузке с установочной флешки: установщику сеть не нужна. Включите её, и Wi-Fi с кабелем заработают.": "Ağ hizmeti çalışmıyor — kurulum USB’sinden açılışta böyle olur: kurulum programının ağa ihtiyacı yoktur. Açın, Wi-Fi ve kablo çalışacaktır.",
 "Включаю сеть…": "Ağ açılıyor…",
-"Сеть не включилась": "Ağ açılamadı"
+"Сеть не включилась": "Ağ açılamadı",
+"Вернуть не получится: файлы не попадут в корзину.": "Geri alınamaz: dosyalar çöp kutusuna gitmeyecek.",
+"Не всё удалось отменить": "Her şey geri alınamadı"
 }
