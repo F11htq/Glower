@@ -661,6 +661,15 @@ pub fn открой_путь(путь: &std::path::Path) {
         запусти_команду("glower-files", &[&путь.to_string_lossy()]);
         return;
     }
+    if crate::fileops::архив_ли(путь) {
+        crate::fileops::распакуй(путь.to_path_buf(), true, |итог| match итог {
+            Ok(п) => {
+                запусти_команду("glower-files", &[&п.to_string_lossy()]);
+            }
+            Err(е) => notify::покажи("С архивом не вышло", &е, "⚠️"),
+        });
+        return;
+    }
     if открой_своей(путь) {
         return;
     }

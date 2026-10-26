@@ -1364,5 +1364,9 @@
 "Драйвер не поставился": "Treiber wurde nicht installiert",
 "Есть драйвер для видеокарты": "Für Ihre Grafikkarte gibt es einen Treiber",
 "Не удалось открыть «{имя}»": "„{имя}“ ließ sich nicht öffnen",
-"Два окна рядом (F3)": "Zwei Fenster nebeneinander (F3)"
+"Два окна рядом (F3)": "Zwei Fenster nebeneinander (F3)",
+"🗜 Извлечь всё в «{имя}»": "🗜 Alles nach „{имя}“ extrahieren",
+"Извлечь сюда": "Hier extrahieren",
+"🗜 Сжать в ZIP": "🗜 Als ZIP komprimieren",
+"С архивом не вышло": "Mit dem Archiv hat es nicht geklappt"
 }

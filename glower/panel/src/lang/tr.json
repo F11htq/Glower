@@ -1364,5 +1364,9 @@
 "Драйвер не поставился": "Sürücü kurulamadı",
 "Есть драйвер для видеокарты": "Ekran kartınız için bir sürücü var",
 "Не удалось открыть «{имя}»": "«{имя}» açılamadı",
-"Два окна рядом (F3)": "Yan yana iki pencere (F3)"
+"Два окна рядом (F3)": "Yan yana iki pencere (F3)",
+"🗜 Извлечь всё в «{имя}»": "🗜 Tümünü «{имя}» içine çıkar",
+"Извлечь сюда": "Buraya çıkar",
+"🗜 Сжать в ZIP": "🗜 ZIP olarak sıkıştır",
+"С архивом не вышло": "Arşivle ilgili işlem başarısız"
 }

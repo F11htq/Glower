@@ -359,6 +359,144 @@ pub fn принимай_в_окно<W: IsA<gtk::Widget>>(в: &W, открой: i
     });
 }
 
+/* ---------- архивы ---------- */
+
+const АРХИВЫ: &[&str] = &[".tar.gz", ".tar.xz", ".tar.bz2", ".tar.zst", ".tgz", ".txz", ".tbz", ".tbz2", ".zip", ".rar", ".7z", ".tar", ".cab", ".cpio", ".xar", ".lzh"];
+
+/// Имя без расширения архива: «Отчёт.tar.gz» → «Отчёт»
+fn без_расширения(имя: &str) -> Option<String> {
+    let малое = имя.to_lowercase();
+    АРХИВЫ.iter().find(|р| малое.ends_with(*р) && малое.len() > р.len()).map(|р| имя[..имя.len() - р.len()].to_string())
+}
+
+pub fn архив_ли(путь: &Path) -> bool {
+    путь.is_file() && путь.file_name().is_some_and(|и| без_расширения(&и.to_string_lossy()).is_some())
+}
+
+fn bsdtar(доводы: &[&std::ffi::OsStr]) -> Result<(), String> {
+    match std::process::Command::new("bsdtar").args(доводы).output() {
+        Err(е) if е.kind() == std::io::ErrorKind::NotFound => Err("нет программы bsdtar (пакет libarchive-tools)".into()),
+        Err(е) => Err(е.to_string()),
+        Ok(о) if о.status.success() => Ok(()),
+        Ok(о) => {
+            let т = String::from_utf8_lossy(&о.stderr).trim().to_string();
+            Err(if т.contains("passphrase") || т.contains("Encrypted") { "архив под паролем — такие пока не распаковываются".into() } else { т.lines().last().unwrap_or("не вышло").to_string() })
+        }
+    }
+}
+
+/// Распаковать: в папку с именем архива рядом с ним (как «Извлечь всё» в
+/// Windows) или прямо туда, где лежит архив. Готово — путь к тому, что
+/// открыть: новая папка или та, где архив
+pub fn распакуй(архив: PathBuf, в_свою_папку: bool, готово: impl FnOnce(Result<PathBuf, String>) + 'static) {
+    let (куда, откуда) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let папка = архив.parent().map(Path::to_path_buf).unwrap_or_default();
+        let итог = if в_свою_папку {
+            let имя = без_расширения(&архив.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default()).unwrap_or_else(|| "Архив".into());
+            let цель = свободное_имя(&папка, &имя);
+            std::fs::create_dir(&цель).map_err(|е| е.to_string()).and_then(|_| {
+                bsdtar(&["-xf".as_ref(), архив.as_os_str(), "-C".as_ref(), цель.as_os_str()]).map(|_| (цель.clone(), vec![цель.clone()])).inspect_err(|_| {
+                    let _ = std::fs::remove_dir_all(&цель);
+                })
+            })
+        } else {
+            // Сюда: что окажется новым — то и «создано» (для Ctrl+Z)
+            let было: std::collections::HashSet<_> = std::fs::read_dir(&папка).map(|ч| ч.filter_map(|з| з.ok()).map(|з| з.path()).collect()).unwrap_or_default();
+            bsdtar(&["-xkf".as_ref(), архив.as_os_str(), "-C".as_ref(), папка.as_os_str()]).map(|_| {
+                let стало: Vec<PathBuf> = std::fs::read_dir(&папка).map(|ч| ч.filter_map(|з| з.ok()).map(|з| з.path()).filter(|п| !было.contains(п)).collect()).unwrap_or_default();
+                (папка.clone(), стало)
+            })
+        };
+        let _ = куда.send_blocking(итог);
+    });
+    glib::MainContext::default().spawn_local(async move {
+        if let Ok(итог) = откуда.recv().await {
+            // Что появилось — в журнал: Ctrl+Z уберёт распакованное
+            готово(итог.map(|(открыть, новые)| {
+                if !новые.is_empty() {
+                    запомни(Дело::Создание(новые));
+                }
+                открыть
+            }));
+        }
+    });
+}
+
+/// Сжать в ZIP рядом с первым: один файл — «Имя.zip», несколько — «Архив.zip»
+pub fn сожми(пути: Vec<PathBuf>, готово: impl FnOnce(Result<PathBuf, String>) + 'static) {
+    let (куда, откуда) = async_channel::bounded(1);
+    std::thread::spawn(move || {
+        let итог = (|| {
+            let первый = пути.first().ok_or("нечего сжимать")?;
+            let папка = первый.parent().ok_or("неизвестно, где")?.to_path_buf();
+            let имя = if пути.len() == 1 {
+                let и = первый.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+                // У файла — без его расширения: «Отчёт.docx» → «Отчёт.zip»
+                let основа = if первый.is_dir() { и.clone() } else { и.rsplit_once('.').map(|(а, _)| а.to_string()).filter(|а| !а.is_empty()).unwrap_or(и.clone()) };
+                format!("{основа}.zip")
+            } else {
+                "Архив.zip".into()
+            };
+            let цель = свободное_имя(&папка, &имя);
+            let mut доводы: Vec<std::ffi::OsString> = vec!["--format".into(), "zip".into(), "-cf".into(), цель.clone().into(), "-C".into(), папка.clone().into()];
+            for п in &пути {
+                if п.parent() != Some(папка.as_path()) {
+                    return Err("сжимать можно файлы из одной папки".to_string());
+                }
+                доводы.push(п.file_name().ok_or("без имени")?.to_os_string());
+            }
+            let ссылки: Vec<&std::ffi::OsStr> = доводы.iter().map(|д| д.as_os_str()).collect();
+            bsdtar(&ссылки).inspect_err(|_| {
+                let _ = std::fs::remove_file(&цель);
+            })?;
+            Ok(цель)
+        })();
+        let _ = куда.send_blocking(итог);
+    });
+    glib::MainContext::default().spawn_local(async move {
+        if let Ok(итог) = откуда.recv().await {
+            if let Ok(п) = &итог {
+                запомни(Дело::Создание(vec![п.clone()]));
+            }
+            готово(итог);
+        }
+    });
+}
+
+/// Пункты для меню файлов: распаковать (у одного архива) и сжать в ZIP.
+/// готово — что сделать по окончании (обновить папку, показать ошибку)
+pub fn пункты_архива(меню: &gtk::Menu, пути: &[PathBuf], готово: std::rc::Rc<dyn Fn(Result<PathBuf, String>, bool)>) {
+    if let [один] = пути {
+        if архив_ли(один) {
+            let имя = без_расширения(&один.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default()).unwrap_or_default();
+            let пункт = crate::apps::пункт_меню(&format!("🗜 Извлечь всё в «{имя}»"));
+            let (п, г) = (один.clone(), готово.clone());
+            пункт.connect_activate(move |_| {
+                let г = г.clone();
+                распакуй(п.clone(), true, move |итог| г(итог, true));
+            });
+            меню.append(&пункт);
+            let пункт = crate::apps::пункт_меню("Извлечь сюда");
+            let (п, г) = (один.clone(), готово.clone());
+            пункт.connect_activate(move |_| {
+                let г = г.clone();
+                распакуй(п.clone(), false, move |итог| г(итог, false));
+            });
+            меню.append(&пункт);
+        }
+    }
+    if !пути.is_empty() {
+        let пункт = crate::apps::пункт_меню("🗜 Сжать в ZIP");
+        let (пути, г) = (пути.to_vec(), готово);
+        пункт.connect_activate(move |_| {
+            let г = г.clone();
+            сожми(пути.clone(), move |итог| г(итог, false));
+        });
+        меню.append(&пункт);
+    }
+}
+
 /* ---------- открыть с помощью ---------- */
 
 /// Свои программы — на случай, если их ярлыков в системе нет (запуск не
@@ -679,6 +817,27 @@ mod проверки {
         for д in [Дело::Перенос(vec![(а.clone(), б.clone())]), Дело::Копия(vec![а.clone()]), Дело::Корзина(vec![б.clone()]), Дело::Создание(vec![а.clone()])] {
             assert_eq!(из_json(&в_json(&д)), Some(д));
         }
+        let _ = std::fs::remove_dir_all(&корень);
+    }
+
+    #[test]
+    fn сжимает_и_распаковывает() {
+        if std::process::Command::new("bsdtar").arg("--version").output().is_err() {
+            return;
+        }
+        let корень = std::env::temp_dir().join(format!("glower-arh-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&корень);
+        std::fs::create_dir_all(корень.join("папка")).unwrap();
+        std::fs::write(корень.join("папка").join("а.txt"), "привет").unwrap();
+        let цель = корень.join("x.zip");
+        bsdtar(&["--format".as_ref(), "zip".as_ref(), "-cf".as_ref(), цель.as_os_str(), "-C".as_ref(), корень.as_os_str(), "папка".as_ref()]).unwrap();
+        assert!(архив_ли(&цель));
+        assert_eq!(без_расширения("Отчёт.tar.gz").as_deref(), Some("Отчёт"));
+        assert_eq!(без_расширения("фото.png"), None);
+        let в = корень.join("вывод");
+        std::fs::create_dir(&в).unwrap();
+        bsdtar(&["-xf".as_ref(), цель.as_os_str(), "-C".as_ref(), в.as_os_str()]).unwrap();
+        assert_eq!(std::fs::read_to_string(в.join("папка").join("а.txt")).unwrap(), "привет");
         let _ = std::fs::remove_dir_all(&корень);
     }
 
