@@ -359,6 +359,160 @@ pub fn принимай_в_окно<W: IsA<gtk::Widget>>(в: &W, открой: i
     });
 }
 
+/* ---------- открыть с помощью ---------- */
+
+/// Свои программы — на случай, если их ярлыков в системе нет (запуск не
+/// из образа): исполняемый файл, имя, значок и какие типы берут
+const СВОИ: &[(&str, &str, &str, &[&str])] = &[
+    ("glower-notepad", "Блокнот", "accessories-text-editor", &["text/"]),
+    ("glower-photos", "Фото", "image-viewer", &["image/"]),
+    ("glower-paint", "Paint", "applications-graphics", &["image/png", "image/jpeg", "image/bmp", "image/gif", "image/webp", "image/tiff"]),
+    ("glower-music", "Музыка", "audio-x-generic", &["audio/"]),
+];
+
+fn пункт_программы(имя: &str, значок: &gio::Icon) -> gtk::MenuItem {
+    let п = gtk::MenuItem::new();
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let к = gtk::Image::from_gicon(значок, gtk::IconSize::Menu);
+    к.set_pixel_size(16);
+    ряд.add(&к);
+    let подпись = gtk::Label::new(Some(имя));
+    // Имена программ — как есть, не переводим
+    подпись.style_context().add_class("no-i18n");
+    ряд.add(&подпись);
+    п.add(&ряд);
+    п
+}
+
+/// «Открыть с помощью ›» для меню файла, как в Windows: подходящие
+/// программы и «Выбрать другую программу…». None — у папок его нет
+pub fn открыть_с_помощью(пути: Vec<PathBuf>) -> Option<gtk::MenuItem> {
+    let первый = пути.first()?.clone();
+    if первый.is_dir() {
+        return None;
+    }
+    let тип = crate::core::тип_файла(&первый);
+    let подменю = gtk::Menu::new();
+    let mut программы: Vec<gio::AppInfo> = Vec::new();
+    if let Some(п) = gio::AppInfo::default_for_type(&тип, false) {
+        программы.push(п);
+    }
+    for п in gio::AppInfo::all_for_type(&тип) {
+        if п.should_show() || п.executable().to_string_lossy().contains("glower-") {
+            if !программы.iter().any(|б| б.id() == п.id()) {
+                программы.push(п);
+            }
+        }
+    }
+    for п in &программы {
+        let значок = п.icon().unwrap_or_else(|| gio::ThemedIcon::new("application-x-executable").upcast());
+        let пункт = пункт_программы(&п.display_name(), &значок);
+        let (п, пути) = (п.clone(), пути.clone());
+        пункт.connect_activate(move |_| {
+            let файлы: Vec<gio::File> = пути.iter().map(gio::File::for_path).collect();
+            let _ = п.launch(&файлы, None::<&gio::AppLaunchContext>);
+        });
+        подменю.append(&пункт);
+    }
+    for (команда, имя, значок, типы) in СВОИ {
+        let подходит = типы.iter().any(|т| if т.ends_with('/') { тип.starts_with(т) } else { тип == *т });
+        let уже = программы.iter().any(|п| п.executable().to_string_lossy().ends_with(команда));
+        if !подходит || уже {
+            continue;
+        }
+        let пункт = пункт_программы(&crate::i18n::tr(имя), &gio::ThemedIcon::new(значок).upcast());
+        let пути = пути.clone();
+        пункт.connect_activate(move |_| {
+            let доводы: Vec<String> = пути.iter().map(|п| п.to_string_lossy().to_string()).collect();
+            let доводы: Vec<&str> = доводы.iter().map(String::as_str).collect();
+            crate::core::запусти_команду(команда, &доводы);
+        });
+        подменю.append(&пункт);
+    }
+    if !подменю.children().is_empty() {
+        подменю.append(&gtk::SeparatorMenuItem::new());
+    }
+    let другая = crate::apps::пункт_меню("Выбрать другую программу…");
+    {
+        let (пути, тип) = (пути.clone(), тип.clone());
+        // После закрытия меню: пока оно открыто, оно держит мышь
+        другая.connect_activate(move |_| {
+            let (пути, тип) = (пути.clone(), тип.clone());
+            glib::idle_add_local_once(move || выбери_программу(&пути, &тип));
+        });
+    }
+    подменю.append(&другая);
+    let пункт = crate::apps::пункт_меню("Открыть с помощью");
+    пункт.set_submenu(Some(&подменю));
+    Some(пункт)
+}
+
+/// Список всех программ, как «Выбрать другое приложение» в Windows, с
+/// галочкой «всегда открывать этой программой»
+pub fn выбери_программу(пути: &[PathBuf], тип: &str) {
+    let имя = пути.first().and_then(|п| п.file_name()).map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+    let д = gtk::AppChooserDialog::for_content_type(None::<&gtk::Window>, gtk::DialogFlags::MODAL, тип);
+    д.style_context().add_class("glower-app");
+    д.set_title(&crate::i18n::tr("Открыть с помощью"));
+    д.set_heading(&crate::i18n::tr(&format!("Чем открыть «{имя}»?")));
+    if let Ok(в) = д.widget().downcast::<gtk::AppChooserWidget>() {
+        в.set_show_default(true);
+        в.set_show_recommended(true);
+        в.set_show_other(true);
+    }
+    // Свои кнопки GTK здесь лишние: «Показать все» — всё и так показано,
+    // а «Найти новые» ведёт в GNOME Software, которого в системе нет.
+    // Вместо неё — наш Магазин
+    fn кнопки(в: &gtk::Widget, итог: &mut Vec<gtk::Button>) {
+        if let Some(к) = в.downcast_ref::<gtk::Button>() {
+            if !в.is::<gtk::ToggleButton>() {
+                итог.push(к.clone());
+            }
+        }
+        if let Some(к) = в.downcast_ref::<gtk::Container>() {
+            for р in к.children() {
+                кнопки(&р, итог);
+            }
+        }
+    }
+    let mut лишние = Vec::new();
+    кнопки(д.content_area().upcast_ref(), &mut лишние);
+    for к in &лишние {
+        к.set_no_show_all(true);
+        к.hide();
+    }
+    let магазин = crate::apps::кнопка("🛍️ Найти программу в Магазине", "");
+    {
+        let тип = тип.to_string();
+        let д2 = д.clone();
+        магазин.connect_clicked(move |_| {
+            д2.response(gtk::ResponseType::Cancel);
+            crate::core::запусти_команду("glower-store", &[&format!("--find={}", тип.split('/').next_back().unwrap_or(""))]);
+        });
+    }
+    магазин.set_margin_start(12);
+    магазин.set_margin_end(12);
+    д.content_area().add(&магазин);
+    let всегда = gtk::CheckButton::with_label(&crate::i18n::tr("Всегда открывать этой программой"));
+    всегда.set_margin_start(12);
+    всегда.set_margin_bottom(8);
+    д.content_area().add(&всегда);
+    д.show_all();
+    let ответ = д.run();
+    let выбор = д.app_info();
+    let навсегда = всегда.is_active();
+    unsafe { д.destroy() };
+    if ответ != gtk::ResponseType::Ok {
+        return;
+    }
+    let Some(п) = выбор else { return };
+    if навсегда {
+        let _ = п.set_as_default_for_type(тип);
+    }
+    let файлы: Vec<gio::File> = пути.iter().map(gio::File::for_path).collect();
+    let _ = п.launch(&файлы, None::<&gio::AppLaunchContext>);
+}
+
 /* ---------- буфер обмена ---------- */
 
 const ФАЙЛЫ_GNOME: &str = "x-special/gnome-copied-files";

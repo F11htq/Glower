@@ -609,12 +609,38 @@ pub fn тип_файла(путь: &std::path::Path) -> String {
         .unwrap_or_else(|| тип_по_имени(&путь.to_string_lossy()))
 }
 
+/// Программа, которую человек сам назначил для типа: строка в его
+/// ~/.config/mimeapps.list. Системные умолчания сюда не входят
+fn выбрано_человеком(тип: &str) -> Option<gio::AppInfo> {
+    let текст = std::fs::read_to_string(glib::user_config_dir().join("mimeapps.list")).ok()?;
+    let mut в_разделе = false;
+    for с in текст.lines() {
+        let с = с.trim();
+        if с.starts_with('[') {
+            в_разделе = с == "[Default Applications]";
+            continue;
+        }
+        if !в_разделе {
+            continue;
+        }
+        if let Some(значение) = с.strip_prefix(тип).and_then(|х| х.strip_prefix('=')) {
+            return значение.split(';').filter(|и| !и.is_empty()).find_map(|и| gio::DesktopAppInfo::new(и)).map(|д| д.upcast());
+        }
+    }
+    None
+}
+
 /// Открыть своей программой, если файл ей по силам: текст — Блокнотом,
 /// картинку — Фото, звук — Музыкой, пакет — установщиком программ.
 /// false — своей нет, пусть открывает программа, назначенная в системе
 pub fn открой_своей(путь: &std::path::Path) -> bool {
     let тип = тип_файла(путь);
     let строка = путь.to_string_lossy();
+    // Человек сам выбрал программу («Открыть с помощью» → «Всегда») —
+    // слушаемся его, как Windows, а не своих правил
+    if let Some(п) = выбрано_человеком(&тип) {
+        return п.launch(&[gio::File::for_path(путь)], None::<&gio::AppLaunchContext>).is_ok();
+    }
     let пакет = тип.contains("debian") || строка.ends_with(".deb") || строка.ends_with(".flatpakref") || строка.ends_with(".AppImage");
     let чем = if пакет {
         "glower-open-package"

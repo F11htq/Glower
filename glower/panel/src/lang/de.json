@@ -1331,5 +1331,10 @@
 "Включаю сеть…": "Netzwerk wird eingeschaltet…",
 "Сеть не включилась": "Netzwerk ließ sich nicht einschalten",
 "Вернуть не получится: файлы не попадут в корзину.": "Wiederherstellen ist nicht möglich: Die Dateien kommen nicht in den Papierkorb.",
-"Не всё удалось отменить": "Nicht alles ließ sich rückgängig machen"
+"Не всё удалось отменить": "Nicht alles ließ sich rückgängig machen",
+"Открыть с помощью": "Öffnen mit",
+"Выбрать другую программу…": "Andere Anwendung wählen…",
+"Чем открыть «{имя}»?": "Womit „{имя}“ öffnen?",
+"Всегда открывать этой программой": "Immer mit diesem Programm öffnen",
+"Найти программу в Магазине": "Programm im Store suchen"
 }

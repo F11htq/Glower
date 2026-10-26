@@ -1331,5 +1331,10 @@
 "Включаю сеть…": "Activation du réseau…",
 "Сеть не включилась": "Le réseau ne s’est pas activé",
 "Вернуть не получится: файлы не попадут в корзину.": "Impossible de revenir en arrière : les fichiers n’iront pas à la corbeille.",
-"Не всё удалось отменить": "Tout n’a pas pu être annulé"
+"Не всё удалось отменить": "Tout n’a pas pu être annulé",
+"Открыть с помощью": "Ouvrir avec",
+"Выбрать другую программу…": "Choisir une autre application…",
+"Чем открыть «{имя}»?": "Ouvrir « {имя} » avec ?",
+"Всегда открывать этой программой": "Toujours ouvrir avec cette application",
+"Найти программу в Магазине": "Trouver une application dans la Boutique"
 }

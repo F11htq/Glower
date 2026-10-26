@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Фото
+Name[en]=Photos
+Comment=Просмотр картинок и фотографий
+Exec=/usr/bin/glower-photos %f
+Icon=image-viewer
+Terminal=false
+NoDisplay=true
+StartupWMClass=glower-photos
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/svg+xml;image/x-icon;image/vnd.microsoft.icon;image/avif;image/heif;

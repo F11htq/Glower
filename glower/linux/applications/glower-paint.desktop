@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Paint
+Comment=Рисовать и править картинки
+Exec=/usr/bin/glower-paint %f
+Icon=applications-graphics
+Terminal=false
+NoDisplay=true
+StartupWMClass=glower-paint
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;

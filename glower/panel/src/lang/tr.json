@@ -1331,5 +1331,10 @@
 "Включаю сеть…": "Ağ açılıyor…",
 "Сеть не включилась": "Ağ açılamadı",
 "Вернуть не получится: файлы не попадут в корзину.": "Geri alınamaz: dosyalar çöp kutusuna gitmeyecek.",
-"Не всё удалось отменить": "Her şey geri alınamadı"
+"Не всё удалось отменить": "Her şey geri alınamadı",
+"Открыть с помощью": "Birlikte aç",
+"Выбрать другую программу…": "Başka uygulama seç…",
+"Чем открыть «{имя}»?": "«{имя}» ne ile açılsın?",
+"Всегда открывать этой программой": "Her zaman bu uygulamayla aç",
+"Найти программу в Магазине": "Mağazada uygulama bul"
 }

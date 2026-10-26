@@ -1331,5 +1331,10 @@
 "Включаю сеть…": "Włączanie sieci…",
 "Сеть не включилась": "Nie udało się włączyć sieci",
 "Вернуть не получится: файлы не попадут в корзину.": "Nie da się tego cofnąć: pliki nie trafią do kosza.",
-"Не всё удалось отменить": "Nie wszystko udało się cofnąć"
+"Не всё удалось отменить": "Nie wszystko udało się cofnąć",
+"Открыть с помощью": "Otwórz za pomocą",
+"Выбрать другую программу…": "Wybierz inną aplikację…",
+"Чем открыть «{имя}»?": "Czym otworzyć „{имя}”?",
+"Всегда открывать этой программой": "Zawsze otwieraj tą aplikacją",
+"Найти программу в Магазине": "Znajdź aplikację w Sklepie"
 }

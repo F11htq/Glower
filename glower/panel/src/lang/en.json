@@ -1331,5 +1331,10 @@
 "Включаю сеть…": "Turning on network…",
 "Сеть не включилась": "Network did not turn on",
 "Вернуть не получится: файлы не попадут в корзину.": "This can’t be undone: the files won’t go to the trash.",
-"Не всё удалось отменить": "Not everything could be undone"
+"Не всё удалось отменить": "Not everything could be undone",
+"Открыть с помощью": "Open with",
+"Выбрать другую программу…": "Choose another app…",
+"Чем открыть «{имя}»?": "Open “{имя}” with?",
+"Всегда открывать этой программой": "Always open with this app",
+"Найти программу в Магазине": "Find an app in the Store"
 }

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Музыка
+Name[en]=Music
+Comment=Слушать музыку
+Exec=/usr/bin/glower-music %F
+Icon=audio-x-generic
+Terminal=false
+NoDisplay=true
+StartupWMClass=glower-music
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/x-opus+ogg;audio/wav;audio/x-wav;audio/mp4;audio/x-m4a;audio/aac;

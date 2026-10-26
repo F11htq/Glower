@@ -1,0 +1,30 @@
+# Чем открывать файлы в GlowerOS — своими программами. Файл читают
+# только сеансы GlowerOS (по имени рабочего стола), чужим он не мешает.
+[Default Applications]
+inode/directory=glower-files.desktop
+text/plain=glower-notepad.desktop
+text/markdown=glower-notepad.desktop
+text/csv=glower-notepad.desktop
+text/x-log=glower-notepad.desktop
+application/json=glower-notepad.desktop
+image/png=glower-photos.desktop
+image/jpeg=glower-photos.desktop
+image/gif=glower-photos.desktop
+image/webp=glower-photos.desktop
+image/bmp=glower-photos.desktop
+image/tiff=glower-photos.desktop
+image/svg+xml=glower-photos.desktop
+image/x-icon=glower-photos.desktop
+image/avif=glower-photos.desktop
+image/heif=glower-photos.desktop
+audio/mpeg=glower-music.desktop
+audio/flac=glower-music.desktop
+audio/x-flac=glower-music.desktop
+audio/ogg=glower-music.desktop
+audio/x-vorbis+ogg=glower-music.desktop
+audio/opus=glower-music.desktop
+audio/wav=glower-music.desktop
+audio/x-wav=glower-music.desktop
+audio/mp4=glower-music.desktop
+audio/x-m4a=glower-music.desktop
+audio/aac=glower-music.desktop

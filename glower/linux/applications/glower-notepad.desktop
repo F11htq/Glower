@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Блокнот
+Name[en]=Notepad
+Comment=Простой текстовый редактор
+Exec=/usr/bin/glower-notepad %F
+Icon=accessories-text-editor
+Terminal=false
+NoDisplay=true
+StartupWMClass=glower-notepad
+MimeType=text/plain;text/markdown;text/csv;text/x-log;text/x-csrc;text/x-chdr;text/x-c++src;text/x-python;text/x-shellscript;application/x-shellscript;application/json;application/xml;text/xml;application/x-desktop;text/x-ini;

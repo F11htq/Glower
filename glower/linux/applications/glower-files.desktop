@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Проводник
+Name[en]=Files
+Comment=Файлы и папки
+Exec=/usr/bin/glower-files %f
+Icon=system-file-manager
+Terminal=false
+NoDisplay=true
+StartupWMClass=glower-files
+MimeType=inode/directory;

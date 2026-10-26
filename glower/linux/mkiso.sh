@@ -442,6 +442,12 @@ install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 # пробный режим с флешки: Esc в установщике снимает маски быстрой загрузки
 install -m 755 "$SRC/linux/glower-try" "$ROOTFS/usr/bin/glower-try"
+# Ярлыки своих программ с типами файлов: по ним Блокнот, Фото, Paint и
+# Музыка видны в «Открыть с помощью» — и у нас, и у чужих программ (Firefox,
+# открывая скачанное, спрашивает систему). И они же — программы по
+# умолчанию в сеансе GlowerOS (gloweros-/labwc-mimeapps.list)
+install -d "$ROOTFS/usr/share/applications"
+install -m 644 "$SRC"/linux/applications/*.desktop "$SRC"/linux/applications/*-mimeapps.list "$ROOTFS/usr/share/applications/"
 install -D -m 755 "$SRC/linux/glower-fast-generator" "$ROOTFS/usr/lib/systemd/system-generators/glower-fast"
 # кнопки окна у всех программ GTK, Firefox тоже: свернуть, развернуть, закрыть
 install -m 644 "$SRC/linux/90_glower.gschema.override" "$ROOTFS/usr/share/glib-2.0/schemas/90_glower.gschema.override"
@@ -697,16 +703,16 @@ x-scheme-handler/https=$BROWSER_DESKTOP
 x-scheme-handler/about=$BROWSER_DESKTOP
 x-scheme-handler/unknown=$BROWSER_DESKTOP
 text/html=$BROWSER_DESKTOP
-text/plain=org.xfce.mousepad.desktop
-inode/directory=thunar.desktop
-image/png=org.gnome.eog.desktop
-image/jpeg=org.gnome.eog.desktop
-image/gif=org.gnome.eog.desktop
-image/webp=org.gnome.eog.desktop
-image/svg+xml=org.gnome.eog.desktop
-audio/mpeg=mpv.desktop
-audio/flac=mpv.desktop
-audio/ogg=mpv.desktop
+text/plain=glower-notepad.desktop
+inode/directory=glower-files.desktop
+image/png=glower-photos.desktop
+image/jpeg=glower-photos.desktop
+image/gif=glower-photos.desktop
+image/webp=glower-photos.desktop
+image/svg+xml=glower-photos.desktop
+audio/mpeg=glower-music.desktop
+audio/flac=glower-music.desktop
+audio/ogg=glower-music.desktop
 video/mp4=mpv.desktop
 video/x-matroska=mpv.desktop
 video/webm=mpv.desktop

@@ -66,6 +66,11 @@ OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
             usr/share/applications/glower-exe.desktop
+            usr/share/applications/glower-package.desktop
+            usr/share/applications/glower-notepad.desktop usr/share/applications/glower-photos.desktop
+            usr/share/applications/glower-paint.desktop usr/share/applications/glower-music.desktop
+            usr/share/applications/glower-files.desktop
+            usr/share/applications/gloweros-mimeapps.list usr/share/applications/labwc-mimeapps.list
             usr/share/glib-2.0/schemas/90_glower.gschema.override
             etc/glower-release"
 

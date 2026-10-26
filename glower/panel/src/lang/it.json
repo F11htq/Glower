@@ -1331,5 +1331,10 @@
 "Включаю сеть…": "Attivazione della rete…",
 "Сеть не включилась": "La rete non si è attivata",
 "Вернуть не получится: файлы не попадут в корзину.": "Non si potrà recuperare: i file non andranno nel cestino.",
-"Не всё удалось отменить": "Non è stato possibile annullare tutto"
+"Не всё удалось отменить": "Non è stato possibile annullare tutto",
+"Открыть с помощью": "Apri con",
+"Выбрать другую программу…": "Scegli un’altra app…",
+"Чем открыть «{имя}»?": "Con cosa aprire «{имя}»?",
+"Всегда открывать этой программой": "Apri sempre con questa app",
+"Найти программу в Магазине": "Trova un’app nello Store"
 }
