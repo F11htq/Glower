@@ -1085,6 +1085,9 @@ fn путь_файла(з: &Value) -> Option<PathBuf> {
 }
 
 fn открой(имя: &str) {
+    if отладка() {
+        eprintln!("glower-panel: стол: открываю «{имя}»");
+    }
     let Some(з) = данные_значка(имя) else { return };
     match з["вид"].as_str().unwrap_or("") {
         "приложение" => core::запусти(з["ярлык"].as_str().unwrap_or(""), "приложение"),
@@ -1424,6 +1427,29 @@ fn значок_картинкой(з: &Value) -> gtk::Widget {
         if let Some(п) = gio::DesktopAppInfo::new(ярлык) {
             if let Some(и) = п.icon() {
                 let к = gtk::Image::from_gicon(&и, gtk::IconSize::Dialog);
+                к.set_pixel_size(48);
+                return к.upcast();
+            }
+        }
+    }
+    // Картинка — её же миниатюрой, как в Windows. Большие не трогаем:
+    // разбирать их на каждой перерисовке стола — заметная задержка
+    if вид == "файл" && з["тип"].as_str().is_some_and(|т| т.starts_with("image/")) {
+        if let Some(п) = путь_файла(з).filter(|п| std::fs::metadata(п).is_ok_and(|м| м.len() < 20 * 1024 * 1024)) {
+            if let Ok(к) = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&п, 56, 48, true) {
+                let и = gtk::Image::from_pixbuf(Some(&к));
+                и.style_context().add_class("di-thumb");
+                return и.upcast();
+            }
+        }
+    }
+    // Остальные файлы — значком типа: у GIO на тип целая цепочка имён
+    // (image-png → image-x-generic), а не одно, которого в теме может не быть
+    if вид == "файл" {
+        if let Some(т) = з["тип"].as_str().filter(|т| !т.is_empty()) {
+            let значок = gio::content_type_get_icon(т);
+            if gtk::IconTheme::default().and_then(|тема| тема.lookup_by_gicon(&значок, 48, gtk::IconLookupFlags::empty())).is_some() {
+                let к = gtk::Image::from_gicon(&значок, gtk::IconSize::Dialog);
                 к.set_pixel_size(48);
                 return к.upcast();
             }

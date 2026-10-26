@@ -305,9 +305,12 @@ fn значки_стола(я: &Ядро) -> Vec<Value> {
         .unwrap_or_default();
     файлы.sort_by_key(|(и, папка)| (!*папка, и.to_lowercase()));
     for (имя, папка) in файлы {
-        let тип = if папка { "inode/directory".into() } else { gio::content_type_guess(Some(&имя), &[]).0.to_string() };
+        let тип = if папка { "inode/directory".into() } else { тип_по_имени(&имя) };
         let значок = gio::content_type_get_icon(&тип).downcast::<gio::ThemedIcon>().ok().and_then(|т| т.names().first().map(|н| н.to_string())).unwrap_or_default();
-        значки.push(json!({ "n": имя, "g": if папка { "📁" } else { знак_файла(&тип) }, "вид": if папка { "папка" } else { "файл" }, "значок": значок }));
+        // Время изменения — чтобы стол заметил пересохранённую картинку и
+        // обновил миниатюру
+        let когда = std::fs::metadata(папка_стола().join(&имя)).and_then(|м| м.modified()).ok().and_then(|в| в.duration_since(std::time::UNIX_EPOCH).ok()).map(|д| д.as_secs()).unwrap_or(0);
+        значки.push(json!({ "n": имя, "g": if папка { "📁" } else { знак_файла(&тип) }, "вид": if папка { "папка" } else { "файл" }, "значок": значок, "тип": тип, "t": когда }));
     }
     // Места: запомненные — как есть, остальные — столбиками сверху вниз
     let (ширина, высота) = gtk::gdk::Display::default()
@@ -581,23 +584,58 @@ pub fn запусти(id: &str, вид: &str) {
 }
 
 /// Открыть файл тем, чем его открывает система
+/// Тип файла по имени. Обёртка gtk-rs передаёт пустые данные не пустым
+/// указателем, и GLib решает, что файл нулевой длины: выходило
+/// application/x-zerosize для любого файла — стол не узнавал картинки,
+/// отдавал их «программе по умолчанию» и показывал им значок документа
+pub fn тип_по_имени(имя: &str) -> String {
+    use glib::translate::{from_glib_full, ToGlibPtr};
+    unsafe {
+        let mut неточно = 0;
+        let т: glib::GString = from_glib_full(gio::ffi::g_content_type_guess(имя.to_glib_none().0, std::ptr::null(), 0, &mut неточно));
+        т.to_string()
+    }
+}
+
+/// Тип файла: по содержимому, а не получится — по имени. Так узнаётся и
+/// картинка без расширения, и файл с чужим расширением
+pub fn тип_файла(путь: &std::path::Path) -> String {
+    gio::File::for_path(путь)
+        .query_info("standard::content-type", gio::FileQueryInfoFlags::NONE, gio::Cancellable::NONE)
+        .ok()
+        .and_then(|и| и.content_type())
+        .map(|т| т.to_string())
+        .filter(|т| т != "application/octet-stream" && т != "application/x-zerosize")
+        .unwrap_or_else(|| тип_по_имени(&путь.to_string_lossy()))
+}
+
+/// Открыть своей программой, если файл ей по силам: текст — Блокнотом,
+/// картинку — Фото, звук — Музыкой, пакет — установщиком программ.
+/// false — своей нет, пусть открывает программа, назначенная в системе
+pub fn открой_своей(путь: &std::path::Path) -> bool {
+    let тип = тип_файла(путь);
+    let строка = путь.to_string_lossy();
+    let пакет = тип.contains("debian") || строка.ends_with(".deb") || строка.ends_with(".flatpakref") || строка.ends_with(".AppImage");
+    let чем = if пакет {
+        "glower-open-package"
+    } else if gio::content_type_is_a(&тип, "text/plain") {
+        "glower-notepad"
+    } else if тип.starts_with("image/") {
+        "glower-photos"
+    } else if тип.starts_with("audio/") {
+        "glower-music"
+    } else {
+        return false;
+    };
+    запусти_команду(чем, &[&строка])
+}
+
 pub fn открой_путь(путь: &std::path::Path) {
     if путь.is_dir() {
         запусти_команду("glower-files", &[&путь.to_string_lossy()]);
         return;
     }
-    let тип = gio::content_type_guess(Some(путь), &[]).0;
-    let строка = путь.to_string_lossy();
-    if gio::content_type_is_a(&тип, "text/plain") && запусти_команду("glower-notepad", &[&строка]) {
-        return;
-    }
-    if тип.starts_with("image/") && запусти_команду("glower-photos", &[&строка]) {
-        return;
-    }
-    if тип.starts_with("audio/") && запусти_команду("glower-music", &[&строка]) {
-        return;
-    }
-    if (тип.contains("debian") || строка.ends_with(".deb") || строка.ends_with(".flatpakref") || строка.ends_with(".AppImage")) && запусти_команду("glower-open-package", &[&строка]) {
+    if открой_своей(путь) {
         return;
     }
     let uri = gio::File::for_path(путь).uri();
@@ -1711,6 +1749,18 @@ pub fn начни() {
 #[cfg(test)]
 mod проверки {
     use super::*;
+
+    #[test]
+    fn тип_файла_по_имени_не_нулевой() {
+        // Раньше любой файл выходил application/x-zerosize, и стол не
+        // открывал картинки своими Фото
+        assert_eq!(тип_по_имени("Рисунок.png"), "image/png");
+        assert!(gio::content_type_is_a(&тип_по_имени("заметка.txt"), "text/plain"));
+        let п = std::env::temp_dir().join(format!("glower-tip-{}.png", std::process::id()));
+        std::fs::write(&п, b"\x89PNG\r\n\x1a\n").unwrap();
+        assert_eq!(тип_файла(&п), "image/png");
+        let _ = std::fs::remove_file(&п);
+    }
 
     #[test]
     fn служебные_сочетания_словами() {

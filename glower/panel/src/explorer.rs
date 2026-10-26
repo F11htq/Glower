@@ -210,15 +210,10 @@ fn ищи(папка: &Path, что: &str, скрытые: bool, итог: &mut 
     }
 }
 
-/// Тип файла по имени. Обёртка gtk-rs передаёт пустые данные не пустым
-/// указателем — и любой файл выходит «нулевой длины»; зовём GLib сами
+/// Тип файла по имени — общий с ядром (там и объяснено, почему не
+/// gio::content_type_guess)
 fn угадай_тип(имя: &str) -> String {
-    use glib::translate::{from_glib_full, ToGlibPtr};
-    unsafe {
-        let mut неточно = 0;
-        let т: glib::GString = from_glib_full(gio::ffi::g_content_type_guess(имя.to_glib_none().0, std::ptr::null(), 0, &mut неточно));
-        т.to_string()
-    }
+    crate::core::тип_по_имени(имя)
 }
 
 /* ---------- значки ---------- */
@@ -730,13 +725,9 @@ fn открой(п: &П, з: &Запись, в_новой: bool) {
         }
         return;
     }
-    let тип = угадай_тип(&з.путь.to_string_lossy());
-    // Текст — своим Блокнотом, картинки — своими Фото, остальное — тем,
-    // что назначено в системе
-    if gio::content_type_is_a(&тип, "text/plain") && std::process::Command::new("glower-notepad").arg(&з.путь).spawn().is_ok() {
-        return;
-    }
-    if тип.starts_with("image/") && std::process::Command::new("glower-photos").arg(&з.путь).spawn().is_ok() {
+    // Своими программами — так же, как со стола (Блокнот, Фото, Музыка,
+    // установка программ); остальное — тем, что назначено в системе
+    if crate::core::открой_своей(&з.путь) {
         return;
     }
     let uri = gio::File::for_path(&з.путь).uri();

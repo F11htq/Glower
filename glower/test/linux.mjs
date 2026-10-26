@@ -904,7 +904,8 @@ try {
             && /apply_embedded_orientation/.test(фото) && /\.trash\(/.test(фото) && /"wallpaper"/.test(фото)
             && /"grim"/.test(ножницы) && /wl-copy/.test(ножницы) && /Layer::Overlay/.test(ножницы) && /Замазать/.test(ножницы)
             && /taskmgr:'glower-taskmgr', photos:'glower-photos', snip:'glower-snip'/.test(агент2)
-            && /exec glower-snip "\$MODE"/.test(снимок) && /"glower-photos"\)\.arg/.test(проводник)
+            && /exec glower-snip "\$MODE"/.test(снимок) && /core::открой_своей/.test(проводник)
+            && /"glower-photos"/.test(await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8'))
             && родная('glower-taskmgr', 'taskmgr') && родная('glower-snip', 'snip'));
         const меню_ = await readFile(join(root, 'panel', 'src', 'menus.rs'), 'utf8');
         check('док выезжает и тает плавно, а не рывком',
