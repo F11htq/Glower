@@ -1133,10 +1133,21 @@ fn покажи_стол() {
 
 /* ---------- опросы ---------- */
 
+/// Ярлыки, которым не место в меню программ: наш Терминал — это и есть
+/// foot, так что три его ярлыка (сам, клиент, сервер) были бы тремя
+/// дублями; просмотрщик ImageMagick и консольный Vim без терминала не
+/// нужны никому, кто ищет программу в меню
+fn служебная(id: &str) -> bool {
+    let id = id.trim_end_matches(".desktop");
+    matches!(id, "org.codeberg.dnkl.foot" | "org.codeberg.dnkl.footclient" | "org.codeberg.dnkl.foot-server" | "foot" | "footclient" | "foot-server" | "vim" | "nvim" | "debian-xterm" | "debian-uxterm" | "xterm")
+        || id.starts_with("display-im")
+        || id.starts_with("python3")
+}
+
 pub fn обнови_программы() {
     позови("sys.apps", json!({}), |о| {
         if let Ok(о) = о {
-            let список: Vec<Value> = о["list"].as_array().cloned().unwrap_or_default();
+            let список: Vec<Value> = о["list"].as_array().cloned().unwrap_or_default().into_iter().filter(|п| !служебная(п["id"].as_str().unwrap_or(""))).collect();
             с_ядром(|я| я.машина = список);
             расскажи_скоро();
         }
@@ -1808,6 +1819,14 @@ pub fn начни() {
 #[cfg(test)]
 mod проверки {
     use super::*;
+
+    #[test]
+    fn служебные_не_в_меню() {
+        assert!(служебная("org.codeberg.dnkl.footclient.desktop"));
+        assert!(служебная("display-im6.q16.desktop"));
+        assert!(!служебная("firefox.desktop"));
+        assert!(!служебная("libreoffice-writer.desktop"));
+    }
 
     #[test]
     fn тип_файла_по_имени_не_нулевой() {

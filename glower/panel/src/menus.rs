@@ -101,13 +101,22 @@ pub fn календарь(кнопка: &gtk::Button) {
 
 // ------------------------------------------------------- быстрые настройки
 
-fn плитка(ряд: &gtk::Grid, место: i32, имя: &str, под: &str, вкл: bool, можно: bool) -> gtk::Button {
+fn плитка(ряд: &gtk::Grid, место: i32, значок: &str, имя: &str, под: &str, вкл: bool, можно: bool) -> gtk::Button {
     let б = gtk::Button::new();
     б.style_context().add_class("tile");
     if вкл {
         б.style_context().add_class("on");
     }
+    // Значок в кружке слева — как в быстрых настройках Windows 11 и GNOME:
+    // плитку узнают по значку раньше, чем прочтут подпись
+    let строка = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let кружок = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Button);
+    кружок.set_pixel_size(16);
+    кружок.style_context().add_class("tile-icon");
+    кружок.set_valign(gtk::Align::Center);
+    строка.add(&кружок);
     let к = gtk::Box::new(gtk::Orientation::Vertical, 1);
+    к.set_valign(gtk::Align::Center);
     let и = gtk::Label::new(Some(имя));
     и.style_context().add_class("tile-name");
     и.set_xalign(0.0);
@@ -117,7 +126,8 @@ fn плитка(ряд: &gtk::Grid, место: i32, имя: &str, под: &str,
     п.set_ellipsize(gtk::pango::EllipsizeMode::End);
     к.add(&и);
     к.add(&п);
-    б.add(&к);
+    строка.add(&к);
+    б.add(&строка);
     б.set_sensitive(можно);
     б.set_hexpand(true);
     ряд.attach(&б, место % 2, место / 2, 1, 1);
@@ -142,14 +152,19 @@ fn наш_переключатель(ключ: &'static str) -> bool {
 
 /// Ползунок, который меняет машину не на каждое движение, а раз в сотню
 /// миллисекунд: иначе звук дёргался бы десятками вызовов подряд.
-fn ползунок(меню: &gtk::Box, имя: &str, взять: &'static str, поле: &'static str, поставить: &'static str) {
-    let ряд = gtk::Box::new(gtk::Orientation::Vertical, 2);
+fn ползунок(меню: &gtk::Box, значок: &str, имя: &str, взять: &'static str, поле: &'static str, поставить: &'static str) {
+    // Значок слева и ползунок во всю ширину — как в Windows 11; имя — в
+    // подсказке, значок громкости и солнца понятен и без слов
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     ряд.style_context().add_class("slider");
-    let л = gtk::Label::new(Some(имя));
-    л.set_xalign(0.0);
+    let л = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Button);
+    л.set_pixel_size(16);
+    л.style_context().add_class("slider-icon");
+    ряд.set_tooltip_text(Some(имя));
     let ш = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 100.0, 1.0);
     ш.set_draw_value(false);
     ш.set_sensitive(false);
+    ш.set_hexpand(true);
     ряд.add(&л);
     ряд.add(&ш);
     меню.add(&ряд);
@@ -269,7 +284,7 @@ fn разбери_bt(о: Result<Value, String>) -> Bt {
 }
 
 pub fn быстрые(кнопка: &gtk::Button) {
-    popup::открой(кнопка, "быстрые", Где::Справа, 300, |меню| наполни_быстрые(меню));
+    popup::открой(кнопка, "быстрые", Где::Справа, 340, |меню| наполни_быстрые(меню));
 }
 
 fn наполни_быстрые(меню: &gtk::Box) {
@@ -296,7 +311,7 @@ fn наполни_быстрые(меню: &gtk::Box) {
             }
             let w = разбери_wifi(о);
             плитки.remove(&место_wifi);
-            let б = плитка(&плитки, 0, "Wi-Fi", &w.под, w.радио, !w.нет);
+            let б = плитка(&плитки, 0, if w.радио { "network-wireless-symbolic" } else { "network-wireless-disabled-symbolic" }, "Wi-Fi", &w.под, w.радио, !w.нет);
             let радио = w.радио;
             let м = меню.clone();
             б.connect_clicked(move |_| {
@@ -326,7 +341,7 @@ fn наполни_быстрые(меню: &gtk::Box) {
             }
             let b = разбери_bt(о);
             плитки.remove(&место_bt);
-            let б = плитка(&плитки, 1, "Bluetooth", &b.под, b.вкл, b.можно);
+            let б = плитка(&плитки, 1, if b.вкл { "bluetooth-active-symbolic" } else { "bluetooth-disabled-symbolic" }, "Bluetooth", &b.под, b.вкл, b.можно);
             let вкл = b.вкл;
             let м = меню.clone();
             б.connect_clicked(move |_| {
@@ -356,11 +371,11 @@ fn наполни_быстрые(меню: &gtk::Box) {
         let з = з.borrow();
         (з.dnd, з.ночной)
     });
-    for (место, ключ, имя, вкл, да, нет) in [
-        (2, "dnd", "Не беспокоить", dnd, "включено", "выключено"),
-        (3, "nightLight", "Ночной свет", ночной, "тёплые тона", "выключен"),
+    for (место, ключ, значок, имя, вкл, да, нет) in [
+        (2, "dnd", "notifications-disabled-symbolic", "Не беспокоить", dnd, "включено", "выключено"),
+        (3, "nightLight", "night-light-symbolic", "Ночной свет", ночной, "тёплые тона", "выключен"),
     ] {
-        let б = плитка(&плитки, место, имя, if вкл { да } else { нет }, вкл, true);
+        let б = плитка(&плитки, место, значок, имя, if вкл { да } else { нет }, вкл, true);
         let м = меню.clone();
         б.connect_clicked(move |_| {
             наш_переключатель(ключ);
@@ -408,40 +423,72 @@ fn наполни_быстрые(меню: &gtk::Box) {
         меню.add(&ряд);
     }
 
-    ползунок(меню, "Громкость", "sys.volume.get", "volume", "sys.volume.set");
-    ползунок(меню, "Яркость", "sys.brightness.get", "value", "sys.brightness.set");
-
-    let (_, заряд) = popup::пара(меню, "Питание", "…");
-    позови("sys.battery", json!({}), move |о| {
-        заряд.set_text(&о.map(|о| заряд_словами(&о)).unwrap_or_else(|_| "—".into()));
-    });
+    ползунок(меню, "audio-volume-high-symbolic", "Громкость", "sys.volume.get", "volume", "sys.volume.set");
+    ползунок(меню, "display-brightness-symbolic", "Яркость", "sys.brightness.get", "value", "sys.brightness.set");
 
     // Раскладки переключает оконный сервер (Alt+Shift) — всем программам
     // разом; здесь — какие включены и куда идти, чтобы их сменить
     let раскладка = ЗНАЮ.with(|з| з.borrow().раскладка.clone());
-    popup::строка(меню, &format!("Раскладки: {раскладка}  ·  Alt+Shift"), false, || {
+    let р = popup::строка(меню, &format!("{раскладка}  ·  Alt+Shift"), false, || {
         скажи("покажи", json!("раскладка"));
         popup::закрой();
     });
+    со_значком(&р, "input-keyboard-symbolic");
+    р.set_tooltip_text(Some("Раскладки"));
 
-    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    ряд.set_homogeneous(true);
-    let параметры = gtk::Button::with_label("Параметры");
-    параметры.style_context().add_class("action");
-    параметры.connect_clicked(|_| {
-        скажи("открой", json!({ "вид": "приложение", "id": "settings" }));
-        popup::закрой();
-    });
-    let замок = gtk::Button::with_label("Заблокировать");
-    замок.style_context().add_class("action");
-    замок.connect_clicked(|_| {
-        позови("sys.power", json!({ "action": "lock" }), |_| {});
-        popup::закрой();
-    });
-    ряд.add(&параметры);
-    ряд.add(&замок);
-    меню.add(&ряд);
+    // Нижняя строка — как в Windows 11: заряд слева, замок и параметры
+    // справа круглыми кнопками
+    let низ = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    низ.style_context().add_class("qs-foot");
+    let батарея = gtk::Image::from_icon_name(Some("battery-good-symbolic"), gtk::IconSize::Button);
+    батарея.set_pixel_size(16);
+    let заряд = gtk::Label::new(Some("…"));
+    заряд.set_xalign(0.0);
+    заряд.set_hexpand(true);
+    заряд.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    низ.add(&батарея);
+    низ.add(&заряд);
+    {
+        let батарея = батарея.clone();
+        позови("sys.battery", json!({}), move |о| {
+            let есть = о.as_ref().map(|о| о["present"].as_bool() != Some(false) && о["battery"]["level"].is_number()).unwrap_or(false);
+            let заряжается = о.as_ref().map(|о| о["charging"].as_bool() == Some(true)).unwrap_or(false);
+            заряд.set_text(&о.map(|о| заряд_словами(&о)).unwrap_or_else(|_| "—".into()));
+            батарея.set_from_icon_name(
+                Some(if !есть { "ac-adapter-symbolic" } else if заряжается { "battery-full-charging-symbolic" } else { "battery-good-symbolic" }),
+                gtk::IconSize::Button,
+            );
+        });
+    }
+    for (значок, подсказка, что) in [("system-lock-screen-symbolic", "Заблокировать", 0), ("emblem-system-symbolic", "Параметры", 1)] {
+        let б = gtk::Button::from_icon_name(Some(значок), gtk::IconSize::Button);
+        б.style_context().add_class("round");
+        б.set_tooltip_text(Some(подсказка));
+        б.connect_clicked(move |_| {
+            if что == 0 {
+                позови("sys.power", json!({ "action": "lock" }), |_| {});
+            } else {
+                скажи("открой", json!({ "вид": "приложение", "id": "settings" }));
+            }
+            popup::закрой();
+        });
+        низ.add(&б);
+    }
+    меню.add(&gtk::Separator::new(gtk::Orientation::Horizontal));
+    меню.add(&низ);
     меню.show_all();
+}
+
+/// Значок слева от подписи кнопки-строки
+fn со_значком(б: &gtk::Button, значок: &str) {
+    let Some(подпись) = б.child() else { return };
+    б.remove(&подпись);
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let к = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Button);
+    к.set_pixel_size(16);
+    ряд.add(&к);
+    ряд.add(&подпись);
+    б.add(&ряд);
 }
 
 /// Список сетей — отдельным видом внутри того же окошка.

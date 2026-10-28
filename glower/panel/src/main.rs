@@ -125,9 +125,10 @@ window.bar button.updates { color: #8cc8ff; }
 
 .menu {
   background-color: alpha(@glower_bg, 0.96);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 8px;
-  box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.10);
+  margin: 0 0 24px 0;
+  box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.10), 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 .menu button {
   background: none;
@@ -141,14 +142,22 @@ window.bar button.updates { color: #8cc8ff; }
 .menu button:hover { background-color: alpha(@glower_fg, 0.12); }
 .menu button.danger:hover { background-color: rgba(220, 70, 70, 0.35); }
 .menu button.tile {
-  background-color: alpha(@glower_fg, 0.08);
-  border-radius: 12px;
-  padding: 9px 11px;
+  background-color: alpha(@glower_fg, 0.07);
+  border-radius: 14px;
+  padding: 10px 10px;
+  box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.06);
 }
-.menu button.tile:hover { background-color: alpha(@glower_fg, 0.14); }
-.menu button.tile.on { background-color: @glower_accent; }
-.menu button.tile.on:hover { background-color: @glower_accent; }
+.menu button.tile:hover { background-color: alpha(@glower_fg, 0.12); }
+.menu button.tile.on { background-image: linear-gradient(135deg, @glower_accent, @glower_accent2); box-shadow: 0 4px 14px alpha(@glower_accent, 0.35); }
+.menu button.tile.on:hover { background-image: linear-gradient(135deg, shade(@glower_accent, 1.08), shade(@glower_accent2, 1.08)); }
+.menu button.tile.on, .menu button.tile.on * { color: #ffffff; }
 .menu button.tile:disabled { opacity: 0.45; }
+.menu .tile-icon { min-width: 32px; min-height: 32px; border-radius: 16px; background-color: alpha(@glower_fg, 0.10); }
+.menu button.tile.on .tile-icon { background-color: rgba(255, 255, 255, 0.22); }
+.menu .slider-icon { opacity: 0.8; min-width: 20px; }
+.menu .qs-foot { padding: 4px 4px 0 10px; }
+.menu .qs-foot label { opacity: 0.8; font-size: 12px; }
+.menu button.round { border-radius: 16px; padding: 7px; min-width: 0; }
 .menu .tile-name { font-weight: 600; }
 .menu .tile-sub { font-size: 11px; opacity: 0.7; }
 .menu button.action {
@@ -171,7 +180,7 @@ window.bar button.updates { color: #8cc8ff; }
 .menu .small { font-size: 11px; opacity: 0.55; padding: 0 10px 6px; }
 .menu .pair { padding: 8px 10px; }
 .menu .value { opacity: 0.75; }
-.menu .slider { padding: 6px 10px 2px; }
+.menu .slider { padding: 4px 10px; }
 .menu scale { padding: 4px 0; }
 .menu scale trough {
   background-color: alpha(@glower_fg, 0.15);
@@ -247,18 +256,26 @@ window.cliphist .dim { opacity: 0.6; color: #ffffff; }
 }
 .overview .glyph.small { font-size: 14px; border-radius: 7px; min-width: 24px; min-height: 24px; }
 .overview image.glyph, window.dock image.glyph { color: #ffffff; }
-.overview button.desk {
-  background-color: rgba(255, 255, 255, 0.08);
-  min-width: 128px;
-  min-height: 72px;
-  border-radius: 12px;
-  font-weight: 600;
+.overview button.desk { padding: 6px 6px 4px; border-radius: 14px; }
+.overview button.desk:hover { background-color: rgba(255, 255, 255, 0.08); }
+.overview .desk-pic {
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.10);
+  background-size: cover;
+  background-position: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 4px 14px rgba(0, 0, 0, 0.35);
 }
-.overview button.desk:hover { background-color: rgba(255, 255, 255, 0.14); }
-.overview button.desk.on { box-shadow: inset 0 0 0 2px @glower_accent; }
-.overview button.desk.drop { background-color: alpha(@glower_accent, 0.35); box-shadow: inset 0 0 0 2px #8fb6ff; }
-.overview button.desk-plus { min-width: 72px; font-size: 22px; }
-.overview button.desk-x { padding: 0 7px; margin: 4px; border-radius: 9px; font-size: 13px; }
+.overview button.desk.on .desk-pic { box-shadow: inset 0 0 0 2px @glower_accent, inset 0 0 0 3px rgba(0, 0, 0, 0.35), 0 4px 18px alpha(@glower_accent, 0.35); }
+.overview button.desk.drop .desk-pic { box-shadow: inset 0 0 0 3px #8fb6ff; }
+.overview button.desk.drop { background-color: alpha(@glower_accent, 0.30); }
+.overview .desk-pic.desk-new { background-color: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.overview .desk-pic.desk-new image { opacity: 0.8; }
+.overview .desk-dot { background-color: rgba(255, 255, 255, 0.92); border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
+.overview .desk-name { font-size: 12px; color: rgba(255, 255, 255, 0.82); }
+.overview button.desk.on .desk-name { color: #ffffff; font-weight: 600; }
+.overview button.desk-x { padding: 0 5px; margin: 10px; border-radius: 9px; font-size: 12px; min-height: 18px; background-color: rgba(10, 12, 20, 0.65); }
+.overview button.desk-x:hover { background-color: #e5484d; }
+.overview entry.search image { color: rgba(255, 255, 255, 0.6); margin-right: 6px; }
 .overview button.win { background-color: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 6px 12px; }
 .overview .empty { opacity: 0.6; padding: 30px; }
 .overview button.task {
@@ -452,7 +469,7 @@ fn main() {
         н.set_gtk_icon_theme_name(Some("Adwaita"));
     }
     let стиль = gtk::CssProvider::new();
-    стиль.load_from_data(СТИЛЬ.as_bytes()).expect("стиль панели");
+    стиль.load_from_data(format!("{СТИЛЬ}{}", apps::МЕНЮ).as_bytes()).expect("стиль панели");
     gtk::StyleContext::add_provider_for_screen(
         &gtk::gdk::Screen::default().expect("экран"),
         &стиль,

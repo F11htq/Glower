@@ -11,6 +11,21 @@ use std::path::PathBuf;
 /// Вид программ — те же тёмные поверхности, что у окон системы на странице.
 const СТИЛЬ: &str = r#"
 window.glower-app { background-color: @glower_bg; }
+/* Углы и тень окна — как в Windows 11: скругление 10 точек, мягкая тень
+   под окном и тонкая светлая кайма, чтобы тёмное окно не сливалось с
+   тёмными обоями. Развёрнутое и прижатое к краю окно — без них */
+window.glower-app.csd, window.glower-app.csd decoration { border-radius: 10px; }
+window.glower-app.csd decoration {
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.60), 0 4px 12px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+window.glower-app.csd decoration:backdrop {
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+window.glower-app.maximized, window.glower-app.maximized decoration,
+window.glower-app.tiled, window.glower-app.tiled decoration,
+window.glower-app.fullscreen, window.glower-app.fullscreen decoration { border-radius: 0; }
+window.glower-app.maximized decoration, window.glower-app.fullscreen decoration { box-shadow: none; }
+window.glower-app.tiled decoration { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06); }
 /* Верхняя строка окна — одна на всю систему: та же высота, цвет и кнопки
    «свернуть, развернуть, закрыть», что у терминала (foot.ini, [csd]) и у
    рамки, которую оконный сервер рисует программам X11 */
@@ -21,9 +36,16 @@ window.glower-app headerbar.titlebar, window.glower-app .titlebar.default-decora
   padding: 0 0 0 10px;
   margin: 0;
   border: none;
-  border-radius: 0;
+  border-radius: 10px 10px 0 0;
   box-shadow: inset 0 -1px rgba(255, 255, 255, 0.06);
 }
+window.glower-app.maximized headerbar.titlebar, window.glower-app.tiled headerbar.titlebar,
+window.glower-app.fullscreen headerbar.titlebar { border-radius: 0; }
+/* Крестик в углу окна — со скруглением угла, иначе его подсветка торчит
+   квадратом из круглого угла */
+window.glower-app.csd headerbar.titlebar button.titlebutton.close { border-radius: 0 10px 0 0; }
+window.glower-app.maximized headerbar.titlebar button.titlebutton.close,
+window.glower-app.tiled headerbar.titlebar button.titlebutton.close { border-radius: 0; }
 window.glower-app headerbar.titlebar *, window.glower-app .titlebar.default-decoration * { color: #e8eaf2; }
 window.glower-app headerbar.titlebar .title { font-weight: 600; font-size: 13px; margin-left: 2px; }
 window.glower-app headerbar.titlebar:backdrop .title { opacity: 0.6; }
@@ -82,6 +104,75 @@ window.glower-app, window.glower-app * {
 .glower-app switch slider { background-color: #ffffff; border: none; }
 "#;
 
+/// Меню по правой кнопке, выпадающие списки, всплывающие окошки и подсказки —
+/// одного вида во всей системе: скруглённые, с тенью, пункт под мышью
+/// подсвечен цветом акцента. Без этого GTK рисовал их серыми прямоугольниками
+/// Adwaita, чужими рядом со всем остальным
+pub const МЕНЮ: &str = r#"
+window.popup.csd decoration, window.popup decoration {
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px alpha(@glower_fg, 0.10);
+}
+window.popup, window.popup.background { background-color: transparent; }
+menu, .context-menu {
+  background-color: @glower_bg;
+  border: none;
+  border-radius: 12px;
+  padding: 6px;
+}
+menu menuitem {
+  padding: 7px 14px 7px 12px;
+  border-radius: 8px;
+  min-height: 18px;
+  color: @glower_fg;
+  text-shadow: none;
+  transition: background-color 120ms ease-out;
+}
+menu menuitem:hover { background-color: alpha(@glower_accent, 0.85); color: #ffffff; }
+menu menuitem:hover label, menu menuitem:hover arrow { color: #ffffff; }
+menu menuitem:disabled, menu menuitem:disabled label { color: alpha(@glower_fg, 0.4); }
+menu menuitem arrow { min-width: 14px; min-height: 14px; color: alpha(@glower_fg, 0.6); }
+menu menuitem accelerator { color: alpha(@glower_fg, 0.5); }
+menu separator { margin: 4px 8px; min-height: 1px; background-color: alpha(@glower_fg, 0.09); }
+menu > arrow { background-color: @glower_bg; border: none; }
+popover {
+  background-color: @glower_bg;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.40), 0 0 0 1px alpha(@glower_fg, 0.10);
+  padding: 6px;
+}
+popover modelbutton { border-radius: 8px; padding: 6px 12px; }
+popover modelbutton:hover { background-color: alpha(@glower_accent, 0.85); color: #ffffff; }
+tooltip, tooltip.background {
+  background-color: rgba(22, 24, 32, 0.96);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+tooltip label { color: #e8eaf2; padding: 2px 4px; }
+check, radio {
+  min-width: 16px;
+  min-height: 16px;
+  background-image: none;
+  background-color: alpha(@glower_fg, 0.06);
+  border: 1.5px solid alpha(@glower_fg, 0.35);
+  box-shadow: none;
+  -gtk-icon-source: none;
+  margin-right: 8px;
+}
+check { border-radius: 5px; }
+radio { border-radius: 50%; }
+check:hover, radio:hover { border-color: alpha(@glower_fg, 0.55); }
+check:checked, radio:checked {
+  background-color: @glower_accent;
+  border-color: @glower_accent;
+  color: #ffffff;
+}
+check:checked { -gtk-icon-source: -gtk-icontheme("object-select-symbolic"); }
+radio:checked { -gtk-icon-source: -gtk-icontheme("media-record-symbolic"); -gtk-icon-transform: scale(0.6); }
+check:indeterminate { background-color: @glower_accent; border-color: @glower_accent; -gtk-icon-source: -gtk-icontheme("list-remove-symbolic"); color: #ffffff; }
+"#;
+
 /// Имя программы для оконного сервера (по нему её узнают док и Alt+Tab),
 /// GTK, тёмная тема и общий стиль.
 pub fn подготовь(имя: &str, название: &str) {
@@ -105,7 +196,7 @@ pub fn подготовь(имя: &str, название: &str) {
     // Тема и акцент — до своего стиля: в нём имена цветов, а не цвета
     crate::theme::подключи();
     let стиль = gtk::CssProvider::new();
-    стиль.load_from_data(СТИЛЬ.as_bytes()).expect("стиль программ");
+    стиль.load_from_data(format!("{СТИЛЬ}{МЕНЮ}").as_bytes()).expect("стиль программ");
     gtk::StyleContext::add_provider_for_screen(
         &gtk::gdk::Screen::default().expect("экран"),
         &стиль,

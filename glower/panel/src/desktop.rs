@@ -70,6 +70,13 @@ struct Стол {
 
 thread_local! {
     static СТОЛ: RefCell<Option<Rc<RefCell<Стол>>>> = const { RefCell::new(None) };
+    /// Фон стола словами CSS — для миниатюр столов в меню программ
+    static ФОН: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Чем залит стол: `background-image` в CSS (градиент или картинка)
+pub fn фон_стола() -> String {
+    ФОН.with(|ф| ф.borrow().clone())
 }
 
 fn стол() -> Option<Rc<RefCell<Стол>>> {
@@ -208,6 +215,7 @@ fn поставь_обои(css: &str) {
         glib::MainContext::default().spawn_local(async move {
             if let Ok(Some(путь)) = откуда.recv().await {
                 let путь = путь.replace('"', "%22");
+                ФОН.with(|ф| *ф.borrow_mut() = format!("url(\"file://{путь}\")"));
                 примени_стиль(&format!(
                     "window.desktop {{ background-image: url(\"file://{путь}\"); background-size: cover; background-position: center; }}"
                 ));
@@ -215,6 +223,7 @@ fn поставь_обои(css: &str) {
         });
         return;
     }
+    ФОН.with(|ф| *ф.borrow_mut() = цвета_для_gtk(css));
     примени_стиль(&format!("window.desktop {{ background-image: {}; }}", цвета_для_gtk(css)));
 }
 

@@ -263,6 +263,7 @@ fn создай() -> Rc<RefCell<Меню>> {
     let поиск = gtk::Entry::new();
     поиск.set_placeholder_text(Some("Поиск программ и файлов"));
     поиск.set_width_chars(36);
+    поиск.set_icon_from_icon_name(gtk::EntryIconPosition::Primary, Some("system-search-symbolic"));
     поиск.set_halign(gtk::Align::Center);
     поиск.style_context().add_class("search");
 
@@ -782,8 +783,12 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
     for i in 0..сколько {
         let окон = на_столах.get(i as usize).copied().unwrap_or(0);
         let стол = gtk::Overlay::new();
-        let б = gtk::Button::with_label(&if окон > 0 { format!("{} · {}", i + 1, окон) } else { format!("{}", i + 1) });
+        let б = gtk::Button::new();
         б.style_context().add_class("desk");
+        б.add(&миниатюра_стола(&format!("{} {}", crate::i18n::tr("Рабочий стол"), i + 1), окон, None));
+        if окон > 0 {
+            б.set_tooltip_text(Some(&format!("{}: {окон}", crate::i18n::tr("Окон"))));
+        }
         if i == текущий {
             б.style_context().add_class("on");
         }
@@ -803,7 +808,8 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
         столы.add(&стол);
     }
     if д["можно-ещё"].as_bool() != Some(false) && сколько < 8 {
-        let плюс = crate::apps::значок_кнопка("+");
+        let плюс = gtk::Button::new();
+        плюс.add(&миниатюра_стола(&crate::i18n::tr("Новый стол"), 0, Some("list-add-symbolic")));
         плюс.style_context().add_class("desk");
         плюс.style_context().add_class("desk-plus");
         плюс.set_tooltip_text(Some("Новый рабочий стол"));
@@ -849,6 +855,51 @@ fn наполни_столы(м: &Rc<RefCell<Меню>>) {
     let задачи = м.borrow().задачи;
     окна.set_visible(!задачи);
     карточки.set_visible(задачи);
+}
+
+/// Миниатюра стола: его обои, на них — точки по числу окон, под ними имя.
+/// Как в Windows 11 и GNOME: столы узнают по картинке, а не по цифре.
+/// `значок` — вместо обоев (кнопка «новый стол»)
+fn миниатюра_стола(имя: &str, окон: u64, значок: Option<&str>) -> gtk::Widget {
+    let ящик = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    let картинка = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    картинка.style_context().add_class("desk-pic");
+    картинка.set_size_request(136, 76);
+    match значок {
+        Some(з) => {
+            картинка.style_context().add_class("desk-new");
+            let к = gtk::Image::from_icon_name(Some(з), gtk::IconSize::LargeToolbar);
+            к.set_hexpand(true);
+            картинка.add(&к);
+        }
+        None => {
+            let фон = crate::desktop::фон_стола();
+            if !фон.is_empty() {
+                let стиль = gtk::CssProvider::new();
+                if стиль.load_from_data(format!("* {{ background-image: {фон}; }}").as_bytes()).is_ok() {
+                    картинка.style_context().add_provider(&стиль, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+                }
+            }
+            // Окна стола — белыми точками внизу миниатюры
+            let точки = gtk::Box::new(gtk::Orientation::Horizontal, 3);
+            точки.set_hexpand(true);
+            точки.set_halign(gtk::Align::Center);
+            точки.set_valign(gtk::Align::End);
+            точки.set_margin_bottom(6);
+            for _ in 0..окон.min(6) {
+                let т = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+                т.style_context().add_class("desk-dot");
+                т.set_size_request(14, 9);
+                точки.add(&т);
+            }
+            картинка.add(&точки);
+        }
+    }
+    ящик.add(&картинка);
+    let подпись = gtk::Label::new(Some(имя));
+    подпись.style_context().add_class("desk-name");
+    ящик.add(&подпись);
+    ящик.upcast()
 }
 
 /// Карточка окна в просмотре задач: значок, имя, крестик «закрыть»
