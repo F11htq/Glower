@@ -1399,5 +1399,9 @@
 "Ваши данные — ваши": "Tus datos son tuyos",
 "Без рекламы и слежки. Диск можно зашифровать целиком.": "Sin anuncios ni rastreo. Se puede cifrar todo el disco.",
 "твердотельный": "estado sólido",
-"диск": "disco"
+"диск": "disco",
+"Установить «{имя}»?": "¿Instalar «{имя}»?",
+"Устанавливаю «{имя}»": "Instalando «{имя}»",
+"Установить": "Instalar",
+"Установить поддержку программ Windows?": "¿Instalar compatibilidad con programas de Windows?"
 }

@@ -1492,8 +1492,12 @@ fn напомни() {
 /* ---------- установка из файла и программы Windows ---------- */
 
 fn спроси(заголовок: &str, текст: &str, да: &str) -> bool {
-    let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Question, gtk::ButtonsType::None, заголовок);
-    д.set_secondary_text(Some(текст));
+    // Без значка «?»: вопрос и так понятен из слов
+    let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Other, gtk::ButtonsType::None, "");
+    д.set_markup(&format!("<b>{}</b>", glib::markup_escape_text(заголовок)));
+    if !текст.is_empty() {
+        д.set_secondary_text(Some(текст));
+    }
     д.add_button("Отмена", gtk::ResponseType::Cancel);
     д.add_button(да, gtk::ResponseType::Accept);
     д.set_default_response(gtk::ResponseType::Accept);
@@ -1525,31 +1529,16 @@ fn спроси_про_установку(путь: String) {
             Ok(п) => п,
             Err(е) => return notify::покажи("Не удалось прочитать файл", &е, "⚠️"),
         };
-        let мб = |b: f64| if b >= 1048576.0 { format!("{:.1} МБ", b / 1048576.0) } else if b >= 1024.0 { format!("{} КБ", (b / 1024.0).round()) } else { format!("{b} Б") };
-        let mut строки = vec![
-            format!("Версия: {}", про["версия"].as_str().unwrap_or("не указана")),
-            format!("Размер файла: {}", мб(про["размер"].as_f64().unwrap_or(0.0))),
-        ];
-        if let Some(м) = про["место"].as_f64() {
-            строки.push(format!("Займёт на диске: около {}", мб(м)));
-        }
-        if let Some(о) = про["описание"].as_str().filter(|о| !о.is_empty()) {
-            строки.push(String::new());
-            строки.push(о.to_string());
-        }
-        let откуда = if про["вид"].as_str() == Some("flatpak") {
-            format!("Программу поставит flatpak с {}.", if про["откуда"].is_null() { "Flathub" } else { "указанного в файле хранилища" })
-        } else {
-            "Это программа из файла, а не из Магазина: за то, что внутри, отвечает тот, кто её сделал.".to_string()
-        };
-        let имя = про["имя"].as_str().unwrap_or("программу").to_string();
-        if !спроси(&format!("Поставить «{имя}»?"), &format!("{}\n\n{откуда}", строки.join("\n")), "Поставить") {
+        let имя = про["название"].as_str().filter(|н| !н.is_empty()).or(про["имя"].as_str()).unwrap_or("программу").to_string();
+        // Только вопрос и две кнопки — как в Windows: что за программа, видно
+        // по имени, а описание из пакета никто не читает
+        if !спроси(&format!("Установить «{имя}»?"), "", "Установить") {
             return;
         }
         позови("pkg.file.install", json!({ "путь": путь }), move |о| match о {
             Err(е) => notify::покажи("Не удалось начать установку", &е, "⚠️"),
             Ok(_) => {
-                notify::покажи("Установка", &format!("Ставлю «{имя}»"), "📦");
+                notify::покажи("Установка", &format!("Устанавливаю «{имя}»"), "📦");
                 следи_за_установкой(имя, None);
             }
         });
@@ -1598,9 +1587,9 @@ fn программа_windows(что: &Value) {
         Some("запуск") => notify::покажи(&имя, "Запускаю программу Windows", "🪟"),
         Some("нет-wine") => {
             if спроси(
-                "Поставить поддержку программ Windows?",
+                "Установить поддержку программ Windows?",
                 &format!("Чтобы открыть «{имя}», нужен Wine — прослойка, на которой в Linux работают программы для Windows. Он займёт около 700 МБ и поставится один раз. Работает многое, но не всё: тяжёлым программам и играм с защитой от читов Wine часто не подходит."),
-                "Поставить",
+                "Установить",
             ) {
                 позови("pkg.windows.install", json!({}), move |о| match о {
                     Err(е) => notify::покажи("Не удалось начать установку", &е, "⚠️"),
@@ -1719,12 +1708,16 @@ pub fn начни() {
                 }
                 "уведомление" => notify::из_шины(что),
                 "уведомление-закрыть" => notify::закрой_номер(что["номер"].as_u64().unwrap_or(0) as u32),
+                // Оба спрашивают окном — не изнутри задачи (см. apps::вне_задачи)
                 "файл-установщик" => {
-                    if let Some(путь) = что["путь"].as_str() {
-                        спроси_про_установку(путь.to_string());
+                    if let Some(путь) = что["путь"].as_str().map(String::from) {
+                        crate::apps::вне_задачи(move || спроси_про_установку(путь));
                     }
                 }
-                "windows" => программа_windows(что),
+                "windows" => {
+                    let что = что.clone();
+                    crate::apps::вне_задачи(move || программа_windows(&что));
+                }
                 "снимок" => {
                     let режим = что.as_str().unwrap_or("экран").to_string();
                     запусти_команду("glower-snip", &[&режим]);

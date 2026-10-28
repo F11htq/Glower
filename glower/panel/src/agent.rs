@@ -69,7 +69,8 @@ where
     });
     glib::MainContext::default().spawn_local(async move {
         if let Ok(ответ) = откуда.recv().await {
-            дело(ответ);
+            // Не изнутри задачи: в ответе часто спрашивают окном
+            crate::apps::вне_задачи(move || дело(ответ));
         }
     });
 }

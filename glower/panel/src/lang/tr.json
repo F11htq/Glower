@@ -1399,5 +1399,9 @@
 "Ваши данные — ваши": "Verileriniz sizindir",
 "Без рекламы и слежки. Диск можно зашифровать целиком.": "Reklam ve izleme yok. Tüm disk şifrelenebilir.",
 "твердотельный": "SSD",
-"диск": "disk"
+"диск": "disk",
+"Установить «{имя}»?": "«{имя}» kurulsun mu?",
+"Устанавливаю «{имя}»": "«{имя}» kuruluyor",
+"Установить": "Yükle",
+"Установить поддержку программ Windows?": "Windows programı desteği kurulsun mu?"
 }

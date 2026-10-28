@@ -104,7 +104,7 @@ pub fn вставь_в_фоне(пути: Vec<PathBuf>, папка: PathBuf, в�
             if !итог.пары.is_empty() {
                 запомни(if вырезать { Дело::Перенос(итог.пары.clone()) } else { Дело::Копия(итог.новые.clone()) });
             }
-            готово(итог);
+            crate::apps::вне_задачи(move || готово(итог));
         }
     });
 }
@@ -324,7 +324,7 @@ pub fn отмени_последнее(готово: impl FnOnce(Option<Vec<Stri
     });
     glib::MainContext::default().spawn_local(async move {
         if let Ok(беды) = откуда.recv().await {
-            готово(Some(беды));
+            crate::apps::вне_задачи(move || готово(Some(беды)));
         }
     });
 }
@@ -413,12 +413,13 @@ pub fn распакуй(архив: PathBuf, в_свою_папку: bool, го�
     glib::MainContext::default().spawn_local(async move {
         if let Ok(итог) = откуда.recv().await {
             // Что появилось — в журнал: Ctrl+Z уберёт распакованное
-            готово(итог.map(|(открыть, новые)| {
+            let итог = итог.map(|(открыть, новые)| {
                 if !новые.is_empty() {
                     запомни(Дело::Создание(новые));
                 }
                 открыть
-            }));
+            });
+            crate::apps::вне_задачи(move || готово(итог));
         }
     });
 }
@@ -459,7 +460,7 @@ pub fn сожми(пути: Vec<PathBuf>, готово: impl FnOnce(Result<PathB
             if let Ok(п) = &итог {
                 запомни(Дело::Создание(vec![п.clone()]));
             }
-            готово(итог);
+            crate::apps::вне_задачи(move || готово(итог));
         }
     });
 }

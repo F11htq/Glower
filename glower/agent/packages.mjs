@@ -102,6 +102,25 @@ import { existsSync, statfsSync, statSync, realpathSync, readdirSync } from 'nod
 /* живая система держит всё в памяти — это меняет и место, и советы человеку */
 const живая = () => existsSync('/run/live/medium') || existsSync('/cdrom/live');
 
+/* Имя программы так, как его видит человек: «Google Chrome», а не
+   google-chrome-stable. Берём из ярлыка внутри пакета (Name на языке
+   системы), а нет ярлыка — пустая строка, и показывается имя пакета. */
+async function имяИзЯрлыка(файл){
+  try {
+    const { stdout } = await run('sh', ['-c',
+      'dpkg-deb --fsys-tarfile "$1" | tar -xO --wildcards "./usr/share/applications/*.desktop" 2>/dev/null | head -c 200000',
+      'sh', файл], { timeout:20000, maxBuffer:1 << 20 });
+    const текст = String(stdout);
+    const язык = String(process.env.LANG || '').split('.')[0];
+    const группа = (текст.split(/^\[Desktop Entry\]\s*$/m)[1] || '').split(/^\[/m)[0];
+    for (const к of [язык, язык.split('_')[0]].filter(Boolean)){
+      const м = группа.match(new RegExp('^Name\\[' + к + '\\]=(.+)$', 'm'));
+      if (м) return м[1].trim();
+    }
+    return ((группа.match(/^Name=(.+)$/m) || [])[1] || '').trim();
+  } catch(e){ return ''; }
+}
+
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
   let память = null; // что на машине есть: спрошено один раз, а не каждый раз
@@ -976,9 +995,10 @@ export function packages(allowPackages){
       }
       const поле = к => (текст.match(new RegExp('^' + к + ':\\s*(.*)$', 'm')) || [])[1] || '';
       const размерФайла = statSync(файл).size;
+      const название = await имяИзЯрлыка(файл);
       const место = parseInt(поле('Installed-Size'), 10);
       return {
-        файл, имя:поле('Package'), версия:поле('Version'),
+        файл, имя:поле('Package'), название, версия:поле('Version'),
         железо:поле('Architecture'), описание:поле('Description'),
         зависимости:поле('Depends').split(',').map(x => x.trim()).filter(Boolean),
         размер:размерФайла,

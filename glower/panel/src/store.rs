@@ -438,7 +438,7 @@ fn сведения(п: &П, прога: &Прога, заново: bool, дел
         glib::MainContext::default().spawn_local(async move {
             if let Ok(итог) = откуда.recv().await {
                 п2.сведения.borrow_mut().insert(пакет, итог.clone());
-                дело(&п2, итог);
+                crate::apps::вне_задачи(move || дело(&п2, итог));
             }
         });
     });

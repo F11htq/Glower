@@ -402,8 +402,9 @@ fn начни_запись(н: &Н, (x, y, ш, в): Рамка, окно_был�
             let хвост: String = ошибка.lines().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
             let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Warning, gtk::ButtonsType::Close, "Запись не получилась");
             д.set_secondary_text(Some(&хвост));
-            д.run();
-            unsafe { д.destroy() };
+            // Без run(): мы внутри задачи (см. apps::вне_задачи)
+            д.connect_response(|д, _| unsafe { д.destroy() });
+            д.show_all();
         }
         if окно_было {
             н1.окно.show_all();
