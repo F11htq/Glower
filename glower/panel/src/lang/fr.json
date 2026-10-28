@@ -1368,5 +1368,8 @@
 "🗜 Извлечь всё в «{имя}»": "🗜 Tout extraire dans « {имя} »",
 "Извлечь сюда": "Extraire ici",
 "🗜 Сжать в ZIP": "🗜 Compresser en ZIP",
-"С архивом не вышло": "L’archive n’a pas pu être traitée"
+"С архивом не вышло": "L’archive n’a pas pu être traitée",
+"Что играет": "En cours de lecture",
+"Ещё звучит": "Joue aussi",
+"Сейчас ничего не играет": "Rien n’est en lecture"
 }

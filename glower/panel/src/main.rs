@@ -34,6 +34,7 @@ mod media;
 mod menus;
 mod music;
 mod notify;
+mod nowplaying;
 mod notepad;
 mod overview;
 mod paint;
@@ -102,6 +103,24 @@ window.bar button.programs label { font-weight: 600; }
 window.bar button.tray { padding: 0 5px; }
 window.bar button.tray label { font-size: 11px; font-weight: 600; }
 window.bar .date { opacity: 0.6; }
+window.bar .np { background-color: rgba(255, 255, 255, 0.08); border-radius: 15px; margin: 2px 0; padding: 0 2px 0 0; }
+window.bar .np button.np-main { padding: 0 10px 0 4px; border-radius: 15px; }
+window.bar .np button.np-btn { padding: 0 6px; min-width: 0; border-radius: 12px; }
+window.bar .np button.np-btn image { -gtk-icon-transform: scale(0.9); }
+.menu.np-card { padding: 14px 16px 12px 16px; border-radius: 20px; }
+.menu.np-card .np-title { font-size: 15px; font-weight: 700; color: #ffffff; }
+.menu.np-card .np-artist { font-size: 13px; color: rgba(255, 255, 255, 0.75); }
+.menu.np-card .np-app { font-size: 11px; color: rgba(255, 255, 255, 0.55); margin-top: 4px; }
+.menu.np-card .np-time { font-size: 11px; color: rgba(255, 255, 255, 0.6); font-feature-settings: "tnum"; }
+.menu.np-card button.np-big { border-radius: 22px; min-width: 40px; min-height: 40px; background-color: transparent; color: #ffffff; }
+.menu.np-card button.np-big:hover { background-color: rgba(255, 255, 255, 0.12); }
+.menu.np-card button.np-play { border-radius: 26px; min-width: 52px; min-height: 52px; background-color: #ffffff; color: #12141b; }
+.menu.np-card button.np-play image { color: #12141b; }
+.menu.np-card button.np-play:hover { background-color: rgba(255, 255, 255, 0.85); }
+.menu.np-card button.np-open { margin-top: 10px; border-radius: 12px; background-color: rgba(255, 255, 255, 0.10); color: #ffffff; }
+.menu.np-card button.np-open:hover { background-color: rgba(255, 255, 255, 0.18); }
+.menu.np-card .np-more { font-size: 11px; color: rgba(255, 255, 255, 0.5); margin-top: 10px; }
+.menu.np-card button.np-other { border-radius: 10px; padding: 4px 8px; color: #ffffff; }
 window.bar button.updates { color: #8cc8ff; }
 
 .menu {
@@ -533,6 +552,8 @@ fn main() {
         скажи("открой-пуск", json!("переключи"));
     });
     полоса.pack_start(&программы, false, false, 0);
+    // Рядом — плеер: что играет у любой программы. Нет звука — его нет
+    полоса.pack_start(&nowplaying::создай(), false, false, 6);
 
     // Посередине — часы
     let часы = gtk::Button::new();

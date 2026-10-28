@@ -1368,5 +1368,8 @@
 "🗜 Извлечь всё в «{имя}»": "🗜 Tümünü «{имя}» içine çıkar",
 "Извлечь сюда": "Buraya çıkar",
 "🗜 Сжать в ZIP": "🗜 ZIP olarak sıkıştır",
-"С архивом не вышло": "Arşivle ilgili işlem başarısız"
+"С архивом не вышло": "Arşivle ilgili işlem başarısız",
+"Что играет": "Şimdi çalıyor",
+"Ещё звучит": "Ayrıca çalıyor",
+"Сейчас ничего не играет": "Hiçbir şey çalmıyor"
 }

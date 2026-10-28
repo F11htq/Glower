@@ -1368,5 +1368,8 @@
 "🗜 Извлечь всё в «{имя}»": "🗜 Extract all to “{имя}”",
 "Извлечь сюда": "Extract here",
 "🗜 Сжать в ZIP": "🗜 Compress to ZIP",
-"С архивом не вышло": "Archive operation failed"
+"С архивом не вышло": "Archive operation failed",
+"Что играет": "Now playing",
+"Ещё звучит": "Also playing",
+"Сейчас ничего не играет": "Nothing is playing"
 }

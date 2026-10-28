@@ -1368,5 +1368,8 @@
 "🗜 Извлечь всё в «{имя}»": "🗜 Alles nach „{имя}“ extrahieren",
 "Извлечь сюда": "Hier extrahieren",
 "🗜 Сжать в ZIP": "🗜 Als ZIP komprimieren",
-"С архивом не вышло": "Mit dem Archiv hat es nicht geklappt"
+"С архивом не вышло": "Mit dem Archiv hat es nicht geklappt",
+"Что играет": "Wird gerade abgespielt",
+"Ещё звучит": "Außerdem läuft",
+"Сейчас ничего не играет": "Nichts wird abgespielt"
 }

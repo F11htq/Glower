@@ -19,6 +19,8 @@ use std::cell::RefCell;
 pub enum Где {
     Справа,
     Посередине,
+    /// Левым краем под самой кнопкой — для плеера рядом с «Программами»
+    ПодКнопкой,
 }
 
 struct Открытое {
@@ -111,6 +113,13 @@ where
             меню_ящик.set_margin_end(8);
         }
         Где::Посередине => меню_ящик.set_halign(gtk::Align::Center),
+        Где::ПодКнопкой => {
+            меню_ящик.set_halign(gtk::Align::Start);
+            // Полоса во всю ширину экрана, так что место кнопки в ней — это
+            // и место на экране
+            let x = кнопка.translate_coordinates(&кнопка.toplevel().unwrap_or_else(|| кнопка.clone().upcast()), 0, 0).map(|(x, _)| x).unwrap_or(8);
+            меню_ящик.set_margin_start(x.max(8));
+        }
     }
 
     let меню = gtk::Box::new(gtk::Orientation::Vertical, 2);
