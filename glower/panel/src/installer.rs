@@ -50,6 +50,8 @@ window.installer.csd:not(.maximized):not(.full) .side { border-radius: 0 0 0 10p
   border-right: 1px solid alpha(@glower_fg, 0.06);
   padding: 26px 16px 18px 18px;
 }
+.installer button.try { background-color: transparent; border-radius: 12px; padding: 8px 10px; box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.10); }
+.installer button.try:hover { background-color: alpha(@glower_fg, 0.08); }
 .installer .brand { font-size: 20px; font-weight: 600; }
 .installer .ver { font-size: 11px; opacity: 0.5; }
 .installer .step { padding: 7px 8px; border-radius: 10px; }
@@ -223,8 +225,14 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.connect_destroy(|_| gtk::main_quit());
     // Пока идёт запись на диск, окно не закрыть: оборванная установка
     // оставляет диск размеченным наполовину
-    окно.connect_delete_event(|_, _| {
+    окно.connect_delete_event(move |_, _| {
         if с_мастером(|м| м.с.шаг == 4) == Some(true) {
+            return glib::Propagation::Stop;
+        }
+        // С флешки установщик — это весь сеанс: закрыть его значит уйти на
+        // рабочий стол, и об этом лучше спросить, как при Esc
+        if во_весь_экран && !чиним {
+            glib::idle_add_local_once(попробуй);
             return glib::Propagation::Stop;
         }
         glib::Propagation::Proceed
@@ -251,11 +259,23 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     let шаги = gtk::Box::new(gtk::Orientation::Vertical, 4);
     бок.add(&шаги);
     if во_весь_экран && !чиним {
-        let esc = метка("Esc — попробовать систему без установки", "ver");
-        esc.set_valign(gtk::Align::End);
-        esc.set_vexpand(true);
-        esc.set_max_width_chars(26);
-        бок.add(&esc);
+        // Попробовать, не устанавливая — кнопкой внизу полосы шагов (и Esc)
+        let проба = gtk::Button::new();
+        проба.style_context().add_class("try");
+        let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        let з = gtk::Image::from_icon_name(Some("media-playback-start-symbolic"), gtk::IconSize::Button);
+        ряд.add(&з);
+        let к = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        let надпись = метка("Попробовать без установки", "");
+        надпись.set_max_width_chars(18);
+        к.add(&надпись);
+        к.add(&метка("Esc", "ver"));
+        ряд.add(&к);
+        проба.add(&ряд);
+        проба.set_valign(gtk::Align::End);
+        проба.set_vexpand(true);
+        проба.connect_clicked(|_| попробуй());
+        бок.add(&проба);
     }
 
     let правая = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -316,10 +336,12 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             glib::Propagation::Proceed
         });
     }
-    окно.show_all();
+    // Во весь экран — до первого показа: тогда окно сразу появляется во
+    // весь экран, а не обычным окном, которое потом растягивается
     if во_весь_экран {
         окно.fullscreen();
     }
+    окно.show_all();
     нарисуй();
     gtk::main();
     std::process::exit(0);

@@ -232,6 +232,15 @@ $1
 GLOWER_URL="http://localhost:$PORT/"
 GLOWER_PORT="$PORT"
 export GLOWER_URL GLOWER_PORT
+# С установочной флешки — сразу установщик, и только он: ни стола, ни
+# панели, ни дока. На старой машине рабочий стол поднимался бы долго, а
+# человеку с флешки он и не нужен. Рабочий стол — только если выбрали
+# «Попробовать без установки» (установщик тогда закрывается сам)
+if grep -qwE 'glower\.(install|repair)=1' /proc/cmdline 2>/dev/null && [ ! -e /run/glower-try ]; then
+  /usr/bin/glower-installer --install
+  GLOWER_INSTALLER_SHOWN=1
+  export GLOWER_INSTALLER_SHOWN
+fi
 falls=0
 since=\$(date +%s)
 while :; do
