@@ -172,18 +172,3 @@ pub fn тихо(меню: &gtk::Box, текст: &str) -> gtk::Label {
     меню.add(&п);
     п
 }
-
-/// Строка «имя … значение».
-pub fn пара(меню: &gtk::Box, имя: &str, значение: &str) -> (gtk::Box, gtk::Label) {
-    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    ряд.style_context().add_class("pair");
-    let л = gtk::Label::new(Some(имя));
-    л.set_xalign(0.0);
-    л.set_hexpand(true);
-    let п = gtk::Label::new(Some(значение));
-    п.style_context().add_class("value");
-    ряд.add(&л);
-    ряд.add(&п);
-    меню.add(&ряд);
-    (ряд, п)
-}

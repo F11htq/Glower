@@ -99,9 +99,30 @@ window.glower-app, window.glower-app * {
 .glower-app notebook tab { padding: 4px 10px; border: none; }
 .glower-app notebook tab:checked { background-color: @glower_bg2; border-radius: 8px 8px 0 0; }
 .glower-app notebook stack { background-color: @glower_bg2; }
-.glower-app switch { background-color: alpha(@glower_fg, 0.15); border: none; }
+.glower-app switch {
+  background-image: none;
+  background-color: alpha(@glower_fg, 0.16);
+  border: none;
+  border-radius: 14px;
+  box-shadow: none;
+  min-width: 46px;
+  min-height: 24px;
+  color: transparent;
+  font-size: 0;
+}
 .glower-app switch:checked { background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
-.glower-app switch slider { background-color: #ffffff; border: none; }
+.glower-app switch image { color: transparent; opacity: 0; }
+.glower-app switch slider {
+  background-image: none;
+  background-color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  min-width: 20px;
+  min-height: 20px;
+  margin: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.glower-app switch:disabled { opacity: 0.45; }
 "#;
 
 /// Меню по правой кнопке, выпадающие списки, всплывающие окошки и подсказки —
@@ -150,6 +171,33 @@ tooltip, tooltip.background {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 tooltip label { color: #e8eaf2; padding: 2px 4px; }
+/* Окна вопросов («Стереть диск?», «Удалить навсегда?») */
+messagedialog.csd decoration, messagedialog decoration {
+  border-radius: 14px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55), 0 0 0 1px alpha(@glower_fg, 0.10);
+}
+messagedialog, messagedialog.background { background-color: @glower_bg; border-radius: 0 0 14px 14px; }
+messagedialog .titlebar, messagedialog headerbar { background-image: none; background-color: @glower_bg; border: none; box-shadow: none; min-height: 0; padding: 0; border-radius: 14px 14px 0 0; }
+messagedialog label { color: @glower_fg; }
+messagedialog .titlebar + box, messagedialog box.vertical > box.horizontal { padding: 8px 10px 4px; }
+messagedialog .dialog-action-area, messagedialog .dialog-action-box { padding: 4px 16px 16px 16px; border: none; margin: 0; }
+messagedialog .dialog-action-area button, messagedialog .dialog-action-box button {
+  background-image: none;
+  background-color: alpha(@glower_fg, 0.08);
+  border: none;
+  border-radius: 10px;
+  box-shadow: none;
+  padding: 9px 16px;
+  margin: 0 4px;
+  color: @glower_fg;
+}
+messagedialog .dialog-action-area button:hover, messagedialog .dialog-action-box button:hover { background-color: alpha(@glower_fg, 0.14); }
+messagedialog .dialog-action-area button:last-child, messagedialog .dialog-action-box button:last-child {
+  background-image: linear-gradient(140deg, @glower_accent, @glower_accent2);
+  color: #ffffff;
+  font-weight: 600;
+}
+messagedialog .dialog-action-area button:last-child label, messagedialog .dialog-action-box button:last-child label { color: #ffffff; }
 check, radio {
   min-width: 16px;
   min-height: 16px;
@@ -532,4 +580,24 @@ pub fn папка_изображений() -> PathBuf {
         }
     }
     корень.join("Изображения")
+}
+
+#[cfg(test)]
+mod проверки {
+    /// Одно непонятное GTK свойство — и стиль не грузится вовсе, а панель
+    /// и все программы падают на старте. Проверяем разбором до сборки
+    #[test]
+    fn стили_разбираются() {
+        use gtk::prelude::*;
+        if gtk::init().is_err() {
+            return;
+        }
+        let цвета = crate::theme::цвета(false, &("#3a86ff".into(), "#8b5cf6".into()));
+        for (имя, css) in [("программ", format!("{цвета}{}{}", super::СТИЛЬ, super::МЕНЮ)), ("панели", format!("{цвета}{}", crate::СТИЛЬ))] {
+            let п = gtk::CssProvider::new();
+            if let Err(е) = п.load_from_data(css.as_bytes()) {
+                panic!("стиль {имя}: {е}");
+            }
+        }
+    }
 }
