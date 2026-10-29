@@ -55,10 +55,14 @@ const ALLOWED = new Set([
   'sudo'
 ]);
 
-async function call(cmd, args = []){
+/* Срок по умолчанию — пять секунд: большинство команд отвечают сразу. Кому
+   нужно дольше (подключение к Wi-Fi, сопряжение Bluetooth, поиск устройств),
+   просит своим сроком — раньше этот срок молча терялся, и подключение
+   обрывалось на пятой секунде, посреди получения адреса. */
+async function call(cmd, args = [], { timeout = 5000 } = {}){
   if (!ALLOWED.has(cmd)) throw new Error('команда не разрешена: ' + cmd);
   try {
-    const { stdout } = await run(cmd, args, { timeout:5000, maxBuffer:1024 * 1024 });
+    const { stdout } = await run(cmd, args, { timeout, maxBuffer:1024 * 1024 });
     return stdout;
   } catch(e){
     /* без stderr сообщение «команда не выполнилась» ничего не объясняет —
@@ -354,12 +358,27 @@ export function wifi(allowNet){
         .map(l => l.split(':')).filter(x => /wireless/.test(x[1])).map(x => x[0]) };
     },
 
+    /* Подключиться. Пароль нужен только незнакомой защищённой сети; у
+       знакомой он сохранён. Неверный пароль nmcli запоминает вместе с
+       профилем сети, и дальше она уже не подключается вовсе, — поэтому
+       такой профиль сразу убираем. Ответ «нужен пароль» отличаем от
+       прочих бед: по нему быстрые настройки показывают поле ввода. */
     async 'sys.wifi.connect'({ ssid, password }){
       await need();
       if (!ssid) throw new Error('не указана сеть');
-      const args = ['device', 'wifi', 'connect', String(ssid)];
+      const args = ['-w', '30', 'device', 'wifi', 'connect', String(ssid)];
       if (password) args.push('password', String(password));
-      await call('nmcli', args);
+      try {
+        await call('nmcli', args, { timeout:40000 });
+      } catch(e){
+        const текст = String(e.message || '');
+        const пароль = /secret|password|psk|802-1x|key-mgmt|Secrets were required/i.test(текст);
+        if (password || пароль)
+          await call('nmcli', ['connection', 'delete', 'id', String(ssid)]).catch(() => {});
+        if (пароль)
+          throw new Error(password ? 'неверный ключ безопасности сети' : 'нужен ключ безопасности сети');
+        throw new Error(текст.replace(/^Error:\s*/i, '') || 'не удалось подключиться');
+      }
       return { ok:true, ssid };
     },
 
@@ -1589,10 +1608,12 @@ export function apps(allowLaunch){
         return м ? { адрес:м[1], имя:м[2] } : null;
       }).filter(Boolean);
 
-      for (const у of list.slice(0, 20)){
+      for (const у of list.slice(0, 30)){
         const про = await call('bluetoothctl', ['info', у.адрес]).catch(() => '');
         у.соединено = /Connected:\s*yes/i.test(про);
         у.своё = /Paired:\s*yes/i.test(про);
+        /* Что это за устройство — по нему значок: наушники, телефон, мышь */
+        у.вид = ((про.match(/^\s*Icon:\s*(\S+)/m) || [])[1] || '');
       }
 
       return { есть:true, включён, имя:поле('Name'), адрес:поле('Controller') || '',

@@ -101,10 +101,15 @@ pub fn календарь(кнопка: &gtk::Button) {
 
 // ------------------------------------------------------- быстрые настройки
 
-fn плитка(ряд: &gtk::Grid, место: i32, значок: &str, имя: &str, под: &str, вкл: bool, можно: bool) -> gtk::Button {
+/// Плитка быстрых настроек. С `ещё` — двойная, как в Windows 11: левая
+/// часть включает и выключает, правая «›» открывает список (сети, устройства)
+fn плитка(ряд: &gtk::Grid, место: i32, значок: &str, имя: &str, под: &str, вкл: bool, можно: bool, ещё: Option<Box<dyn Fn()>>) -> gtk::Button {
+    let ящик = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    ящик.style_context().add_class("tilebox");
     let б = gtk::Button::new();
     б.style_context().add_class("tile");
     if вкл {
+        ящик.style_context().add_class("on");
         б.style_context().add_class("on");
     }
     // Значок в кружке слева — как в быстрых настройках Windows 11 и GNOME:
@@ -124,13 +129,23 @@ fn плитка(ряд: &gtk::Grid, место: i32, значок: &str, имя:
     п.style_context().add_class("tile-sub");
     п.set_xalign(0.0);
     п.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    п.set_max_width_chars(12);
     к.add(&и);
     к.add(&п);
     строка.add(&к);
     б.add(&строка);
-    б.set_sensitive(можно);
     б.set_hexpand(true);
-    ряд.attach(&б, место % 2, место / 2, 1, 1);
+    ящик.add(&б);
+    if let Some(ещё) = ещё {
+        б.style_context().add_class("split");
+        let с = gtk::Button::from_icon_name(Some("go-next-symbolic"), gtk::IconSize::Button);
+        с.style_context().add_class("tile-more");
+        с.connect_clicked(move |_| ещё());
+        ящик.add(&с);
+    }
+    ящик.set_sensitive(можно);
+    ящик.set_hexpand(true);
+    ряд.attach(&ящик, место % 2, место / 2, 1, 1);
     б
 }
 
@@ -311,7 +326,8 @@ fn наполни_быстрые(меню: &gtk::Box) {
             }
             let w = разбери_wifi(о);
             плитки.remove(&место_wifi);
-            let б = плитка(&плитки, 0, if w.радио { "network-wireless-symbolic" } else { "network-wireless-disabled-symbolic" }, "Wi-Fi", &w.под, w.радио, !w.нет);
+            let м0 = меню.clone();
+            let б = плитка(&плитки, 0, if w.радио { "network-wireless-symbolic" } else { "network-wireless-disabled-symbolic" }, "Wi-Fi", &w.под, w.радио, !w.нет, Some(Box::new(move || сети_wifi(&м0))));
             let радио = w.радио;
             let м = меню.clone();
             б.connect_clicked(move |_| {
@@ -325,10 +341,6 @@ fn наполни_быстрые(меню: &gtk::Box) {
                     });
                 });
             });
-            if радио {
-                let м = меню.clone();
-                popup::строка(&сети, "Сети Wi-Fi  ›", false, move || сети_wifi(&м));
-            }
             плитки.show_all();
             сети.show_all();
         });
@@ -341,7 +353,8 @@ fn наполни_быстрые(меню: &gtk::Box) {
             }
             let b = разбери_bt(о);
             плитки.remove(&место_bt);
-            let б = плитка(&плитки, 1, if b.вкл { "bluetooth-active-symbolic" } else { "bluetooth-disabled-symbolic" }, "Bluetooth", &b.под, b.вкл, b.можно);
+            let м0 = меню.clone();
+            let б = плитка(&плитки, 1, if b.вкл { "bluetooth-active-symbolic" } else { "bluetooth-disabled-symbolic" }, "Bluetooth", &b.под, b.вкл, b.можно, Some(Box::new(move || устройства_bt(&м0))));
             let вкл = b.вкл;
             let м = меню.clone();
             б.connect_clicked(move |_| {
@@ -375,7 +388,7 @@ fn наполни_быстрые(меню: &gtk::Box) {
         (2, "dnd", "notifications-disabled-symbolic", "Не беспокоить", dnd, "включено", "выключено"),
         (3, "nightLight", "night-light-symbolic", "Ночной свет", ночной, "тёплые тона", "выключен"),
     ] {
-        let б = плитка(&плитки, место, значок, имя, if вкл { да } else { нет }, вкл, true);
+        let б = плитка(&плитки, место, значок, имя, if вкл { да } else { нет }, вкл, true, None);
         let м = меню.clone();
         б.connect_clicked(move |_| {
             наш_переключатель(ключ);
@@ -491,51 +504,627 @@ fn со_значком(б: &gtk::Button, значок: &str) {
     б.add(&ряд);
 }
 
+// ------------------------------------------------- списки Wi-Fi и Bluetooth
+//
+// Как в Windows 11: стрелка «›» на плитке открывает список прямо в быстрых
+// настройках. Сеть или устройство раскрывается щелчком, и под ним — кнопки:
+// подключиться, отключиться, забыть; у незнакомой защищённой сети — поле
+// для пароля. В Параметры ходить незачем.
+
+thread_local! {
+    /// Что раскрыто в списке: имя сети или адрес устройства
+    static РАСКРЫТО: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+fn раскрыто(что: &str) -> bool {
+    РАСКРЫТО.with(|р| *р.borrow() == что)
+}
+
+fn раскрой(что: &str) {
+    РАСКРЫТО.with(|р| {
+        let mut р = р.borrow_mut();
+        *р = if *р == что { String::new() } else { что.to_string() };
+    });
+}
+
+/// Шапка списка: «‹», имя, выключатель справа
+fn шапка_списка(меню: &gtk::Box, имя: &str, вкл: Option<bool>, переключи: impl Fn(bool) + 'static) {
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    ряд.style_context().add_class("qs-head");
+    let назад = gtk::Button::from_icon_name(Some("go-previous-symbolic"), gtk::IconSize::Button);
+    назад.style_context().add_class("round");
+    назад.set_tooltip_text(Some("Назад"));
+    let м = меню.clone();
+    назад.connect_clicked(move |_| {
+        РАСКРЫТО.with(|р| р.borrow_mut().clear());
+        наполни_быстрые(&м);
+    });
+    ряд.add(&назад);
+    let з = gtk::Label::new(Some(имя));
+    з.style_context().add_class("qs-title");
+    з.set_xalign(0.0);
+    з.set_hexpand(true);
+    ряд.add(&з);
+    if let Some(вкл) = вкл {
+        let в = gtk::Switch::new();
+        в.set_active(вкл);
+        в.set_valign(gtk::Align::Center);
+        в.connect_state_set(move |_, да| {
+            переключи(да);
+            glib::Propagation::Proceed
+        });
+        ряд.add(&в);
+    }
+    меню.add(&ряд);
+}
+
+/// Листание для длинного списка: растёт по содержимому, но не выше экрана
+fn листание_списка(список: &gtk::Box) -> gtk::ScrolledWindow {
+    let л = gtk::ScrolledWindow::new(gtk::Adjustment::NONE, gtk::Adjustment::NONE);
+    л.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
+    л.set_propagate_natural_height(true);
+    л.set_max_content_height(360);
+    л.add(список);
+    л
+}
+
+/// Низ списка: ссылка в Параметры и «обновить»
+fn низ_списка(меню: &gtk::Box, подпись: &str, раздел: &'static str, обнови: impl Fn() + 'static) {
+    меню.add(&gtk::Separator::new(gtk::Orientation::Horizontal));
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    ряд.style_context().add_class("qs-foot");
+    let ссылка = gtk::Button::with_label(подпись);
+    ссылка.style_context().add_class("qs-link");
+    ссылка.set_hexpand(true);
+    if let Some(п) = ссылка.child().and_then(|п| п.downcast::<gtk::Label>().ok()) {
+        п.set_xalign(0.0);
+    }
+    ссылка.connect_clicked(move |_| {
+        скажи("открой", json!({ "вид": "приложение", "id": "settings", "довод": { "section": раздел } }));
+        popup::закрой();
+    });
+    ряд.add(&ссылка);
+    let з = gtk::Button::from_icon_name(Some("view-refresh-symbolic"), gtk::IconSize::Button);
+    з.style_context().add_class("round");
+    з.set_tooltip_text(Some("Обновить"));
+    з.connect_clicked(move |_| обнови());
+    ряд.add(&з);
+    меню.add(&ряд);
+}
+
+/// Строка списка: значок, имя, подпись; щелчок раскрывает
+fn строка_списка(список: &gtk::Box, ключ: &str, значок: &str, имя: &str, под: &str, вкл: bool, перерисуй: Rc<dyn Fn()>) -> (gtk::Box, bool) {
+    let ящик = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    ящик.style_context().add_class("qs-item");
+    let открыто = раскрыто(ключ);
+    if вкл {
+        ящик.style_context().add_class("on");
+    }
+    if открыто {
+        ящик.style_context().add_class("open");
+    }
+    let б = gtk::Button::new();
+    б.style_context().add_class("qs-row");
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    let з = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Button);
+    з.set_pixel_size(18);
+    ряд.add(&з);
+    let т = gtk::Box::new(gtk::Orientation::Vertical, 1);
+    т.set_valign(gtk::Align::Center);
+    let и = gtk::Label::new(Some(имя));
+    и.set_xalign(0.0);
+    и.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    и.set_max_width_chars(26);
+    т.add(&и);
+    if !под.is_empty() {
+        let п = gtk::Label::new(Some(под));
+        п.style_context().add_class("qs-sub");
+        п.set_xalign(0.0);
+        т.add(&п);
+    }
+    ряд.add(&т);
+    б.add(&ряд);
+    let ключ = ключ.to_string();
+    б.connect_clicked(move |_| {
+        раскрой(&ключ);
+        перерисуй();
+    });
+    ящик.add(&б);
+    список.add(&ящик);
+    (ящик, открыто)
+}
+
+fn кнопка_действия(текст: &str, главная: bool) -> gtk::Button {
+    let б = gtk::Button::with_label(текст);
+    б.style_context().add_class("action");
+    if главная {
+        б.style_context().add_class("main");
+    }
+    б
+}
+
+/// Ряд кнопок под раскрытой строкой, справа — как в Windows
+fn ряд_действий(ящик: &gtk::Box) -> gtk::Box {
+    let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    ряд.set_halign(gtk::Align::End);
+    ряд.style_context().add_class("qs-actions");
+    ящик.add(&ряд);
+    ряд
+}
+
+fn значок_сигнала(сила: f64) -> &'static str {
+    if сила >= 75.0 {
+        "network-wireless-signal-excellent-symbolic"
+    } else if сила >= 50.0 {
+        "network-wireless-signal-good-symbolic"
+    } else if сила >= 25.0 {
+        "network-wireless-signal-ok-symbolic"
+    } else {
+        "network-wireless-signal-weak-symbolic"
+    }
+}
+
+/// Что знаем о Wi-Fi для списка
+#[derive(Default, Clone)]
+struct СетиWifi {
+    радио: bool,
+    устройство: String,
+    активная: Option<String>,
+    сохранённые: Vec<String>,
+    список: Vec<Value>,
+}
+
 /// Список сетей — отдельным видом внутри того же окошка.
 fn сети_wifi(меню: &gtk::Box) {
     popup::очисти(меню);
-    let м = меню.clone();
-    popup::строка(меню, "‹ Wi-Fi", false, move || наполни_быстрые(&м));
-    let ищу = popup::тихо(меню, "Ищу сети…");
+    шапка_списка(меню, "Wi-Fi", None, |_| {});
+    popup::тихо(меню, "Ищу сети…");
     меню.show_all();
     let м = меню.clone();
-    позови("sys.wifi.scan", json!({}), move |о| {
+    // Сперва — что включено и к чему подключены, потом сохранённые сети,
+    // потом сами сети вокруг
+    позови("sys.wifi.state", json!({}), move |о| {
         if !жив(&м) {
             return;
         }
-        м.remove(&ищу);
         let о = о.unwrap_or(Value::Null);
-        let сети = о["список"].as_array().or(о["list"].as_array()).cloned().unwrap_or_default();
-        let mut показано = 0;
-        for с in сети.iter().take(8) {
-            let Some(имя) = с["ssid"].as_str().or(с["имя"].as_str()).or(с["name"].as_str()) else { continue };
-            let сигнал = с["signal"].as_f64().or(с["сигнал"].as_f64());
-            let текст = match сигнал {
-                Some(s) => format!("{имя}   {}%", s.round()),
-                None => имя.to_string(),
+        let mut с = СетиWifi { радио: о["radio"].as_bool() == Some(true), ..Default::default() };
+        с.устройство = о["devices"].as_array().and_then(|у| у.first()).and_then(|у| у["device"].as_str()).unwrap_or("").to_string();
+        с.активная = о["active"].as_array().and_then(|а| {
+            а.iter()
+                .find(|а| а["type"].as_str().is_some_and(|т| т.contains("wireless") || т.contains("wifi")))
+                .and_then(|а| а["name"].as_str().map(String::from))
+        });
+        let м2 = м.clone();
+        позови("sys.wifi.saved", json!({}), move |о| {
+            с.сохранённые = о.ok().and_then(|о| о["list"].as_array().cloned()).unwrap_or_default().iter().filter_map(|х| х.as_str().map(String::from)).collect();
+            if !с.радио {
+                return покажи_сети(&м2, с);
+            }
+            let м3 = м2.clone();
+            crate::agent::позови_за("sys.wifi.scan", json!({}), 20, move |о| {
+                let о = о.unwrap_or(Value::Null);
+                с.список = о["list"].as_array().cloned().unwrap_or_default();
+                покажи_сети(&м3, с);
+            });
+        });
+    });
+}
+
+fn покажи_сети(меню: &gtk::Box, с: СетиWifi) {
+    if !жив(меню) {
+        return;
+    }
+    popup::очисти(меню);
+    let м = меню.clone();
+    шапка_списка(меню, "Wi-Fi", Some(с.радио), move |да| {
+        let м = м.clone();
+        позови("sys.wifi.radio", json!({ "on": да }), move |_| {
+            let м = м.clone();
+            glib::timeout_add_local_once(Duration::from_millis(1500), move || {
+                if жив(&м) {
+                    сети_wifi(&м)
+                }
+            });
+        });
+    });
+    let с = Rc::new(с);
+    let перерисуй: Rc<dyn Fn()> = {
+        let (м, с) = (меню.clone(), с.clone());
+        Rc::new(move || покажи_сети(&м, (*с).clone()))
+    };
+    if !с.радио {
+        popup::тихо(меню, "Wi-Fi выключен");
+    } else {
+        let список = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        let mut сети = с.список.clone();
+        // Подключённая — первой
+        сети.sort_by_key(|х| х["ssid"].as_str() != с.активная.as_deref());
+        for сеть in сети.iter().take(20) {
+            let Some(имя) = сеть["ssid"].as_str() else { continue };
+            let активна = с.активная.as_deref() == Some(имя) || сеть["active"].as_bool() == Some(true);
+            let защищена = сеть["secure"].as_bool() == Some(true);
+            let знакома = с.сохранённые.iter().any(|х| х == имя);
+            let под = if активна {
+                if защищена { "Подключено, защищено" } else { "Подключено" }
+            } else if знакома {
+                "Сохранена"
+            } else if защищена {
+                "Защищена"
+            } else {
+                "Открытая"
             };
-            let имя = имя.to_string();
-            let мм = м.clone();
-            popup::строка(&м, &текст, false, move || {
-                let мм = мм.clone();
-                позови("sys.wifi.connect", json!({ "ssid": имя }), move |о| {
-                    if о.is_ok() {
-                        if жив(&мм) {
-                            наполни_быстрые(&мм)
+            let значок = значок_сигнала(сеть["signal"].as_f64().unwrap_or(0.0));
+            let (ящик, открыто) = строка_списка(&список, имя, значок, имя, &crate::i18n::tr(под), активна, перерисуй.clone());
+            if !открыто {
+                continue;
+            }
+            let итог = gtk::Label::new(None);
+            итог.style_context().add_class("qs-note");
+            итог.set_xalign(0.0);
+            итог.set_line_wrap(true);
+            итог.set_no_show_all(true);
+            ящик.add(&итог);
+            let ряд = ряд_действий(&ящик);
+            if активна {
+                let б = кнопка_действия("Отключиться", false);
+                let (м, устр) = (меню.clone(), с.устройство.clone());
+                б.connect_clicked(move |б| {
+                    б.set_sensitive(false);
+                    let м = м.clone();
+                    позови("sys.wifi.disconnect", json!({ "device": устр }), move |_| {
+                        if жив(&м) {
+                            сети_wifi(&м)
                         }
+                    });
+                });
+                ряд.add(&б);
+            } else {
+                if знакома {
+                    let б = кнопка_действия("Забыть", false);
+                    let (м, имя) = (меню.clone(), имя.to_string());
+                    б.connect_clicked(move |_| {
+                        let м = м.clone();
+                        позови("sys.wifi.forget", json!({ "ssid": имя }), move |_| {
+                            if жив(&м) {
+                                сети_wifi(&м)
+                            }
+                        });
+                    });
+                    ряд.add(&б);
+                }
+                let б = кнопка_действия("Подключиться", true);
+                let (м, имя, ящик2, ряд2, итог2) = (меню.clone(), имя.to_string(), ящик.clone(), ряд.clone(), итог.clone());
+                let нужен_пароль = защищена && !знакома;
+                б.connect_clicked(move |_| {
+                    if нужен_пароль {
+                        спроси_пароль(&м, &ящик2, &ряд2, &итог2, &имя, None);
                     } else {
-                        // Пароль спрашивать здесь негде: за этим есть Параметры
-                        скажи("открой", json!({ "вид": "приложение", "id": "settings", "довод": { "section": "net" } }));
-                        popup::закрой();
+                        подключи_wifi(&м, &ящик2, &ряд2, &итог2, &имя, None);
                     }
                 });
-            });
-            показано += 1;
+                ряд.add(&б);
+            }
         }
-        if показано == 0 {
-            popup::тихо(&м, "Сетей не видно");
+        if с.список.is_empty() {
+            popup::тихо(&список, "Сетей не видно");
         }
+        меню.add(&листание_списка(&список));
+    }
+    let м = меню.clone();
+    низ_списка(меню, "Дополнительные параметры сети Wi-Fi", "net", move || {
+        popup::очисти(&м);
+        let м2 = м.clone();
+        шапка_списка(&м, "Wi-Fi", None, |_| {});
+        popup::тихо(&м, "Ищу сети…");
         м.show_all();
+        // Заново ищем по-настоящему: nmcli пересканирует эфир
+        crate::agent::позови_за("sys.wifi.scan", json!({ "rescan": true }), 25, move |_| {
+            if жив(&м2) {
+                сети_wifi(&м2)
+            }
+        });
+    });
+    меню.show_all();
+}
+
+/// Поле пароля под сетью — как «Введите ключ безопасности сети» в Windows
+fn спроси_пароль(меню: &gtk::Box, ящик: &gtk::Box, ряд: &gtk::Box, итог: &gtk::Label, имя: &str, беда: Option<&str>) {
+    for р in ряд.children() {
+        ряд.remove(&р);
+    }
+    let поле = gtk::Entry::new();
+    поле.set_visibility(false);
+    поле.set_placeholder_text(Some(&crate::i18n::tr("Ключ безопасности сети")));
+    поле.set_icon_from_icon_name(gtk::EntryIconPosition::Secondary, Some("view-reveal-symbolic"));
+    поле.set_icon_tooltip_text(gtk::EntryIconPosition::Secondary, Some(&crate::i18n::tr("Показать символы")));
+    поле.connect_icon_press(|п, _, _| п.set_visibility(!gtk::prelude::EntryExt::is_visible(п)));
+    поле.set_hexpand(true);
+    поле.style_context().add_class("qs-entry");
+    // Поле — над кнопками, во всю ширину
+    let есть = ящик.children().iter().any(|в| в.style_context().has_class("qs-entry"));
+    if !есть {
+        let позиция = ящик.children().len() as i32 - 1;
+        ящик.add(&поле);
+        ящик.reorder_child(&поле, позиция.max(1));
+    }
+    match беда {
+        Some(т) => {
+            итог.set_text(&crate::i18n::tr(т));
+            итог.style_context().add_class("bad");
+            итог.show();
+        }
+        None => итог.hide(),
+    }
+    let отмена = кнопка_действия("Отмена", false);
+    {
+        let (м, ключ) = (меню.clone(), имя.to_string());
+        отмена.connect_clicked(move |_| {
+            раскрой(&ключ);
+            сети_wifi(&м);
+        });
+    }
+    let далее = кнопка_действия("Далее", true);
+    let ход = {
+        let (м, ящик, ряд, итог, имя, поле) = (меню.clone(), ящик.clone(), ряд.clone(), итог.clone(), имя.to_string(), поле.clone());
+        Rc::new(move || {
+            let пароль = поле.text().to_string();
+            if пароль.chars().count() < 8 {
+                итог.set_text(&crate::i18n::tr("Ключ сети — не короче 8 знаков"));
+                итог.style_context().add_class("bad");
+                итог.show();
+                return;
+            }
+            подключи_wifi(&м, &ящик, &ряд, &итог, &имя, Some(пароль));
+        })
+    };
+    {
+        let ход = ход.clone();
+        далее.connect_clicked(move |_| ход());
+    }
+    поле.connect_activate(move |_| ход());
+    ряд.add(&отмена);
+    ряд.add(&далее);
+    ящик.show_all();
+    if беда.is_none() {
+        итог.hide();
+    }
+    поле.grab_focus();
+}
+
+fn подключи_wifi(меню: &gtk::Box, ящик: &gtk::Box, ряд: &gtk::Box, итог: &gtk::Label, имя: &str, пароль: Option<String>) {
+    ряд.set_sensitive(false);
+    итог.style_context().remove_class("bad");
+    итог.set_text(&crate::i18n::tr("Подключение…"));
+    итог.show();
+    let доводы = match &пароль {
+        Some(п) => json!({ "ssid": имя, "password": п }),
+        None => json!({ "ssid": имя }),
+    };
+    let (м, ящик, ряд, итог, имя) = (меню.clone(), ящик.clone(), ряд.clone(), итог.clone(), имя.to_string());
+    crate::agent::позови_за("sys.wifi.connect", доводы, 50, move |о| {
+        if !жив(&м) {
+            return;
+        }
+        match о {
+            Ok(_) => {
+                РАСКРЫТО.with(|р| р.borrow_mut().clear());
+                сети_wifi(&м);
+            }
+            Err(е) => {
+                ряд.set_sensitive(true);
+                if е.contains("ключ") {
+                    let беда = if е.contains("неверный") { Some("Неверный ключ безопасности сети") } else { None };
+                    спроси_пароль(&м, &ящик, &ряд, &итог, &имя, беда);
+                } else {
+                    итог.set_text(&format!("{}: {е}", crate::i18n::tr("Не подключилось")));
+                    итог.style_context().add_class("bad");
+                    итог.show();
+                }
+            }
+        }
+    });
+}
+
+/// Значок устройства Bluetooth по его виду (Icon у bluetoothctl)
+fn значок_устройства(вид: &str) -> &'static str {
+    match вид {
+        в if в.starts_with("audio-head") || в == "audio-card" => "audio-headphones-symbolic",
+        в if в.starts_with("audio") => "audio-speakers-symbolic",
+        "phone" => "phone-symbolic",
+        "input-mouse" | "input-tablet" => "input-mouse-symbolic",
+        "input-keyboard" => "input-keyboard-symbolic",
+        "input-gaming" => "input-gaming-symbolic",
+        в if в.starts_with("video") => "video-display-symbolic",
+        "computer" => "computer-symbolic",
+        "camera-photo" | "camera-video" => "camera-photo-symbolic",
+        _ => "bluetooth-symbolic",
+    }
+}
+
+/// Имя устройства — или адрес вместо него. Безымянные устройства (адрес
+/// через дефисы) в «новых» не показываем: их в эфире десятки, и узнать по
+/// ним ничего нельзя — Windows делает так же
+fn безымянное(имя: &str) -> bool {
+    let ч: String = имя.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    ч.len() >= 12 && имя.chars().all(|c| c.is_ascii_hexdigit() || c == '-' || c == ':')
+}
+
+fn устройства_bt(меню: &gtk::Box) {
+    popup::очисти(меню);
+    шапка_списка(меню, "Bluetooth", None, |_| {});
+    popup::тихо(меню, "Смотрю устройства…");
+    меню.show_all();
+    let м = меню.clone();
+    позови("sys.bt", json!({}), move |о| {
+        if жив(&м) {
+            покажи_bt(&м, о.unwrap_or(Value::Null), true);
+        }
+    });
+}
+
+/// `искать` — запустить поиск новых устройств (он идёт несколько секунд)
+fn покажи_bt(меню: &gtk::Box, о: Value, искать: bool) {
+    popup::очисти(меню);
+    let вкл = о["включён"].as_bool() == Some(true);
+    let м = меню.clone();
+    шапка_списка(меню, "Bluetooth", Some(вкл), move |да| {
+        let м = м.clone();
+        позови("sys.bt.power", json!({ "включить": да, "on": да }), move |о| {
+            if !жив(&м) {
+                return;
+            }
+            if let Err(е) = о {
+                popup::тихо(&м, &format!("{}: {е}", crate::i18n::tr("Не вышло")));
+                м.show_all();
+                return;
+            }
+            let м = м.clone();
+            glib::timeout_add_local_once(Duration::from_millis(900), move || {
+                if жив(&м) {
+                    устройства_bt(&м)
+                }
+            });
+        });
+    });
+    let о = Rc::new(о);
+    let перерисуй: Rc<dyn Fn()> = {
+        let (м, о) = (меню.clone(), о.clone());
+        Rc::new(move || покажи_bt(&м, (*о).clone(), false))
+    };
+    if о["есть"].as_bool() == Some(false) {
+        popup::тихо(меню, о["почему"].as_str().unwrap_or("Bluetooth на машине нет"));
+    } else if !вкл {
+        popup::тихо(меню, "Bluetooth выключен");
+    } else {
+        let список = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        let все = о["list"].as_array().cloned().unwrap_or_default();
+        let mut свои: Vec<&Value> = все.iter().filter(|у| у["своё"].as_bool() == Some(true)).collect();
+        свои.sort_by_key(|у| у["соединено"].as_bool() != Some(true));
+        let новые: Vec<&Value> = все.iter().filter(|у| у["своё"].as_bool() != Some(true) && !безымянное(у["имя"].as_str().unwrap_or(""))).collect();
+        let заголовок = |т: &str| {
+            let л = gtk::Label::new(Some(&crate::i18n::tr(т)));
+            л.style_context().add_class("qs-section");
+            л.set_xalign(0.0);
+            л
+        };
+        if !свои.is_empty() {
+            список.add(&заголовок("Ваши устройства"));
+        }
+        for у in свои {
+            добавь_устройство(меню, &список, у, true, перерисуй.clone());
+        }
+        список.add(&заголовок("Новые устройства"));
+        for у in &новые {
+            добавь_устройство(меню, &список, у, false, перерисуй.clone());
+        }
+        if искать {
+            let ищу = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            ищу.style_context().add_class("qs-note");
+            let к = gtk::Spinner::new();
+            к.start();
+            ищу.add(&к);
+            ищу.add(&gtk::Label::new(Some(&crate::i18n::tr("Ищу устройства рядом…"))));
+            список.add(&ищу);
+            let м = меню.clone();
+            crate::agent::позови_за("sys.bt.scan", json!({ "секунд": 8 }), 25, move |о| {
+                // Человек мог уже раскрыть строку — поиск её не закрывает
+                if жив(&м) {
+                    if let Ok(о) = о {
+                        покажи_bt(&м, о, false);
+                    }
+                }
+            });
+        } else if новые.is_empty() {
+            popup::тихо(&список, "Поблизости ничего не нашлось. Включите на устройстве режим сопряжения и обновите список");
+        }
+        меню.add(&листание_списка(&список));
+    }
+    let м = меню.clone();
+    let о2 = о.clone();
+    низ_списка(меню, "Дополнительные параметры Bluetooth", "bt", move || {
+        if жив(&м) {
+            покажи_bt(&м, (*о2).clone(), true);
+        }
+    });
+    меню.show_all();
+}
+
+fn добавь_устройство(меню: &gtk::Box, список: &gtk::Box, у: &Value, своё: bool, перерисуй: Rc<dyn Fn()>) {
+    let адрес = у["адрес"].as_str().unwrap_or("").to_string();
+    let имя = у["имя"].as_str().unwrap_or(&адрес).to_string();
+    let соединено = у["соединено"].as_bool() == Some(true);
+    let под = if !своё {
+        ""
+    } else if соединено {
+        "Подключено"
+    } else {
+        "Не подключено"
+    };
+    let (ящик, открыто) = строка_списка(список, &адрес, значок_устройства(у["вид"].as_str().unwrap_or("")), &имя, &crate::i18n::tr(под), соединено, перерисуй);
+    if !открыто {
+        return;
+    }
+    let итог = gtk::Label::new(None);
+    итог.style_context().add_class("qs-note");
+    итог.set_xalign(0.0);
+    итог.set_line_wrap(true);
+    итог.set_no_show_all(true);
+    ящик.add(&итог);
+    let ряд = ряд_действий(&ящик);
+    // Шаги по очереди: новое — сопрячь, доверять (чтобы потом подключалось
+    // само) и подключить; своё — только подключить или отключить
+    let сделай = {
+        let (м, итог, ряд, адрес) = (меню.clone(), итог.clone(), ряд.clone(), адрес.clone());
+        move |шаги: Vec<&'static str>, словами: &'static str| {
+            ряд.set_sensitive(false);
+            итог.style_context().remove_class("bad");
+            итог.set_text(&crate::i18n::tr(словами));
+            итог.show();
+            шаг_bt(м.clone(), итог.clone(), ряд.clone(), адрес.clone(), шаги, 0);
+        }
+    };
+    if своё {
+        let удалить = кнопка_действия("Удалить", false);
+        let с = сделай.clone();
+        удалить.connect_clicked(move |_| с(vec!["remove"], "Удаляю…"));
+        ряд.add(&удалить);
+        let б = if соединено { кнопка_действия("Отключить", false) } else { кнопка_действия("Подключить", true) };
+        let с = сделай.clone();
+        б.connect_clicked(move |_| if соединено { с(vec!["disconnect"], "Отключаю…") } else { с(vec!["connect"], "Подключаю…") });
+        ряд.add(&б);
+    } else {
+        let б = кнопка_действия("Подключить", true);
+        let с = сделай.clone();
+        б.connect_clicked(move |_| с(vec!["pair", "trust", "connect"], "Сопрягаю… Подтвердите на устройстве, если оно спросит"));
+        ряд.add(&б);
+    }
+}
+
+fn шаг_bt(м: gtk::Box, итог: gtk::Label, ряд: gtk::Box, адрес: String, шаги: Vec<&'static str>, i: usize) {
+    if i >= шаги.len() {
+        РАСКРЫТО.with(|р| р.borrow_mut().clear());
+        if жив(&м) {
+            устройства_bt(&м);
+        }
+        return;
+    }
+    let что = шаги[i];
+    crate::agent::позови_за("sys.bt.device", json!({ "action": что, "адрес": адрес }), 40, move |о| {
+        if !жив(&м) {
+            return;
+        }
+        match о {
+            // «Доверять» может не пройти у иных устройств — это не беда
+            Ok(_) => шаг_bt(м, итог, ряд, адрес, шаги, i + 1),
+            Err(_) if что == "trust" => шаг_bt(м, итог, ряд, адрес, шаги, i + 1),
+            Err(е) => {
+                ряд.set_sensitive(true);
+                итог.set_text(&format!("{}: {е}", crate::i18n::tr("Не вышло")));
+                итог.style_context().add_class("bad");
+                итог.show();
+            }
+        }
     });
 }
 

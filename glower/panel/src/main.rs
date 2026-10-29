@@ -141,17 +141,50 @@ window.bar button.updates { color: #8cc8ff; }
 }
 .menu button:hover { background-color: alpha(@glower_fg, 0.12); }
 .menu button.danger:hover { background-color: rgba(220, 70, 70, 0.35); }
-.menu button.tile {
+/* Плитка — ящик: в нём кнопка «вкл/выкл» и, у Wi-Fi и Bluetooth, «›» */
+.menu .tilebox {
   background-color: alpha(@glower_fg, 0.07);
   border-radius: 14px;
-  padding: 10px 10px;
   box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.06);
 }
-.menu button.tile:hover { background-color: alpha(@glower_fg, 0.12); }
-.menu button.tile.on { background-image: linear-gradient(135deg, @glower_accent, @glower_accent2); box-shadow: 0 4px 14px alpha(@glower_accent, 0.35); }
-.menu button.tile.on:hover { background-image: linear-gradient(135deg, shade(@glower_accent, 1.08), shade(@glower_accent2, 1.08)); }
-.menu button.tile.on, .menu button.tile.on * { color: #ffffff; }
-.menu button.tile:disabled { opacity: 0.45; }
+.menu .tilebox.on { background-image: linear-gradient(135deg, @glower_accent, @glower_accent2); box-shadow: 0 4px 14px alpha(@glower_accent, 0.35); }
+.menu .tilebox.on, .menu .tilebox.on * { color: #ffffff; }
+.menu .tilebox:disabled { opacity: 0.45; }
+.menu .tilebox button.tile { background: none; border-radius: 14px; padding: 10px 10px; }
+.menu .tilebox button.tile.split { border-radius: 14px 0 0 14px; }
+.menu .tilebox button.tile:hover, .menu .tilebox button.tile-more:hover { background-color: alpha(@glower_fg, 0.08); }
+.menu .tilebox.on button.tile:hover, .menu .tilebox.on button.tile-more:hover { background-color: rgba(255, 255, 255, 0.14); }
+.menu .tilebox button.tile-more {
+  background: none;
+  border-radius: 0 14px 14px 0;
+  padding: 0 8px;
+  min-width: 0;
+  box-shadow: inset 1px 0 alpha(@glower_fg, 0.10);
+}
+.menu .tilebox.on button.tile-more { box-shadow: inset 1px 0 rgba(255, 255, 255, 0.25); }
+/* Списки сетей и устройств */
+.menu .qs-head { padding: 2px 2px 8px 2px; }
+.menu switch {
+  background-image: none; background-color: alpha(@glower_fg, 0.18); border: none; border-radius: 14px;
+  box-shadow: none; min-width: 42px; min-height: 22px; color: transparent; font-size: 0;
+}
+.menu switch:checked { background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); }
+.menu switch image { color: transparent; opacity: 0; }
+.menu switch slider { background-image: none; background-color: #ffffff; border: none; border-radius: 9px; min-width: 18px; min-height: 18px; margin: 2px; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.menu .qs-title { font-size: 15px; font-weight: 600; }
+.menu .qs-section { font-size: 12px; font-weight: 600; opacity: 0.7; padding: 8px 8px 2px; }
+.menu .qs-item { border-radius: 10px; }
+.menu .qs-item.open { background-color: alpha(@glower_fg, 0.07); padding-bottom: 8px; }
+.menu .qs-item.on { box-shadow: inset 3px 0 @glower_accent; }
+.menu .qs-item button.qs-row { padding: 9px 10px; border-radius: 10px; }
+.menu .qs-sub { font-size: 11px; opacity: 0.65; }
+.menu .qs-actions { padding: 0 10px; }
+.menu .qs-actions button { padding: 6px 16px; }
+.menu .qs-note { font-size: 12px; opacity: 0.8; padding: 0 12px; }
+.menu .qs-note.bad { color: #ff8a8a; opacity: 1; }
+.menu entry.qs-entry { margin: 0 10px; }
+.menu button.qs-link { font-size: 12px; opacity: 0.8; padding: 6px 8px; }
+.menu .qs-foot { padding: 4px 2px 0 2px; }
 .menu .tile-icon { min-width: 32px; min-height: 32px; border-radius: 16px; background-color: alpha(@glower_fg, 0.10); }
 .menu button.tile.on .tile-icon { background-color: rgba(255, 255, 255, 0.22); }
 .menu .slider-icon { opacity: 0.8; min-width: 20px; }

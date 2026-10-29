@@ -229,6 +229,11 @@ $1
 # окно с вопросом «разрешить?» показывает он — без него запросы прав
 # проваливаются молча
 [ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
+# Агент сопряжения Bluetooth: без него сопряжение из быстрых настроек
+# отказывает у телефонов и наушников, которые спрашивают подтверждение.
+# NoInputNoOutput — подтверждаем сами, а код, если нужен, человек сверяет
+# на самом устройстве
+command -v bt-agent >/dev/null 2>&1 && bt-agent -c NoInputNoOutput >/dev/null 2>&1 &
 GLOWER_URL="http://localhost:$PORT/"
 GLOWER_PORT="$PORT"
 export GLOWER_URL GLOWER_PORT
