@@ -852,3 +852,183 @@ mod проверки {
         assert_eq!(п, vec![PathBuf::from("/x")]);
     }
 }
+
+// ------------------------------------------------------------- «Создать»
+//
+// Одно подменю «Создать», как в Windows: папка и текстовый документ — свои,
+// рисунок — для нашего Paint, а дальше то, что добавили другие программы.
+// В Windows программы кладут записи ShellNew в реестр; в Linux для этого
+// есть папка «Шаблоны» человека (её же читает Nautilus) и
+// /usr/share/templates с ярлыками-описаниями (так делают программы KDE).
+// LibreOffice своих шаблонов не кладёт — его документы добавляем сами, если
+// он стоит: пустой файл .odt он открывает как новый документ.
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Откуда {
+    Папка,
+    Пустой,
+    /// Белый холст для Paint
+    Холст,
+    Копия(PathBuf),
+}
+
+#[derive(Clone, Debug)]
+pub struct Шаблон {
+    /// Как называется в меню: «Текстовый документ»
+    pub имя: String,
+    /// Имя нового файла: «Новый текстовый документ.txt»
+    pub файл: String,
+    pub значок: String,
+    pub откуда: Откуда,
+}
+
+fn шаблон(имя: &str, файл: &str, значок: &str, откуда: Откуда) -> Шаблон {
+    Шаблон { имя: crate::i18n::tr(имя), файл: crate::i18n::tr(файл), значок: значок.into(), откуда }
+}
+
+/// Поле ярлыка на языке системы: Name[ru], потом Name
+fn поле_ярлыка(текст: &str, ключ: &str) -> Option<String> {
+    let язык = std::env::var("LANG").unwrap_or_default();
+    let язык = язык.split(['.', '@']).next().unwrap_or("");
+    let кор = язык.split('_').next().unwrap_or("");
+    for к in [format!("{ключ}[{язык}]"), format!("{ключ}[{кор}]"), ключ.to_string()] {
+        if let Some(з) = текст.lines().find_map(|с| с.strip_prefix(&format!("{к}="))) {
+            if !з.trim().is_empty() {
+                return Some(з.trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Всё, что можно создать: сначала своё, потом от программ
+pub fn шаблоны() -> Vec<Шаблон> {
+    let mut все = vec![
+        шаблон("Папку", "Новая папка", "folder-new-symbolic", Откуда::Папка),
+        шаблон("Текстовый документ", "Новый текстовый документ.txt", "text-x-generic-symbolic", Откуда::Пустой),
+        шаблон("Рисунок", "Новый рисунок.png", "image-x-generic-symbolic", Откуда::Холст),
+    ];
+    let есть = |id: &str| gio::DesktopAppInfo::new(id).is_some();
+    if есть("libreoffice-writer.desktop") {
+        все.push(шаблон("Документ Writer", "Новый документ.odt", "x-office-document-symbolic", Откуда::Пустой));
+    }
+    if есть("libreoffice-calc.desktop") {
+        все.push(шаблон("Таблицу Calc", "Новая таблица.ods", "x-office-spreadsheet-symbolic", Откуда::Пустой));
+    }
+    if есть("libreoffice-impress.desktop") {
+        все.push(шаблон("Презентацию Impress", "Новая презентация.odp", "x-office-presentation-symbolic", Откуда::Пустой));
+    }
+    // Папка «Шаблоны» человека: каждый файл в ней — пункт меню
+    if let Some(папка) = glib::user_special_dir(glib::UserDirectory::Templates).filter(|п| п != &glib::home_dir()) {
+        let mut файлы: Vec<PathBuf> = std::fs::read_dir(&папка).into_iter().flatten().flatten().map(|ф| ф.path()).filter(|п| п.is_file()).collect();
+        файлы.sort();
+        for ф in файлы {
+            let имя_файла = ф.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+            if имя_файла.starts_with('.') {
+                continue;
+            }
+            let основа = ф.file_stem().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+            все.push(Шаблон { имя: основа, файл: имя_файла, значок: "text-x-generic-symbolic".into(), откуда: Откуда::Копия(ф) });
+        }
+    }
+    // Ярлыки-описания программ: Name, Icon и URL — путь к образцу
+    for корень in [glib::user_data_dir().join("templates"), PathBuf::from("/usr/share/templates")] {
+        let mut ярлыки: Vec<PathBuf> = std::fs::read_dir(&корень).into_iter().flatten().flatten().map(|ф| ф.path()).filter(|п| п.extension().is_some_and(|р| р == "desktop")).collect();
+        ярлыки.sort();
+        for я in ярлыки {
+            let Ok(текст) = std::fs::read_to_string(&я) else { continue };
+            if !текст.lines().any(|с| с.trim() == "Type=Link") {
+                continue;
+            }
+            let (Some(имя), Some(адрес)) = (поле_ярлыка(&текст, "Name"), поле_ярлыка(&текст, "URL")) else { continue };
+            let образец = if адрес.starts_with('/') { PathBuf::from(&адрес) } else { корень.join(&адрес) };
+            if !образец.is_file() {
+                continue;
+            }
+            let файл = образец.file_name().map(|и| и.to_string_lossy().to_string()).unwrap_or_default();
+            let имя = имя.trim_end_matches("...").trim_end_matches('…').to_string();
+            // Такое расширение уже есть (LibreOffice, своё) — второй раз не надо
+            let хвост = Path::new(&файл).extension().map(|р| р.to_string_lossy().to_lowercase());
+            if все.iter().any(|ш| Path::new(&ш.файл).extension().map(|р| р.to_string_lossy().to_lowercase()) == хвост && хвост.is_some()) {
+                continue;
+            }
+            let значок = поле_ярлыка(&текст, "Icon").unwrap_or_else(|| "text-x-generic-symbolic".into());
+            все.push(Шаблон { имя, файл, значок, откуда: Откуда::Копия(образец) });
+        }
+    }
+    все
+}
+
+/// Создать по шаблону в папке под именем `имя`. Готовое — в журнал Ctrl+Z
+pub fn создай_по_шаблону(папка: &Path, имя: &str, ш: &Шаблон) -> std::io::Result<PathBuf> {
+    let путь = папка.join(имя);
+    if путь.exists() {
+        return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, crate::i18n::tr("такое имя уже занято")));
+    }
+    match &ш.откуда {
+        Откуда::Папка => std::fs::create_dir(&путь)?,
+        Откуда::Пустой => std::fs::write(&путь, b"")?,
+        Откуда::Копия(образец) => {
+            std::fs::copy(образец, &путь)?;
+        }
+        Откуда::Холст => {
+            let к = gdk::gdk_pixbuf::Pixbuf::new(gdk::gdk_pixbuf::Colorspace::Rgb, false, 8, 1280, 720)
+                .ok_or_else(|| std::io::Error::other("нет памяти под холст"))?;
+            к.fill(0xffffffff);
+            к.savev(&путь, "png", &[]).map_err(|е| std::io::Error::other(е.to_string()))?;
+        }
+    }
+    запомни(Дело::Создание(vec![путь.clone()]));
+    Ok(путь)
+}
+
+/// Подменю «Создать ▸»: `выбрано` получает шаблон, имя спрашивает вызвавший
+pub fn меню_создать(выбрано: impl Fn(Шаблон) + Clone + 'static) -> gtk::MenuItem {
+    let под = gtk::Menu::new();
+    let все = шаблоны();
+    for (i, ш) in все.iter().enumerate() {
+        // Своё отделено от добавленного программами, как в Windows
+        if i == 1 || (i == 3 && все.len() > 3) {
+            под.append(&gtk::SeparatorMenuItem::new());
+        }
+        let п = gtk::MenuItem::new();
+        let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        let з = gtk::Image::from_icon_name(Some(&ш.значок), gtk::IconSize::Menu);
+        з.set_pixel_size(16);
+        ряд.add(&з);
+        let л = gtk::Label::new(Some(&ш.имя));
+        л.set_xalign(0.0);
+        ряд.add(&л);
+        п.add(&ряд);
+        let (ш, выбрано) = (ш.clone(), выбрано.clone());
+        п.connect_activate(move |_| {
+            let (ш, выбрано) = (ш.clone(), выбрано.clone());
+            glib::idle_add_local_once(move || выбрано(ш));
+        });
+        под.append(&п);
+    }
+    let пункт = gtk::MenuItem::with_label(&crate::i18n::tr("Создать"));
+    пункт.set_submenu(Some(&под));
+    пункт
+}
+
+#[cfg(test)]
+mod проверки_создать {
+    use super::*;
+
+    #[test]
+    fn ярлык_шаблона_читается() {
+        std::env::set_var("LANG", "ru_RU.UTF-8");
+        let т = "[Desktop Entry]\nName=Text File...\nName[ru]=Текстовый файл...\nType=Link\nURL=.source/TextFile.txt\nIcon=text-plain\n";
+        assert_eq!(поле_ярлыка(т, "Name").as_deref(), Some("Текстовый файл..."));
+        assert_eq!(поле_ярлыка(т, "URL").as_deref(), Some(".source/TextFile.txt"));
+        assert_eq!(поле_ярлыка(т, "Comment"), None);
+    }
+
+    #[test]
+    fn свои_пункты_первыми() {
+        let в = шаблоны();
+        assert_eq!(в[0].откуда, Откуда::Папка);
+        assert!(в.iter().any(|ш| ш.откуда == Откуда::Холст));
+    }
+}

@@ -143,6 +143,24 @@ window.bar button.updates { color: #8cc8ff; }
 }
 .menu button:hover { background-color: alpha(@glower_fg, 0.12); }
 .menu button.danger:hover { background-color: rgba(220, 70, 70, 0.35); }
+/* Alt+F4 на столе — «Завершение работы» */
+window.bye { background-color: transparent; }
+.bye-card {
+  background-color: @glower_bg;
+  border-radius: 18px;
+  padding: 22px 22px 16px 22px;
+  box-shadow: inset 0 0 0 1px alpha(@glower_fg, 0.10), 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.bye-card, .bye-card * { color: @glower_fg; font-family: sans-serif; }
+.bye-title { font-size: 18px; font-weight: 600; }
+.bye-sub { opacity: 0.7; }
+.bye-list { background: none; margin-top: 6px; }
+.bye-list row { border-radius: 10px; padding: 9px 12px; margin: 1px 0; }
+.bye-list row:hover { background-color: alpha(@glower_fg, 0.07); }
+.bye-list row:selected { background-image: linear-gradient(90deg, alpha(@glower_accent, 0.32), alpha(@glower_accent2, 0.18)); box-shadow: inset 3px 0 @glower_accent; }
+.bye-list row:selected, .bye-list row:selected * { color: #ffffff; }
+.bye-hint { font-size: 11px; opacity: 0.5; margin-top: 2px; }
+.bye-card button.action { padding: 7px 22px; }
 /* Плитка — ящик: в нём кнопка «вкл/выкл» и, у Wi-Fi и Bluetooth, «›» */
 .menu .tilebox {
   background-color: alpha(@glower_fg, 0.07);

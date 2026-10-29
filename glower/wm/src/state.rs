@@ -124,6 +124,8 @@ pub struct Glower {
     pub значок_переноса: Option<(WlSurface, Point<i32, Logical>)>,
     /// Куда встанет окно, если отпустить его сейчас (тащат к краю экрана)
     pub подсказка_края: Option<Rectangle<i32, Logical>>,
+    /// Жест тачпада тремя и более пальцами: путь с его начала
+    pub жест: Option<Point<f64, Logical>>,
     /// Над какой поверхностью была мышь в прошлый раз, пока она захвачена
     pub фокус_захвата: Option<WlSurface>,
     /// Где мышь. Своя копия: у указателя спрашивать нельзя, пока идёт
@@ -242,6 +244,7 @@ impl Glower {
             cursor_status: CursorImageStatus::default_named(),
             значок_переноса: None,
             подсказка_края: None,
+            жест: None,
             фокус_захвата: None,
             мышь: Point::from((640.0, 400.0)),
             замок: None,

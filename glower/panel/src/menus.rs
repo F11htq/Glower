@@ -1300,6 +1300,12 @@ fn спроси(меню: &gtk::Box, кнопка: &gtk::Button, id: &'static st
 }
 
 fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static str) {
+    выполни(Some(кнопка.clone()), id, имя);
+}
+
+/// Выключить, перезагрузить, усыпить… `кнопка` — где показать отказ; без
+/// неё (окно Alt+F4) отказ приходит уведомлением
+fn выполни(кнопка: Option<gtk::Button>, id: &'static str, имя: &'static str) {
     popup::закрой();
     let id = if id == "switch" { "logout" } else { id };
     if id == "lock" {
@@ -1313,7 +1319,7 @@ fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static s
         "logout" => "Выхожу из системы…",
         _ => "Завершение работы…",
     });
-    let к = кнопка.clone();
+    let к = кнопка;
     // Перезагрузка и выключение — с чистого листа: стол забывает окна,
     // чтобы после включения ничего не открылось само. Ему хватает
     // полсекунды
@@ -1333,15 +1339,213 @@ fn сделай(кнопка: &gtk::Button, id: &'static str, имя: &'static s
             // Машина отказалась — убираем занавес и говорим почему: иначе
             // человек остаётся перед чёрным экраном работающего компьютера
             unsafe { з.destroy() };
-            popup::открой(&к, "отказ", Где::Справа, 240, |м| {
-                let т = gtk::Label::new(Some(&format!("Не вышло: {имя}")));
-                т.style_context().add_class("title");
-                т.set_xalign(0.0);
-                м.add(&т);
-                popup::тихо(м, &е);
-            });
+            match &к {
+                Some(к) => popup::открой(к, "отказ", Где::Справа, 240, |м| {
+                    let т = gtk::Label::new(Some(&format!("Не вышло: {имя}")));
+                    т.style_context().add_class("title");
+                    т.set_xalign(0.0);
+                    м.add(&т);
+                    popup::тихо(м, &е);
+                }),
+                None => crate::notify::покажи(&format!("Не вышло: {имя}"), &е, "⚠️"),
+            }
         }
     }));
+}
+
+// ------------------------------------------------- Alt+F4 на рабочем столе
+
+thread_local! {
+    static ОКНО_ВЫХОДА: RefCell<Option<gtk::Window>> = const { RefCell::new(None) };
+}
+
+fn значок_действия(id: &str) -> &'static str {
+    match id {
+        "lock" => "system-lock-screen-symbolic",
+        "switch" => "system-users-symbolic",
+        "logout" => "system-log-out-symbolic",
+        "suspend" => "weather-clear-night-symbolic",
+        "reboot" | "update-reboot" => "view-refresh-symbolic",
+        _ => "system-shutdown-symbolic",
+    }
+}
+
+/// «Завершение работы» — как Alt+F4 на рабочем столе Windows: список
+/// действий, стрелки выбирают, Enter делает, Esc — передумали
+pub fn окно_выхода() {
+    // Второй Alt+F4, пока окно открыто, — закрыть его
+    if let Some(о) = ОКНО_ВЫХОДА.with(|о| о.borrow_mut().take()) {
+        unsafe { о.destroy() };
+        return;
+    }
+    popup::закрой();
+    let о = gtk::Window::new(gtk::WindowType::Toplevel);
+    о.set_decorated(false);
+    о.set_app_paintable(true);
+    if let Some(в) = gtk::prelude::GtkWindowExt::screen(&о).and_then(|э| э.rgba_visual()) {
+        о.set_visual(Some(&в));
+    }
+    о.style_context().add_class("bye");
+    о.init_layer_shell();
+    о.set_layer(Layer::Overlay);
+    о.set_namespace("glower-bye");
+    for край in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+        о.set_anchor(край, true);
+    }
+    о.set_exclusive_zone(-1);
+    о.set_keyboard_mode(KeyboardMode::Exclusive);
+    // Затемнение вокруг — плавно
+    let начало = std::time::Instant::now();
+    о.connect_draw(move |о, к| {
+        let t = (начало.elapsed().as_secs_f64() / 0.18).min(1.0);
+        к.set_operator(gtk::cairo::Operator::Source);
+        к.set_source_rgba(0.02, 0.03, 0.06, 0.55 * t);
+        let _ = к.paint();
+        if t < 1.0 {
+            о.queue_draw();
+        }
+        glib::Propagation::Proceed
+    });
+    let закрой = |о: &gtk::Window| {
+        ОКНО_ВЫХОДА.with(|в| в.borrow_mut().take());
+        unsafe { о.destroy() };
+    };
+
+    let фон = gtk::EventBox::new();
+    фон.set_visible_window(false);
+    {
+        let о = о.clone();
+        фон.connect_button_press_event(move |_, _| {
+            закрой(&о);
+            glib::Propagation::Stop
+        });
+    }
+    let карточка = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    карточка.style_context().add_class("bye-card");
+    карточка.set_halign(gtk::Align::Center);
+    карточка.set_valign(gtk::Align::Center);
+    карточка.set_size_request(380, -1);
+    let ящик = gtk::EventBox::new();
+    ящик.connect_button_press_event(|_, _| glib::Propagation::Stop);
+    ящик.set_halign(gtk::Align::Center);
+    ящик.set_valign(gtk::Align::Center);
+    ящик.add(&карточка);
+
+    let шапка = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    if let Some(з) = crate::apps::картинка_системы("logo-64.png", 40, 40) {
+        шапка.add(&gtk::Image::from_pixbuf(Some(&з)));
+    }
+    let т = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    т.set_valign(gtk::Align::Center);
+    let з = gtk::Label::new(Some(&crate::i18n::tr("Завершение работы")));
+    з.style_context().add_class("bye-title");
+    з.set_xalign(0.0);
+    т.add(&з);
+    let в = gtk::Label::new(Some(&crate::i18n::tr("Что должен сделать компьютер?")));
+    в.style_context().add_class("bye-sub");
+    в.set_xalign(0.0);
+    т.add(&в);
+    шапка.add(&т);
+    карточка.add(&шапка);
+
+    let список = gtk::ListBox::new();
+    список.style_context().add_class("bye-list");
+    список.set_selection_mode(gtk::SelectionMode::Browse);
+    let mut действия: Vec<(&'static str, &'static str)> = Vec::new();
+    if ЗНАЮ.with(|з| з.borrow().обновлений) > 0 {
+        действия.push(("update-reboot", "Обновить и перезагрузить"));
+        действия.push(("update-poweroff", "Обновить и завершить работу"));
+    }
+    for (id, имя, _, _) in ДЕЙСТВИЯ {
+        действия.push((id, if id == "poweroff" { "Завершение работы" } else { имя }));
+    }
+    let mut выбрать = None;
+    for (id, имя) in &действия {
+        let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let з = gtk::Image::from_icon_name(Some(значок_действия(id)), gtk::IconSize::Button);
+        з.set_pixel_size(18);
+        ряд.add(&з);
+        let л = gtk::Label::new(Some(&crate::i18n::tr(имя)));
+        л.set_xalign(0.0);
+        ряд.add(&л);
+        let р = gtk::ListBoxRow::new();
+        р.add(&ряд);
+        список.add(&р);
+        if *id == "poweroff" {
+            выбрать = Some(р);
+        }
+    }
+    карточка.add(&список);
+    let подсказка = gtk::Label::new(Some(&crate::i18n::tr("↑ ↓ — выбрать · Enter — выполнить · Esc — отмена")));
+    подсказка.style_context().add_class("bye-hint");
+    карточка.add(&подсказка);
+
+    let кнопки = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    кнопки.set_halign(gtk::Align::End);
+    let отмена = gtk::Button::with_label(&crate::i18n::tr("Отмена"));
+    отмена.style_context().add_class("action");
+    let ок = gtk::Button::with_label("OK");
+    ок.style_context().add_class("action");
+    ок.style_context().add_class("main");
+    кнопки.add(&отмена);
+    кнопки.add(&ок);
+    карточка.add(&кнопки);
+
+    let действия = Rc::new(действия);
+    let сделать = {
+        let (о, список, действия) = (о.clone(), список.clone(), действия.clone());
+        Rc::new(move || {
+            let Some(р) = список.selected_row() else { return };
+            let Some(&(id, имя)) = действия.get(р.index() as usize) else { return };
+            закрой(&о);
+            match id {
+                "update-reboot" | "update-poweroff" => скажи("питание", json!(id)),
+                _ => выполни(None, id, имя),
+            }
+        })
+    };
+    {
+        let с = сделать.clone();
+        ок.connect_clicked(move |_| с());
+    }
+    {
+        let с = сделать.clone();
+        список.connect_row_activated(move |_, _| с());
+    }
+    {
+        let о = о.clone();
+        отмена.connect_clicked(move |_| закрой(&о));
+    }
+    {
+        let (с, список) = (сделать.clone(), список.clone());
+        о.connect_key_press_event(move |о, е| {
+            use gtk::gdk::keys::constants as к;
+            match е.keyval() {
+                к::Escape => закрой(о),
+                к::Return | к::KP_Enter => с(),
+                // Стрелки — по списку, куда бы ни был фокус (как в Windows)
+                к::Up | к::Down => {
+                    let n = список.children().len() as i32;
+                    let сейчас = список.selected_row().map(|р| р.index()).unwrap_or(0);
+                    let куда = if е.keyval() == к::Up { (сейчас - 1).max(0) } else { (сейчас + 1).min(n - 1) };
+                    if let Some(р) = список.row_at_index(куда) {
+                        список.select_row(Some(&р));
+                        р.grab_focus();
+                    }
+                }
+                _ => return glib::Propagation::Proceed,
+            }
+            glib::Propagation::Stop
+        });
+    }
+    фон.add(&ящик);
+    о.add(&фон);
+    о.show_all();
+    if let Some(р) = выбрать {
+        список.select_row(Some(&р));
+        р.grab_focus();
+    }
+    ОКНО_ВЫХОДА.with(|в| *в.borrow_mut() = Some(о));
 }
 
 /// Чёрный экран с надписью — поверх всего, вместе с самой полосой.

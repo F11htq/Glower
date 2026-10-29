@@ -50,7 +50,12 @@ const СТИЛЬ: &str = r#"
 .store .fact .k { font-size: 11px; opacity: 0.6; }
 .store .about { font-size: 14px; opacity: 0.85; margin-top: 14px; }
 .store .note { font-size: 13px; opacity: 0.65; margin: 8px 2px; }
-.store .big { font-size: 15px; padding: 10px 22px; }
+.store .big { font-size: 15px; padding: 10px 22px; min-width: 140px; }
+.store button.flat-small { background: none; box-shadow: none; padding: 4px 10px; opacity: 0.75; }
+.store button.flat-small:hover { opacity: 1; background-color: alpha(@glower_fg, 0.08); }
+.store .progress-box { min-width: 200px; }
+.store .progress-box progressbar trough { min-height: 6px; border-radius: 3px; background-color: alpha(@glower_fg, 0.10); }
+.store .progress-box progressbar progress { min-height: 6px; border-radius: 3px; background-image: linear-gradient(90deg, @glower_accent, @glower_accent2); }
 .store .work { padding: 10px 16px; background-color: @glower_bg3; border-top: 1px solid alpha(@glower_fg, 0.07); }
 .store .dot { min-width: 8px; min-height: 8px; border-radius: 4px; padding: 0; background-color: alpha(@glower_fg, 0.3); }
 .store .dot.on { background-color: #ffffff; }
@@ -92,6 +97,11 @@ struct Окно {
     сведения: RefCell<HashMap<String, Value>>,
     значки: RefCell<HashMap<String, Option<Pixbuf>>>,
     работа: Cell<bool>,
+    /// Какой пакет сейчас ставится или удаляется — его страница показывает
+    /// ход на месте кнопки, как Microsoft Store
+    в_работе: RefCell<String>,
+    /// Ход на странице программы: подпись и полоса
+    кнопка_хода: RefCell<Option<(gtk::Label, gtk::ProgressBar)>>,
     ход: gtk::Revealer,
     ход_текст: gtk::Label,
     ход_полоса: gtk::ProgressBar,
@@ -484,9 +494,12 @@ fn следи(п: &П, конец: impl FnOnce(&П, Value) + 'static) {
                 let имя = строка(&j, "name");
                 п2.ход_текст.set_text(&format!("{}{}", if имя.is_empty() { String::new() } else { format!("{имя} · ") }, if шаг.is_empty() { "Работаю…".to_string() } else { шаг }));
                 п2.ход_полоса.set_fraction(j["percent"].as_f64().unwrap_or(0.0).clamp(0.0, 100.0) / 100.0);
+                покажи_ход(&п2, &j);
                 return;
             }
             п2.работа.set(false);
+            п2.в_работе.borrow_mut().clear();
+            *п2.кнопка_хода.borrow_mut() = None;
             п2.ход.set_reveal_child(false);
             if let Some(к) = конец2.borrow_mut().take() {
                 к(&п2, j);
@@ -500,29 +513,85 @@ fn следи(п: &П, конец: impl FnOnce(&П, Value) + 'static) {
    Правила — крошечный пакет системы: ставим его сами */
 const ДОПОЛНЕНИЯ: &[(&str, &str)] = &[("com.valvesoftware.Steam", "steam-devices")];
 
+/// Установка не началась (отказ, отмена) — вернуть кнопку на место
+fn сорвалось(п: &П) {
+    п.в_работе.borrow_mut().clear();
+    *п.кнопка_хода.borrow_mut() = None;
+    рисуй(п);
+}
+
+/// Ход на странице программы: что делается и сколько процентов
+fn покажи_ход(п: &П, j: &Value) {
+    let Some((подпись, полоса)) = п.кнопка_хода.borrow().clone() else { return };
+    let доля = j["percent"].as_f64().unwrap_or(0.0).clamp(0.0, 100.0);
+    let шаг = строка(j, "step");
+    let шаг = if шаг.is_empty() { crate::i18n::tr("Установка…") } else { шаг };
+    подпись.set_text(&if доля > 0.0 { format!("{шаг} · {}%", доля.round()) } else { шаг });
+    if доля > 0.0 {
+        полоса.set_fraction(доля / 100.0);
+    } else {
+        полоса.pulse();
+    }
+}
+
+/// Полоса хода на месте кнопки «Установить»
+fn ход_вместо_кнопки(п: &П, место: &gtk::Box, текст: &str) {
+    очисти(место);
+    let к = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    к.style_context().add_class("progress-box");
+    let подпись = ярлык(&crate::i18n::tr(текст), "note");
+    let полоса = gtk::ProgressBar::new();
+    полоса.set_pulse_step(0.12);
+    полоса.set_size_request(200, -1);
+    к.add(&подпись);
+    к.add(&полоса);
+    место.add(&к);
+    место.show_all();
+    *п.кнопка_хода.borrow_mut() = Some((подпись, полоса.clone()));
+    // Пока агент не сказал процентов — полоса «дышит»
+    let п1 = Rc::downgrade(п);
+    glib::timeout_add_local(Duration::from_millis(250), move || {
+        let Some(п) = п1.upgrade() else { return glib::ControlFlow::Break };
+        let живо = п.кнопка_хода.borrow().as_ref().is_some_and(|(_, п)| п == &полоса);
+        if !живо {
+            return glib::ControlFlow::Break;
+        }
+        if полоса.fraction() == 0.0 || !п.работа.get() {
+            полоса.pulse();
+        }
+        glib::ControlFlow::Continue
+    });
+}
+
 fn поставь(п: &П, имя: String, источник: String) {
+    *п.в_работе.borrow_mut() = имя.clone();
     let п1 = п.clone();
     узнай_состояние(п, move |п, с| {
         if let Err(почему) = можно_ставить(&с) {
+            сорвалось(п);
             return сообщи(п, "Не выйдет", &почему);
         }
         if источник == "flatpak" {
             if с["flatpak"].as_bool() != Some(true) {
+                сорвалось(п);
                 return сообщи(п, "Не выйдет", "На этой машине нет flatpak, а эта программа живёт только там.");
             }
             if с["flathubData"].as_bool() != Some(true) {
                 if !спроси_да(п, "Подключить Flathub?", "Эта программа живёт на Flathub. Чтобы её поставить, система сперва прочитает его списки — это около тридцати мегабайт и одна-две минуты. Дальше всё оттуда ставится сразу.", "Подключить") {
-                    return;
+                    return сорвалось(п);
                 }
                 let (п2, имя2) = (п1.clone(), имя.clone());
                 позови("pkg.flathub", json!({}), move |о| {
                     if let Err(е) = о {
+                        сорвалось(&п2);
                         return сообщи(&п2, "Flathub не подключился", &е);
                     }
                     следи(&п2, move |п, j| {
                         if j["ok"].as_bool() != Some(true) {
+                            сорвалось(п);
                             return сообщи(п, "Flathub не подключился", &строка(&j, "error"));
                         }
+                        *п.в_работе.borrow_mut() = имя2.clone();
                         *п.состояние.borrow_mut() = None;
                         п.сведения.borrow_mut().clear();
                         начни_установку(п, имя2, "flatpak".into());
@@ -537,8 +606,10 @@ fn поставь(п: &П, имя: String, источник: String) {
 
 fn начни_установку(п: &П, имя: String, источник: String) {
     let п2 = п.clone();
+    *п.в_работе.borrow_mut() = имя.clone();
     позови("pkg.install", json!({ "name": имя, "source": источник }), move |о| {
         if let Err(е) = о {
+            сорвалось(&п2);
             return сообщи(&п2, "Не вышло начать установку", &е);
         }
         следи(&п2, move |п, j| {
@@ -553,13 +624,16 @@ fn начни_установку(п: &П, имя: String, источник: Stri
     });
 }
 
-fn убери(п: &П, имя: String, источник: String, название: &str) {
+/// true — человек согласился, удаление пошло
+fn убери(п: &П, имя: String, источник: String, название: &str) -> bool {
     if !спроси_да(п, &format!("Удалить {название}?"), "Программа будет удалена вместе с ненужными зависимостями.", "Удалить") {
-        return;
+        return false;
     }
+    *п.в_работе.borrow_mut() = имя.clone();
     let п2 = п.clone();
     позови("pkg.remove", json!({ "name": имя, "source": источник }), move |о| {
         if let Err(е) = о {
+            сорвалось(&п2);
             return сообщи(&п2, "Не вышло удалить", &е);
         }
         следи(&п2, |п, j| {
@@ -570,6 +644,7 @@ fn убери(п: &П, имя: String, источник: String, названи�
             рисуй(п);
         });
     });
+    true
 }
 
 /* ---------- экраны ---------- */
@@ -967,33 +1042,50 @@ fn программа(п: &П, прога: &Прога) {
         let стоит = стоит(&о["installed"]);
         let имя = { let и = строка(&о, "name"); if и.is_empty() { прога2.пакет.clone() } else { и } };
         let источник = строка(&о, "source");
-        let кн = crate::apps::значок_кнопка(if стоит { "🗑 Удалить" } else { "⬇ Установить" });
-        кн.style_context().add_class("big");
-        if !стоит {
-            кн.style_context().add_class("accent");
-        }
-        let заглушка = о["snap"].as_bool() == Some(true) && !стоит;
-        if заглушка {
-            кн.set_label("Недоступно");
-            кн.set_sensitive(false);
-        }
-        кн.set_sensitive(!заглушка && !п.работа.get());
-        let (п2, имя2, источник2, название) = (п.clone(), имя.clone(), источник.clone(), прога2.имя.clone());
-        кн.connect_clicked(move |_| {
-            if стоит {
-                убери(&п2, имя2.clone(), источник2.clone(), &название);
-            } else {
-                поставь(&п2, имя2.clone(), источник2.clone());
-            }
-        });
-        место2.add(&кн);
-        if стоит {
+        // Как Microsoft Store: «Установить» → ход на месте кнопки → «Открыть»
+        let эта_в_работе = п.работа.get() && *п.в_работе.borrow() == имя;
+        if эта_в_работе {
+            ход_вместо_кнопки(п, &место2, if стоит { "Удаление…" } else { "Установка…" });
+        } else if стоит {
             // Открыть поставленное — тем, чем его открывает система
             let п3 = п.clone();
             let пакет = имя.clone();
             let открыть = gtk::Button::with_label("Открыть");
+            открыть.style_context().add_class("big");
+            открыть.style_context().add_class("accent");
             открыть.connect_clicked(move |_| запусти_пакет(&п3, &пакет));
             место2.add(&открыть);
+            let удалить = gtk::Button::with_label("Удалить");
+            удалить.style_context().add_class("flat-small");
+            удалить.set_sensitive(!п.работа.get());
+            let (п2, имя2, источник2, название) = (п.clone(), имя.clone(), источник.clone(), прога2.имя.clone());
+            let место3 = место2.clone();
+            удалить.connect_clicked(move |_| {
+                if убери(&п2, имя2.clone(), источник2.clone(), &название) {
+                    ход_вместо_кнопки(&п2, &место3, "Удаление…");
+                }
+            });
+            место2.add(&удалить);
+        } else {
+            let кн = crate::apps::значок_кнопка("⬇ Установить");
+            кн.style_context().add_class("big");
+            кн.style_context().add_class("accent");
+            let заглушка = о["snap"].as_bool() == Some(true);
+            if заглушка {
+                кн.set_label("Недоступно");
+            }
+            // Другая программа ещё ставится — эта ждёт своей очереди
+            кн.set_sensitive(!заглушка && !п.работа.get());
+            if п.работа.get() {
+                кн.set_tooltip_text(Some(&crate::i18n::tr("Сначала дождитесь конца текущей установки")));
+            }
+            let (п2, имя2, источник2) = (п.clone(), имя.clone(), источник.clone());
+            let место3 = место2.clone();
+            кн.connect_clicked(move |_| {
+                ход_вместо_кнопки(&п2, &место3, "Подготовка…");
+                поставь(&п2, имя2.clone(), источник2.clone());
+            });
+            место2.add(&кн);
         }
 
         let факты = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -1365,6 +1457,8 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         сведения: RefCell::new(HashMap::new()),
         значки: RefCell::new(HashMap::new()),
         работа: Cell::new(false),
+        в_работе: RefCell::new(String::new()),
+        кнопка_хода: RefCell::new(None),
         ход,
         ход_текст,
         ход_полоса,

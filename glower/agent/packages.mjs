@@ -126,6 +126,46 @@ async function имяИзЯрлыка(файл){
   } catch(e){ return ''; }
 }
 
+/* Поиск на сайте Flathub — когда своего списка Flathub в системе ещё нет.
+
+   Локальный «flatpak search» ищет только по скачанному списку программ
+   (appstream), а он появляется, лишь когда Flathub подключён. До тех пор
+   поиск не находил ни Chromium, ни Discord, ни Telegram — хотя в сети они
+   есть. Сайт Flathub отвечает на поиск сам: спрашиваем его. Сначала
+   нынешний способ (POST /api/v2/search), не ответил — прежний (v1). */
+async function поискНаFlathub(запрос){
+  const разбери = о => {
+    const список = Array.isArray(о) ? о : (о && (о.hits || о.results)) || [];
+    return список.map(х => ({
+      source:'flatpak',
+      name:х.app_id || х.flatpakAppId || х.id || '',
+      title:х.name || '',
+      about:х.summary || '',
+      candidate:'', installed:false
+    })).filter(х => х.name && APPID.test(х.name));
+  };
+  const curl = (доводы) => new Promise((готово, беда) => {
+    execFile('curl', ['-fsSL', '--max-time', '15', ...доводы], { maxBuffer:8 << 20 },
+      (е, вывод) => е ? беда(е) : готово(вывод));
+  });
+  const тело = JSON.stringify({ query:запрос, filters:[] });
+  const пути = [
+    () => fetch('https://flathub.org/api/v2/search', { method:'POST',
+      headers:{ 'Content-Type':'application/json' }, body:тело, signal:AbortSignal.timeout(12000) })
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }),
+    () => curl(['-X', 'POST', '-H', 'Content-Type: application/json', '-d', тело,
+      'https://flathub.org/api/v2/search']).then(JSON.parse),
+    () => curl(['https://flathub.org/api/v1/apps/search/' + encodeURIComponent(запрос)]).then(JSON.parse)
+  ];
+  for (const путь of пути){
+    try {
+      const итог = разбери(await путь());
+      if (итог.length) return итог;
+    } catch(e){}
+  }
+  return [];
+}
+
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
   let память = null; // что на машине есть: спрошено один раз, а не каждый раз
@@ -805,6 +845,9 @@ export function packages(allowPackages){
           })).filter(x => x.name && APPID.test(x.name));
         }
       } catch(e){ /* flatpak может быть не установлен — это не ошибка поиска */ }
+      /* Своего списка Flathub нет — спрашиваем сам сайт */
+      if (!flathub.length && !existsSync('/var/lib/flatpak/appstream/flathub'))
+        flathub = await поискНаFlathub(q);
 
       /* Что из найденного уже стоит. Без этого поиск предлагал «Установить»
          то, что установлено, — человек нажимал, работа заканчивалась мгновенно
@@ -833,9 +876,25 @@ export function packages(allowPackages){
       flathub.forEach(отметь);
       ubuntu.forEach(отметь);
 
-      /* сначала то, что названо ровно как искали: человек ищет «telegram», а не «php-telegram» */
-      const точно = x => (x.title || x.name).toLowerCase().includes(q.toLowerCase()) ? 0 : 1;
-      const list = [...flathub, ...ubuntu].sort((a, b) => точно(a) - точно(b))
+      /* Сначала то, что названо ровно как искали: человек ищет «telegram»,
+         а не «php-telegram», и «sl» — это программа sl, а не два десятка
+         пакетов, в имени которых встретились эти две буквы. Ступени: точное
+         имя, имя начинается с запроса, запрос — отдельное слово, просто
+         встречается. Служебное (библиотеки, документация, языковые пакеты)
+         — в самый низ: программой его не запустишь. */
+      const ступень = x => {
+        const з = q.toLowerCase();
+        const имена = [x.title, x.name, x.name.split('.').pop()].filter(Boolean).map(и => и.toLowerCase());
+        let с = 4;
+        if (имена.some(и => и === з)) с = 0;
+        else if (имена.some(и => и.startsWith(з))) с = 1;
+        else if (имена.some(и => и.split(/[^a-zа-яё0-9]+/).includes(з))) с = 2;
+        else if (имена.some(и => и.includes(з))) с = 3;
+        if (x.source === 'apt' && /^lib|-(dev|doc|dbg|data|common|l10n|tests?)$|^language-pack-|^hunspell-|^hyphen-|^gnome-user-docs-|^fonts-/.test(x.name)) с += 5;
+        return с;
+      };
+      const list = [...flathub, ...ubuntu]
+        .map((x, i) => [ступень(x), i, x]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(т => т[2])
         .slice(0, limit || 40);
       return { list, flathubИскал:flathub.length > 0 };
     },

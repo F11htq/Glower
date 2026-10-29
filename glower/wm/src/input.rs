@@ -2,8 +2,8 @@
 
 use smithay::{
     backend::input::{
-        AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, InputEvent, KeyState,
-        KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
+        AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, GestureBeginEvent, GestureEndEvent, GestureSwipeUpdateEvent,
+        InputBackend, InputEvent, KeyState, KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
     },
     input::{
         keyboard::{keysyms, FilterResult},
@@ -119,6 +119,26 @@ impl Glower {
                 if let Some(у) = self.seat.get_pointer() {
                     у.axis(self, кадр);
                     у.frame(self);
+                }
+            }
+            // Жесты тачпада тремя-четырьмя пальцами — как в Windows: в
+            // стороны — соседний рабочий стол, вверх — просмотр задач, вниз —
+            // рабочий стол. Двумя пальцами libinput жестов не шлёт — это
+            // прокрутка, и она идёт программам как обычно
+            InputEvent::GestureSwipeBegin { event } => {
+                self.жест = (event.fingers() >= 3).then(Point::default);
+            }
+            InputEvent::GestureSwipeUpdate { event } => {
+                if let Some(путь) = self.жест.as_mut() {
+                    *путь += event.delta();
+                }
+            }
+            InputEvent::GestureSwipeEnd { event } => {
+                let путь = self.жест.take();
+                if let (Some(путь), false) = (путь, event.cancelled()) {
+                    if let Some(команда) = команда_жеста(путь) {
+                        crate::input::запусти(команда);
+                    }
                 }
             }
             _ => {}
@@ -251,8 +271,11 @@ impl Glower {
         match дело {
             Дело::Запусти(команда) => запусти(&команда),
             Дело::Закрой => {
-                if let Some(о) = в_фокусе {
-                    self.закрой(&о);
+                match в_фокусе {
+                    Some(о) => self.закрой(&о),
+                    // Окна в фокусе нет — значит, человек на рабочем столе, и
+                    // Alt+F4 там, как в Windows, — «Завершение работы»
+                    None => запусти("glower-menu клавиша A-F4"),
                 }
             }
             Дело::Следующее => self.следующее(),
@@ -351,5 +374,35 @@ pub fn запусти(команда: &str) {
             std::thread::spawn(move || ребёнок.wait());
         }
         Err(е) => tracing::warn!("не запустилось «{команда}»: {е}"),
+    }
+}
+
+/// Что сделать по жесту: путь пальцев за жест (в точках тачпада). Короткий
+/// или косой жест — ничего: случайное касание не должно уводить со стола
+pub fn команда_жеста(путь: Point<f64, Logical>) -> Option<&'static str> {
+    const ПОРОГ: f64 = 90.0;
+    let (x, y) = (путь.x, путь.y);
+    if x.abs() >= ПОРОГ && x.abs() > y.abs() * 1.5 {
+        // Пальцы влево — содержимое уходит влево, приходит стол справа
+        Some(if x < 0.0 { "glower-desk вперёд" } else { "glower-desk назад" })
+    } else if y.abs() >= ПОРОГ && y.abs() > x.abs() * 1.5 {
+        Some(if y < 0.0 { "glower-menu задачи" } else { "glower-menu клавиша W-d" })
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod жесты {
+    use super::*;
+
+    #[test]
+    fn жесты_по_направлению() {
+        assert_eq!(команда_жеста(Point::from((-200.0, 10.0))), Some("glower-desk вперёд"));
+        assert_eq!(команда_жеста(Point::from((200.0, -20.0))), Some("glower-desk назад"));
+        assert_eq!(команда_жеста(Point::from((5.0, -150.0))), Some("glower-menu задачи"));
+        assert_eq!(команда_жеста(Point::from((0.0, 150.0))), Some("glower-menu клавиша W-d"));
+        assert_eq!(команда_жеста(Point::from((40.0, 10.0))), None, "короткий — мимо");
+        assert_eq!(команда_жеста(Point::from((120.0, 110.0))), None, "косой — мимо");
     }
 }
