@@ -780,14 +780,18 @@ impl Glower {
             return;
         }
         let старые: Vec<Window> = self.space.elements().cloned().collect();
+        let вправо = n > self.стол;
         for о in &старые {
             let где = self.space.element_location(о).unwrap_or_default();
             if let Some(з) = self.запись_мут(о) {
                 з.место = где;
             }
+            // Пока уезжает — рисуем призраком: место окна (угол геометрии)
+            if let Some(г) = self.space.element_geometry(о) {
+                self.анимации.ушло_со_стола(о, г, вправо);
+            }
             self.space.unmap_elem(о);
         }
-        let вправо = n > self.стол;
         self.стол = n;
         let новые: Vec<(Window, Point<i32, Logical>)> = self
             .окна

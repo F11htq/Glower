@@ -631,7 +631,7 @@ mod проверки {
             return;
         }
         let цвета = crate::theme::цвета(false, &("#3a86ff".into(), "#8b5cf6".into()));
-        for (имя, css) in [("программ", format!("{цвета}{}{}", super::СТИЛЬ, super::МЕНЮ)), ("панели", format!("{цвета}{}", crate::СТИЛЬ))] {
+        for (имя, css) in [("программ", format!("{цвета}{}{}", super::СТИЛЬ, super::МЕНЮ)), ("панели", format!("{цвета}{}{}", crate::СТИЛЬ, crate::osd::СТИЛЬ))] {
             let п = gtk::CssProvider::new();
             if let Err(е) = п.load_from_data(css.as_bytes()) {
                 panic!("стиль {имя}: {е}");

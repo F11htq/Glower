@@ -35,6 +35,7 @@ mod media;
 mod menus;
 mod music;
 mod notify;
+mod osd;
 mod nowplaying;
 mod notepad;
 mod overview;
@@ -503,7 +504,7 @@ fn main() {
         н.set_gtk_icon_theme_name(Some("Adwaita"));
     }
     let стиль = gtk::CssProvider::new();
-    стиль.load_from_data(format!("{СТИЛЬ}{}", apps::МЕНЮ).as_bytes()).expect("стиль панели");
+    стиль.load_from_data(format!("{СТИЛЬ}{}{}", apps::МЕНЮ, osd::СТИЛЬ).as_bytes()).expect("стиль панели");
     gtk::StyleContext::add_provider_for_screen(
         &gtk::gdk::Screen::default().expect("экран"),
         &стиль,

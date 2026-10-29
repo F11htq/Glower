@@ -275,7 +275,12 @@ fn призрак(п: &crate::anim::Призрак, renderer: &mut GlesRenderer,
     let t = плавно(Анимации::доля(п));
     let где = п.где;
     let центр: Point<i32, Logical> = где.loc - экран.loc + Point::from((где.size.w / 2, где.size.h / 2));
-    let (м, сдвиг, прозр) = if п.к_доку {
+    let (м, сдвиг, прозр) = if let Some(влево) = п.уезжает {
+        // Уезжает со старым столом за край экрана, целиком
+        let t = crate::anim::мягко(Анимации::доля(п));
+        let путь = (экран.size.w as f64 * t) as i32;
+        (1.0, Point::from((if влево { -путь } else { путь }, 0)), 1.0)
+    } else if п.к_доку {
         // К доку: вниз к середине экрана, уменьшаясь
         let цель: Point<i32, Logical> = Point::from((экран.size.w / 2, экран.size.h - 20));
         let путь = цель - центр;
