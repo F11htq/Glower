@@ -1433,5 +1433,11 @@
 "Отключаю…": "Wird getrennt…",
 "Подключаю…": "Wird verbunden…",
 "Сопрягаю… Подтвердите на устройстве, если оно спросит": "Kopplung… Bestätigen Sie am Gerät, falls es fragt",
-"Смотрю устройства…": "Geräte werden geprüft…"
+"Смотрю устройства…": "Geräte werden geprüft…",
+"Узнаю погоду…": "Wetter wird abgerufen…",
+"Нет данных": "Keine Daten",
+"Нажмите, чтобы повторить": "Zum Wiederholen klicken",
+"нет связи с сервисом погоды": "keine Verbindung zum Wetterdienst",
+"система не успела ответить — попробуйте ещё раз": "das System hat nicht rechtzeitig geantwortet – erneut versuchen",
+"служба системы ещё не запустилась — подождите немного": "der Systemdienst ist noch nicht gestartet – bitte warten"
 }

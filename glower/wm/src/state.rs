@@ -69,6 +69,8 @@ pub struct Запись {
     /// Размер и место до разворачивания или прилипания к краю
     pub прежнее: Option<Rectangle<i32, Logical>>,
     pub развёрнуто: bool,
+    /// Прилипло к половине экрана (мышью к краю или Win+стрелка)
+    pub прилипло: bool,
     pub во_весь_экран: bool,
 }
 
@@ -120,6 +122,8 @@ pub struct Glower {
     /// Значок того, что тащат мышью между программами (файл из Проводника),
     /// и его сдвиг от острия указателя
     pub значок_переноса: Option<(WlSurface, Point<i32, Logical>)>,
+    /// Куда встанет окно, если отпустить его сейчас (тащат к краю экрана)
+    pub подсказка_края: Option<Rectangle<i32, Logical>>,
     /// Над какой поверхностью была мышь в прошлый раз, пока она захвачена
     pub фокус_захвата: Option<WlSurface>,
     /// Где мышь. Своя копия: у указателя спрашивать нельзя, пока идёт
@@ -237,6 +241,7 @@ impl Glower {
             seat,
             cursor_status: CursorImageStatus::default_named(),
             значок_переноса: None,
+            подсказка_края: None,
             фокус_захвата: None,
             мышь: Point::from((640.0, 400.0)),
             замок: None,
@@ -463,6 +468,7 @@ impl Glower {
             место,
             прежнее: (весь || развёрнуто).then_some(обычное),
             развёрнуто: развёрнуто && !весь,
+            прилипло: false,
             во_весь_экран: весь,
         });
         if весь || развёрнуто {
@@ -639,6 +645,7 @@ impl Glower {
             self.поставь(окно, прежнее, Some(false));
         } else {
             з.развёрнуто = true;
+            з.прилипло = false;
             if з.прежнее.is_none() {
                 з.прежнее = Some(гео);
             }
@@ -656,13 +663,38 @@ impl Glower {
                 з.прежнее = Some(гео);
             }
             з.развёрнуто = false;
+            з.прилипло = true;
         }
-        let пол = область.size.w / 2;
-        let куда = Rectangle::new(
-            Point::from((if влево { область.loc.x } else { область.loc.x + пол }, область.loc.y)),
-            Size::from((пол, область.size.h)),
-        );
+        let куда = половина(область, влево);
         self.поставь(окно, куда, Some(false));
+        // Прилипшее окно — без скруглений и тени с той стороны, где сосед:
+        // программа узнаёт об этом по состояниям Tiled*
+        if let Some(t) = окно.toplevel() {
+            t.with_pending_state(|с| {
+                for к in [xdg_toplevel::State::TiledLeft, xdg_toplevel::State::TiledRight, xdg_toplevel::State::TiledTop, xdg_toplevel::State::TiledBottom] {
+                    с.states.set(к);
+                }
+            });
+            t.send_pending_configure();
+        }
+    }
+
+    /// Окно отлипло от края: вернуть прежний размер и снять Tiled
+    pub fn отлепи(&mut self, окно: &Window) -> Option<Rectangle<i32, Logical>> {
+        let з = self.запись_мут(окно)?;
+        if !з.прилипло {
+            return None;
+        }
+        з.прилипло = false;
+        let прежнее = з.прежнее.take();
+        if let Some(t) = окно.toplevel() {
+            t.with_pending_state(|с| {
+                for к in [xdg_toplevel::State::TiledLeft, xdg_toplevel::State::TiledRight, xdg_toplevel::State::TiledTop, xdg_toplevel::State::TiledBottom] {
+                    с.states.unset(к);
+                }
+            });
+        }
+        прежнее
     }
 
     /// Поставить окно в прямоугольник: просим размер и сразу ставим место
@@ -959,4 +991,13 @@ mod проверки {
         assert_eq!(короткое_имя_раскладки("Russian"), "RU");
         assert_eq!(короткое_имя_раскладки("Georgian"), "GE");
     }
+}
+
+/// Левая или правая половина рабочей области
+pub fn половина(область: Rectangle<i32, Logical>, влево: bool) -> Rectangle<i32, Logical> {
+    let пол = область.size.w / 2;
+    Rectangle::new(
+        Point::from((if влево { область.loc.x } else { область.loc.x + пол }, область.loc.y)),
+        Size::from((if влево { пол } else { область.size.w - пол }, область.size.h)),
+    )
 }

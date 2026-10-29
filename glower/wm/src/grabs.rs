@@ -73,13 +73,19 @@ impl PointerGrab<Glower> for Перенос {
         handle.motion(data, None, event);
         let сдвиг = event.location - self.start_data.location;
         let новое = self.начало.to_f64() + сдвиг;
-        // Развёрнутое окно, которое потащили, — сначала свернуть в прежний размер
-        let развёрнуто = data.запись(&self.окно).map(|з| з.развёрнуто).unwrap_or(false);
+        // Развёрнутое или прилипшее к краю окно, которое потащили, — сначала
+        // вернуть ему прежний размер, как в Windows
+        let развёрнуто = data.запись(&self.окно).map(|з| з.развёрнуто || з.прилипло).unwrap_or(false);
         if развёрнуто && сдвиг.x.abs() + сдвиг.y.abs() > 12.0 {
-            let прежнее = data.запись_мут(&self.окно).and_then(|з| {
-                з.развёрнуто = false;
-                з.прежнее.take()
-            });
+            let прилипло = data.запись(&self.окно).map(|з| з.прилипло).unwrap_or(false);
+            let прежнее = if прилипло {
+                data.отлепи(&self.окно)
+            } else {
+                data.запись_мут(&self.окно).and_then(|з| {
+                    з.развёрнуто = false;
+                    з.прежнее.take()
+                })
+            };
             if let Some(п) = прежнее {
                 // Окно остаётся под мышью той же долей своей ширины
                 let доля = (self.start_data.location.x - self.начало.x as f64) / data.space.element_geometry(&self.окно).map(|г| г.size.w as f64).unwrap_or(1.0).max(1.0);
@@ -92,6 +98,12 @@ impl PointerGrab<Glower> for Перенос {
             return;
         }
         data.space.map_element(self.окно.clone(), новое.to_i32_round(), true);
+        // Мышь у края экрана — показать, куда встанет окно
+        let было = data.подсказка_края;
+        data.подсказка_края = куда_у_края(data, event.location);
+        if было != data.подсказка_края {
+            data.нужен_кадр = true;
+        }
         data.нужен_кадр = true;
     }
 
@@ -103,19 +115,65 @@ impl PointerGrab<Glower> for Перенос {
     }
 
     fn unset(&mut self, data: &mut Glower) {
-        // Окно у верхнего края — развернуть, как в Windows
-        let Some(гео) = data.space.element_geometry(&self.окно) else { return };
-        let мышь = data.мышь;
-        if let Some(экран) = data.главный_экран() {
-            let область = data.рабочая_область(&экран);
-            if мышь.y <= (область.loc.y + 2) as f64 && гео.loc.y <= область.loc.y + 4 {
-                let окно = self.окно.clone();
-                data.разверни(&окно);
+        // Отпустили у края — как в Windows: у верхнего развернуть, у
+        // левого или правого — на половину экрана
+        let подсказка = data.подсказка_края.take();
+        data.нужен_кадр = true;
+        if подсказка.is_none() {
+            return;
+        }
+        let окно = self.окно.clone();
+        match край(data, data.мышь) {
+            Some(Край::Верх) => {
+                if окно.x11_surface().is_some() {
+                    data.разверни_x11(&окно);
+                } else {
+                    data.разверни(&окно);
+                }
             }
+            Some(Край::Лево) => data.к_краю(&окно, true),
+            Some(Край::Право) => data.к_краю(&окно, false),
+            None => {}
         }
     }
 
     прочее_как_есть!();
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Край {
+    Верх,
+    Лево,
+    Право,
+}
+
+/// У какого края экрана мышь. Порог — несколько точек: в край экрана мышь
+/// упирается сама, и попасть в него легко
+fn край(data: &Glower, мышь: Point<f64, Logical>) -> Option<Край> {
+    let экран = data.главный_экран()?;
+    let г = data.space.output_geometry(&экран)?;
+    let порог = 6.0;
+    let (x0, y0) = (г.loc.x as f64, г.loc.y as f64);
+    let (x1, y1) = (x0 + г.size.w as f64, y0 + г.size.h as f64);
+    if мышь.x <= x0 + порог {
+        Some(Край::Лево)
+    } else if мышь.x >= x1 - порог {
+        Some(Край::Право)
+    } else if мышь.y <= y0 + порог && мышь.y < y1 {
+        Some(Край::Верх)
+    } else {
+        None
+    }
+}
+
+fn куда_у_края(data: &Glower, мышь: Point<f64, Logical>) -> Option<Rectangle<i32, Logical>> {
+    let экран = data.главный_экран()?;
+    let область = data.рабочая_область(&экран);
+    Some(match край(data, мышь)? {
+        Край::Верх => область,
+        Край::Лево => crate::state::половина(область, true),
+        Край::Право => crate::state::половина(область, false),
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

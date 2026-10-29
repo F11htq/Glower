@@ -105,11 +105,16 @@ const живая = () => existsSync('/run/live/medium') || existsSync('/cdrom/li
 /* Имя программы так, как его видит человек: «Google Chrome», а не
    google-chrome-stable. Берём из ярлыка внутри пакета (Name на языке
    системы), а нет ярлыка — пустая строка, и показывается имя пакета. */
+/* Ярлык достаём, только если пакет небольшой: для этого dpkg распаковывает
+   весь архив, и стомегабайтный пакет (Яндекс Музыка, Chrome) на старой
+   машине разбирался бы дольше, чем панель ждёт ответа. Большой пакет —
+   без красивого имени, зато сразу; и в любом случае не дольше 4 секунд. */
 async function имяИзЯрлыка(файл){
   try {
+    if (statSync(файл).size > 40 * 1024 * 1024) return '';
     const { stdout } = await run('sh', ['-c',
       'dpkg-deb --fsys-tarfile "$1" | tar -xO --wildcards "./usr/share/applications/*.desktop" 2>/dev/null | head -c 200000',
-      'sh', файл], { timeout:20000, maxBuffer:1 << 20 });
+      'sh', файл], { timeout:4000, maxBuffer:1 << 20 });
     const текст = String(stdout);
     const язык = String(process.env.LANG || '').split('.')[0];
     const группа = (текст.split(/^\[Desktop Entry\]\s*$/m)[1] || '').split(/^\[/m)[0];
@@ -995,7 +1000,10 @@ export function packages(allowPackages){
       }
       const поле = к => (текст.match(new RegExp('^' + к + ':\\s*(.*)$', 'm')) || [])[1] || '';
       const размерФайла = statSync(файл).size;
-      const название = await имяИзЯрлыка(файл);
+      /* Нет ярлыка или пакет большой — имя пакета словами: yandex-music →
+         Yandex Music */
+      const название = await имяИзЯрлыка(файл)
+        || поле('Package').split(/[-_]+/).filter(Boolean).map(с => с[0].toUpperCase() + с.slice(1)).join(' ');
       const место = parseInt(поле('Installed-Size'), 10);
       return {
         файл, имя:поле('Package'), название, версия:поле('Version'),

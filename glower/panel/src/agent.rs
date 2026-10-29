@@ -40,7 +40,20 @@ pub fn зов(метод: &str, доводы: Value, срок: u64) -> Result<Va
         Ok(о) => о.into_json().map_err(|е| е.to_string())?,
         // Агент отвечает отказом с телом — причину берём из него
         Err(ureq::Error::Status(_, о)) => о.into_json().map_err(|е| е.to_string())?,
-        Err(е) => return Err(е.to_string()),
+        // Связь с агентом — словами, а не «http://localhost:8123/rpc: Network
+        // Error: Error encountered in the status line»: человеку важно, что
+        // случилось, а не адрес
+        Err(е) => {
+            let т = е.to_string();
+            eprintln!("glower-panel: {метод}: {т}");
+            return Err(if т.contains("timed out") || т.contains("Timeout") {
+                "система не успела ответить — попробуйте ещё раз".into()
+            } else if т.contains("refused") || т.contains("Connection Failed") {
+                "служба системы ещё не запустилась — подождите немного".into()
+            } else {
+                т
+            });
+        }
     };
     if тело["ok"].as_bool() == Some(true) {
         Ok(тело["result"].clone())

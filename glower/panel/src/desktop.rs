@@ -414,6 +414,7 @@ fn открой_виджет(запись: &Value) {
                 let _ = std::process::Command::new("sh").args(["-c", &куда]).spawn();
             }
         }
+        "weather" if core::погода().is_null() => core::обнови_погоду(),
         "weather" => {
             let город = core::погода()["город"].as_str().map(String::from)
                 .or_else(|| core::настройка("city").as_str().map(String::from))
@@ -1606,9 +1607,10 @@ pub fn обнови_виджеты() {
     let список: Vec<String> = записи.iter().map(|в| в.to_string()).collect();
     // Дела и события дня тоже видны на столе: поменялись — перерисовать
     let слепок = format!(
-        "{}|{}|{}|{}|{}",
+        "{}|{}{}|{}|{}|{}",
         список.join(","),
         core::погода(),
+        core::беда_погоды(),
         core::настройка("tz"),
         crate::apps::читай_данные(crate::todo::ФАЙЛ),
         serde_json::Value::Array(crate::calendar::события(&crate::apps::читай_данные(crate::calendar::ФАЙЛ), &сегодня_ключ()))
@@ -1707,7 +1709,16 @@ fn наполни_виджет(к: &gtk::Box, t: &str, запись: &Value) {
             let город = п["город"].as_str().map(String::from).unwrap_or_else(|| core::настройка("city").as_str().unwrap_or("").to_string());
             строка_виджета(к, &format!("Погода · {город}"), "w-t");
             if п.is_null() {
-                строка_виджета(к, "Нет данных — нужна сеть", "w-sub");
+                // Причину — как есть: «нужна сеть» при живом интернете только
+                // путала. Щелчок по виджету — спросить заново
+                let беда = core::беда_погоды();
+                let текст = if беда.is_empty() { crate::i18n::tr("Узнаю погоду…") } else { format!("{}: {}", crate::i18n::tr("Нет данных"), crate::i18n::tr(&беда)) };
+                let п = строка_виджета(к, &текст, "w-sub");
+                п.set_line_wrap(true);
+                п.set_max_width_chars(28);
+                if !беда.is_empty() {
+                    строка_виджета(к, &crate::i18n::tr("Нажмите, чтобы повторить"), "w-sub");
+                }
                 return;
             }
             let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 10);

@@ -182,6 +182,7 @@ impl XwmHandler for Glower {
             место,
             прежнее: None,
             развёрнуто: false,
+            прилипло: false,
             во_весь_экран: false,
         });
         self.space.map_element(окно.clone(), место, true);

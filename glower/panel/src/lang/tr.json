@@ -1433,5 +1433,11 @@
 "Отключаю…": "Bağlantı kesiliyor…",
 "Подключаю…": "Bağlanıyor…",
 "Сопрягаю… Подтвердите на устройстве, если оно спросит": "Eşleştiriliyor… Cihaz sorarsa onaylayın",
-"Смотрю устройства…": "Cihazlara bakılıyor…"
+"Смотрю устройства…": "Cihazlara bakılıyor…",
+"Узнаю погоду…": "Hava durumu alınıyor…",
+"Нет данных": "Veri yok",
+"Нажмите, чтобы повторить": "Yeniden denemek için tıklayın",
+"нет связи с сервисом погоды": "hava durumu hizmetine bağlantı yok",
+"система не успела ответить — попробуйте ещё раз": "sistem zamanında yanıt vermedi — tekrar deneyin",
+"служба системы ещё не запустилась — подождите немного": "sistem hizmeti henüz başlamadı — lütfen bekleyin"
 }

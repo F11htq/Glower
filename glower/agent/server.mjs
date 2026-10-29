@@ -14,6 +14,37 @@ import { readFile, writeFile, mkdir, rm, rename, readdir, stat } from 'node:fs/p
 import { existsSync } from 'node:fs';
 import { join, resolve, relative, dirname, extname, sep } from 'node:path';
 import { homedir } from 'node:os';
+import dns from 'node:dns';
+import net from 'node:net';
+import { execFile } from 'node:child_process';
+
+/* Сеть: сначала IPv4, и пробовать оба протокола наперегонки.
+
+   Node 18 (он в Ubuntu 24.04) берёт адреса в том порядке, в каком их отдал
+   DNS, — обычно IPv6 первым — и не переключается на IPv4, если IPv6 есть
+   на бумаге, но провайдер его не возит. Браузер в такой сети работает (он
+   пробует оба сразу), а fetch агента висит до срока, и погода писала «нужна
+   сеть» при живом интернете. */
+try { dns.setDefaultResultOrder('ipv4first'); } catch(e){}
+try { net.setDefaultAutoSelectFamily && net.setDefaultAutoSelectFamily(true); } catch(e){}
+
+/* JSON по адресу. fetch, а не вышло — curl: он сам выбирает IPv4/IPv6,
+   уважает системные настройки прокси и стоит в образе всегда */
+async function возьмиJSON(адрес, срок = 10000){
+  try {
+    const о = await fetch(адрес, { signal:AbortSignal.timeout(срок) });
+    if (!о.ok) throw new Error('сервер ответил ' + о.status);
+    return await о.json();
+  } catch(первая){
+    const текст = await new Promise((готово, беда) => {
+      execFile('curl', ['-fsSL', '--max-time', String(Math.ceil(срок / 1000) + 5), адрес],
+        { maxBuffer:4 << 20 }, (е, вывод, ошибка) => е
+          ? беда(new Error(String(ошибка || '').trim().split('\n').pop() || первая.message))
+          : готово(вывод));
+    });
+    return JSON.parse(текст);
+  }
+}
 
 
 const arg = (name, def) => {
@@ -299,15 +330,21 @@ const API = {
       : c <= 67 ? '🌧' : c <= 77 ? '❄️' : c <= 82 ? '🌧' : c <= 86 ? '🌨' : '⛈';
     const слово = c => c === 0 ? 'Ясно' : c <= 2 ? 'Малооблачно' : c === 3 ? 'Пасмурно' : c <= 48 ? 'Туман'
       : c <= 57 ? 'Морось' : c <= 67 ? 'Дождь' : c <= 77 ? 'Снег' : c <= 82 ? 'Ливень' : c <= 86 ? 'Снегопад' : 'Гроза';
-    const сигнал = AbortSignal.timeout(10000);
-    const g = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name='
-      + encodeURIComponent(где), { signal:сигнал }).then(r => r.json());
+    /* Нет связи — говорим это словами: панель покажет причину человеку */
+    const g = await возьмиJSON('https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name='
+      + encodeURIComponent(где)).catch(е => {
+        console.error('погода: ' + е.message);
+        throw new Error('нет связи с сервисом погоды');
+      });
     const место = g.results && g.results[0];
     if (!место) throw new Error('город не найден: ' + где);
-    const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${место.latitude}`
+    const w = await возьмиJSON(`https://api.open-meteo.com/v1/forecast?latitude=${место.latitude}`
       + `&longitude=${место.longitude}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m`
-      + `&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6`,
-      { signal:AbortSignal.timeout(10000) }).then(r => r.json());
+      + `&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6`)
+      .catch(е => {
+        console.error('погода: ' + е.message);
+        throw new Error('нет связи с сервисом погоды');
+      });
     const дни = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
     const итог = { ts:Date.now(), 'город':место.name, t:Math.round(w.current.temperature_2m),
       'знак':знак(w.current.weather_code), 'слово':слово(w.current.weather_code),

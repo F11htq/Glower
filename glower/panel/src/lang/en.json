@@ -1433,5 +1433,11 @@
 "Отключаю…": "Disconnecting…",
 "Подключаю…": "Connecting…",
 "Сопрягаю… Подтвердите на устройстве, если оно спросит": "Pairing… Confirm on the device if it asks",
-"Смотрю устройства…": "Looking at devices…"
+"Смотрю устройства…": "Looking at devices…",
+"Узнаю погоду…": "Getting the weather…",
+"Нет данных": "No data",
+"Нажмите, чтобы повторить": "Click to retry",
+"нет связи с сервисом погоды": "no connection to the weather service",
+"система не успела ответить — попробуйте ещё раз": "the system did not respond in time — try again",
+"служба системы ещё не запустилась — подождите немного": "the system service has not started yet — please wait"
 }

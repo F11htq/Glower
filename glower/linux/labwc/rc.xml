@@ -122,6 +122,15 @@
       <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="glower-desk вперёд" />
     </keybind>
+    <!-- Как в Windows: Win+Ctrl+стрелка -->
+    <keybind key="W-C-Left">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-desk назад" />
+    </keybind>
+    <keybind key="W-C-Right">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-desk вперёд" />
+    </keybind>
     <keybind key="C-A-Left">
       <action name="Execute" command="glower-desk назад" />
     </keybind>

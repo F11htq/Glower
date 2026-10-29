@@ -212,6 +212,24 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
         всё.extend(слои_верх.into_iter().filter(|(_, б)| б.is_none()).map(|(э, _)| э));
     }
     всё.extend(меню_низа);
+    // Подсказка «окно встанет сюда» — когда окно тащат к краю экрана: светлая
+    // рамка и полупрозрачная заливка поверх окон, как в Windows
+    if let Some(п) = состояние.подсказка_края {
+        let отступ = 8;
+        let п = Rectangle::new(п.loc - гео.loc + Point::from((отступ, отступ)), (п.size.w - 2 * отступ, п.size.h - 2 * отступ).into());
+        let физ = п.to_physical_precise_round(масштаб);
+        let т = 2;
+        let рамка = Color32F::new(0.75, 0.85, 1.0, 0.55);
+        for кусок in [
+            Rectangle::new(физ.loc, (физ.size.w, т).into()),
+            Rectangle::new(физ.loc + Point::from((0, физ.size.h - т)), (физ.size.w, т).into()),
+            Rectangle::new(физ.loc, (т, физ.size.h).into()),
+            Rectangle::new(физ.loc + Point::from((физ.size.w - т, 0)), (т, физ.size.h).into()),
+        ] {
+            всё.push(Элемент::Сплошной(SolidColorRenderElement::new(Id::new(), кусок, 0usize, рамка, Kind::Unspecified)));
+        }
+        всё.push(Элемент::Сплошной(SolidColorRenderElement::new(Id::new(), физ, 0usize, Color32F::new(0.30, 0.42, 0.70, 0.30), Kind::Unspecified)));
+    }
     всё.extend(окна_эл);
     всё.extend(под_окном);
     всё.extend(низ);

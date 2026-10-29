@@ -1433,5 +1433,11 @@
 "Отключаю…": "Disconnessione…",
 "Подключаю…": "Connessione…",
 "Сопрягаю… Подтвердите на устройстве, если оно спросит": "Abbinamento… Conferma sul dispositivo se richiesto",
-"Смотрю устройства…": "Controllo dispositivi…"
+"Смотрю устройства…": "Controllo dispositivi…",
+"Узнаю погоду…": "Recupero meteo…",
+"Нет данных": "Nessun dato",
+"Нажмите, чтобы повторить": "Fai clic per riprovare",
+"нет связи с сервисом погоды": "nessuna connessione al servizio meteo",
+"система не успела ответить — попробуйте ещё раз": "il sistema non ha risposto in tempo — riprova",
+"служба системы ещё не запустилась — подождите немного": "il servizio di sistema non è ancora avviato — attendi"
 }

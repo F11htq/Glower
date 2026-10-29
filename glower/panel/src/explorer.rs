@@ -1988,7 +1988,8 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     if доводы.first().is_some_and(|д| д == "--trash") {
         первая = Место::Корзина;
     } else if let Some(д) = доводы.first() {
-        let путь = PathBuf::from(д);
+        // Путь или ссылка file:///… — так папку присылают чужие программы
+        let путь = crate::filemanager::путь_из(д).unwrap_or_else(|| PathBuf::from(д));
         if путь.is_dir() {
             первая = Место::Папка(путь);
         } else if путь.exists() {

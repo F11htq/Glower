@@ -25,6 +25,7 @@ mod core;
 mod desktop;
 mod dock;
 mod explorer;
+mod filemanager;
 mod fileops;
 mod i18n;
 mod icons;
@@ -660,6 +661,8 @@ fn main() {
     dock::создай();
     // Win+V: что копировали — слушаем буфер с самого начала сеанса
     cliphist::следи();
+    // «Показать в папке» из Firefox, Chrome, Telegram
+    filemanager::подключи();
     notify::служба();
     core::начни();
 
