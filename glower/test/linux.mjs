@@ -953,14 +953,19 @@ try {
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
     /* Заставка загрузки: каждая картинка, которую зовёт сценарий, едет в
-       образ (logo.png кладёт сборка из assets), а пакет просит пересобрать
+       образ (logo.png и word.png кладёт сборка из assets — и проверяем, что
+       кладёт), а пакет просит пересобрать
        initramfs — иначе новую заставку машина увидит только с новым ядром. */
     {
       const { readdir } = await import('node:fs/promises');
       const сцен = await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8');
       const зовёт = [...сцен.matchAll(/Image\("([^"]+)"\)/g)].map(m => m[1]);
       const есть = await readdir(join(root, 'linux', 'plymouth'));
-      const нет = зовёт.filter(ф => ф !== 'logo.png' && !есть.includes(ф));
+      const мкисо = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+      const изАссетов = { 'logo.png':'assets/logo.png', 'word.png':'assets/logo-word.png' };
+      const нет = зовёт.filter(ф => изАссетов[ф]
+        ? !(мкисо.includes(изАссетов[ф]) && мкисо.includes('themes/glower/' + ф))
+        : !есть.includes(ф));
       check('заставка: все картинки сценария есть в теме', зовёт.includes('logo.png') && !нет.length,
         JSON.stringify({ зовёт, нет }));
       check('заставка: сборка кладёт все картинки темы, а пакет пересобирает initramfs',

@@ -586,8 +586,18 @@ for img in "$SRC"/linux/plymouth/*.png; do
   install -m 644 "$img" "$ROOTFS/usr/share/plymouth/themes/glower/"
 done
 install -m 644 "$SRC/assets/logo.png"                "$ROOTFS/usr/share/plymouth/themes/glower/logo.png"
+install -m 644 "$SRC/assets/logo-word.png"           "$ROOTFS/usr/share/plymouth/themes/glower/word.png"
+# Знак системы — и как значок «glower» в теме значков: им пользуются окна
+# «О программе» чужих программ и всё, что ищет логотип дистрибутива
+for n in 64 256 512; do
+  f="$SRC/assets/logo-$n.png"; [ "$n" = 512 ] && f="$SRC/assets/logo.png"
+  install -D -m 644 "$f" "$ROOTFS/usr/share/icons/hicolor/${n}x${n}/apps/glower.png"
+  install -D -m 644 "$f" "$ROOTFS/usr/share/icons/hicolor/${n}x${n}/apps/distributor-logo.png"
+done
+install -D -m 644 "$SRC/assets/logo-256.png" "$ROOTFS/usr/share/pixmaps/glower.png"
 chroot "$ROOTFS" /bin/bash -e <<'INPLY'
 export DEBIAN_FRONTEND=noninteractive
+gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
 # Тема заставки выбирается через альтернативы: отдельной программы для этого
 # в Ubuntu нет, а ссылка default.plymouth и есть выбор системы.
 update-alternatives --install /usr/share/plymouth/themes/default.plymouth \

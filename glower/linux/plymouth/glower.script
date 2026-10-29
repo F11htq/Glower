@@ -24,10 +24,17 @@ logo.SetX(cx - size / 2);
 logo.SetY(cy - size / 2);
 logo.SetZ(20);
 
-word_img = Image.Text("GlowerOS", 1, 1, 1, 1, "Sans Bold " + Math.Int(size / 6.5));
+# Надпись — та же, что в логотипе (word.png); нет файла — словами
+word_src = Image("word.png");
+if (word_src){
+  word_w = Math.Int(size * 1.35);
+  word_img = word_src.Scale(word_w, Math.Int(word_w * word_src.GetHeight() / word_src.GetWidth()));
+} else {
+  word_img = Image.Text("GlowerOS", 1, 1, 1, 1, "Sans Bold " + Math.Int(size / 6.5));
+}
 word = Sprite(word_img);
 word.SetX(cx - word_img.GetWidth() / 2);
-word_y = cy + size / 2 + size * 0.42;
+word_y = cy + size / 2 + size * 0.22;
 word.SetY(word_y);
 word.SetZ(20);
 text_y = word_y + word_img.GetHeight() + size * 0.22;

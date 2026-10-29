@@ -370,10 +370,34 @@ pub enum Режим {
     Вход,
 }
 
+/// Фон — обои стола, притемнённые сверху и снизу, чтобы читались часы и
+/// поле пароля. Экрану входа чужие настройки не прочесть — у него обои
+/// системы по умолчанию
+fn фон_обоями(о: &gtk::Window, вход: bool) {
+    let id = if вход {
+        "glower".to_string()
+    } else {
+        std::fs::read_to_string(gtk::glib::user_config_dir().join("glower").join("settings.json"))
+            .ok()
+            .and_then(|т| serde_json::from_str::<serde_json::Value>(&т).ok())
+            .and_then(|н| н["wallpaper"].as_str().map(String::from))
+            .unwrap_or_else(|| "glower".into())
+    };
+    let обои = crate::desktop::цвета_для_gtk(&crate::core::обои_по_имени(&id));
+    let css = format!(
+        "window.lock {{ background-image: linear-gradient(180deg, rgba(6,8,20,.42) 0%, rgba(6,8,20,.12) 34%, rgba(6,8,20,.58) 100%), {обои}; background-size: cover; background-position: center; }}"
+    );
+    let с = gtk::CssProvider::new();
+    if с.load_from_data(css.as_bytes()).is_ok() {
+        о.style_context().add_provider(&с, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 2);
+    }
+}
+
 fn окно(монитор: &gtk::gdk::Monitor, главное: bool, режим: Режим) -> (gtk::Window, Option<gtk::Entry>) {
     let о = gtk::Window::new(gtk::WindowType::Toplevel);
     о.set_decorated(false);
     о.style_context().add_class("lock");
+    фон_обоями(&о, режим == Режим::Вход);
     о.init_layer_shell();
     о.set_monitor(монитор);
     о.set_layer(Layer::Overlay);

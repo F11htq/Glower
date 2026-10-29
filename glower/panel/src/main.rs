@@ -561,7 +561,11 @@ fn main() {
     let программы = gtk::Button::new();
     программы.style_context().add_class("programs");
     let внутри = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    внутри.add(&Значок::новый(Вид::Сетка).холст);
+    // Знак системы — как флажок Windows на кнопке «Пуск»
+    match apps::картинка_системы("logo-64.png", 18, 18) {
+        Some(з) => внутри.add(&gtk::Image::from_pixbuf(Some(&з))),
+        None => внутри.add(&Значок::новый(Вид::Сетка).холст),
+    }
     внутри.add(&gtk::Label::new(Some("Программы")));
     программы.add(&внутри);
     программы.connect_clicked(|_| {

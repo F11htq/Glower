@@ -61,6 +61,9 @@ OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/glower-menu usr/bin/glower-desk usr/bin/glower-exe
             usr/bin/glower-tray usr/bin/glower-greeter usr/bin/glower-panel
             usr/bin/glower-lock usr/bin/glower-login usr/bin/glower-notepad usr/bin/glower-calc usr/bin/glower-files usr/bin/glower-settings usr/bin/glower-store usr/bin/glower-taskmgr usr/bin/glower-photos usr/bin/glower-snip usr/bin/glower-installer usr/bin/glower-music
+            usr/share/pixmaps/glower.png
+            usr/share/icons/hicolor/64x64/apps/glower.png usr/share/icons/hicolor/256x256/apps/glower.png usr/share/icons/hicolor/512x512/apps/glower.png
+            usr/share/icons/hicolor/64x64/apps/distributor-logo.png usr/share/icons/hicolor/256x256/apps/distributor-logo.png usr/share/icons/hicolor/512x512/apps/distributor-logo.png
             usr/bin/glower-wm usr/bin/glower-paint usr/bin/glower-calendar usr/bin/glower-clock usr/bin/glower-todo usr/bin/glower-props
             etc/pam.d/glower-lock usr/bin/врач
             usr/bin/vrach usr/bin/dhfx

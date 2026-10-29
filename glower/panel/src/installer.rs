@@ -221,6 +221,13 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     окно.style_context().add_class("installer");
     if во_весь_экран {
         окно.style_context().add_class("full");
+        // Фон — обои системы по умолчанию, чуть притемнённые под карточкой
+        let обои = crate::desktop::цвета_для_gtk(&crate::core::обои_по_имени("glower"));
+        let с = gtk::CssProvider::new();
+        let css = format!("window.installer.full {{ background-image: linear-gradient(rgba(5,8,16,.25), rgba(5,8,16,.25)), {обои}; background-size: cover; background-position: center; }}");
+        if с.load_from_data(css.as_bytes()).is_ok() {
+            окно.style_context().add_provider(&с, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 2);
+        }
     }
     окно.connect_destroy(|_| gtk::main_quit());
     // Пока идёт запись на диск, окно не закрыть: оборванная установка
@@ -249,8 +256,15 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     if let Some(л) = crate::setup::логотип(36) {
         знак.add(&gtk::Image::from_pixbuf(Some(&л)));
     }
-    let имя = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    имя.add(&метка("GlowerOS", "brand"));
+    let имя = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    match crate::apps::картинка_системы("logo-word.png", 120, 24) {
+        Some(н) => {
+            let н = gtk::Image::from_pixbuf(Some(&н));
+            н.set_halign(gtk::Align::Start);
+            имя.add(&н);
+        }
+        None => имя.add(&метка("GlowerOS", "brand")),
+    }
     имя.add(&метка(&format!("{} {}", crate::i18n::tr("Версия"), crate::core::версия()), "ver"));
     имя.set_valign(gtk::Align::Center);
     знак.add(&имя);

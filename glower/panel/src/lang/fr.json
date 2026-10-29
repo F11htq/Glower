@@ -1403,5 +1403,14 @@
 "Установить «{имя}»?": "Installer « {имя} » ?",
 "Устанавливаю «{имя}»": "Installation de « {имя} »",
 "Установить": "Installer",
-"Установить поддержку программ Windows?": "Installer la prise en charge des programmes Windows ?"
+"Установить поддержку программ Windows?": "Installer la prise en charge des programmes Windows ?",
+"Озеро": "Lac",
+"Сияние": "Aurore",
+"Пламя": "Flamme",
+"Волны": "Vagues",
+"Дюны": "Dunes",
+"Туманность": "Nébuleuse",
+"Глубина": "Profondeur",
+"Графит": "Graphite",
+"Рассвет": "Aube"
 }

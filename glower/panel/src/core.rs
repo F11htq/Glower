@@ -93,7 +93,7 @@ pub const ВИДЖЕТЫ: &[(&str, &str, &str)] = &[
 pub fn умолчания() -> Value {
     json!({
         "theme": "dark", "accent": 0, "accentCustom": null,
-        "wallpaper": "gora", "wallShuffle": false,
+        "wallpaper": "glower", "wallShuffle": false,
         "clock24": true, "showSeconds": false, "tz": "", "city": "Москва",
         "dockApps": ["browser", "files", "notepad", "settings", "store", "music", "term", "calc"],
         "showDesktopIcons": true, "showDeskWidgets": true,
@@ -240,16 +240,43 @@ fn расскажи_скоро() {
 
 /* ---------- что рассказываем ---------- */
 
+fn ссылка_на_файл(путь: &std::path::Path) -> String {
+    format!("url(\"file://{}\")", путь.to_string_lossy().replace('"', "%22"))
+}
+
+/// Фон стола словами CSS. Свои обои — картинки в assets/wallpapers; нет
+/// файла (стенд без картинок, урезанная сборка) — запасной градиент тех же
+/// цветов из того же списка
 fn обои_css(id: &str, данные: &Value) -> String {
     if let Some(путь) = id.strip_prefix("файл:") {
-        return format!("url(\"file://{}\")", путь.replace('"', "%22"));
+        return ссылка_на_файл(std::path::Path::new(путь));
     }
-    данные["обои"]
-        .as_array()
-        .and_then(|о| о.iter().find(|в| в["id"].as_str() == Some(id)).or(о.first()))
-        .and_then(|в| в["css"].as_str())
-        .unwrap_or("linear-gradient(#0b0d1a, #05060c)")
-        .to_string()
+    let Some(в) = данные["обои"].as_array().and_then(|о| о.iter().find(|в| в["id"].as_str() == Some(id)).or(о.first())) else {
+        return "linear-gradient(#0b0d1a, #05060c)".into();
+    };
+    if let Some(путь) = в["файл"].as_str().and_then(crate::apps::файл_системы) {
+        return ссылка_на_файл(&путь);
+    }
+    в["css"].as_str().unwrap_or("linear-gradient(#0b0d1a, #05060c)").to_string()
+}
+
+/// Обои по имени — для замка и экрана входа: они живут отдельно от стола
+pub fn обои_по_имени(id: &str) -> String {
+    обои_css(id, &serde_json::from_str(ДАННЫЕ).unwrap_or_default())
+}
+
+/// Список своих обоев для выбора: вместо полной картинки — маленькая (её
+/// и показывает плитка), чтобы окно выбора не грузило десять больших файлов
+pub fn обои_для_выбора() -> Value {
+    let данные: Value = serde_json::from_str(ДАННЫЕ).unwrap_or_default();
+    let mut список = данные["обои"].as_array().cloned().unwrap_or_default();
+    for в in &mut список {
+        let мини = в["файл"].as_str().map(|ф| ф.replacen("wallpapers/", "wallpapers/mini/", 1));
+        if let Some(путь) = мини.as_deref().and_then(crate::apps::файл_системы) {
+            в["css"] = json!(ссылка_на_файл(&путь));
+        }
+    }
+    Value::Array(список)
 }
 
 fn сведения_нашей(н: &Наша) -> Value {
@@ -400,7 +427,7 @@ fn расскажи_всё() {
         json!({
             "s": s,
             "kv": kv,
-            "обои": данные["обои"],
+            "обои": обои_для_выбора(),
             "акценты": данные["акценты"],
             "программы": НАШИ.iter().filter(|н| н.id != "installer").map(сведения_нашей).collect::<Vec<_>>(),
             "виджеты": ВИДЖЕТЫ.iter().map(|(t, и, з)| json!({ "t": t, "имя": и, "знак": з })).collect::<Vec<_>>(),
@@ -1857,9 +1884,10 @@ mod проверки {
     #[test]
     fn данные_оболочки_читаются() {
         let д: Value = serde_json::from_str(ДАННЫЕ).unwrap();
-        assert_eq!(д["обои"].as_array().unwrap().len(), 15);
+        assert_eq!(д["обои"].as_array().unwrap().len(), 10);
         assert_eq!(д["акценты"].as_array().unwrap().len(), 10);
-        assert!(обои_css("gora", &д).contains("radial-gradient"));
+        // Картинка из assets, а без неё — запасной градиент
+        assert!(обои_css("dyuny", &д).contains("dyuny.jpg") || обои_css("dyuny", &д).contains("gradient"));
         assert_eq!(обои_css("файл:/x/кот.png", &д), "url(\"file:///x/кот.png\")");
         // Неизвестные обои — первые, а не пустота
         assert!(обои_css("нет-таких", &д).contains("gradient"));

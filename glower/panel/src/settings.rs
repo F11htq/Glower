@@ -577,6 +577,14 @@ fn персонализация(п: &П) {
     }
     let сейчас = строка(&s(п, "wallpaper"), "");
     let сейчас = if сейчас.is_empty() { s(п, "wallpaper").as_str().unwrap_or("").to_string() } else { сейчас };
+    // Обоев с таким именем больше нет (прежние градиенты) — на столе первые
+    // из списка, их и отмечаем
+    let свои = п.сост.borrow()["обои"].as_array().cloned().unwrap_or_default();
+    let сейчас = if !сейчас.starts_with("файл:") && !свои.iter().any(|в| в["id"].as_str() == Some(сейчас.as_str())) {
+        свои.first().and_then(|в| в["id"].as_str()).unwrap_or("").to_string()
+    } else {
+        сейчас
+    };
     let плитки: Rc<RefCell<Vec<gtk::Button>>> = Rc::new(RefCell::new(Vec::new()));
 
     let о = карта(п, "Фон рабочего стола");
@@ -2484,27 +2492,33 @@ fn прошивки(п: &П, место: &gtk::Box) {
     });
 }
 
+/// Логотип с надписью — в «О системе», как у Windows и macOS
 fn логотип() -> Option<Pixbuf> {
-    let рядом = std::env::current_exe().ok().and_then(|п| п.parent().map(|р| р.join("../../../assets/logo.png")));
-    ["/usr/share/glower/ui/assets/logo.png".into()]
-        .into_iter()
-        .chain(рядом)
-        .find_map(|п: std::path::PathBuf| Pixbuf::from_file_at_scale(п, 96, 96, true).ok())
+    crate::apps::картинка_системы("logo-text.png", 240, 160)
 }
 
 fn о_системе(п: &П) {
     let бренд = п.сост.borrow()["бренд"].clone();
     let шапка = gtk::Box::new(gtk::Orientation::Vertical, 6);
     шапка.set_margin(20);
-    if let Some(л) = логотип() {
-        шапка.add(&gtk::Image::from_pixbuf(Some(&л)));
+    // Надпись уже на картинке; словами — только если картинки нет или у
+    // сборки своё полное имя
+    let полное = строка(&бренд, "полное");
+    let есть_картинка = match логотип() {
+        Some(л) => {
+            шапка.add(&gtk::Image::from_pixbuf(Some(&л)));
+            true
+        }
+        None => false,
+    };
+    if !есть_картинка {
+        let имя = gtk::Label::new(Some(&if полное.is_empty() { "GlowerOS".to_string() } else { полное }));
+        имя.style_context().add_class("logo");
+        шапка.add(&имя);
     }
-    let имя = gtk::Label::new(Some(&{ let ф = строка(&бренд, "полное"); if ф.is_empty() { "GlowerOS".into() } else { ф } }));
-    имя.style_context().add_class("logo");
-    шапка.add(&имя);
     let версия = строка(&бренд, "версия");
     if !версия.is_empty() {
-        let в = gtk::Label::new(Some(&версия));
+        let в = gtk::Label::new(Some(&format!("{} {версия}", crate::i18n::tr("Версия"))));
         в.style_context().add_class("d");
         шапка.add(&в);
     }

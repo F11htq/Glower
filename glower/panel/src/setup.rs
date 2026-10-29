@@ -179,7 +179,7 @@ pub fn покажи() {
         знак: s("userEmoji").as_str().unwrap_or("").to_string(),
         тема: s("theme").as_str().unwrap_or("dark").to_string(),
         акцент: s("accent").as_u64().unwrap_or(0),
-        обои: s("wallpaper").as_str().unwrap_or("gora").to_string(),
+        обои: s("wallpaper").as_str().unwrap_or("glower").to_string(),
     };
 
     let окно = gtk::Window::new(gtk::WindowType::Toplevel);
@@ -362,24 +362,24 @@ fn нарисуй() {
 
 /* ---------- шаги ---------- */
 
+/// Знак системы — без надписи
 pub(crate) fn логотип(размер: i32) -> Option<Pixbuf> {
-    let рядом = std::env::current_exe().ok().and_then(|п| п.parent().map(|р| р.join("../../../assets/logo.png")));
-    [std::path::PathBuf::from("/usr/share/glower/ui/assets/logo.png"), std::path::PathBuf::from("assets/logo.png")]
-        .into_iter()
-        .chain(рядом)
-        .find_map(|п| Pixbuf::from_file_at_scale(п, размер, размер, true).ok())
+    crate::apps::картинка_системы("logo.png", размер, размер)
 }
 
 fn шаг_привет(место: &gtk::Box) {
     let к = gtk::Box::new(gtk::Orientation::Vertical, 10);
     к.set_valign(gtk::Align::Center);
     к.set_vexpand(true);
-    if let Some(л) = логотип(110) {
-        к.add(&gtk::Image::from_pixbuf(Some(&л)));
+    // Знак с надписью — в первом же шаге, как приветствие
+    match crate::apps::картинка_системы("logo-text.png", 360, 230) {
+        Some(л) => к.add(&gtk::Image::from_pixbuf(Some(&л))),
+        None => {
+            let имя = gtk::Label::new(Some("GlowerOS"));
+            имя.style_context().add_class("brand");
+            к.add(&имя);
+        }
     }
-    let имя = gtk::Label::new(Some("GlowerOS"));
-    имя.style_context().add_class("brand");
-    к.add(&имя);
     let в = gtk::Label::new(Some(&format!("Версия {}", core::версия())));
     в.style_context().add_class("hint");
     к.add(&в);
@@ -663,7 +663,7 @@ fn шаг_обои(место: &gtk::Box) {
     сетка.set_min_children_per_line(4);
     сетка.set_row_spacing(8);
     сетка.set_column_spacing(8);
-    for в in данные()["обои"].as_array().cloned().unwrap_or_default() {
+    for в in core::обои_для_выбора().as_array().cloned().unwrap_or_default() {
         let id = в["id"].as_str().unwrap_or("").to_string();
         let б = gtk::Button::new();
         б.style_context().add_class("wall");
