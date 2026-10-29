@@ -30,14 +30,15 @@ try { net.setDefaultAutoSelectFamily && net.setDefaultAutoSelectFamily(true); } 
 
 /* JSON по адресу. fetch, а не вышло — curl: он сам выбирает IPv4/IPv6,
    уважает системные настройки прокси и стоит в образе всегда */
-async function возьмиJSON(адрес, срок = 10000){
+async function возьмиJSON(адрес, { срок = 7000, headers = {} } = {}){
   try {
-    const о = await fetch(адрес, { signal:AbortSignal.timeout(срок) });
+    const о = await fetch(адрес, { signal:AbortSignal.timeout(срок), headers });
     if (!о.ok) throw new Error('сервер ответил ' + о.status);
     return await о.json();
   } catch(первая){
+    const заголовки = Object.entries(headers).flatMap(([к, з]) => ['-H', `${к}: ${з}`]);
     const текст = await new Promise((готово, беда) => {
-      execFile('curl', ['-fsSL', '--max-time', String(Math.ceil(срок / 1000) + 5), адрес],
+      execFile('curl', ['-fsSL', '--max-time', String(Math.ceil(срок / 1000) + 3), ...заголовки, адрес],
         { maxBuffer:4 << 20 }, (е, вывод, ошибка) => е
           ? беда(new Error(String(ошибка || '').trim().split('\n').pop() || первая.message))
           : готово(вывод));
@@ -160,6 +161,7 @@ if (SYSTEM){
     ...m.tray(ALLOW_LAUNCH),
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
     ...(await import('./packages.mjs')).packages(ALLOW_PKG),
+    ...(await import('./av.mjs')).protection(),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
   };
   /* Папку Windows готовим заранее — только в настоящем сеансе, где
@@ -326,32 +328,7 @@ const API = {
     const где = String(город || 'Москва').trim().slice(0, 60);
     const было = ПОГОДА.get(где);
     if (было && Date.now() - было.ts < 30 * 60000) return было;
-    const знак = c => c === 0 ? '☀️' : c <= 2 ? '🌤' : c === 3 ? '☁️' : c <= 48 ? '🌫' : c <= 57 ? '🌦'
-      : c <= 67 ? '🌧' : c <= 77 ? '❄️' : c <= 82 ? '🌧' : c <= 86 ? '🌨' : '⛈';
-    const слово = c => c === 0 ? 'Ясно' : c <= 2 ? 'Малооблачно' : c === 3 ? 'Пасмурно' : c <= 48 ? 'Туман'
-      : c <= 57 ? 'Морось' : c <= 67 ? 'Дождь' : c <= 77 ? 'Снег' : c <= 82 ? 'Ливень' : c <= 86 ? 'Снегопад' : 'Гроза';
-    /* Нет связи — говорим это словами: панель покажет причину человеку */
-    const g = await возьмиJSON('https://geocoding-api.open-meteo.com/v1/search?count=1&language=ru&name='
-      + encodeURIComponent(где)).catch(е => {
-        console.error('погода: ' + е.message);
-        throw new Error('нет связи с сервисом погоды');
-      });
-    const место = g.results && g.results[0];
-    if (!место) throw new Error('город не найден: ' + где);
-    const w = await возьмиJSON(`https://api.open-meteo.com/v1/forecast?latitude=${место.latitude}`
-      + `&longitude=${место.longitude}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m`
-      + `&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6`)
-      .catch(е => {
-        console.error('погода: ' + е.message);
-        throw new Error('нет связи с сервисом погоды');
-      });
-    const дни = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
-    const итог = { ts:Date.now(), 'город':место.name, t:Math.round(w.current.temperature_2m),
-      'знак':знак(w.current.weather_code), 'слово':слово(w.current.weather_code),
-      'влажность':w.current.relative_humidity_2m, 'ветер':w.current.wind_speed_10m,
-      'дни':w.daily.time.slice(1, 6).map((д, i) => ({ 'день':дни[new Date(д).getDay()],
-        'знак':знак(w.daily.weather_code[i + 1]), max:Math.round(w.daily.temperature_2m_max[i + 1]),
-        min:Math.round(w.daily.temperature_2m_min[i + 1]) })) };
+    const итог = await (await import('./weather.mjs')).погода(где, (адрес, о = {}) => возьмиJSON(адрес, о));
     ПОГОДА.set(где, итог);
     return итог;
   },

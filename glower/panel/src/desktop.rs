@@ -1322,6 +1322,9 @@ fn меню_значков(е: &gtk::gdk::EventButton) {
             });
         }
         черта(&меню);
+        if let Some(п) = crate::protection::пункт_меню(файлы.clone()) {
+            меню.append(&п);
+        }
         let пути: Vec<String> = файлы.iter().map(|п| п.to_string_lossy().to_string()).collect();
         пункт(&меню, "Свойства", move || {
             let доводы: Vec<&str> = пути.iter().map(|п| п.as_str()).collect();

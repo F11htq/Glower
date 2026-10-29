@@ -166,6 +166,9 @@ async function поискНаFlathub(запрос){
   return [];
 }
 
+/* Ответ ubuntu-drivers — см. sys.drivers */
+let драйверыПомню = null;
+
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
   let память = null; // что на машине есть: спрошено один раз, а не каждый раз
@@ -1175,7 +1178,7 @@ export function packages(allowPackages){
     },
 
     /* Поставить обновления — тем же способом, что и установку программ. */
-    async 'pkg.upgrade.run'({ source } = {}){
+    async 'pkg.upgrade.run'({ source, толькоОбновления } = {}){
       нужноРазрешение();
       if (job && !job.done) throw new Error('уже идёт другая работа');
       if (source === 'flatpak'){
@@ -1199,7 +1202,9 @@ export function packages(allowPackages){
          и его неудача обновление не портит. Спрашиваем заранее: быстрое
          обновление успело бы закончиться, пока мы спрашиваем, и очередь
          опоздала бы. */
-      const нуженWine = !(await естьWine()).полный;
+      /* Но не перед перезагрузкой: «Обновить и перезагрузить» ждёт за
+         занавесом, и полчаса скачивания Wine там выглядят зависанием */
+      const нуженWine = !толькоОбновления && !(await естьWine()).полный;
       const пуск = запусти('upgrade', 'система', ['upgrade', '-y', '--with-new-pkgs', '--no-install-recommends']);
       const конец = () => { job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null; };
       job.потом = () => убериСтарыйДвижок(нуженWine ? () => доставьWine(true) : конец);
@@ -1214,7 +1219,17 @@ export function packages(allowPackages){
        linux-modules-nvidia-NNN-…: они уже подписаны Canonical, работают при
        включённом Secure Boot и ничего не собирают на машине. Так делает и
        сама Ubuntu (ubuntu-drivers install). */
+    /* ubuntu-drivers — программа на Python, и на старой машине она думает
+       полминуты. Видеокарта за час не поменяется: ответ помним, а после
+       установки драйвера забываем */
     async 'sys.drivers'(){
+      if (драйверыПомню && Date.now() - драйверыПомню.когда < 3600000) return драйверыПомню.ответ;
+      const ответ = await this['sys.drivers.read']();
+      драйверыПомню = { когда:Date.now(), ответ };
+      return ответ;
+    },
+
+    async 'sys.drivers.read'(){
       let вывод = '';
       try { вывод = (await run('ubuntu-drivers', ['devices'], { timeout:60000, env:{ ...process.env, LC_ALL:'C' } })).stdout; }
       catch(e){
@@ -1240,6 +1255,7 @@ export function packages(allowPackages){
 
     async 'sys.drivers.install'({ name } = {}){
       нужноРазрешение();
+      драйверыПомню = null;
       if (job && !job.done) throw new Error('уже идёт другая работа');
       const пакет = проверьИмя(name);
       if (!/^nvidia-driver-\d+(-open|-server|-server-open)?$/.test(пакет))

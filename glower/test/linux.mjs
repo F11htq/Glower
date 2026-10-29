@@ -875,13 +875,50 @@ try {
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
             && родная('glower-files', 'files') && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
-        check('Параметры на Rust: все восемнадцать разделов, системное — у агента, своё — у ядра панели',
-          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 18
-            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware']
+        check('Параметры на Rust: все девятнадцать разделов, системное — у агента, своё — у ядра панели',
+          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 19
+            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware', 'av.state']
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
             && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
             && родная('glower-settings', 'settings'));
+        {
+          // «Защита»: ClamAV по требованию, можно выключить совсем
+          const av = await readFile(join(root, 'agent', 'av.mjs'), 'utf8');
+          const защита = await readFile(join(root, 'panel', 'src', 'protection.rs'), 'utf8');
+          const exe = await readFile(join(root, 'linux', 'glower-exe'), 'utf8');
+          const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          const { разбери_строку } = await import(pathToFileURL(join(root, 'agent', 'av.mjs')).href);
+          check('Защита: агент проверяет, обновляет базу, держит карантин и выключается совсем',
+            ['av.state', 'av.set', 'av.update', 'av.scan', 'av.check', 'av.quarantine', 'av.quarantine.restore', 'av.purge']
+              .every(м => av.includes("'" + м + "'"))
+            && /packages\.microsoft\.com\/clamav/.test(av) && /dpkg-deb', \['-R'/.test(av)
+            && /if \(!нас\.вкл/.test(av) && /clamav-freshclam\.service/.test(av)
+            && existsSync(join(root, 'linux', 'clamav', 'glower.ndb')) && existsSync(join(root, 'linux', 'clamav', 'glower.yar')));
+          check('Защита: строки ClamAV разбираются, путь с двоеточием не ломается',
+            JSON.stringify(разбери_строку('/tmp/a: b.exe: Win.Trojan.X-1 FOUND')) === JSON.stringify({ путь:'/tmp/a: b.exe', угроза:'Win.Trojan.X-1' })
+            && разбери_строку('/tmp/x: OK').угроза === null
+            && разбери_строку('/tmp/y: YARA.Z.UNOFFICIAL FOUND').угроза === 'YARA.Z');
+          check('Защита: пакеты проверяются перед установкой, программы Windows — перед запуском',
+            /protection::перед\(/.test(ядро) && /"проверь"/.test(ядро) && /tell "проверь"/.test(exe) && /GLOWER_NO_AV/.test(exe)
+            && /fn доступна\(\)/.test(защита) && /"glower-scan"/.test(главная) && /glower-scan/.test(образ2));
+        }
+        {
+          const погода = await import(pathToFileURL(join(root, 'agent', 'weather.mjs')).href);
+          const вызовы = [];
+          const ряд = [{ time:'2026-10-29T06:00:00Z', data:{ instant:{ details:{ air_temperature:-3, relative_humidity:70, wind_speed:2 } },
+            next_1_hours:{ summary:{ symbol_code:'snow' } } } }];
+          const ответ = await погода.погода('Красноярск', async (адрес) => {
+            вызовы.push(new URL(адрес).host);
+            if (адрес.includes('open-meteo')) throw new Error('нет связи');
+            if (адрес.includes('nominatim')) return [{ lat:'56', lon:'92.9', display_name:'Красноярск' }];
+            return { properties:{ timeseries:ряд } };
+          });
+          check('Погода: Open-Meteo недоступен — берётся met.no, город через OpenStreetMap',
+            ответ.t === -3 && ответ['источник'] === 'met.no' && ответ['слово'] === 'Снег' && вызовы.includes('api.met.no'));
+          check('Погода: коды wttr.in и met.no приводятся к одним значкам',
+            погода.кодWttr(113) === 0 && погода.кодWttr(389) === 95 && погода.кодMetNo('lightrainshowers_day') === 81 && погода.кодMetNo('fog') === 45);
+        }
         const магазин = await readFile(join(root, 'panel', 'src', 'store.rs'), 'utf8');
         const каталог = JSON.parse(await readFile(join(root, 'panel', 'src', 'store-catalog.json'), 'utf8'));
         check('Магазин на Rust: витрина, разделы, поиск, установка, обновления, «Моё»',

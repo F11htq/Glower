@@ -349,7 +349,10 @@ test -x /usr/bin/labwc || { echo "основные пакеты не устан�
 # steam-devices — двадцать килобайт правил udev для геймпадов. Сам Steam
 # из песочницы их поставить не может и при первом запуске жалуется окном
 # по-английски; человеку, который просто поставил игру, это непонятно.
-for extra in gnome-backgrounds steam-devices; do
+# clamav — «Защита»: проверка на вирусы по требованию, около 30 МБ. Базу
+# в образ не кладём (она в четыре раза больше самого ClamAV): система
+# скачает её сама. Службу freshclam гасим ниже — базу обновляет агент.
+for extra in gnome-backgrounds steam-devices clamav clamav-freshclam; do
   apt-get install -y --no-install-recommends "$extra" >/dev/null 2>&1 \
     && echo "  доп.: $extra — поставлен" \
     || echo "  доп.: $extra — в репозитории нет, пропускаю"
@@ -486,7 +489,7 @@ if [ -x "$PANEL_BIN" ]; then
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-files"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-settings"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-store"
-  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
+  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props glower-scan; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
   echo "  рабочий стол: $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "нет panel/target/release/glower-panel — рабочий стол собрать не из чего"
@@ -1017,6 +1020,8 @@ chroot "$ROOTFS" /bin/sh -c '
   systemctl disable e2scrub_reap.service >/dev/null 2>&1 || true
   systemctl mask e2scrub_reap.service >/dev/null 2>&1 || true
   systemctl disable accounts-daemon.service >/dev/null 2>&1 || true
+  systemctl disable clamav-freshclam.service >/dev/null 2>&1 || true
+  systemctl mask clamav-freshclam.service >/dev/null 2>&1 || true
 ' || true
 # Индекс пакетов мы из образа выбрасываем: со списками ISO не влезает в
 # лимит на размер. Цена этого вылезает на установленной системе — apt не

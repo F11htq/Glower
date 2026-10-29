@@ -48,6 +48,7 @@ mod store;
 mod snip;
 mod taskmgr;
 mod photos;
+mod protection;
 mod theme;
 mod todo;
 mod tray;
@@ -385,6 +386,7 @@ window.desktop .di-label {
 }
 window.curtain { background-color: #000000; }
 window.curtain label { color: rgba(255, 255, 255, 0.8); font-size: 18px; }
+window.curtain .curtain-sub { color: rgba(255, 255, 255, 0.55); font-size: 13px; }
 /* уведомления */
 window.toasts, window.toasts * { color: alpha(@glower_fg, 0.95); font-family: sans-serif; font-size: 13px; }
 .toast {
@@ -493,6 +495,7 @@ fn main() {
         "glower-clock" => clock::запусти(std::env::args().skip(1).collect()),
         "glower-todo" => todo::запусти(std::env::args().skip(1).collect()),
         "glower-props" => props::запусти(std::env::args().skip(1).collect()),
+        "glower-scan" => protection::запусти(std::env::args().skip(1).collect()),
         _ => {}
     }
     if имя == "glower-music" {

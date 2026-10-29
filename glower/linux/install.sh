@@ -50,7 +50,7 @@ install -d "$PREFIX/bin" "$PREFIX/share/glower/labwc"
 install -m 755 "$PANEL_BIN" "$PREFIX/bin/glower-panel"
 for prog in glower-lock glower-login glower-notepad glower-calc glower-files glower-settings \
             glower-store glower-taskmgr glower-photos glower-snip glower-installer glower-music \
-            glower-paint glower-calendar glower-clock glower-todo glower-props; do
+            glower-paint glower-calendar glower-clock glower-todo glower-props glower-scan; do
   ln -sf glower-panel "$PREFIX/bin/$prog"
 done
 for prog in glower-menu glower-desk glower-shot glower-open-package glower-exe glower-tray; do

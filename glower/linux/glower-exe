@@ -42,6 +42,15 @@ if [ -z "$WINE" ]; then
   exit 1
 fi
 
+# «Защита»: незнакомую программу сперва проверяют на вирусы, как SmartScreen
+# в Windows. Проверяет оболочка — она и спросит, если что-то нашлось, — а
+# если всё чисто, запустит этот же файл снова, уже с GLOWER_NO_AV=1.
+# Выключенная «Защита» (или нет ClamAV) — запускаем сразу.
+if [ -z "${GLOWER_NO_AV:-}" ] && command -v clamscan >/dev/null 2>&1 \
+   && ! grep -qs '"вкл": *false' "$HOME/.config/glower/protection.json"; then
+  tell "проверь" && exit 0
+fi
+
 tell "запуск"
 
 export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"

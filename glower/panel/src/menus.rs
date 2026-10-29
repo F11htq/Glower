@@ -1561,10 +1561,25 @@ pub(crate) fn занавес(надпись: &str) -> gtk::Window {
     о.set_exclusive_zone(-1);
     о.set_keyboard_mode(KeyboardMode::None);
     о.style_context().add_class("curtain");
-    let п = gtk::Label::new(Some(надпись));
-    о.add(&п);
+    let к = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    к.set_valign(gtk::Align::Center);
+    к.add(&gtk::Label::new(Some(надпись)));
+    // Вторая строка — что именно сейчас делается. Без неё долгую работу не
+    // отличить от зависшей: человек видит одну и ту же надпись полчаса
+    let ход = gtk::Label::new(None);
+    ход.style_context().add_class("curtain-sub");
+    к.add(&ход);
+    о.add(&к);
     о.show_all();
     о
+}
+
+/// Сменить вторую строку занавеса
+pub(crate) fn занавес_ход(о: &gtk::Window, текст: &str) {
+    let Some(к) = о.child().and_then(|к| к.downcast::<gtk::Box>().ok()) else { return };
+    if let Some(л) = к.children().get(1).and_then(|л| л.clone().downcast::<gtk::Label>().ok()) {
+        л.set_text(текст);
+    }
 }
 
 #[cfg(test)]
