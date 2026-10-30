@@ -242,6 +242,18 @@ PORTALS
   fi
 }
 
+# Переменные, которые включают из «Параметров» (например, счётчик кадров в
+# играх — MANGOHUD=1). Только имена заглавными буквами — ничего, кроме
+# переменных, этот файл задать не может
+if [ -r "$HOME/.config/glower/session-env" ]; then
+  while IFS='=' read -r SKEY SVAL; do
+    case "$SKEY" in
+      ''|*[!A-Z0-9_]*|[0-9]*) ;;
+      *) export "$SKEY=$SVAL" ;;
+    esac
+  done < "$HOME/.config/glower/session-env"
+fi
+
 # Программы на Qt — тема из тех же ключей, что у GTK, если модуль для этого есть
 for QTGTK in /usr/lib/*/qt6/plugins/platformthemes/libqgtk3.so /usr/lib/*/qt5/plugins/platformthemes/libqgtk3.so; do
   if [ -e "$QTGTK" ]; then QT_QPA_PLATFORMTHEME=gtk3; export QT_QPA_PLATFORMTHEME; break; fi

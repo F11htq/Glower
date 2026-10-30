@@ -162,6 +162,7 @@ if (SYSTEM){
     ...(await import('./install.mjs')).install(ALLOW_INSTALL),
     ...(await import('./packages.mjs')).packages(ALLOW_PKG),
     ...(await import('./av.mjs')).protection(),
+    ...(await import('./games.mjs')).games(),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
   };
   /* Папку Windows готовим заранее — только в настоящем сеансе, где

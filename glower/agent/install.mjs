@@ -84,28 +84,39 @@ export function install(allowInstall){
     async 'install.disks'(){
       const live = await liveDevice();
       const list = await disks();
+      /* Что на каждом диске: другая система, свободное место, разделы,
+         куда можно поставить, не трогая остальное. Спрашиваем сам
+         сценарий установки — он же потом и ставит, и правила у них одни */
+      const подробно = await Promise.all(list.map(async d => {
+        if (live && live.startsWith(d.dev)) return null;
+        try {
+          const { stdout } = await run(RUNNER.cmd, [...RUNNER.pre, '--disk', d.dev, '--probe'], { timeout:30000 });
+          return разбери_пробу(stdout);
+        } catch(e){ return null; }
+      }));
       return {
-        list:list.map(d => Object.assign({}, d, {
-          live: !!(live && live.startsWith(d.dev))
+        list:list.map((d, i) => Object.assign({}, d, {
+          live: !!(live && live.startsWith(d.dev)),
+          ...(подробно[i] || {})
         })),
         liveDevice:live
       };
     },
 
     /* проверка без записи: сценарий сам расскажет, что собирается делать */
-    async 'install.plan'({ disk }){
+    async 'install.plan'({ disk, mode, part }){
       if (!allowInstall) throw new Error('установка выключена: запустите агент с ключом --allow-install');
       await checkDisk(disk);
-      const { stdout } = await run(RUNNER.cmd, [...RUNNER.pre, '--disk', disk, '--dry-run'], { timeout:15000 });
+      const { stdout } = await run(RUNNER.cmd, [...RUNNER.pre, '--disk', disk, ...ключи_места(mode, part), '--dry-run'], { timeout:30000 });
       return { plan:stdout };
     },
 
-    async 'install.start'({ disk, password, hostname, tz, repair, crypt, cryptPassword }){
+    async 'install.start'({ disk, password, hostname, tz, repair, crypt, cryptPassword, mode, part }){
       if (!allowInstall) throw new Error('установка выключена: запустите агент с ключом --allow-install');
       if (job && !job.done) throw new Error('установка уже идёт');
       await checkDisk(disk);
 
-      const args = ['--disk', disk, '--yes'];
+      const args = ['--disk', disk, '--yes', ...ключи_места(mode, part)];
       if (repair) args.push('--repair');
       if (password) args.push('--pass', String(password));
       /* Пароль диска не то же самое, что пароль человека: первый отпирает
@@ -145,6 +156,17 @@ export function install(allowInstall){
     }
   };
 
+  /* Куда ставить: весь диск, свободное место рядом с другой системой или
+     один раздел. Имя раздела — только вида /dev/sdXN, /dev/nvmeXnYpZ */
+  function ключи_места(mode, part){
+    if (mode === 'free') return ['--alongside'];
+    if (mode === 'part'){
+      if (!/^\/dev\/[a-z0-9]+$/.test(String(part || ''))) throw new Error('не указан раздел');
+      return ['--part', String(part)];
+    }
+    return [];
+  }
+
   async function checkDisk(disk){
     const list = await disks();
     const d = list.find(x => x.dev === disk);
@@ -154,4 +176,29 @@ export function install(allowInstall){
       throw new Error('это носитель, с которого запущена система — на него ставить нельзя');
     return d;
   }
+}
+
+/* Ответ сценария на --probe — построчно:
+     ТАБЛИЦА gpt · СЕКТОР 512 · СВОБОДНО начало секторов байт · EFI /dev/sda1
+     РАЗДЕЛ /dev/sda5 байт fs метка почему-нельзя-или-«можно»
+     WINDOWS да|нет · BITLOCKER да|нет */
+export function разбери_пробу(текст){
+  const о = { таблица:null, свободно:0, efi:null, windows:false, bitlocker:false, разделы:[] };
+  for (const стр of String(текст).split('\n')){
+    const ч = стр.trim().split(' ');
+    switch (ч[0]){
+      case 'ТАБЛИЦА': о.таблица = ч[1] === 'нет' ? null : ч[1]; break;
+      case 'СВОБОДНО': о.свободно = Number(ч[3]) || 0; break;
+      case 'EFI': о.efi = ч[1]; break;
+      case 'WINDOWS': о.windows = ч[1] === 'да'; break;
+      case 'BITLOCKER': о.bitlocker = ч[1] === 'да'; break;
+      case 'РАЗДЕЛ': {
+        const почему = ч.slice(5).join(' ');
+        о.разделы.push({ dev:ч[1], size:Number(ч[2]) || 0, fs:ч[3] === '-' ? '' : ч[3],
+          label:ч[4] === '-' ? '' : ч[4].replace(/_/g, ' '), можно:почему === 'можно', почему:почему === 'можно' ? '' : почему });
+        break;
+      }
+    }
+  }
+  return о;
 }

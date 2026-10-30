@@ -166,8 +166,82 @@ async function поискНаFlathub(запрос){
   return [];
 }
 
+/* Все программы раздела Магазина — с Flathub, без предела.
+
+   Подборка в Магазине — это то, что мы выбрали руками: десять-двадцать
+   программ на раздел. А на Flathub в одних «Играх» их сотни. Раздел
+   показывает подборку первой, а за ней — всё, что есть в этой категории,
+   страницами. Спрашиваем сайт Flathub; нет сайта — свой список Flathub
+   на диске (он есть, когда Flathub подключён). Ответы помним на сеанс. */
+const КАТЕГОРИИ = { сеть:'Network', работа:'Office', медиа:'AudioVideo', графика:'Graphics',
+  игры:'Game', система:'System', разработка:'Development' };
+const СТРАНИЦЫ = new Map();
+let местныйКаталог = null;
+
+function разбериAppstream(xml){
+  const все = [];
+  const снимай = т => т.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
+  for (const м of xml.matchAll(/<component type="desktop(?:-application)?"[^>]*>([\s\S]*?)<\/component>/g)){
+    const к = м[1];
+    const id = (к.match(/<id>([^<]+)<\/id>/) || [])[1];
+    const имя = (к.match(/<name>([^<]+)<\/name>/) || [])[1];
+    if (!id || !имя) continue;
+    все.push({ source:'flatpak', name:id.replace(/\.desktop$/, ''), title:снимай(имя),
+      about:снимай((к.match(/<summary>([^<]*)<\/summary>/) || [])[1] || ''),
+      категории:[...к.matchAll(/<category>([^<]+)<\/category>/g)].map(х => х[1]) });
+  }
+  return все.filter(х => APPID.test(х.name));
+}
+
+async function категорияFlathub(раздел, страница){
+  const кат = КАТЕГОРИИ[раздел];
+  if (!кат) throw new Error('нет такого раздела');
+  const ключ = кат + '|' + страница;
+  if (СТРАНИЦЫ.has(ключ)) return СТРАНИЦЫ.get(ключ);
+  const НА_СТРАНИЦЕ = 48;
+  const адрес = `https://flathub.org/api/v2/collection/category/${кат}?page=${страница}&per_page=${НА_СТРАНИЦЕ}`;
+  const разбери = о => ({
+    list:((о && (о.hits || о.results)) || []).map(х => ({ source:'flatpak', name:х.app_id || х.id || '',
+      title:х.name || '', about:х.summary || '' })).filter(х => х.name && APPID.test(х.name)),
+    страниц:Number(о && (о.totalPages || о.total_pages)) || 1,
+  });
+  let итог = null;
+  try {
+    const о = await fetch(адрес, { signal:AbortSignal.timeout(12000) }).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); });
+    итог = разбери(о);
+  } catch(e){
+    try {
+      const текст = await new Promise((готово, беда) => execFile('curl', ['-fsSL', '--max-time', '15', адрес],
+        { maxBuffer:16 << 20 }, (е, вывод) => е ? беда(е) : готово(вывод)));
+      итог = разбери(JSON.parse(текст));
+    } catch(e2){}
+  }
+  if (!итог || !итог.list.length){
+    // Сайта нет — свой список Flathub на диске
+    if (!местныйКаталог){
+      const { gunzipSync } = await import('node:zlib');
+      for (const ф of ['/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz',
+                       '/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml']){
+        try {
+          const б = await readFile(ф);
+          местныйКаталог = разбериAppstream((ф.endsWith('.gz') ? gunzipSync(б) : б).toString('utf8'));
+          break;
+        } catch(e){}
+      }
+    }
+    if (!местныйКаталог) throw new Error('Flathub недоступен: нет связи с сайтом, а свой список Flathub ещё не скачан');
+    const свои = местныйКаталог.filter(х => х.категории.includes(кат)).map(({ категории, ...х }) => х);
+    итог = { list:свои.slice((страница - 1) * НА_СТРАНИЦЕ, страница * НА_СТРАНИЦЕ),
+             страниц:Math.max(1, Math.ceil(свои.length / НА_СТРАНИЦЕ)) };
+  }
+  СТРАНИЦЫ.set(ключ, итог);
+  return итог;
+}
+
 /* Ответ ubuntu-drivers — см. sys.drivers */
 let драйверыПомню = null;
+
+export { разбериAppstream };
 
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
@@ -848,6 +922,11 @@ export function packages(allowPackages){
     },
 
     /* поиск сразу по двум источникам: репозитории Ubuntu и Flathub */
+    async 'pkg.category'({ раздел, страница = 1 }){
+      const с = Math.max(1, Math.min(500, Number(страница) || 1));
+      return { ...(await категорияFlathub(String(раздел || ''), с)), страница:с };
+    },
+
     async 'pkg.search'({ query, limit }){
       const q = String(query || '').trim();
       if (q.length < 2) return { list:[] };
@@ -1306,6 +1385,63 @@ export function packages(allowPackages){
       const в = await естьWine();
       return { ...в, можно:!!allowPackages };
     },
+    /* Подготовить систему к играм — одной кнопкой.
+
+       Steam, Heroic и прочее из Flathub везут свои библиотеки сами. А вот
+       Wine и Lutris берут драйверы у системы, и 32-битной игре нужны
+       32-битные драйверы Vulkan и OpenGL — без них старая игра под Wine
+       открывает чёрное окно или падает с «vkCreateInstance failed».
+       gamemode переводит процессор на полную частоту, пока идёт игра;
+       MangoHud рисует поверх игры счётчик кадров. vm.max_map_count — то,
+       без чего часть игр под Proton (CS2, Hogwarts Legacy, DayZ) падает
+       при загрузке: Valve сама просит поднять его, и SteamOS так и делает. */
+    async 'game.prepare'(){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      job = { name:'игры', action:'install', percent:2, step:'Готовлю систему к играм', done:false, ok:false,
+              error:null, log:'', слышно:Date.now(), pid:null };
+      (async () => {
+        try {
+          const { stdout } = await run('dpkg', ['--print-foreign-architectures']).catch(() => ({ stdout:'' }));
+          if (!/\bi386\b/.test(stdout))
+            await run('sudo', ['-n', 'dpkg', '--add-architecture', 'i386'], { timeout:60000, env:СРЕДА_APT() });
+          job.step = 'Обновляю списки пакетов'; job.слышно = Date.now();
+          await run('sudo', ['-n', 'apt-get', 'update'], { timeout:600000, env:СРЕДА_APT() });
+        } catch(e){
+          job.done = true; job.percent = 100; job.ok = false;
+          job.error = 'Не вышло обновить списки пакетов: ' + String(e.stderr || e.message || '').trim().split('\n').pop();
+          return;
+        }
+        const пакеты = ['gamemode', 'mangohud', 'vulkan-tools', 'steam-devices',
+          'libvulkan1:i386', 'mesa-vulkan-drivers:i386', 'libgl1-mesa-dri:i386', 'libglx-mesa0:i386'];
+        // Стоит драйвер NVIDIA — нужна и его 32-битная часть, иначе Wine
+        // с 32-битной игрой на такой машине уходит на программную отрисовку
+        try {
+          const { stdout } = await run('dpkg-query', ['-W', '-f=${Package} ${Status}\n', 'nvidia-driver-*']);
+          const ветка = stdout.split('\n').filter(с => / install ok installed$/.test(с))
+            .map(с => (с.match(/^nvidia-driver-(\d+)/) || [])[1]).find(Boolean);
+          if (ветка) пакеты.push(`libnvidia-gl-${ветка}:i386`);
+        } catch(e){}
+        начни('install', 'игры', ['install', '-y', '--no-install-recommends', ...пакеты]);
+        job.потом = async () => {
+          job.step = 'Последние настройки'; job.слышно = Date.now();
+          try {
+            const п = spawn('sudo', ['-n', 'tee', '/etc/sysctl.d/80-glower-games.conf'], { stdio:['pipe', 'ignore', 'ignore'] });
+            п.stdin.end('# GlowerOS: игры под Proton просят больше областей памяти (так же в SteamOS)\nvm.max_map_count = 2147483642\n');
+            await new Promise(r => п.on('close', r));
+            await run('sudo', ['-n', 'sysctl', '-q', '-w', 'vm.max_map_count=2147483642']).catch(() => {});
+          } catch(e){}
+          // Счётчик кадров и для игр из Flathub (Steam): слой MangoHud под
+          // их среду. Нет Flathub или сети — не беда, просто без него
+          for (const ветка of ['24.08', '23.08'])
+            await run('sudo', ['-n', 'flatpak', 'install', '-y', '--noninteractive', '--system', 'flathub',
+              `runtime/org.freedesktop.Platform.VulkanLayer.MangoHud//${ветка}`], { timeout:300000 }).catch(() => {});
+          job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null;
+        };
+      })();
+      return { started:true, name:'игры', action:'install' };
+    },
+
     async 'pkg.windows.install'(){
       нужноРазрешение();
       if (job && !job.done) throw new Error('уже идёт другая работа');

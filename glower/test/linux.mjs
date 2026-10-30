@@ -875,9 +875,9 @@ try {
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
             && родная('glower-files', 'files') && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
-        check('Параметры на Rust: все девятнадцать разделов, системное — у агента, своё — у ядра панели',
-          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 19
-            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware', 'av.state']
+        check('Параметры на Rust: все двадцать разделов, системное — у агента, своё — у ядра панели',
+          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 20
+            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware', 'av.state', 'game.state']
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
             && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
@@ -920,6 +920,36 @@ try {
           const мастер = await readFile(join(root, 'panel', 'src', 'setup.rs'), 'utf8');
           check('Мастер настройки — на своём фоне (сияние), а не поверх стола; кадры по монитору, на слабой машине 25',
             /struct Сияние/.test(мастер) && /add_tick_callback/.test(мастер) && /0\.040/.test(мастер));
+        }
+        {
+          // Установка рядом с Windows: ничего, кроме отданного места, не стирается
+          const уст = await readFile(join(root, 'linux', 'glower-install'), 'utf8');
+          const устАг = await readFile(join(root, 'agent', 'install.mjs'), 'utf8');
+          const устОк = await readFile(join(root, 'panel', 'src', 'installer.rs'), 'utf8');
+          const { разбери_пробу } = await import(pathToFileURL(join(root, 'agent', 'install.mjs')).href);
+          const п = разбери_пробу('ТАБЛИЦА gpt\nСВОБОДНО 1 2 30000000000\nEFI /dev/sda1\nРАЗДЕЛ /dev/sda3 9 ntfs Windows на нём стоит Windows\nРАЗДЕЛ /dev/sda5 25000000000 ntfs Новый_том можно\nWINDOWS да\nBITLOCKER нет');
+          check('Установка рядом с Windows: в раздел или свободное место, раздел EFI не форматируется, меню выбора системы',
+            /--alongside\) MODE=free/.test(уст) && /--part\) MODE=part/.test(уст) && /--probe\) PROBE=1/.test(уст)
+            && /sfdisk --quiet --append/.test(уст) && /GRUB_DISABLE_OS_PROBER=false/.test(уст) && /LOCAL/.test(уст)
+            && /на нём стоит Windows/.test(уст) && /--no-nvram/.test(уст)
+            && п.windows && п.разделы[1].можно && !п.разделы[0].можно && п.свободно === 30000000000
+            && /'--alongside'/.test(устАг) && /fn выбор_места/.test(устОк) && /os-prober/.test(образ2) && /shim-signed/.test(образ2));
+          // Игры
+          const игры = await readFile(join(root, 'agent', 'games.mjs'), 'utf8');
+          const ядро2 = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          const пак = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          check('Игры: игровой режим сам по окну игры, счётчик кадров, подготовка одной кнопкой',
+            /gamemoded', \['-r'\]/.test(игры) && /MANGOHUD/.test(игры) && /'game\.prepare'/.test(пак) && /mesa-vulkan-drivers:i386/.test(пак)
+            && /max_map_count/.test(пак) && /fn это_игра/.test(ядро2) && /игра_идёт\(\)/.test(ядро2) && /gamemode mangohud/.test(образ2));
+        }
+        {
+          const маг = await readFile(join(root, 'panel', 'src', 'store.rs'), 'utf8');
+          const пак2 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          const { разбериAppstream } = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const а = разбериAppstream('<component type="desktop-application"><id>com.example.Game</id><name>Игра</name><summary>A &amp; B</summary><category>Game</category></component>');
+          check('Магазин: рекомендации каждый раз новые, в разделе — все программы категории с Flathub, страницами',
+            /fn перемешай/.test(маг) && /fn догрузи/.test(маг) && /"Показать ещё"/.test(маг) && /'pkg\.category'/.test(пак2)
+            && /api\/v2\/collection\/category/.test(пак2) && а.length === 1 && а[0].about === 'A & B' && а[0].категории[0] === 'Game');
         }
         {
           const погода = await import(pathToFileURL(join(root, 'agent', 'weather.mjs')).href);

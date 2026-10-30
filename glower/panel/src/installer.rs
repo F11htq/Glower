@@ -128,6 +128,9 @@ struct Состояние {
     пароль_диска: String,
     можно: Option<Value>,
     чиним: bool,
+    /// Куда на диске: "disk" — весь, "free" — свободное место, "part" — раздел
+    место: String,
+    раздел: Option<String>,
 }
 
 struct Мастер {
@@ -174,7 +177,12 @@ fn ответ_показа(метод: &str) -> Result<Value, String> {
     match метод {
         "install.can" => Ok(json!({ "allowed": true, "reason": null })),
         "install.disks" => Ok(json!({ "list": [
-            { "dev": "/dev/nvme0n1", "model": "Samsung SSD 980 PRO", "size": 1.0e12, "kind": "твердотельный" },
+            { "dev": "/dev/nvme0n1", "model": "Samsung SSD 980 PRO", "size": 1.0e12, "kind": "твердотельный",
+              "windows": true, "bitlocker": false, "свободно": 0, "efi": "/dev/nvme0n1p1", "таблица": "gpt",
+              "разделы": [
+                { "dev": "/dev/nvme0n1p3", "size": 7.5e11, "fs": "ntfs", "label": "Windows", "можно": false, "почему": "на нём стоит Windows" },
+                { "dev": "/dev/nvme0n1p5", "size": 2.0e11, "fs": "ntfs", "label": "Новый том", "можно": true, "почему": "" }
+              ] },
             { "dev": "/dev/sda", "model": "WDC WD20EZBX", "size": 2.0e12, "kind": "диск" },
             { "dev": "/dev/sdb", "model": "SanDisk Ultra", "size": 32.0e9, "kind": "твердотельный", "removable": true, "live": true },
         ] })),
@@ -336,7 +344,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             шаги,
             назад,
             далее,
-            с: Состояние { имя_машины: "GlowerOS".into(), чиним, ..Default::default() },
+            с: Состояние { имя_машины: "GlowerOS".into(), чиним, место: "disk".into(), ..Default::default() },
         })))
     });
     // Esc — попробовать систему, не устанавливая. Только с флешки и только
@@ -419,7 +427,7 @@ fn нарисуй_шаги(шаг: usize, чиним: bool) {
     let имена = [
         "Приветствие",
         "Диск",
-        "Учётная запись",
+        "Пароль",
         "Проверка",
         if чиним { "Восстановление" } else { "Установка" },
         "Готово",
@@ -521,7 +529,7 @@ fn нарисуй() {
                 с_мастером(|м| м.с.можно = Some(о.clone()));
                 if можно {
                     место.add(&метка(
-                        if чиним { "Разметка диска не меняется. Заменяются только файлы самой системы." } else { "Диск, который вы выберете, будет очищен полностью. Всё, что на нём есть, исчезнет." },
+                        if чиним { "Разметка диска не меняется. Заменяются только файлы самой системы." } else { "Можно поставить рядом с Windows — в отдельный раздел или в свободное место — или занять весь диск. Выбор — на следующем шаге." },
                         "note",
                     ));
                 } else {
@@ -554,8 +562,14 @@ fn нарисуй() {
                         if диски.is_empty() {
                             список.add(&метка("Дисков не найдено", "warn"));
                         }
-                        for д in диски {
-                            список.add(&плитка_диска(&д, выбран.as_deref()));
+                        for д in &диски {
+                            список.add(&плитка_диска(д, выбран.as_deref()));
+                        }
+                        let чиним = с_мастером(|м| м.с.чиним).unwrap_or(false);
+                        if let Some(д) = выбран.as_deref().and_then(|в| диски.iter().find(|д| д["dev"].as_str() == Some(в))) {
+                            if !чиним {
+                                список.add(&выбор_места(д));
+                            }
                         }
                         кнопки(true, Some("Далее"), выбран.is_some());
                     }
@@ -564,7 +578,7 @@ fn нарисуй() {
             });
         }
         2 => {
-            т.add(&метка("Учётная запись машины", "h2"));
+            т.add(&метка("Пароль и имя компьютера", "h2"));
             let (пароль, имя, шифр, пароль_диска) = с_мастером(|м| (м.с.пароль.clone(), м.с.имя_машины.clone(), м.с.шифр, м.с.пароль_диска.clone())).unwrap_or_default();
             let сетка = gtk::Grid::new();
             сетка.set_row_spacing(14);
@@ -601,8 +615,8 @@ fn нарисуй() {
                 поле.set_valign(gtk::Align::Center);
                 сетка.attach(поле, 1, r, 1, 1);
             };
-            строка(0, "dialog-password-symbolic", "Пароль системной записи", "Нужен для входа в консоль и для sudo. Можно оставить пустым, как в живой системе.", п1.upcast_ref());
-            строка(1, "computer-symbolic", "Имя машины", "Так система будет представляться в сети", хн.upcast_ref());
+            строка(0, "dialog-password-symbolic", "Пароль для входа", "Его спросят при включении компьютера. Оставите пустым — система будет входить сама, без пароля.", п1.upcast_ref());
+            строка(1, "computer-symbolic", "Имя компьютера", "Так компьютер виден в домашней сети — например, другим компьютерам и телефону", хн.upcast_ref());
             // Шифрование: пароль входа защищает от того, кто сядет за машину,
             // шифрование — от того, кто унесёт диск
             let флажок = gtk::Switch::new();
@@ -663,6 +677,15 @@ fn нарисуй() {
         3 => {
             let (с_диск, диски, имя, пароль, шифр) = с_мастером(|м| (м.с.диск.clone().unwrap_or_default(), м.с.диски.clone(), м.с.имя_машины.clone(), !м.с.пароль.is_empty(), м.с.шифр)).unwrap_or_default();
             let д = диски.iter().find(|д| д["dev"].as_str() == Some(&с_диск)).cloned().unwrap_or_default();
+            let (место, раздел) = с_мастером(|м| (м.с.место.clone(), м.с.раздел.clone())).unwrap_or_default();
+            let р = раздел.as_deref().and_then(|р| д["разделы"].as_array().and_then(|в| в.iter().find(|х| х["dev"].as_str() == Some(р)).cloned())).unwrap_or_default();
+            let куда = match (чиним, место.as_str()) {
+                (true, _) => crate::i18n::tr("на месте, разметка не меняется"),
+                (_, "part") => format!("{} {}", crate::i18n::tr("раздел"), имя_раздела(&р)),
+                (_, "free") => format!("{} · {}", crate::i18n::tr("свободное место"), размер(д["свободно"].as_f64().unwrap_or(0.0))),
+                _ => crate::i18n::tr("весь диск"),
+            };
+            let шифр = шифр && место != "part";
             т.add(&метка("Проверьте перед началом", "h2"));
             let карточка = gtk::Box::new(gtk::Orientation::Vertical, 0);
             карточка.style_context().add_class("card");
@@ -670,6 +693,7 @@ fn нарисуй() {
                 (значок_диска(&д), "Диск", д["model"].as_str().filter(|м| !м.is_empty()).or(д["name"].as_str()).unwrap_or(&с_диск).to_string()),
                 ("media-flash-symbolic", "Устройство", с_диск.clone()),
                 ("drive-harddisk-symbolic", "Объём", размер(д["size"].as_f64().unwrap_or(0.0))),
+                ("drive-harddisk-system-symbolic", "Куда", куда),
                 ("computer-symbolic", "Имя машины", имя),
                 ("dialog-password-symbolic", "Пароль", if пароль { "задан".into() } else { "без пароля".into() }),
                 ("security-high-symbolic", "Шифрование", if шифр { "диск будет зашифрован".into() } else { "нет".into() }),
@@ -693,12 +717,16 @@ fn нарисуй() {
             т.add(&метка(
                 &if чиним {
                     format!("Разметка и личные файлы не трогаются. Заменяются файлы системы: {с_диск}.")
+                } else if место == "part" {
+                    format!("Будет стёрт только раздел {}. Остальное на диске останется как есть, при включении появится меню выбора системы.", раздел.clone().unwrap_or_default())
+                } else if место == "free" {
+                    "Новый раздел займёт свободное место. Существующие разделы не тронутся, при включении появится меню выбора системы.".to_string()
                 } else {
                     format!("Диск {с_диск} будет стёрт полностью, вместе со всеми разделами и данными. Отменить это будет нечем.")
                 },
-                if чиним { "note" } else { "warn" },
+                if чиним || место != "disk" { "note" } else { "warn" },
             ));
-            кнопки(true, Some(if чиним { "Восстановить систему" } else { "Стереть диск и установить" }), true);
+            кнопки(true, Some(if чиним { "Восстановить систему" } else if место == "disk" { "Стереть диск и установить" } else { "Установить" }), true);
         }
         4 => установка(&т),
         5 => {
@@ -753,7 +781,8 @@ fn плитка_диска(д: &Value, выбран: Option<&str>) -> gtk::Butto
     и.set_xalign(0.0);
     к.add(&и);
     let вид = д["kind"].as_str().map(crate::i18n::tr).unwrap_or_default();
-    к.add(&метка(&format!("{dev} · {вид}{}", if живой { crate::i18n::tr(" · носитель системы") } else { String::new() }), "muted"));
+    let windows = if д["windows"].as_bool() == Some(true) { " · Windows".to_string() } else { String::new() };
+    к.add(&метка(&format!("{dev} · {вид}{windows}{}", if живой { crate::i18n::tr(" · носитель системы") } else { String::new() }), "muted"));
     ряд.add(&к);
     let объём = метка(&размер(д["size"].as_f64().unwrap_or(0.0)), "disk-size");
     объём.set_valign(gtk::Align::Center);
@@ -764,11 +793,131 @@ fn плитка_диска(д: &Value, выбран: Option<&str>) -> gtk::Butto
     ряд.add(&галка);
     б.add(&ряд);
     б.set_sensitive(!живой);
+    let д2 = д.clone();
     б.connect_clicked(move |_| {
-        с_мастером(|м| м.с.диск = Some(dev.clone()));
+        let (место, раздел) = место_по_умолчанию(&д2);
+        с_мастером(|м| {
+            м.с.диск = Some(dev.clone());
+            м.с.место = место;
+            м.с.раздел = раздел;
+        });
         нарисуй();
     });
     б
+}
+
+/// Рядом с Windows по умолчанию — подготовленный раздел, иначе свободное
+/// место; стирать весь диск с чужой системой сами не предлагаем
+fn место_по_умолчанию(д: &Value) -> (String, Option<String>) {
+    let раздел = д["разделы"].as_array().and_then(|р| р.iter().find(|р| р["можно"].as_bool() == Some(true))).and_then(|р| р["dev"].as_str()).map(String::from);
+    if let Some(р) = раздел {
+        return ("part".into(), Some(р));
+    }
+    if д["свободно"].as_f64().unwrap_or(0.0) >= 20e9 {
+        return ("free".into(), None);
+    }
+    ("disk".into(), None)
+}
+
+/// Как назвать раздел человеку: метка и объём
+fn имя_раздела(р: &Value) -> String {
+    let метка_ = р["label"].as_str().filter(|м| !м.is_empty()).unwrap_or(р["dev"].as_str().unwrap_or(""));
+    format!("«{метка_}» · {}", размер(р["size"].as_f64().unwrap_or(0.0)))
+}
+
+/// Куда на выбранном диске: в раздел, в свободное место или весь диск
+fn выбор_места(д: &Value) -> gtk::Box {
+    let к = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    к.set_margin_top(8);
+    let (место, раздел) = с_мастером(|м| (м.с.место.clone(), м.с.раздел.clone())).unwrap_or_default();
+    let с_windows = д["windows"].as_bool() == Some(true);
+    к.add(&метка(if с_windows { "На этом диске стоит Windows. Куда поставить GlowerOS?" } else { "Куда поставить GlowerOS на этом диске?" }, "feat-name"));
+    let вариант = |значок: &str, имя: String, под: &str, вкл: bool, опасно: bool, дело: Box<dyn Fn()>| {
+        let б = gtk::Button::new();
+        б.style_context().add_class("disk");
+        if вкл {
+            б.style_context().add_class("on");
+        }
+        let ряд = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let з = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Button);
+        з.set_pixel_size(20);
+        ряд.add(&з);
+        let т = gtk::Box::new(gtk::Orientation::Vertical, 2);
+        т.set_hexpand(true);
+        let и = gtk::Label::new(None);
+        и.set_markup(&format!("<b>{}</b>", glib::markup_escape_text(&имя)));
+        и.set_xalign(0.0);
+        т.add(&и);
+        т.add(&метка(под, if опасно { "warn" } else { "muted" }));
+        ряд.add(&т);
+        let галка = gtk::Image::from_icon_name(Some("object-select-symbolic"), gtk::IconSize::Button);
+        галка.style_context().add_class("tick");
+        галка.set_opacity(if вкл { 1.0 } else { 0.0 });
+        ряд.add(&галка);
+        б.add(&ряд);
+        б.connect_clicked(move |_| {
+            дело();
+            нарисуй();
+        });
+        б
+    };
+    for р in д["разделы"].as_array().cloned().unwrap_or_default() {
+        if р["можно"].as_bool() != Some(true) {
+            continue;
+        }
+        let dev = р["dev"].as_str().unwrap_or("").to_string();
+        let вкл = место == "part" && раздел.as_deref() == Some(dev.as_str());
+        к.add(&вариант(
+            "drive-harddisk-system-symbolic",
+            format!("{} {}", crate::i18n::tr("В раздел"), имя_раздела(&р)),
+            "Стирается только этот раздел. Windows и остальные файлы не тронутся, при включении — меню выбора системы.",
+            вкл,
+            false,
+            Box::new(move || {
+                let dev = dev.clone();
+                с_мастером(|м| {
+                    м.с.место = "part".into();
+                    м.с.раздел = Some(dev);
+                });
+            }),
+        ));
+    }
+    let свободно = д["свободно"].as_f64().unwrap_or(0.0);
+    if свободно >= 20e9 {
+        к.add(&вариант(
+            "list-add-symbolic",
+            format!("{} · {}", crate::i18n::tr("В свободное место"), размер(свободно)),
+            "Новый раздел займёт неразмеченное место. Остальное на диске не тронется, при включении — меню выбора системы.",
+            место == "free",
+            false,
+            Box::new(|| {
+                с_мастером(|м| {
+                    м.с.место = "free".into();
+                    м.с.раздел = None;
+                });
+            }),
+        ));
+    }
+    к.add(&вариант(
+        "edit-clear-all-symbolic",
+        crate::i18n::tr("Стереть весь диск"),
+        if с_windows { "Windows и все файлы на этом диске исчезнут." } else { "Все разделы и файлы на этом диске исчезнут." },
+        место == "disk",
+        true,
+        Box::new(|| {
+            с_мастером(|м| {
+                м.с.место = "disk".into();
+                м.с.раздел = None;
+            });
+        }),
+    ));
+    if д["bitlocker"].as_bool() == Some(true) {
+        к.add(&метка("На диске есть раздел с BitLocker. После установки Windows может один раз спросить ключ восстановления — найдите его заранее на account.microsoft.com/devices/recoverykey.", "warn"));
+    }
+    if с_windows && место != "disk" {
+        к.add(&метка("Перед установкой выключите в Windows «быстрый запуск» (Панель управления → Электропитание → Действия кнопок питания): иначе диски Windows будут видны из GlowerOS только для чтения.", "muted"));
+    }
+    к
 }
 
 /// Пробный режим: установщик закрывается, а сеть и остальные службы,
@@ -804,8 +953,13 @@ fn вперёд() {
     let Some((шаг, чиним, диск)) = с_мастером(|м| (м.с.шаг, м.с.чиним, м.с.диск.clone().unwrap_or_default())) else { return };
     match шаг {
         3 => {
+            let (место, раздел) = с_мастером(|м| (м.с.место.clone(), м.с.раздел.clone().unwrap_or_default())).unwrap_or_default();
             let да = if чиним {
                 подтверди(&format!("Восстановить систему на {диск}?"), "Файлы самой системы будут заменены. Личные файлы останутся на месте.", "Восстановить")
+            } else if место == "part" {
+                подтверди(&format!("Стереть раздел {раздел}?"), "Всё, что лежит в этом разделе, исчезнет. Windows и остальные разделы останутся как есть.", "Стереть раздел и установить")
+            } else if место == "free" {
+                подтверди("Установить в свободное место?", "На свободном месте появится новый раздел. Существующие разделы не тронутся.", "Установить")
             } else {
                 подтверди(&format!("Стереть диск {диск}?"), "Все разделы и данные на этом диске исчезнут. Это необратимо.", "Стереть и установить")
             };
@@ -913,8 +1067,11 @@ fn установка(т: &gtk::Box) {
             "password": м.с.пароль,
             "hostname": м.с.имя_машины,
             "repair": м.с.чиним,
-            "crypt": м.с.шифр,
-            "cryptPassword": if м.с.шифр { json!(м.с.пароль_диска) } else { Value::Null },
+            "mode": if м.с.чиним { "disk".to_string() } else { м.с.место.clone() },
+            "part": м.с.раздел,
+            // Шифрование в один раздел невозможно: ядру нужен отдельный открытый
+            "crypt": м.с.шифр && м.с.место != "part",
+            "cryptPassword": if м.с.шифр && м.с.место != "part" { json!(м.с.пароль_диска) } else { Value::Null },
             // Пояс, выбранный в Параметрах живой системы, — если выбран
             "tz": std::fs::read_to_string(glib::user_config_dir().join("glower").join("settings.json"))
                 .ok()

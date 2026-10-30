@@ -309,6 +309,33 @@ fn заметка(к: &gtk::Box, текст: &str) {
     к.add(&ярлык(текст, "note"));
 }
 
+/// Перемешать на месте (Фишер — Йетс)
+fn перемешай<T>(в: &mut [T]) {
+    for i in (1..в.len()).rev() {
+        let j = glib::random_int_range(0, i as i32 + 1) as usize;
+        в.swap(i, j);
+    }
+}
+
+/// Программа из ответа Flathub (раздел, поиск)
+fn из_flathub(х: &Value) -> Прога {
+    let имя = строка(х, "name");
+    let заголовок = строка(х, "title");
+    Прога {
+        пакет: имя.clone(),
+        имя: if заголовок.is_empty() { имя.clone() } else { заголовок },
+        про: строка(х, "about"),
+        знак: "🫙".into(),
+        флатхаб: имя,
+        источник: "flatpak".into(),
+    }
+}
+
+/// Страница раздела с Flathub — в отдельном потоке, ответ в главном цикле
+fn страница_раздела(раздел: &str, страница: u32, дело: impl FnOnce(Result<Value, String>) + 'static) {
+    crate::agent::позови_за("pkg.category", json!({ "раздел": раздел, "страница": страница }), 40, дело);
+}
+
 fn сетка() -> gtk::FlowBox {
     let с = gtk::FlowBox::new();
     с.set_selection_mode(gtk::SelectionMode::None);
@@ -942,10 +969,37 @@ fn обзор(п: &П) {
         ш.add(&ещё);
         п.тело.add(&ш);
         let с = сетка();
-        for з in п.каталог["подборки"][id].as_array().cloned().unwrap_or_default().iter().take(8) {
-            с.add(&карточка(п, &из_записи(з)));
+        let подборка: Vec<Прога> = п.каталог["подборки"][id].as_array().cloned().unwrap_or_default().iter().map(из_записи).collect();
+        for прога in подборка.iter().take(8) {
+            с.add(&карточка(п, прога));
         }
         п.тело.add(&с);
+        // Рекомендации каждый раз разные: к подборке подмешиваем случайные
+        // программы этого раздела с Flathub. Не успел Flathub ответить за
+        // три секунды — ряд остаётся как есть, чтобы не прыгал на глазах
+        let (п2, с2, поколение, начато) = (п.clone(), с.clone(), п.поколение.get(), std::time::Instant::now());
+        let страница = glib::random_int_range(1, 4) as u32;
+        страница_раздела(id, страница, move |о| {
+            let Ok(о) = о else { return };
+            if п2.поколение.get() != поколение || начато.elapsed().as_secs_f64() > 3.0 {
+                return;
+            }
+            let mut все = подборка.clone();
+            for х in о["list"].as_array().cloned().unwrap_or_default() {
+                let прога = из_flathub(&х);
+                if !все.iter().any(|п| п.флатхаб == прога.флатхаб && !п.флатхаб.is_empty()) {
+                    все.push(прога);
+                }
+            }
+            перемешай(&mut все);
+            for р in с2.children() {
+                с2.remove(&р);
+            }
+            for прога in все.iter().take(8) {
+                с2.add(&карточка(&п2, прога));
+            }
+            с2.show_all();
+        });
     }
 }
 
@@ -995,10 +1049,69 @@ fn раздел(п: &П, id: &str) {
     }
     заголовок(п, &format!("{} {}", строка(&р, "знак"), строка(&р, "имя")));
     let с = сетка();
+    let mut уже: Vec<String> = Vec::new();
     for з in п.каталог["подборки"][id].as_array().cloned().unwrap_or_default() {
-        с.add(&карточка(п, &из_записи(&з)));
+        let прога = из_записи(&з);
+        if !прога.флатхаб.is_empty() {
+            уже.push(прога.флатхаб.clone());
+        }
+        с.add(&карточка(п, &прога));
     }
     п.тело.add(&с);
+    // А за подборкой — всё, что есть в этом разделе на Flathub, страницами
+    let ещё_з = ярлык("Ещё в разделе", "h");
+    ещё_з.set_margin_top(18);
+    п.тело.add(&ещё_з);
+    let с2 = сетка();
+    п.тело.add(&с2);
+    let низ = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    п.тело.add(&низ);
+    догрузи(п, id.to_string(), 1, Rc::new(RefCell::new(уже)), с2, низ);
+}
+
+/// Следующая страница раздела с Flathub — и кнопка «Показать ещё», пока есть что
+fn догрузи(п: &П, id: String, страница: u32, уже: Rc<RefCell<Vec<String>>>, с: gtk::FlowBox, низ: gtk::Box) {
+    for р in низ.children() {
+        низ.remove(&р);
+    }
+    let ждём = gtk::Spinner::new();
+    ждём.start();
+    низ.add(&ждём);
+    низ.show_all();
+    let (п2, поколение) = (п.clone(), п.поколение.get());
+    страница_раздела(&id.clone(), страница, move |о| {
+        if п2.поколение.get() != поколение {
+            return;
+        }
+        for р in низ.children() {
+            низ.remove(&р);
+        }
+        let о = match о {
+            Ok(о) => о,
+            Err(е) => {
+                заметка(&низ, &е);
+                низ.show_all();
+                return;
+            }
+        };
+        for х in о["list"].as_array().cloned().unwrap_or_default() {
+            let прога = из_flathub(&х);
+            if уже.borrow().contains(&прога.флатхаб) {
+                continue;
+            }
+            уже.borrow_mut().push(прога.флатхаб.clone());
+            с.add(&карточка(&п2, &прога));
+        }
+        с.show_all();
+        if (страница as u64) < о["страниц"].as_u64().unwrap_or(1) {
+            let б = gtk::Button::with_label("Показать ещё");
+            б.set_halign(gtk::Align::Center);
+            let (п3, id3, уже3, с3, низ3) = (п2.clone(), id.clone(), уже.clone(), с.clone(), низ.clone());
+            б.connect_clicked(move |_| догрузи(&п3, id3.clone(), страница + 1, уже3.clone(), с3.clone(), низ3.clone()));
+            низ.add(&б);
+        }
+        низ.show_all();
+    });
 }
 
 fn программа(п: &П, прога: &Прога) {
@@ -1431,7 +1544,19 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     ход.add(&строка_хода);
     правая.add(&ход);
 
-    let каталог: Value = serde_json::from_str(КАТАЛОГ).expect("каталог магазина");
+    let mut каталог: Value = serde_json::from_str(КАТАЛОГ).expect("каталог магазина");
+    // Каждый раз — в новом порядке: витрина, подборки на главной и в разделах.
+    // Магазин, открытый второй раз, не должен показывать то же самое
+    if let Some(в) = каталог["витрина"].as_array_mut() {
+        перемешай(в);
+    }
+    if let Some(п) = каталог["подборки"].as_object_mut() {
+        for (_, список) in п.iter_mut() {
+            if let Some(с) = список.as_array_mut() {
+                перемешай(с);
+            }
+        }
+    }
     let mut первый = Экран::Обзор;
     for д in &доводы {
         if let Some(что) = д.strip_prefix("--find=") {

@@ -355,12 +355,34 @@ test -x /usr/bin/labwc || { echo "основные пакеты не устан�
 # dconf и схемы — чтобы чужие программы узнавали тему: без dconf настройки
 # GTK живут только в памяти программы, и ключ «тёмная тема» никто не видит.
 # qt*-gtk-platformtheme — программам на Qt брать тему из тех же ключей.
-for extra in gnome-backgrounds steam-devices clamav clamav-freshclam \
+# gamemode и mangohud — игровой режим и счётчик кадров: вместе меньше
+# десяти мегабайт, и с ними игры готовы сразу после установки.
+for extra in gnome-backgrounds steam-devices clamav clamav-freshclam gamemode mangohud \
              dconf-gsettings-backend gsettings-desktop-schemas qt5-gtk-platformtheme qt6-gtk-platformtheme; do
   apt-get install -y --no-install-recommends "$extra" >/dev/null 2>&1 \
     && echo "  доп.: $extra — поставлен" \
     || echo "  доп.: $extra — в репозитории нет, пропускаю"
 done
+
+# Установка рядом с Windows. os-prober находит Windows, и GRUB показывает её
+# в меню при включении. Подписанная цепочка (shim → grub → ядро) нужна,
+# чтобы GlowerOS грузилась и с включённым Secure Boot: игры с античитом в
+# Windows его требуют, и выключать его ради второй системы человек не
+# обязан. Пакет shim при установке сам пробует прописать загрузчик; в
+# сборке ему прописывать некуда, и если он из-за этого встал криво — убираем
+# его, а не оставляем dpkg в полуразобранном виде
+for extra in os-prober grub-efi-amd64-signed shim-signed mokutil; do
+  apt-get install -y --no-install-recommends "$extra" </dev/null >/dev/null 2>&1 \
+    && echo "  загрузка: $extra — поставлен" \
+    || echo "  загрузка: $extra — не встал"
+done
+if [ -n "$(dpkg --audit 2>/dev/null)" ]; then
+  dpkg --configure -a >/dev/null 2>&1 || true
+  if [ -n "$(dpkg --audit 2>/dev/null)" ]; then
+    echo "  загрузка: подписанная цепочка не настроилась — убираю, Secure Boot придётся выключить"
+    apt-get purge -y shim-signed grub-efi-amd64-signed >/dev/null 2>&1 || dpkg --purge --force-all shim-signed grub-efi-amd64-signed >/dev/null 2>&1 || true
+  fi
+fi
 
 # Программы для Windows — через Wine. Самого Wine в образе нет, и это
 # вынужденно: с ним образ перерос 2 ГБ, а больше GitHub в выпуск не

@@ -217,6 +217,8 @@ function живой_сеанс(){
 async function пора(){
   const нас = await н();
   if (!нас.вкл || обновляю || живой_сеанс()) return;
+  // Идёт игра — база подождёт: freshclam и сеть ей сейчас ни к чему
+  if ((await import('./games.mjs')).играИдёт()) return;
   if (!await есть('freshclam')) return;
   const теперь = Date.now();
   if (теперь - (нас.обновлено || 0) < СУТКИ) return;

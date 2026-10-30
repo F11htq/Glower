@@ -17,9 +17,15 @@ set -eu
 
 DISK=""; PASS=""; HOST="GlowerOS"; TZ=""; DRY=0; YES=0; REPAIR=0
 CRYPT=0; CRYPTPASS=""
+# Куда ставить: весь диск (disk), неразмеченное место рядом с другой
+# системой (free) или один уже существующий раздел (part)
+MODE=disk; PART=""; PROBE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --disk) DISK="$2"; shift 2 ;;
+    --alongside) MODE=free; shift ;;
+    --part) MODE=part; PART="$2"; shift 2 ;;
+    --probe) PROBE=1; shift ;;
     --pass) PASS="$2"; shift 2 ;;
     --hostname) HOST="$2"; shift 2 ;;
     --tz) TZ="$2"; shift 2 ;;
@@ -38,6 +44,111 @@ die(){ printf '%s\n' "$1" >&2; exit 1; }
 [ -n "$DISK" ] || die "не указан диск: --disk /dev/sda"
 [ "$(id -u)" = 0 ] || die "установка требует прав root"
 [ -b "$DISK" ] || die "$DISK — не блочное устройство"
+
+# ---------- рядом с другой системой ----------
+#
+# Человек освободил место под GlowerOS, оставив Windows (или другую систему)
+# на месте. Здесь ничего нельзя стирать, кроме того, что он отдал: ни
+# таблицу разделов, ни раздел EFI, где лежит загрузчик Windows, ни соседние
+# разделы. Всё, что ниже, только читает диск — пишет потом установка.
+
+GUID_EFI=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+GUID_MSR=e3c9e316-0b5c-4db8-817d-f92df00215ae
+GUID_WINRE=de94bba4-06d1-4d40-a16a-bfd50179d6ac
+MIN_BYTES=20000000000
+
+SS="$(blockdev --getss "$DISK" 2>/dev/null || echo 512)"
+TABLE="$(sfdisk -d "$DISK" 2>/dev/null | sed -n 's/^label: *//p' | head -1)"
+
+# Самый большой кусок неразмеченного места: «начало число_секторов»
+largest_free(){
+  sfdisk -F "$DISK" 2>/dev/null | awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { if ($3 > best) { best = $3; st = $1 } } END { if (best) print st, best }'
+}
+
+part_num(){ cat "/sys/class/block/$(basename "$1")/partition" 2>/dev/null; }
+parent_disk(){ echo "/dev/$(lsblk -no PKNAME "$1" 2>/dev/null | head -1)"; }
+disk_parts(){ lsblk -lnpo NAME,TYPE "$1" 2>/dev/null | awk '$2 == "part" { print $1 }'; }
+
+# Тип раздела, файловая система и метка — прямо с диска, а не из базы udev:
+# в живой системе она бывает ещё не заполнена, и тогда раздел EFI «не
+# находился», а NTFS с Windows выглядел пустым местом
+part_type(){ sfdisk --part-type "$(parent_disk "$1")" "$(part_num "$1")" 2>/dev/null | tr 'A-Z' 'a-z'; }
+fs_type(){ blkid -p -s TYPE -o value "$1" 2>/dev/null; }
+fs_label(){ blkid -p -s LABEL -o value "$1" 2>/dev/null; }
+
+# Раздел EFI: сперва на этом диске, потом на любом — Windows могла стоять
+# на другом диске, а место отдали на этом
+find_esp(){
+  for d in "$DISK" $(lsblk -dnpo NAME 2>/dev/null | grep -vx "$DISK"); do
+    for _p in $(disk_parts "$d"); do
+      case "$(part_type "$_p")" in "$GUID_EFI"|ef) echo "$_p"; return 0 ;; esac
+    done
+  done
+  return 1
+}
+
+# Есть ли на разделе Windows: 0 — есть, 1 — нет, 2 — не понять.
+# ntfsls читает раздел, не подключая его, — и тогда, когда Windows оставила
+# его «спящим» (быстрый запуск), а подключать такой ntfs-3g отказывается
+has_windows(){
+  if command -v ntfsls >/dev/null 2>&1; then
+    _l="$(ntfsls -f -p /Windows "$1" 2>/dev/null)" && {
+      printf '%s\n' "$_l" | grep -qix 'system32' && return 0
+      return 1
+    }
+    # Папки /Windows нет — ntfsls ответит ошибкой; отличаем от нечитаемого раздела
+    ntfsls -f -p / "$1" >/dev/null 2>&1 && return 1
+  fi
+  _m="$(mktemp -d)"; _r=2
+  if mount -o ro "$1" "$_m" 2>/dev/null; then
+    _r=1; [ -d "$_m/Windows/System32" ] && _r=0
+    umount "$_m" 2>/dev/null || umount -l "$_m" 2>/dev/null
+  fi
+  rmdir "$_m" 2>/dev/null; return $_r
+}
+
+# Можно ли отдать раздел под систему; пусто — можно, иначе — почему нельзя
+part_refusal(){
+  _t="$(part_type "$1")"
+  _fs="$(fs_type "$1")"
+  _sz="$(blockdev --getsize64 "$1" 2>/dev/null || echo 0)"
+  case "$_t" in
+    "$GUID_EFI"|ef) echo "это раздел EFI: в нём загрузчики систем"; return ;;
+    "$GUID_MSR") echo "служебный раздел Windows"; return ;;
+    "$GUID_WINRE"|27) echo "раздел восстановления Windows"; return ;;
+    5|f|85) echo "расширенный раздел — выберите раздел внутри него"; return ;;
+  esac
+  [ "$_fs" = BitLocker ] && { echo "раздел зашифрован BitLocker"; return; }
+  if [ "$_fs" = ntfs ]; then
+    _w=0; has_windows "$1" || _w=$?
+    [ $_w = 0 ] && { echo "на нём стоит Windows"; return; }
+    [ $_w = 2 ] && { echo "раздел не читается — не понять, нет ли на нём Windows"; return; }
+  fi
+  [ "$_sz" -ge "$MIN_BYTES" ] || { echo "меньше 20 ГБ — системе и играм не хватит"; return; }
+  return 0
+}
+
+if [ "$PROBE" = 1 ]; then
+  [ "$(id -u)" = 0 ] || die "проверка диска требует прав root"
+  echo "ТАБЛИЦА ${TABLE:-нет}"
+  echo "СЕКТОР $SS"
+  set -- $(largest_free)
+  [ -n "${2:-}" ] && echo "СВОБОДНО $1 $2 $(( $2 * SS ))"
+  ESPF="$(find_esp || true)"
+  [ -n "$ESPF" ] && echo "EFI $ESPF"
+  WIN=нет; BL=нет
+  for part in $(disk_parts "$DISK"); do
+    fs="$(fs_type "$part")"
+    [ "$fs" = BitLocker ] && BL=да
+    if [ "$fs" = ntfs ]; then has_windows "$part" && WIN=да; fi
+    why="$(part_refusal "$part")"
+    lab="$(fs_label "$part" | tr ' ' '_')"
+    echo "РАЗДЕЛ $part $(blockdev --getsize64 "$part" 2>/dev/null || echo 0) ${fs:--} ${lab:--} ${why:-можно}"
+  done
+  echo "WINDOWS $WIN"
+  echo "BITLOCKER $BL"
+  exit 0
+fi
 
 # --- откуда берём систему ---
 SQFS=""
@@ -66,6 +177,37 @@ if [ "$CRYPT" = 1 ]; then
   BOOT="${P}3"; CRYPTPART="${P}4"; ROOT=/dev/mapper/glower
 else
   BOOT=""; CRYPTPART=""; ROOT="${P}3"
+fi
+
+# Рядом с другой системой — свои правила: раздел EFI уже есть и чужой, его
+# только подключаем; меню загрузки показываем, чтобы выбрать систему
+SHARED=0
+[ "$MODE" != disk ] && SHARED=1
+if [ "$MODE" = part ]; then
+  [ -b "$PART" ] || die "$PART — нет такого раздела"
+  [ "$(parent_disk "$PART")" = "$DISK" ] || die "$PART не на диске $DISK"
+  [ "$CRYPT" = 0 ] || die "шифрование при установке в один раздел недоступно: ядру нужен отдельный открытый раздел. Отдайте системе неразмеченное место — тогда можно"
+  WHY="$(part_refusal "$PART")"
+  [ -z "$WHY" ] || die "в $PART ставить нельзя: $WHY"
+  ROOT="$PART"
+fi
+if [ "$SHARED" = 1 ]; then
+  if [ -d /sys/firmware/efi ]; then
+    ESP="$(find_esp || true)"
+    [ -n "$ESP" ] || die "на машине нет раздела EFI — некуда положить загрузчик рядом с Windows"
+  else
+    # Машина загружена по-старому (BIOS): загрузчик пишется в начало диска,
+    # а чужой раздел EFI — даже если он есть на другом диске — не нужен
+    ESP=/dev/null-esp
+  fi
+fi
+# Восстановление: системный раздел — по метке, раздел EFI — по типу. Номера
+# разделов на диске рядом с Windows свои, «третий» там может быть чем угодно
+if [ "$REPAIR" = 1 ]; then
+  LBL="$(readlink -f /dev/disk/by-label/GlowerOS 2>/dev/null || true)"
+  [ -n "$LBL" ] && [ "$(parent_disk "$LBL")" = "$DISK" ] && ROOT="$LBL"
+  ESPF="$(find_esp || true)"; [ -n "$ESPF" ] && ESP="$ESPF"
+  for _p in $(disk_parts "$DISK"); do [ "$(fs_type "$_p")" = ntfs ] && SHARED=1; done
 fi
 
 # Лучше отказаться сразу и назвать, чего не хватает, чем упасть посреди
@@ -101,7 +243,14 @@ SIZE="$(blockdev --getsize64 "$DISK" 2>/dev/null || echo 0)"
 if [ "$DRY" = 1 ]; then
   echo "ПЛАН"
   echo "  диск:        $DISK ($((SIZE / 1000000000)) ГБ)"
-  if [ "$CRYPT" = 1 ]; then
+  if [ "$MODE" = part ]; then
+    echo "  разметка:    не меняется · стирается только $PART ($(( $(blockdev --getsize64 "$PART") / 1000000000 )) ГБ)"
+    echo "  загрузчик:   в существующий раздел EFI ($ESP), меню выбора системы при включении"
+  elif [ "$MODE" = free ]; then
+    set -- $(largest_free)
+    echo "  разметка:    не меняется · новый раздел в свободном месте ($(( ${2:-0} * SS / 1000000000 )) ГБ)"
+    echo "  загрузчик:   в существующий раздел EFI ($ESP), меню выбора системы при включении"
+  elif [ "$CRYPT" = 1 ]; then
     echo "  разметка:    GPT · 1 МБ загрузчик BIOS · 512 МБ EFI · 1 ГБ ядро · остальное — система под шифром"
     echo "  шифрование:  LUKS2, пароль спрашивается при включении"
   else
@@ -144,6 +293,73 @@ if [ "$REPAIR" = 1 ]; then
   [ -b "$ROOT" ] || die "на $DISK нет раздела с системой — восстанавливать нечего"
   blkid -s LABEL -o value "$ROOT" 2>/dev/null | grep -qi glower || \
     die "раздел $ROOT не похож на систему GlowerOS"
+elif [ "$MODE" = part ]; then
+  say 4 "Готовлю раздел $PART"
+  # Стираем только этот раздел. Тип — «Linux»: Windows перестанет
+  # предлагать его отформатировать как пустой диск
+  N="$(part_num "$PART")"
+  if [ "$TABLE" = gpt ]; then
+    sfdisk --quiet --part-type "$DISK" "$N" 0FC63DAF-8483-4772-8E79-3D69D8477DE4 >/dev/null 2>&1 || true
+  elif [ "$TABLE" = dos ]; then
+    sfdisk --quiet --part-type "$DISK" "$N" 83 >/dev/null 2>&1 || true
+  fi
+  partx -u "$DISK" 2>/dev/null || true
+  wipefs -a "$PART" >/dev/null 2>&1 || true
+  say 10 "Создаю файловую систему"
+  mkfs.ext4 -F -q -L GlowerOS "$ROOT" >/dev/null
+elif [ "$MODE" = free ]; then
+  say 4 "Ищу свободное место"
+  set -- $(largest_free)
+  FSTART="${1:-0}"; FCOUNT="${2:-0}"
+  [ $(( FCOUNT * SS )) -ge "$MIN_BYTES" ] || die "на $DISK нет куска неразмеченного места от 20 ГБ (самый большой — $(( FCOUNT * SS / 1000000000 )) ГБ)"
+  # Начало и конец — по мегабайтам: так разделы выровнены, как у Windows
+  AL=$(( 1048576 / SS ))
+  ST=$(( (FSTART + AL - 1) / AL * AL ))
+  EN=$(( (FSTART + FCOUNT) / AL * AL ))
+  CNT=$(( EN - ST ))
+  BEFORE="$(lsblk -lnpo NAME,TYPE "$DISK" | awk '$2 == "part" { print $1 }')"
+  if [ "$TABLE" = gpt ]; then TYPE_L=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+  elif [ "$TABLE" = dos ]; then
+    TYPE_L=83
+    USED="$(sfdisk -d "$DISK" | grep -c 'start=')"
+    NEED=1; [ "$CRYPT" = 1 ] && NEED=2
+    [ $(( USED + NEED )) -le 4 ] || die "на диске со старой разметкой (MBR) уже $USED раздела из четырёх возможных — новый не поместится"
+  else die "на $DISK нет таблицы разделов — ставить рядом не с чем, выберите «весь диск»"
+  fi
+  say 6 "Создаю раздел в свободном месте"
+  if [ "$CRYPT" = 1 ]; then
+    BSZ=$(( 1073741824 / SS ))
+    printf 'start=%s, size=%s, type=%s\nstart=%s, size=%s, type=%s\n' \
+      "$ST" "$BSZ" "$TYPE_L" "$(( ST + BSZ ))" "$(( CNT - BSZ ))" "$TYPE_L" \
+      | sfdisk --quiet --append --no-reread "$DISK" >/dev/null || die "не удалось создать разделы в свободном месте"
+  else
+    printf 'start=%s, size=%s, type=%s\n' "$ST" "$CNT" "$TYPE_L" \
+      | sfdisk --quiet --append --no-reread "$DISK" >/dev/null || die "не удалось создать раздел в свободном месте"
+  fi
+  partprobe "$DISK" 2>/dev/null || partx -a "$DISK" 2>/dev/null || partx -u "$DISK" 2>/dev/null || true
+  udevadm settle 2>/dev/null || sleep 2
+  NEW="$(lsblk -lnpo NAME,TYPE "$DISK" | awk '$2 == "part" { print $1 }' | grep -vxF "$BEFORE" || true)"
+  [ -n "$NEW" ] || { sleep 2; NEW="$(lsblk -lnpo NAME,TYPE "$DISK" | awk '$2 == "part" { print $1 }' | grep -vxF "$BEFORE" || true)"; }
+  [ -n "$NEW" ] || die "новый раздел не появился: ядро не перечитало таблицу"
+  # Новые — по порядку начала на диске
+  NEW="$(for n in $NEW; do echo "$(cat /sys/class/block/$(basename $n)/start) $n"; done | sort -n | awk '{ print $2 }')"
+  if [ "$CRYPT" = 1 ]; then
+    BOOT="$(echo "$NEW" | sed -n 1p)"; CRYPTPART="$(echo "$NEW" | sed -n 2p)"
+    [ -b "$CRYPTPART" ] || die "второй новый раздел не появился"
+  else
+    ROOT="$(echo "$NEW" | sed -n 1p)"
+  fi
+  say 10 "Создаю файловые системы"
+  if [ "$CRYPT" = 1 ]; then
+    mkfs.ext4 -F -q -L GlowerOS-boot "$BOOT" >/dev/null
+    say 11 "Запираю диск"
+    printf '%s' "$CRYPTPASS" | cryptsetup luksFormat --type luks2 --batch-mode \
+      --key-file - "$CRYPTPART" >/dev/null 2>&1 || die "не удалось зашифровать раздел"
+    printf '%s' "$CRYPTPASS" | cryptsetup open --key-file - "$CRYPTPART" glower \
+      >/dev/null 2>&1 || die "зашифрованный раздел не открывается"
+    [ -b "$ROOT" ] || die "после отпирания не появилось устройство $ROOT"
+  fi
+  mkfs.ext4 -F -q -L GlowerOS "$ROOT" >/dev/null
 else
   say 2 "Готовлю диск"
   wipefs -a "$DISK" >/dev/null 2>&1 || true
@@ -210,6 +426,13 @@ if ! mount "$ESP" "$TARGET/boot/efi" 2>/dev/null; then
   ESP_OK=0
   say 15 "Раздел EFI не подключился — ставлю загрузчик только для BIOS"
 fi
+# Чужой раздел EFI бывает маленьким (у Windows — 100 МБ). Загрузчику нужно
+# около десяти мегабайт; не влезет — лучше сказать сейчас, чем оставить
+# машину без загрузчика
+if [ "$SHARED" = 1 ] && [ "$ESP_OK" = 1 ]; then
+  FREEK="$(df -Pk "$TARGET/boot/efi" | awk 'NR == 2 { print $4 }')"
+  [ "${FREEK:-0}" -ge 15000 ] || die "в разделе EFI свободно меньше 15 МБ — загрузчику GlowerOS не поместиться"
+fi
 
 if [ "$REPAIR" = 1 ]; then
   # сносим только системные каталоги; /home, /root и /var/log остаются
@@ -222,7 +445,8 @@ fi
 say 18 "Переношу систему на диск"
 # unsquashfs шумит процентами в stdout — пересчитываем их в общий прогресс
 unsquashfs -f -d "$TARGET" "$SQFS" 2>/dev/null | while read -r line; do
-  pct="$(printf '%s' "$line" | tr -dc '0-9%' | tr -d '%' | head -c 3)"
+  pct="$(printf '%s' "$line" | sed -n 's/.*[^0-9]\([0-9]\{1,3\}\)%.*/\1/p')"
+  [ -n "$pct" ] && [ "$pct" -gt 100 ] && pct=100
   case "$line" in
     *%*) [ -n "$pct" ] && say $((18 + pct * 55 / 100)) "Переношу систему на диск" ;;
   esac
@@ -255,6 +479,24 @@ printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "$HOST" > "$TARGET/etc/hosts"
 # на диске система больше не живая: настройки пользователя должны переживать перезагрузку
 rm -f "$TARGET/etc/systemd/system/multi-user.target.wants/live-"* 2>/dev/null || true
 
+if [ "$SHARED" = 1 ]; then
+  # Рядом с Windows — меню выбора системы, десять секунд; запоминается то,
+  # что выбрали в прошлый раз. Windows в меню находит os-prober
+  {
+    echo 'GRUB_DEFAULT=saved'
+    echo 'GRUB_SAVEDEFAULT=true'
+    echo 'GRUB_TIMEOUT=10'
+    echo 'GRUB_TIMEOUT_STYLE=menu'
+    echo 'GRUB_RECORDFAIL_TIMEOUT=10'
+    echo 'GRUB_DISABLE_OS_PROBER=false'
+    echo 'GRUB_DISTRIBUTOR="GlowerOS"'
+    echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"'
+  } >> "$TARGET/etc/default/grub"
+  # Windows держит в часах машины местное время, Linux — всемирное. Не
+  # договорившись, они переводят часы друг другу при каждой смене системы
+  # на несколько часов. Делаем, как Windows
+  printf '0.0 0 0.0\n0\nLOCAL\n' > "$TARGET/etc/adjtime"
+else
 # На установленной машине меню загрузчика не нужно: система одна и должна
 # стартовать сразу. Меню остаётся доступным по Shift или Esc.
 {
@@ -264,6 +506,7 @@ rm -f "$TARGET/etc/systemd/system/multi-user.target.wants/live-"* 2>/dev/null ||
   echo 'GRUB_DISTRIBUTOR="GlowerOS"'
   echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"'
 } >> "$TARGET/etc/default/grub"
+fi
 
 say 80 "Подключаю служебные каталоги"
 for d in dev dev/pts proc sys run; do
@@ -300,11 +543,35 @@ if [ "$CRYPT" = 1 ]; then
   printf 'CRYPTSETUP=y\n' > "$TARGET/etc/cryptsetup-initramfs/conf-hook"
 fi
 
+ESPDISK=""; ESPNUM=""
+if [ "$ESP_OK" = 1 ]; then ESPDISK="$(parent_disk "$ESP")"; ESPNUM="$(part_num "$ESP")"; fi
 chroot "$TARGET" /bin/sh -e <<CHROOT
+if [ "$SHARED" = 1 ]; then
+  # Рядом с Windows. Загрузчик Windows не трогаем: свой кладём рядом, в
+  # отдельную папку раздела EFI, и записываем в прошивку первым. Запасной
+  # путь EFI/BOOT (--removable) не занимаем — он может быть нужен Windows.
+  if [ -d /sys/firmware/efi ] && [ "$ESP_OK" = 1 ]; then
+    if [ -e /usr/lib/shim/shimx64.efi.signed ] || [ -e /usr/lib/shim/shimx64.efi.signed.latest ]; then
+      # Подписанная цепочка (shim → grub → ядро): система грузится и при
+      # включённом Secure Boot. Подписанный grub ищет настройки в EFI/ubuntu —
+      # поэтому папка зовётся так, а в меню прошивки пишем «GlowerOS»
+      grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+        --bootloader-id=ubuntu --uefi-secure-boot --no-nvram >/dev/null 2>&1
+    else
+      grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+        --bootloader-id=GlowerOS --no-nvram >/dev/null 2>&1
+    fi
+  else
+    grub-install --target=i386-pc --boot-directory=/boot "$DISK" >/dev/null 2>&1
+  fi
+else
 grub-install --target=i386-pc --boot-directory=/boot "$DISK" >/dev/null 2>&1 || true
 if [ -d /sys/firmware/efi ] && [ "$ESP_OK" = 1 ]; then
   grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+    --bootloader-id=GlowerOS --removable --no-uefi-secure-boot >/dev/null 2>&1 \
+  || grub-install --target=x86_64-efi --efi-directory=/boot/efi \
     --bootloader-id=GlowerOS --removable >/dev/null 2>&1 || true
+fi
 fi
 update-grub >/dev/null 2>&1 || grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
 # При шифровании пересборка образа — не украшение: без неё машина не спросит
@@ -316,6 +583,27 @@ else
   update-initramfs -u >/dev/null 2>&1 || true
 fi
 CHROOT
+
+# Запись в меню прошивки — сами, а не руками grub-install: на части машин
+# он спотыкается о запись в NVRAM и роняет установку на последнем шаге.
+# Подписанный загрузчик (для Secure Boot) лежит в EFI/ubuntu — так его ищет
+# подписанный grub, — но в меню прошивки он зовётся «GlowerOS». Чужие
+# записи (Windows Boot Manager и прочие) не трогаем; прежние «GlowerOS»
+# заменяем, чтобы после переустановки они не копились
+if [ "$SHARED" = 1 ] && [ "$IN_EFI" = 1 ] && [ "$ESP_OK" = 1 ]; then
+  LOADER=""
+  [ -e "$TARGET/boot/efi/EFI/GlowerOS/grubx64.efi" ] && LOADER='\EFI\GlowerOS\grubx64.efi'
+  [ -e "$TARGET/boot/efi/EFI/ubuntu/shimx64.efi" ] && LOADER='\EFI\ubuntu\shimx64.efi'
+  [ -n "$LOADER" ] || die "загрузчик EFI не встал: в разделе EFI нет файлов GlowerOS"
+  if command -v efibootmgr >/dev/null 2>&1; then
+    for n in $(efibootmgr 2>/dev/null | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} GlowerOS.*/\1/p'); do
+      efibootmgr -q -b "$n" -B >/dev/null 2>&1 || true
+    done
+    # Новая запись встаёт первой: при включении — меню GRUB с выбором системы
+    efibootmgr -q -c -d "$ESPDISK" -p "$ESPNUM" -L GlowerOS -l "$LOADER" >/dev/null 2>&1 \
+      || say 92 "Запись в меню прошивки не создалась — GlowerOS можно выбрать в меню загрузки (F8, F11 или F12)"
+  fi
+fi
 
 # grub-mkconfig определяет корень по устройству и на некоторых машинах
 # записывает в меню путь вида /dev/sda3 или /dev/loop0p3 — имя, которое
@@ -346,6 +634,16 @@ fi
 
 say 94 "Проверяю загрузчик"
 [ -f "$TARGET/boot/grub/grub.cfg" ] || die "загрузчик не встал: /boot/grub/grub.cfg не создан"
+if [ "$SHARED" = 1 ]; then
+  if grep -qi 'windows' "$TARGET/boot/grub/grub.cfg"; then
+    say 95 "Windows есть в меню загрузки"
+  else
+    # Не повод бросать установку: Windows останется доступна через меню
+    # загрузки прошивки (F8/F11/F12), а в меню GRUB появится, когда
+    # система первый раз обновит загрузчик
+    say 95 "Windows в меню загрузки не нашлась — её можно выбрать в меню прошивки (F8, F11 или F12)"
+  fi
+fi
 grep -q "root=UUID=$UUID_ROOT" "$TARGET/boot/grub/grub.cfg" || \
   die "в меню загрузчика нет корня по UUID — система не нашла бы себя после перезагрузки"
 if [ "$IN_EFI" = 1 ] && [ "$ESP_OK" = 1 ] && [ ! -d "$TARGET/boot/efi/EFI" ]; then

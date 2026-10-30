@@ -99,7 +99,7 @@ pub fn умолчания() -> Value {
         "showDesktopIcons": true, "showDeskWidgets": true,
         "deskWidgets": [{ "t": "clock" }, { "t": "weather" }],
         "deskApps": [], "deskNative": [], "iconPos": {},
-        "dnd": false, "notif": true, "soundNotif": true, "nightLight": false,
+        "dnd": false, "gameMode": true, "notif": true, "soundNotif": true, "nightLight": false,
         "autoLock": 0, "lockOnWake": true, "autostart": [], "focusLen": "25",
         "userName": "", "userEmoji": "", "desks": 2, "note": "",
         "setupDone": false, "updatesAsked": 0
@@ -1194,11 +1194,51 @@ pub fn обнови_программы() {
     });
 }
 
+/* ---------- игровой режим ----------
+
+   Игра узнаётся по окну: Steam-игра (steam_app_…), программа Windows
+   (.exe) или незнакомая программа во весь экран. Браузер с видео во весь
+   экран — не игра, поэтому знакомые неигровые программы исключены. */
+
+thread_local! {
+    static ИГРА: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Идёт ли сейчас игра: уведомления молчат, обновления ждут
+pub fn игра_идёт() -> bool {
+    ИГРА.with(|и| и.get())
+}
+
+const НЕ_ИГРЫ: &[&str] = &[
+    "firefox", "chrom", "brave", "yandex", "opera", "vivaldi", "edge", "mpv", "vlc", "totem", "celluloid",
+    "smplayer", "kodi", "eog", "loupe", "glower", "libreoffice", "soffice", "obs", "evince", "okular",
+    "telegram", "discord", "steam", "heroic", "lutris", "prismlauncher", "foot", "terminal",
+];
+
+pub fn это_игра(w: &Value) -> bool {
+    let id = w["appId"].as_str().unwrap_or("").to_lowercase();
+    if id.starts_with("steam_app_") || id.ends_with(".exe") || id == "gamescope" || id.contains("minecraft") {
+        return true;
+    }
+    let вовесь = w["состояние"]["вовесь"].as_bool() == Some(true);
+    вовесь && !id.is_empty() && !НЕ_ИГРЫ.iter().any(|н| id.contains(н))
+}
+
+fn проверь_игру(окна: &[Value]) {
+    let идёт = настройка("gameMode").as_bool() != Some(false) && окна.iter().any(это_игра);
+    if ИГРА.with(|и| и.replace(идёт)) == идёт {
+        return;
+    }
+    позови("game.mode", json!({ "вкл": идёт }), |_| {});
+    скажи("игра", json!(идёт));
+}
+
 fn опроси_окна() {
     позови("sys.windows", json!({}), |о| {
         if let Ok(о) = о {
             // Свои диалоги панели (имя для папки и т. п.) — не программы
             let список: Vec<Value> = о["list"].as_array().cloned().unwrap_or_default().into_iter().filter(|w| w["appId"].as_str() != Some("glower-panel")).collect();
+            проверь_игру(&список);
             let менялось = с_ядром(|я| {
                 let было = std::mem::replace(&mut я.окна, список);
                 let стол = я.стол;
@@ -1218,6 +1258,10 @@ fn опроси_окна() {
 }
 
 fn проверь_обновления(читать: bool) {
+    // Пока идёт игра — не время: apt и сеть подождут до следующего раза
+    if игра_идёт() {
+        return;
+    }
     let (куда, откуда) = async_channel::bounded::<Option<Value>>(1);
     std::thread::spawn(move || {
         if читать && зов("pkg.update", json!({}), 30).is_ok() {
@@ -1921,6 +1965,18 @@ pub fn начни() {
 #[cfg(test)]
 mod проверки {
     use super::*;
+
+    #[test]
+    fn игра_узнаётся_по_окну() {
+        let о = |id: &str, вовесь: bool| json!({ "appId": id, "состояние": { "вовесь": вовесь } });
+        assert!(это_игра(&о("steam_app_730", false)));
+        assert!(это_игра(&о("witcher3.exe", false)));
+        assert!(это_игра(&о("hollow_knight", true)));
+        assert!(!это_игра(&о("hollow_knight", false)));
+        assert!(!это_игра(&о("firefox", true)));
+        assert!(!это_игра(&о("mpv", true)));
+        assert!(!это_игра(&о("com.valvesoftware.Steam", true)));
+    }
 
     #[test]
     fn служебные_не_в_меню() {
