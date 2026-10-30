@@ -80,6 +80,7 @@ fn срок_для(метод: &str) -> u64 {
     match метод {
         "sys.firmware" | "sys.firmware.refresh" | "sys.firmware.update" => 200,
         "sys.drivers" | "pkg.upgrade.check" | "av.check" | "av.update" | "av.purge" => 150,
+        "pkg.upgrade.flathub" => 90,
         _ => 0,
     }
 }

@@ -172,6 +172,28 @@ let драйверыПомню = null;
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
   let память = null; // что на машине есть: спрошено один раз, а не каждый раз
+  let проверкаИдёт = null; // pkg.upgrade.check, который уже спрашивает apt
+
+  /* Обновления программ из Flathub — Telegram, Steam, OBS и всё, что человек
+     поставил оттуда. Список flatpak берёт из интернета; ответ помним полчаса,
+     а одновременные вопросы ждут один и тот же. */
+  let flathubПомню = null, flathubИдёт = null;
+  const обновленияFlathub = async (заново = false) => {
+    if (!заново && flathubПомню && Date.now() - flathubПомню.когда < 30 * 60000) return flathubПомню.список;
+    if (!flathubИдёт) flathubИдёт = (async () => {
+      const flathub = [];
+      try {
+        const выход = await flatpak(['remote-ls', '--updates', '--app',
+          '--columns=application,name,version'], 60000);
+        колонки(выход).forEach(([id, имя, версия]) => {
+          if (id && APPID.test(id)) flathub.push({ name:id, 'имя':имя || id, 'станет':версия || '', source:'flatpak' });
+        });
+      } catch(e){ /* flatpak не стоит или Flathub не подключён — значит, и обновлять там нечего */ }
+      flathubПомню = { когда:Date.now(), список:flathub };
+      return flathub;
+    })().finally(() => { flathubИдёт = null; });
+    return await flathubИдёт;
+  };
 
   const нужноРазрешение = () => {
     if (!allowPackages)
@@ -501,6 +523,7 @@ export function packages(allowPackages){
      зовём от его имени, без sudo. Через sudo он смотрел бы в дом root и
      честно отвечал бы, что такой программы нет. */
   const запустиFlatpak = (action, name, args, свой = false) => {
+    flathubПомню = null;   // поставили, убрали или обновили — прежний список устарел
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
             error:null, log:'', слышно:Date.now(), pid:null };
     /* Проценты flatpak печатает, только когда видит терминал, — без него
@@ -1104,7 +1127,24 @@ export function packages(allowPackages){
        «Что можно обновить» читает то, что система уже знает: быстро и без
        сети. Обновить сами списки — отдельное дело (pkg.update), у него свой
        ход работы, потому что оно ходит в интернет и бывает долгим. */
-    async 'pkg.upgrade.check'(){
+    /* Что можно обновить. Отвечает apt, и только он: список с Flathub
+       ходит в интернет и на медленной сети думает до минуты — его
+       спрашивают отдельно (pkg.upgrade.flathub). Раньше они шли одним
+       ответом, и «Параметры» не дожидались его вовсе: обновления в меню
+       питания были, а на странице «Обновления» — «система не успела
+       ответить». Одновременные вопросы (ядро панели и «Параметры» спрашивают
+       разом) получают один ответ, а не два apt подряд. */
+    async 'pkg.upgrade.check'({ приложения = true } = {}){
+      if (!проверкаИдёт) проверкаИдёт = this['pkg.upgrade.apt']().finally(() => { проверкаИдёт = null; });
+      const ответ = await проверкаИдёт;
+      return { ...ответ, 'flathub':приложения ? await обновленияFlathub() : [] };
+    },
+
+    async 'pkg.upgrade.flathub'({ заново = false } = {}){
+      return { 'flathub':await обновленияFlathub(заново) };
+    },
+
+    async 'pkg.upgrade.apt'(){
       let текст = '';
       try {
         const { stdout } = await run('sudo', ['-n', 'apt-get', '-s',
@@ -1154,27 +1194,7 @@ export function packages(allowPackages){
         } catch(e2){}
       }
 
-      /* Программы из Flathub — Telegram, Steam, OBS и всё, что человек
-         поставил оттуда.
-
-         До сих пор про них здесь не спрашивали вовсе: обновления знали
-         только apt, и со стороны выглядело так, будто система обновляет
-         лишь то, что написали мы сами. Спросить flatpak стоит одной
-         строки: у него есть готовый список «что можно обновить».
-
-         Список не входит в «всего» у apt — это отдельная очередь со своей
-         кнопкой, потому что и обновляются они отдельно, своим путём. */
-      const flathub = [];
-      try {
-        const выход = await flatpak(['remote-ls', '--updates', '--app',
-          '--columns=application,name,version'], 60000);
-        колонки(выход).forEach(([id, имя, версия]) => {
-          if (id && APPID.test(id)) flathub.push({ name:id, 'имя':имя || id, 'станет':версия || '', source:'flatpak' });
-        });
-      } catch(e){ /* flatpak не стоит или Flathub не подключён — значит, и обновлять там нечего */ }
-
-      return { list, всего:list.length, когда, 'удержано':удержано,
-               'flathub':flathub, можно:!!allowPackages };
+      return { list, всего:list.length, когда, 'удержано':удержано, можно:!!allowPackages };
     },
 
     /* Поставить обновления — тем же способом, что и установку программ. */
