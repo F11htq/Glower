@@ -456,6 +456,21 @@ fn кнопка_со_значком(вид: Вид, подсказка: &str) ->
     (б, з)
 }
 
+thread_local! {
+    static ЗНАК_ПУСКА: std::cell::RefCell<Option<gtk::Image>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Тема сменилась — знак на кнопке «Программы» в своём варианте
+pub fn обнови_знак_пуска() {
+    if let Some(з) = apps::картинка_системы("logo-64.png", 18, 18) {
+        ЗНАК_ПУСКА.with(|з2| {
+            if let Some(к) = з2.borrow().as_ref() {
+                к.set_from_pixbuf(Some(&з));
+            }
+        });
+    }
+}
+
 fn main() {
     // Та же программа под другими именами: glower-lock — экран блокировки,
     // glower-login — экран входа. Это один и тот же экран
@@ -620,7 +635,11 @@ fn main() {
     let внутри = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     // Знак системы — как флажок Windows на кнопке «Пуск»
     match apps::картинка_системы("logo-64.png", 18, 18) {
-        Some(з) => внутри.add(&gtk::Image::from_pixbuf(Some(&з))),
+        Some(з) => {
+            let знак = gtk::Image::from_pixbuf(Some(&з));
+            ЗНАК_ПУСКА.with(|з| *з.borrow_mut() = Some(знак.clone()));
+            внутри.add(&знак);
+        }
         None => внутри.add(&Значок::новый(Вид::Сетка).холст),
     }
     внутри.add(&gtk::Label::new(Some("Программы")));

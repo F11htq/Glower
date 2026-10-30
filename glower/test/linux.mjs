@@ -913,7 +913,7 @@ try {
             /dbus-update-activation-environment/.test(сеанс) && /WAYLAND_DISPLAY/.test(сеанс)
             && /org\.freedesktop\.impl\.portal\.Settings=gtk/.test(сеанс) && /QT_QPA_PLATFORMTHEME=gtk3/.test(сеанс)
             && /"color-scheme"/.test(тема) && /"gtk-theme"/.test(тема) && /gtk-application-prefer-dark-theme/.test(тема)
-            && /"theme" => crate::theme::сообщи_программам/.test(ядро2));
+            && /"theme" => \{\s*crate::theme::сообщи_программам/.test(ядро2) && /обнови_знак_пуска/.test(ядро2));
           const окно_уст = await readFile(join(root, 'panel', 'src', 'installwin.rs'), 'utf8');
           check('Установка из файла — окошко с ходом, «Скрыть», «Отмена» и «Открыть» по готовности',
             /installwin::покажи\(/.test(ядро2) && /"pkg\.job"/.test(окно_уст) && /"pkg\.cancel"/.test(окно_уст) && /dpkg-query/.test(окно_уст));
@@ -1017,7 +1017,7 @@ try {
       const зовёт = [...сцен.matchAll(/Image\("([^"]+)"\)/g)].map(m => m[1]);
       const есть = await readdir(join(root, 'linux', 'plymouth'));
       const мкисо = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
-      const изАссетов = { 'logo.png':'assets/logo.png', 'word.png':'assets/logo-word.png' };
+      const изАссетов = { 'logo.png':'assets/logo-dark.png', 'word.png':'assets/logo-word.png' };
       const нет = зовёт.filter(ф => изАссетов[ф]
         ? !(мкисо.includes(изАссетов[ф]) && мкисо.includes('themes/glower/' + ф))
         : !есть.includes(ф));

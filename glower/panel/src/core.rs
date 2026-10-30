@@ -223,7 +223,11 @@ pub fn убери_со_стола(id: &str, вид: &str) {
 fn после(k: &str) {
     match k {
         "nightLight" => ночной_свет(),
-        "theme" => crate::theme::сообщи_программам(настройка("theme").as_str() == Some("light")),
+        "theme" => {
+            crate::theme::сообщи_программам(настройка("theme").as_str() == Some("light"));
+            // Файл настроек уже записан — знак берёт вариант по нему
+            crate::обнови_знак_пуска();
+        }
         "autoLock" => авто_замок(),
         "desks" => {}
         _ => {}

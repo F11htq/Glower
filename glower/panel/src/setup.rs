@@ -508,7 +508,7 @@ fn нарисуй() {
 
 /// Знак системы — без надписи
 pub(crate) fn логотип(размер: i32) -> Option<Pixbuf> {
-    crate::apps::картинка_системы("logo.png", размер, размер)
+    crate::apps::картинка_на_тёмном("logo.png", размер, размер)
 }
 
 fn шаг_привет(место: &gtk::Box) {
@@ -516,7 +516,7 @@ fn шаг_привет(место: &gtk::Box) {
     к.set_valign(gtk::Align::Center);
     к.set_vexpand(true);
     // Знак с надписью — в первом же шаге, как приветствие
-    match crate::apps::картинка_системы("logo-text.png", 360, 230) {
+    match crate::apps::картинка_на_тёмном("logo-text.png", 360, 230) {
         Some(л) => к.add(&gtk::Image::from_pixbuf(Some(&л))),
         None => {
             let имя = gtk::Label::new(Some("GlowerOS"));

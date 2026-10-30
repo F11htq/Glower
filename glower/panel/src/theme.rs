@@ -72,6 +72,11 @@ fn настройки() -> Value {
     std::fs::read_to_string(путь_настроек()).ok().and_then(|т| serde_json::from_str(&т).ok()).unwrap_or_default()
 }
 
+/// Тёмная ли сейчас тема (по умолчанию — да)
+pub fn тёмная() -> bool {
+    настройки()["theme"].as_str() != Some("light")
+}
+
 /// Два цвета акцента: свой цвет человека или один из готовых
 pub fn акцент(s: &Value) -> (String, String) {
     if let Some(свой) = s["accentCustom"].as_str().filter(|с| с.starts_with('#') && с.len() == 7) {

@@ -592,7 +592,8 @@ for img in "$SRC"/linux/plymouth/*.png; do
   [ -e "$img" ] || continue
   install -m 644 "$img" "$ROOTFS/usr/share/plymouth/themes/glower/"
 done
-install -m 644 "$SRC/assets/logo.png"                "$ROOTFS/usr/share/plymouth/themes/glower/logo.png"
+# Заставка всегда на тёмном — знак с подсвеченными кольцами
+install -m 644 "$SRC/assets/logo-dark.png"           "$ROOTFS/usr/share/plymouth/themes/glower/logo.png"
 install -m 644 "$SRC/assets/logo-word.png"           "$ROOTFS/usr/share/plymouth/themes/glower/word.png"
 # Знак системы — и как значок «glower» в теме значков: им пользуются окна
 # «О программе» чужих программ и всё, что ищет логотип дистрибутива
