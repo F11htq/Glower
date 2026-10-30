@@ -129,6 +129,63 @@ fn примени() {
     });
 }
 
+/// Сказать о теме чужим программам — всем, кто её спрашивает по-своему.
+///
+/// Свои программы перекрашиваются по файлу настроек, а чужие о нём не
+/// знают. Каждая спрашивает своё место:
+///   — libadwaita, GTK4, а через портал рабочего стола Firefox, Chrome,
+///     Electron (Discord, VS Code, Telegram) и всё из Flathub — ключ
+///     color-scheme в org.gnome.desktop.interface;
+///   — старые программы GTK3 — gtk-theme (Adwaita или Adwaita-dark);
+///   — GTK, запущенный без gsettings, — settings.ini;
+///   — Qt через свой модуль gtk3 — тоже gtk-theme.
+/// Пишет это только ядро панели, раз при запуске и при каждой смене темы.
+pub fn сообщи_программам(светлая: bool) {
+    let схема = if светлая { "prefer-light" } else { "prefer-dark" };
+    let тема = if светлая { "Adwaita" } else { "Adwaita-dark" };
+    if let Some(источник) = gio::SettingsSchemaSource::default() {
+        if let Some(схема_) = источник.lookup("org.gnome.desktop.interface", true) {
+            let н = gio::Settings::new("org.gnome.desktop.interface");
+            if схема_.has_key("color-scheme") {
+                // prefer-light есть не во всех версиях: где его нет — default
+                if н.set_string("color-scheme", схема).is_err() && светлая {
+                    let _ = н.set_string("color-scheme", "default");
+                }
+            }
+            if схема_.has_key("gtk-theme") {
+                let _ = н.set_string("gtk-theme", тема);
+            }
+            gio::Settings::sync();
+        }
+    }
+    for папка in ["gtk-3.0", "gtk-4.0"] {
+        let файл = glib::user_config_dir().join(папка).join("settings.ini");
+        let было = std::fs::read_to_string(&файл).unwrap_or_default();
+        let стало = settings_ini(&было, !светлая);
+        if стало != было {
+            let _ = std::fs::create_dir_all(файл.parent().unwrap_or(std::path::Path::new("/")));
+            let _ = std::fs::write(&файл, стало);
+        }
+    }
+}
+
+/// settings.ini с нужным gtk-application-prefer-dark-theme; прочее не трогаем
+pub fn settings_ini(было: &str, тёмная: bool) -> String {
+    let строка = format!("gtk-application-prefer-dark-theme={}", if тёмная { 1 } else { 0 });
+    let mut строки: Vec<String> = было.lines().filter(|с| !с.trim_start().starts_with("gtk-application-prefer-dark-theme")).map(String::from).collect();
+    match строки.iter().position(|с| с.trim() == "[Settings]") {
+        Some(i) => строки.insert(i + 1, строка),
+        None => {
+            if !строки.is_empty() && !строки.last().is_some_and(|с| с.is_empty()) {
+                строки.push(String::new());
+            }
+            строки.push("[Settings]".into());
+            строки.push(строка);
+        }
+    }
+    строки.join("\n") + "\n"
+}
+
 /// Подключить тему и следить за ней. Звать после gtk::init и до того,
 /// как программа загрузит свой стиль: имена цветов должны быть известны
 pub fn подключи() {
@@ -152,6 +209,13 @@ mod проверки {
         assert!(цвета(true, &а).contains("glower_bg #f4f5f9"));
         assert!(цвета(false, &а).contains("glower_bg #161821"));
         assert!(цвета(false, &а).contains("glower_accent #22c55e"));
+    }
+
+    #[test]
+    fn settings_ini_меняет_только_свою_строку() {
+        assert_eq!(settings_ini("", true), "[Settings]\ngtk-application-prefer-dark-theme=1\n");
+        let было = "[Settings]\ngtk-font-name=Noto Sans 11\ngtk-application-prefer-dark-theme=1\n";
+        assert_eq!(settings_ini(было, false), "[Settings]\ngtk-application-prefer-dark-theme=0\ngtk-font-name=Noto Sans 11\n");
     }
 
     #[test]

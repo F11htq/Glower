@@ -220,7 +220,35 @@ ls /dev/dri/card* >/dev/null 2>&1 && HAVE_DRI=yes
 # Пять падений за полминуты — это уже не случайность: тогда сеанс
 # заканчивается, и служба входа показывает экран входа, а не пустоту.
 # $1 — что сделать перед панелью (размер вложенного экрана под X).
+# Портал рабочего стола: какая его часть что делает. Тема и окна файлов —
+# GTK (он читает тёмную/светлую из gsettings, куда её пишет панель), экран —
+# wlroots. Без этого портал выбирал наугад, и часть, отвечающая за
+# настройки, могла не найтись вовсе. Файл свой — и у labwc, и у glower-wm
+# одно и то же; чужой (если человек написал свой) не трогаем.
+write_portals(){
+  PCONF="$HOME/.config/xdg-desktop-portal/portals.conf"
+  if [ ! -e "$PCONF" ] || grep -q '^# glower' "$PCONF" 2>/dev/null; then
+    mkdir -p "$(dirname "$PCONF")"
+    cat > "$PCONF" <<'PORTALS'
+# glower: этот файл пишет сеанс GlowerOS при каждом входе
+[preferred]
+default=gtk
+org.freedesktop.impl.portal.Settings=gtk
+org.freedesktop.impl.portal.FileChooser=gtk
+org.freedesktop.impl.portal.Screenshot=wlr
+org.freedesktop.impl.portal.ScreenCast=wlr
+org.freedesktop.impl.portal.Inhibit=none
+PORTALS
+  fi
+}
+
+# Программы на Qt — тема из тех же ключей, что у GTK, если модуль для этого есть
+for QTGTK in /usr/lib/*/qt6/plugins/platformthemes/libqgtk3.so /usr/lib/*/qt5/plugins/platformthemes/libqgtk3.so; do
+  if [ -e "$QTGTK" ]; then QT_QPA_PLATFORMTHEME=gtk3; export QT_QPA_PLATFORMTHEME; break; fi
+done
+
 write_start(){
+  write_portals
   mkdir -p "$HOME/.local/share/glower"
   START_SH="$HOME/.local/share/glower/shell.sh"
   cat > "$START_SH" <<STARTUP
@@ -237,6 +265,13 @@ command -v bt-agent >/dev/null 2>&1 && bt-agent -c NoInputNoOutput >/dev/null 2>
 GLOWER_URL="http://localhost:$PORT/"
 GLOWER_PORT="$PORT"
 export GLOWER_URL GLOWER_PORT
+# Программы, которые шина сеанса запускает сама, — прежде всего портал
+# рабочего стола: через него Firefox, Chrome, Electron и всё из Flathub
+# узнают тему, открывают окна «Открыть файл» и снимают экран. Без экрана
+# в окружении шины его часть для GTK не поднималась вовсе, и программы
+# не знали даже, тёмная тема или светлая
+dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE QT_QPA_PLATFORM QT_QPA_PLATFORMTHEME GTK_USE_PORTAL >/dev/null 2>&1 \
+  || dbus-update-activation-environment WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE QT_QPA_PLATFORM QT_QPA_PLATFORMTHEME >/dev/null 2>&1
 # С установочной флешки — сразу установщик, и только он: ни стола, ни
 # панели, ни дока. На старой машине рабочий стол поднимался бы долго, а
 # человеку с флешки он и не нужен. Рабочий стол — только если выбрали

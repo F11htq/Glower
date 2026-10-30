@@ -352,7 +352,11 @@ test -x /usr/bin/labwc || { echo "основные пакеты не устан�
 # clamav — «Защита»: проверка на вирусы по требованию, около 30 МБ. Базу
 # в образ не кладём (она в четыре раза больше самого ClamAV): система
 # скачает её сама. Службу freshclam гасим ниже — базу обновляет агент.
-for extra in gnome-backgrounds steam-devices clamav clamav-freshclam; do
+# dconf и схемы — чтобы чужие программы узнавали тему: без dconf настройки
+# GTK живут только в памяти программы, и ключ «тёмная тема» никто не видит.
+# qt*-gtk-platformtheme — программам на Qt брать тему из тех же ключей.
+for extra in gnome-backgrounds steam-devices clamav clamav-freshclam \
+             dconf-gsettings-backend gsettings-desktop-schemas qt5-gtk-platformtheme qt6-gtk-platformtheme; do
   apt-get install -y --no-install-recommends "$extra" >/dev/null 2>&1 \
     && echo "  доп.: $extra — поставлен" \
     || echo "  доп.: $extra — в репозитории нет, пропускаю"

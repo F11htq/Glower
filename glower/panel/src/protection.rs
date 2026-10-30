@@ -15,7 +15,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-const СТИЛЬ: &str = r#"
+pub const СТИЛЬ: &str = r#"
 .scan .h1 { font-size: 20px; font-weight: 600; }
 .scan .d { font-size: 12px; opacity: 0.65; }
 .scan .big { font-size: 40px; }

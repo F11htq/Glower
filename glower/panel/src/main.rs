@@ -48,6 +48,7 @@ mod store;
 mod snip;
 mod taskmgr;
 mod photos;
+mod installwin;
 mod protection;
 mod theme;
 mod todo;

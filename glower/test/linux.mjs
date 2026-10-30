@@ -904,6 +904,24 @@ try {
             && /fn доступна\(\)/.test(защита) && /"glower-scan"/.test(главная) && /glower-scan/.test(образ2));
         }
         {
+          // Чужие программы узнают тему: шина знает экран, портал знает, кого
+          // спрашивать, панель пишет тему туда, где её ищут
+          const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+          const тема = await readFile(join(root, 'panel', 'src', 'theme.rs'), 'utf8');
+          const ядро2 = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          check('Тема для чужих программ: color-scheme, gtk-theme, settings.ini, портал и окружение шины',
+            /dbus-update-activation-environment/.test(сеанс) && /WAYLAND_DISPLAY/.test(сеанс)
+            && /org\.freedesktop\.impl\.portal\.Settings=gtk/.test(сеанс) && /QT_QPA_PLATFORMTHEME=gtk3/.test(сеанс)
+            && /"color-scheme"/.test(тема) && /"gtk-theme"/.test(тема) && /gtk-application-prefer-dark-theme/.test(тема)
+            && /"theme" => crate::theme::сообщи_программам/.test(ядро2));
+          const окно_уст = await readFile(join(root, 'panel', 'src', 'installwin.rs'), 'utf8');
+          check('Установка из файла — окошко с ходом, «Скрыть», «Отмена» и «Открыть» по готовности',
+            /installwin::покажи\(/.test(ядро2) && /"pkg\.job"/.test(окно_уст) && /"pkg\.cancel"/.test(окно_уст) && /dpkg-query/.test(окно_уст));
+          const мастер = await readFile(join(root, 'panel', 'src', 'setup.rs'), 'utf8');
+          check('Мастер настройки — на своём фоне (сияние), а не поверх стола; кадры по монитору, на слабой машине 25',
+            /struct Сияние/.test(мастер) && /add_tick_callback/.test(мастер) && /0\.040/.test(мастер));
+        }
+        {
           const погода = await import(pathToFileURL(join(root, 'agent', 'weather.mjs')).href);
           const вызовы = [];
           const ряд = [{ time:'2026-10-29T06:00:00Z', data:{ instant:{ details:{ air_temperature:-3, relative_humidity:70, wind_speed:2 } },
