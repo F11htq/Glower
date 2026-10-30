@@ -809,6 +809,24 @@ Description: GlowerOS — оболочка, агент и сценарии си�
  сценарии. Обновляется обычным путём, вместе со всей системой.
 
 Package: glower
+Version: 11.64
+Architecture: amd64
+Maintainer: GlowerOS <noreply@glower.local>
+Installed-Size: 19708
+Depends: python3, nodejs, labwc, libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, librsvg2-common, wtype, wlsunset, swayidle, wl-clipboard, wf-recorder, libarchive-tools, gvfs-backends, dconf-gsettings-backend | gsettings-backend, gsettings-desktop-schemas, libseat1, libinput10, libgbm1, libxkbcommon0, libegl1, xwayland
+Filename: ./glower_11.64_amd64.deb
+Size: 7710952
+MD5sum: f7c1fa713b8ef55646a6bc25182af00b
+SHA1: 390e63aa8b7bb177a027c6b297d832b916deb2e8
+SHA256: 46c64c89187f8a124f9c70eab2ea0b66ee5d65fb41c5e48a79666e7f8ad55280
+Section: misc
+Priority: optional
+Description: GlowerOS — оболочка, агент и сценарии системы
+ Всё, что делает из Ubuntu систему GlowerOS: рабочий стол и панель,
+ агент, экран входа, установщик, приёмник лотка и вспомогательные
+ сценарии. Обновляется обычным путём, вместе со всей системой.
+
+Package: glower
 Version: 11.7
 Architecture: all
 Maintainer: GlowerOS <noreply@glower.local>
