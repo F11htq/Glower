@@ -476,6 +476,7 @@ install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 # Включена ссылкой из пакета (multi-user.target.wants), а не systemctl
 # enable: так она включится и на машинах, что получат её обновлением
 install -m 755 "$SRC/linux/glower-rescue" "$ROOTFS/usr/bin/glower-rescue"
+install -D -m 644 "$SRC/linux/apt-80glower-net" "$ROOTFS/etc/apt/apt.conf.d/80glower-net"
 install -D -m 644 "$SRC/linux/glower-rescue.service" "$ROOTFS/usr/lib/systemd/system/glower-rescue.service"
 install -d "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../glower-rescue.service "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/glower-rescue.service"

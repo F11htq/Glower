@@ -1040,6 +1040,16 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // apt не виснет на молчащей сети и говорит, какой источник не ответил
+          const пк = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const настр = await readFile(join(root, 'linux', 'apt-80glower-net'), 'utf8');
+          const стр = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+          check('Обновления: apt только по IPv4 и с обрывом молчащих соединений, недоступный репозиторий назван, а не «обновлений нет»',
+            пк.СЕТЬ_APT.includes('Acquire::ForceIPv4=true') && /Acquire::ForceIPv4 "true"/.test(настр)
+            && пк.недоступные_источники('Err:5 https://raw.githubusercontent.com/F11htq/Glower/apt ./ InRelease\nHit:1 http://archive.ubuntu.com/ubuntu noble InRelease').join() === 'raw.githubusercontent.com'
+            && /Не ответили: /.test(стр) && /etc\/apt\/apt\.conf\.d\/80glower-net/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

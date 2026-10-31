@@ -1,0 +1,7 @@
+// GlowerOS: сеть для apt. Только IPv4 — у многих провайдеров IPv6 есть лишь
+// на бумаге, и apt минутами ждёт молчащее соединение; молчание дольше
+// 20 секунд — обрыв и следующая попытка.
+Acquire::ForceIPv4 "true";
+Acquire::http::Timeout "20";
+Acquire::https::Timeout "20";
+Acquire::Retries "2";

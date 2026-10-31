@@ -286,6 +286,27 @@ export function сравниВерсии(а, б){
 
 const ВЕРСИИ_АДРЕС = process.env.GLOWER_VERSIONS_URL || 'https://raw.githubusercontent.com/F11htq/Glower/apt/versions.json';
 
+/* Сеть для apt. По умолчанию apt стучится сперва по IPv6, а у многих
+   провайдеров IPv6 есть только на бумаге: соединение не отвечает и не
+   рвётся, и «обновить списки» стоит минутами на одном проценте. Только
+   IPv4 и обрыв молчащего соединения через 20 секунд — тот же лечебный
+   приём, что уже понадобился погоде. Тот же набор лежит в
+   /etc/apt/apt.conf.d/80glower-net — для apt из терминала. */
+export const СЕТЬ_APT = ['-o', 'Acquire::ForceIPv4=true', '-o', 'Acquire::http::Timeout=20',
+  '-o', 'Acquire::https::Timeout=20', '-o', 'Acquire::Retries=2'];
+
+/* Какие источники не ответили: строки apt «Err:3 https://host/... »,
+   «W: Failed to fetch https://host/...», «Could not connect to host» */
+export function недоступные_источники(лог){
+  const хосты = new Set();
+  for (const с of String(лог).split('\n')){
+    const м = с.match(/^(?:Err:\d+|W: Failed to fetch|E: Failed to fetch)\s+(?:https?|ftp):\/\/([^\s/:]+)/)
+      || с.match(/Could not (?:connect to|resolve) '?([a-z0-9.-]+\.[a-z]{2,})/i);
+    if (м) хосты.add(м[1]);
+  }
+  return [...хосты];
+}
+
 const ЕДИНИЦЫ = { bytes:1, b:1, kb:1e3, mb:1e6, gb:1e9 };
 export function ходFlatpak(вывод){
   const т = String(вывод).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
@@ -335,7 +356,8 @@ export function packages(allowPackages){
   /* Обновления программ из Flathub — Telegram, Steam, OBS и всё, что человек
      поставил оттуда. Список flatpak берёт из интернета; ответ помним полчаса,
      а одновременные вопросы ждут один и тот же. */
-  let версииПомню = null;   // versions.json сборки — на час
+  let версииПомню = null;
+  let сбоиСети = [];      // какие источники apt не ответили в последний раз   // versions.json сборки — на час
   let flathubПомню = null, flathubИдёт = null;
   const обновленияFlathub = async (заново = false) => {
     if (!заново && flathubПомню && Date.now() - flathubПомню.когда < 30 * 60000) return flathubПомню.список;
@@ -438,7 +460,7 @@ export function packages(allowPackages){
       if (!/\bi386\b/.test(stdout))
         await run('sudo', ['-n', 'dpkg', '--add-architecture', 'i386'], { timeout:60000, env:СРЕДА_APT() });
       job.step = 'Обновляю списки пакетов'; job.слышно = Date.now();
-      await run('sudo', ['-n', 'apt-get', 'update'], { timeout:600000, env:СРЕДА_APT() });
+      await run('sudo', ['-n', 'apt-get', ...СЕТЬ_APT, 'update'], { timeout:600000, env:СРЕДА_APT() });
     } catch(e){
       const почему = String(e.stderr || e.message || '').trim().split('\n').pop();
       job.done = true; job.percent = 100;
@@ -535,7 +557,7 @@ export function packages(allowPackages){
        Читать такое невозможно, а главное — незачем. */
     const p = spawn('sudo', ['-n', 'apt-get',
       '-o', 'Dpkg::Use-Pty=0', '-o', 'Dpkg::Options::=--force-confold',
-      '-o', 'APT::Status-Fd=3', ...args], {
+      '-o', 'APT::Status-Fd=3', ...СЕТЬ_APT, ...args], {
       stdio:['ignore', 'pipe', 'pipe', 'pipe'],
       detached:true,     // своя группа процессов: иначе работу нечем остановить
       env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' }
@@ -585,6 +607,10 @@ export function packages(allowPackages){
       job.log = (job.log + t + '\n').slice(-8000);
     });
     p.on('exit', async code => {
+      if (/^(update|upgrade)$/.test(action)){
+        сбоиСети = недоступные_источники(job.log);
+        if (сбоиСети.length) job.заметка = 'Не ответили: ' + сбоиСети.join(', ');
+      }
       if (code === 0){
         /* Следом за этой работой может идти ещё одна — так за обновлением
            системы идёт доставка Wine. Одна работа за раз, поэтому очередь
@@ -644,7 +670,7 @@ export function packages(allowPackages){
         job.step = 'Обновляю списки и пробую снова';
         job.percent = 5;
         try {
-          await run('sudo', ['-n', 'apt-get', 'update'],
+          await run('sudo', ['-n', 'apt-get', ...СЕТЬ_APT, 'update'],
             { timeout:600000, env:{ ...process.env, DEBIAN_FRONTEND:'noninteractive', LC_ALL:'C' } });
         } catch(e){}
         const прежний = { ...job };
@@ -1376,7 +1402,14 @@ export function packages(allowPackages){
         } catch(e2){}
       }
 
-      return { list, всего:list.length, когда, 'удержано':удержано, можно:!!allowPackages };
+      // Своя версия — отдельно: «обновлений нет», когда репозиторий GlowerOS
+      // просто не ответил, вводит в заблуждение
+      let glower = null;
+      try {
+        const { stdout } = await run('apt-cache', ['policy', 'glower'], { timeout:15000, env:{ ...process.env, LC_ALL:'C' } });
+        glower = { стоит:(stdout.match(/Installed:\s*(\S+)/) || [])[1] || null, есть:(stdout.match(/Candidate:\s*(\S+)/) || [])[1] || null };
+      } catch(e){}
+      return { list, всего:list.length, когда, 'удержано':удержано, можно:!!allowPackages, недоступны:сбоиСети, glower };
     },
 
     /* Поставить обновления — тем же способом, что и установку программ. */
@@ -1571,7 +1604,7 @@ export function packages(allowPackages){
           if (!/\bi386\b/.test(stdout))
             await run('sudo', ['-n', 'dpkg', '--add-architecture', 'i386'], { timeout:60000, env:СРЕДА_APT() });
           job.step = 'Обновляю списки пакетов'; job.слышно = Date.now();
-          await run('sudo', ['-n', 'apt-get', 'update'], { timeout:600000, env:СРЕДА_APT() });
+          await run('sudo', ['-n', 'apt-get', ...СЕТЬ_APT, 'update'], { timeout:600000, env:СРЕДА_APT() });
         } catch(e){
           job.done = true; job.percent = 100; job.ok = false;
           job.error = 'Не вышло обновить списки пакетов: ' + String(e.stderr || e.message || '').trim().split('\n').pop();
