@@ -115,15 +115,70 @@ pub fn цвета(светлая: bool, акцент: &(String, String)) -> Stri
 /// особые кнопки (акцентные, плоские, плитки) остаются как были: приоритет у
 /// него выше темы GTK, но ниже стилей программ
 pub const ОСНОВА: &str = "
+/* окна и диалоги: свой фон, а не фон темы GTK */
+window.background, dialog, messagedialog, filechooser, filechooserdialog, window.dialog {
+  background-color: @glower_bg; color: @glower_fg; }
+dialog box, messagedialog box, messagedialog label, dialog label { color: @glower_fg; }
+messagedialog .titlebar, dialog .titlebar, dialog headerbar, filechooserdialog headerbar, window.dialog headerbar {
+  background-image: none; background-color: @glower_bg2; color: @glower_fg; border-color: @glower_line; box-shadow: none; }
+headerbar .title, headerbar .subtitle { color: @glower_fg; }
+.dialog-action-area, messagedialog .dialog-action-box { background-color: transparent; }
+
+/* кнопки */
 button { background-image: none; background-color: alpha(@glower_fg, 0.08); color: @glower_fg;
-         border: 1px solid alpha(@glower_fg, 0.10); box-shadow: none; text-shadow: none; }
+         border: 1px solid alpha(@glower_fg, 0.10); box-shadow: none; text-shadow: none; -gtk-icon-shadow: none; }
+button label, button image { color: inherit; }
 button:hover { background-color: alpha(@glower_fg, 0.14); }
 button:active, button:checked { background-color: alpha(@glower_fg, 0.20); }
 button:disabled { background-color: alpha(@glower_fg, 0.04); color: alpha(@glower_fg, 0.4); }
-button.flat, button.titlebutton { background-color: transparent; border-color: transparent; }
+button.flat, button.titlebutton, button.image-button.flat { background-color: transparent; border-color: transparent; }
 button.flat:hover, button.titlebutton:hover { background-color: alpha(@glower_fg, 0.10); }
-row:selected { background-color: alpha(@glower_accent, 0.28); color: @glower_fg; }
-messagedialog, messagedialog .dialog-action-area button { color: @glower_fg; }
+button.suggested-action, button.default:not(.flat) { background-image: linear-gradient(140deg, @glower_accent, @glower_accent2); color: #ffffff; border-color: transparent; }
+button.destructive-action { background-color: #c0392b; color: #ffffff; border-color: transparent; }
+
+/* поля ввода, числа, выпадающие списки */
+entry, spinbutton, spinbutton entry, combobox button.combo, textview, textview text {
+  background-image: none; background-color: alpha(@glower_fg, 0.06); color: @glower_fg;
+  border-color: alpha(@glower_fg, 0.14); box-shadow: none; caret-color: @glower_fg; }
+entry:focus, spinbutton:focus { border-color: @glower_accent; }
+entry:disabled { color: alpha(@glower_fg, 0.45); }
+entry selection, textview text selection, label selection { background-color: alpha(@glower_accent, 0.45); color: #ffffff; }
+spinbutton button { background-color: transparent; border-color: transparent; }
+
+/* списки, таблицы, значки */
+list, listview, treeview.view, iconview, .view, placessidebar, placessidebar list, stacksidebar, stacksidebar list {
+  background-color: @glower_bg; color: @glower_fg; }
+treeview.view header button { background-color: @glower_bg2; color: alpha(@glower_fg, 0.7); border-color: @glower_line; }
+row:selected, treeview.view:selected, iconview:selected, .view:selected, flowboxchild:selected,
+placessidebar row:selected, treeview.view:selected:focus {
+  background-image: none; background-color: alpha(@glower_accent, 0.30); color: @glower_fg; }
+row:hover { background-color: alpha(@glower_fg, 0.05); }
+treeview.view:hover { background-color: alpha(@glower_fg, 0.05); }
+placessidebar row label, placessidebar row image { color: @glower_fg; }
+
+/* окно выбора файлов */
+filechooser .path-bar button, filechooser pathbar button { background-color: alpha(@glower_fg, 0.06); }
+filechooser actionbar, filechooser .search-bar, searchbar, actionbar {
+  background-image: none; background-color: @glower_bg2; border-color: @glower_line; color: @glower_fg; }
+filechooser paned separator, paned separator { background-color: @glower_line; }
+
+/* вкладки, календарь, флажки, ползунки, прокрутка, всплывающее */
+notebook, notebook header, notebook stack { background-color: @glower_bg; border-color: @glower_line; }
+notebook tab { color: alpha(@glower_fg, 0.65); }
+notebook tab:checked { color: @glower_fg; box-shadow: inset 0 -2px @glower_accent; }
+calendar { background-color: @glower_bg; color: @glower_fg; border-color: @glower_line; }
+calendar:selected { background-color: @glower_accent; color: #ffffff; border-radius: 6px; }
+calendar.header, calendar.button { color: @glower_fg; }
+check, radio { background-image: none; background-color: alpha(@glower_fg, 0.08); border-color: alpha(@glower_fg, 0.30); color: #ffffff; }
+check:checked, radio:checked { background-color: @glower_accent; border-color: @glower_accent; }
+scale trough, progressbar trough { background-color: alpha(@glower_fg, 0.12); border-color: transparent; }
+scale highlight, progressbar progress { background-image: none; background-color: @glower_accent; border-color: transparent; }
+scale slider { background-image: none; background-color: #ffffff; border-color: alpha(#000000, 0.2); }
+scrollbar, scrollbar trough { background-color: transparent; border-color: transparent; }
+scrollbar slider { background-color: alpha(@glower_fg, 0.35); }
+popover, popover.background { background-color: @glower_bg2; color: @glower_fg; border-color: @glower_line; }
+tooltip, tooltip.background { background-color: @glower_bg2; color: @glower_fg; }
+separator { background-color: @glower_line; }
 ";
 
 fn примени() {
