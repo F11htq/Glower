@@ -243,6 +243,64 @@ let драйверыПомню = null;
 
 export { разбериAppstream };
 
+/* Ход flatpak по его же выводу.
+   flatpak печатает таблицу того, что поставит, с размерами:
+       1.     org.freedesktop.Platform   23.08   i   flathub   < 210,3 MB
+   и строку хода, которую переписывает через \r:
+       Installing 2/7… ████▌        35%  4,2 MB/s  01:12
+   Проценты — на одну часть; общий ход считаем по весу частей (размеры из
+   таблицы), без них — поровну. Возвращает { процент, часть, всего, скорость,
+   осталось, этап } или null, если в выводе ничего такого нет. */
+/* «Retrieving file 3 of 12 (1min 4s remaining)» → «Скачиваю 3 из 12 · осталось 1 мин 4 с» */
+export function словаApt(т){
+  const м = String(т).match(/file (\d+) of (\d+)/i);
+  const о = String(т).match(/\(([^)]*?)\s*remaining\)/i);
+  const куски = [м ? `Скачиваю ${м[1]} из ${м[2]}` : 'Скачиваю'];
+  if (о) куски.push('осталось ' + о[1].replace(/(\d+)h/, '$1 ч').replace(/(\d+)min/, '$1 мин').replace(/(\d+)s\b/, '$1 с').trim());
+  return куски.join(' · ');
+}
+
+const ЕДИНИЦЫ = { bytes:1, b:1, kb:1e3, mb:1e6, gb:1e9 };
+export function ходFlatpak(вывод){
+  const т = String(вывод).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  const размеры = [];
+  for (const м of т.matchAll(/^\s*(\d+)\.\s+\S+.*?[<>]?\s*([\d.,]+)\D{0,3}?(bytes|[kMG]B)\s*$/gim))
+    размеры[Number(м[1]) - 1] = parseFloat(м[2].replace(',', '.')) * (ЕДИНИЦЫ[м[3].toLowerCase()] || 1);
+  const ходы = [...т.matchAll(/(Installing|Updating|Uninstalling|Downloading)(?:\s+(\d+)\/(\d+))?[^%\r\n]*?(\d{1,3})%(?:[ \t]+([\d.,]+)\D{0,3}?(bytes|[kMG]B)\/s)?(?:[ \t]+(\d{1,2}:\d{2}(?::\d{2})?))?/g)];
+  if (!ходы.length){
+    if (/Looking for matches|Downloading metadata|Updating appstream|Updating metadata/i.test(т)) return { процент:null, этап:'ищу' };
+    return null;
+  }
+  const п = ходы[ходы.length - 1];
+  const часть = Number(п[2] || 1), всего = Number(п[3] || 1);
+  const доля = Math.min(100, Number(п[4])) / 100;
+  let общее;
+  const есть = размеры.length >= всего && размеры.slice(0, всего).every(р => р > 0);
+  if (есть){
+    const сумма = размеры.slice(0, всего).reduce((а, б) => а + б, 0);
+    const до = размеры.slice(0, часть - 1).reduce((а, б) => а + б, 0);
+    общее = (до + размеры[часть - 1] * доля) / сумма;
+  } else общее = ((часть - 1) + доля) / всего;
+  const скорость = п[5] ? parseFloat(п[5].replace(',', '.')) * (ЕДИНИЦЫ[п[6].toLowerCase()] || 1) : null;
+  return { процент:Math.round(общее * 100), часть, всего, скорость, осталось:п[7] || null,
+    этап:/Uninstalling/.test(п[1]) ? 'удаляю' : /Updating/.test(п[1]) ? 'обновляю' : 'ставлю',
+    размер:есть ? размеры.slice(0, всего).reduce((а, б) => а + б, 0) : null };
+}
+
+const мб = б => б >= 1e9 ? (б / 1e9).toFixed(1).replace('.', ',') + ' ГБ' : Math.max(1, Math.round(б / 1e6)) + ' МБ';
+
+/* Строка хода для человека: «Ставлю 2 из 7 · 4 МБ/с · осталось 01:12» */
+export function словаХода(х){
+  if (!х) return null;
+  if (х.процент === null) return 'Ищу программу и всё, что ей нужно';
+  const что = х.этап === 'удаляю' ? 'Удаляю' : х.этап === 'обновляю' ? 'Обновляю' : 'Скачиваю и ставлю';
+  const куски = [х.всего > 1 ? `${что} ${х.часть} из ${х.всего}` : что];
+  if (х.размер) куски.push(мб(х.размер));
+  if (х.скорость) куски.push(мб(х.скорость) + '/с');
+  if (х.осталось && х.осталось !== '00:00') куски.push('осталось ' + х.осталось);
+  return куски.join(' · ');
+}
+
 export function packages(allowPackages){
   let job = null;    // { name, action, percent, step, done, ok, error, log }
   let память = null; // что на машине есть: спрошено один раз, а не каждый раз
@@ -469,7 +527,7 @@ export function packages(allowPackages){
           job.percent = st[1] === 'dlstatus' ? Math.min(50, Math.round(п / 2))
                                              : Math.max(50, 50 + Math.round(п / 2));
         }
-        if (st[3]) job.step = st[1] === 'dlstatus' ? 'Скачиваю' : 'Устанавливаю';
+        if (st[3]) job.step = st[1] === 'dlstatus' ? словаApt(st[3]) : 'Устанавливаю';
         return;
       }
 
@@ -599,14 +657,20 @@ export function packages(allowPackages){
   const запустиFlatpak = (action, name, args, свой = false) => {
     flathubПомню = null;   // поставили, убрали или обновили — прежний список устарел
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
-            error:null, log:'', слышно:Date.now(), pid:null };
+            error:null, log:'', начало:'', слышно:Date.now(), pid:null };
+    if (action === 'remove') job.step = 'Удаляю';
     /* Проценты flatpak печатает, только когда видит терминал, — без него
        полоса в Магазине стояла на двух процентах и прыгала сразу к ста.
        Терминал даёт script (bsdutils, есть в любой Ubuntu); нет его —
        запускаем как раньше, просто без хода. */
+    const черезТерминал = existsSync('/usr/bin/script');
+    /* С --noninteractive flatpak не печатает хода совсем, даже в терминале:
+       одна строка «Installing …» — и тишина до конца. Так Steam и «стоял
+       на двух процентах». Через терминал ключ не нужен: -y и так отвечает
+       «да» на всё, а вопросов, кроме этого, flatpak не задаёт. */
+    if (черезТерминал) args = args.filter(а => а !== '--noninteractive');
     const команда = свой ? ['flatpak', ...args] : ['sudo', '-n', 'flatpak', ...args];
     const вКавычках = с => "'" + String(с).replace(/'/g, "'\\''") + "'";
-    const черезТерминал = existsSync('/usr/bin/script');
     const p = черезТерминал
       ? spawn('script', ['-qfec', команда.map(вКавычках).join(' '), '/dev/null'], {
           stdio:['ignore', 'pipe', 'pipe'], detached:true,
@@ -621,15 +685,15 @@ export function packages(allowPackages){
       const t = String(кусок);
       job.слышно = Date.now();
       job.log = (job.log + t).slice(-8000);
-      /* flatpak сам печатает проценты — берём их, а не выдумываем свои */
-      const m = t.match(/(\d{1,3})%/g);
-      if (m){
-        const п = parseInt(m[m.length - 1], 10);
-        if (п >= 0 && п <= 100) job.percent = Math.max(job.percent, п);
-      }
-      if (/Installing/i.test(t)) job.step = 'Скачиваю и ставлю';
+      // Начало вывода — с таблицей размеров — храним отдельно: хвост журнала
+      // за час скачивания Steam давно бы его вытеснил
+      if (job.начало.length < 6000) job.начало += t;
+      /* flatpak сам печатает ход — берём его, а не выдумываем свой.
+         Смотрим весь вывод: таблица размеров приходит раньше хода */
+      const х = ходFlatpak(job.начало.slice(0, 6000) + '\n' + job.log.slice(-1500));
+      if (х && х.процент !== null) job.percent = Math.max(job.percent, Math.min(99, Math.max(3, х.процент)));
+      if (х) job.step = словаХода(х);
       else if (/Uninstalling|Removing/i.test(t)) job.step = 'Удаляю';
-      else if (/Updating appstream|Updating metadata/i.test(t)) job.step = 'Читаю списки Flathub';
     };
     p.stdout.on('data', принять);
     p.stderr.on('data', d => { принять(d); const t = String(d).trim(); if (t) job.error = t.split('\n').pop(); });

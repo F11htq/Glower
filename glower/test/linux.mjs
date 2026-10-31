@@ -955,6 +955,21 @@ try {
             && /api\/v2\/collection\/category/.test(пак2) && а.length === 1 && а[0].about === 'A & B' && а[0].категории[0] === 'Game');
         }
         {
+          // Настоящий вывод flatpak 1.14 через терминал: таблица размеров и ход по частям
+          const { ходFlatpak, словаХода, словаApt } = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const вывод = 'Looking for matches…\r\n\x1b[1m        ID                 Branch      Op      Remote     Download\x1b[22m\r\n'
+            + ' 1.     org.test.Big       1           i       t          < 120.0 MB\r\n 2.     org.test.Big2      1           i       t           < 30.0 MB\r\n\r\n'
+            + '\x1b[?25l\x1b[6n\rInstalling 1/2… \x1b[2m██\x1b[22m   35%  28.3 MB/s\x1b[6n\rInstalling 1/2… \x1b[2m████\x1b[22m 100%  30.0 MB/s  00:00'
+            + '\x1b[6n\rInstalling 2/2… \x1b[2m█\x1b[22m  50%  25.2 MB/s  00:01';
+          const х = ходFlatpak(вывод);
+          const пакеты = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          check('Скачивание из Flathub: ход по частям с учётом их размера, скорость; без --noninteractive, иначе flatpak молчит',
+            х.процент === 90 && х.часть === 2 && х.всего === 2 && х.скорость === 25.2e6 && /2 из 2 · 150 МБ · 25 МБ\/с · осталось 00:01/.test(словаХода(х))
+            && ходFlatpak('Looking for matches').процент === null && ходFlatpak('') === null
+            && /args\.filter\(а => а !== '--noninteractive'\)/.test(пакеты)
+            && словаApt('Retrieving file 3 of 12 (1min 4s remaining)') === 'Скачиваю 3 из 12 · осталось 1 мин 4 с');
+        }
+        {
           const мышь = await import(pathToFileURL(join(root, 'agent', 'mouse.mjs')).href);
           const пар = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
           const wmМышь = await readFile(join(root, 'wm', 'src', 'mouse.rs'), 'utf8');
