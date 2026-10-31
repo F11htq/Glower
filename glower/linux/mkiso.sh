@@ -361,7 +361,7 @@ test -x /usr/bin/labwc || { echo "основные пакеты не устан�
 # десяти мегабайт, и с ними игры готовы сразу после установки.
 for extra in gnome-backgrounds steam-devices clamav clamav-freshclam gamemode mangohud \
              dconf-gsettings-backend gsettings-desktop-schemas qt5-gtk-platformtheme qt6-gtk-platformtheme \
-             gnome-themes-extra; do
+             gnome-themes-extra dmz-cursor-theme bibata-cursor-theme breeze-cursor-theme; do
   apt-get install -y --no-install-recommends "$extra" >/dev/null 2>&1 \
     && echo "  доп.: $extra — поставлен" \
     || echo "  доп.: $extra — в репозитории нет, пропускаю"

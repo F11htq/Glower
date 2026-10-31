@@ -875,9 +875,9 @@ try {
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
             && родная('glower-files', 'files') && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
-        check('Параметры на Rust: все двадцать разделов, системное — у агента, своё — у ядра панели',
-          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 20
-            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware', 'av.state', 'game.state']
+        check('Параметры на Rust: все двадцать один раздел, системное — у агента, своё — у ядра панели',
+          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 21
+            && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware', 'av.state', 'game.state', 'sys.mouse']
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
             && /settings:'glower-settings'/.test(агент2) && /\^\[a-z0-9\]\{1,20\}\$/.test(агент2)
@@ -953,6 +953,20 @@ try {
           check('Магазин: рекомендации каждый раз новые, в разделе — все программы категории с Flathub, страницами',
             /fn перемешай/.test(маг) && /fn догрузи/.test(маг) && /"Показать ещё"/.test(маг) && /'pkg\.category'/.test(пак2)
             && /api\/v2\/collection\/category/.test(пак2) && а.length === 1 && а[0].about === 'A & B' && а[0].категории[0] === 'Game');
+        }
+        {
+          const мышь = await import(pathToFileURL(join(root, 'agent', 'mouse.mjs')).href);
+          const пар = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+          const wmМышь = await readFile(join(root, 'wm', 'src', 'mouse.rs'), 'utf8');
+          const раздел = мышь.раздел_libinput({ ...мышь.ПО_УМОЛЧАНИЮ, левша:true, строки:6, точность:false });
+          const rc = мышь.вставь_раздел('<labwc_config><libinput>старое</libinput>\n</labwc_config>', раздел);
+          const env = мышь.среда_с('XKB_DEFAULT_LAYOUT=us,ru\nXCURSOR_SIZE=24\n', { XCURSOR_THEME:'Adwaita', XCURSOR_SIZE:'48' });
+          check('Мышь и тачпад как в Windows: левша, скорость, колесо, тачпад, вид и размер указателя',
+            /<leftHanded>yes<\/leftHanded>/.test(раздел) && /<scrollFactor>2\.00/.test(раздел) && /<accelProfile>flat/.test(раздел)
+            && !/старое/.test(rc) && rc.match(/<libinput>/g).length === 1 && rc.trim().endsWith('</labwc_config>')
+            && /XKB_DEFAULT_LAYOUT=us,ru/.test(env) && /XCURSOR_SIZE=48/.test(env) && !/XCURSOR_SIZE=24/.test(env)
+            && /fn мышь\(/.test(пар) && /'sys\.mouse\.set'/.test(await readFile(join(root, 'agent', 'mouse.mjs'), 'utf8'))
+            && /config_left_handed_set/.test(wmМышь) && /config_tap_set_enabled/.test(wmМышь));
         }
         {
           const погода = await import(pathToFileURL(join(root, 'agent', 'weather.mjs')).href);

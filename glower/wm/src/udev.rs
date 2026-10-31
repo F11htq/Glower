@@ -68,11 +68,23 @@ pub struct Udev {
     указатели: Указатели,
     размыватель: Option<Размыватель>,
     libinput: Libinput,
+    /// Подключённые мыши и тачпады — чтобы применить к ним новые настройки
+    устройства: Vec<smithay::reexports::input::Device>,
     pub dmabuf_state: DmabufState,
     _dmabuf_global: DmabufGlobal,
 }
 
 impl Udev {
+    pub fn примени_мышь(&mut self, м: &crate::mouse::Мышь) {
+        for у in self.устройства.iter_mut() {
+            crate::mouse::примени(у, м);
+        }
+    }
+
+    pub fn смени_указатели(&mut self, тема: &str, размер: u32) {
+        self.указатели = Указатели::из(тема, размер);
+    }
+
     pub fn renderer(&mut self) -> Option<&mut GlesRenderer> {
         Some(&mut self.renderer)
     }
@@ -281,6 +293,7 @@ pub fn запусти(цикл: &mut EventLoop<'static, Glower>, с: &mut Glower
         указатели: Указатели::new(),
         размыватель,
         libinput,
+        устройства: Vec::new(),
         dmabuf_state,
         _dmabuf_global: dmabuf_global,
     };
@@ -296,13 +309,23 @@ pub fn запусти(цикл: &mut EventLoop<'static, Glower>, с: &mut Glower
 
     let ручка = цикл.handle();
     ручка.insert_source(ввод, |событие, _, с| {
-        if let InputEvent::DeviceAdded { device } = &событие {
-            let mut устройство = device.clone();
-            // Тачпад: касание — щелчок, как в Windows; печатаешь — не дёргает
-            if устройство.config_tap_finger_count() > 0 {
-                let _ = устройство.config_tap_set_enabled(true);
-                let _ = устройство.config_dwt_set_enabled(true);
+        match &событие {
+            // Новая мышь или тачпад — сразу по настройкам «Параметров». По
+            // умолчанию у тачпада касание — щелчок, как в Windows, и пока
+            // печатаешь, он не дёргает указатель
+            InputEvent::DeviceAdded { device } => {
+                let mut устройство = device.clone();
+                crate::mouse::примени(&mut устройство, &с.настройки_мыши);
+                if let Some(Бэкенд::Udev(u)) = с.бэкенд.as_mut() {
+                    u.устройства.push(устройство);
+                }
             }
+            InputEvent::DeviceRemoved { device } => {
+                if let Some(Бэкенд::Udev(u)) = с.бэкенд.as_mut() {
+                    u.устройства.retain(|у| у != device);
+                }
+            }
+            _ => {}
         }
         с.ввод(событие);
     })?;

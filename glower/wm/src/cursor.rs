@@ -17,7 +17,12 @@ impl Указатели {
     pub fn new() -> Self {
         let тема = std::env::var("XCURSOR_THEME").unwrap_or_else(|_| "Adwaita".into());
         let размер = std::env::var("XCURSOR_SIZE").ok().and_then(|р| р.parse().ok()).unwrap_or(24);
-        Указатели { тема: xcursor::CursorTheme::load(&тема), размер, готовые: HashMap::new() }
+        Self::из(&тема, размер)
+    }
+
+    /// Другая тема или размер — «Параметры» → «Мышь»
+    pub fn из(тема: &str, размер: u32) -> Self {
+        Указатели { тема: xcursor::CursorTheme::load(тема), размер, готовые: HashMap::new() }
     }
 
     fn загрузи(&self, имя: &str, масштаб: u32) -> Option<(MemoryRenderBuffer, Point<i32, Physical>)> {

@@ -130,6 +130,8 @@ pub struct Glower {
     pub фокус_захвата: Option<WlSurface>,
     /// Где мышь. Своя копия: у указателя спрашивать нельзя, пока идёт
     /// захват — его замок уже взят, и сервер повис бы
+    /// Настройки мыши и тачпада из rc.xml (раздел <libinput>)
+    pub настройки_мыши: crate::mouse::Мышь,
     pub мышь: Point<f64, Logical>,
 
     pub замок: Option<Замок>,
@@ -246,6 +248,7 @@ impl Glower {
             подсказка_края: None,
             жест: None,
             фокус_захвата: None,
+            настройки_мыши: Default::default(),
             мышь: Point::from((640.0, 400.0)),
             замок: None,
             сочетания: vec![],
@@ -291,6 +294,7 @@ impl Glower {
     pub fn перечитай_настройки(&mut self) {
         let rc = std::fs::read_to_string(self.папка_настроек.join("rc.xml")).unwrap_or_default();
         self.сочетания = keys::разбери(&rc);
+        self.настройки_мыши = crate::mouse::разбери(&rc);
         let среда = std::fs::read_to_string(self.папка_настроек.join("environment")).unwrap_or_default();
         let пары = keys::среда(&среда);
         let взять = |имя: &str| {
@@ -318,6 +322,28 @@ impl Glower {
             }
         }
         self.запиши_раскладку();
+
+        // Мыши и тачпады, которые уже подключены, — сразу по новым правилам
+        let мышь = self.настройки_мыши.clone();
+        if let Some(crate::backend::Бэкенд::Udev(u)) = self.бэкенд.as_mut() {
+            u.примени_мышь(&мышь);
+        }
+        // Курсор: тема и размер из environment. Окнам X11 и программам,
+        // которые сервер запустит дальше, — через переменные среды
+        let тема = взять("XCURSOR_THEME");
+        let размер = взять("XCURSOR_SIZE").parse::<u32>().ok().filter(|р| (16..=96).contains(р));
+        if !тема.is_empty() || размер.is_some() {
+            let тема = if тема.is_empty() { "Adwaita".to_string() } else { тема };
+            let размер = размер.unwrap_or(24);
+            std::env::set_var("XCURSOR_THEME", &тема);
+            std::env::set_var("XCURSOR_SIZE", размер.to_string());
+            match self.бэкенд.as_mut() {
+                Some(crate::backend::Бэкенд::Udev(u)) => u.смени_указатели(&тема, размер),
+                Some(crate::backend::Бэкенд::Winit(w)) => w.указатели = crate::cursor::Указатели::из(&тема, размер),
+                _ => {}
+            }
+            self.нужен_кадр = true;
+        }
     }
 
     /// Номер текущей раскладки (с единицы) и имена всех — для меню на панели

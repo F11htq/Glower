@@ -93,19 +93,23 @@ impl Glower {
             InputEvent::PointerButton { event } => self.кнопка(event.button_code(), event.state(), event.time_msec()),
             InputEvent::PointerAxis { event } => {
                 let источник = event.source();
-                let по_гор = event.amount(Axis::Horizontal).unwrap_or_else(|| event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.0);
-                let по_верт = event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.0);
+                // Скорость прокрутки из «Параметров»: сколько строк за щелчок
+                // колеса (у тачпада — своя)
+                let м = &self.настройки_мыши;
+                let множ = if источник == AxisSource::Finger { м.тачпад.множитель } else { м.мышь.множитель }.unwrap_or(1.0);
+                let по_гор = множ * event.amount(Axis::Horizontal).unwrap_or_else(|| event.amount_v120(Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.0);
+                let по_верт = множ * event.amount(Axis::Vertical).unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.0);
                 let mut кадр = AxisFrame::new(event.time_msec()).source(источник);
                 if по_гор != 0.0 {
                     кадр = кадр.value(Axis::Horizontal, по_гор);
                     if let Some(д) = event.amount_v120(Axis::Horizontal) {
-                        кадр = кадр.v120(Axis::Horizontal, д as i32);
+                        кадр = кадр.v120(Axis::Horizontal, (д * множ) as i32);
                     }
                 }
                 if по_верт != 0.0 {
                     кадр = кадр.value(Axis::Vertical, по_верт);
                     if let Some(д) = event.amount_v120(Axis::Vertical) {
-                        кадр = кадр.v120(Axis::Vertical, д as i32);
+                        кадр = кадр.v120(Axis::Vertical, (д * множ) as i32);
                     }
                 }
                 if источник == AxisSource::Finger {

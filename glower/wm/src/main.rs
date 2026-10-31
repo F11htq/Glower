@@ -21,6 +21,7 @@ mod handlers;
 mod input;
 mod ipc;
 mod keys;
+mod mouse;
 mod protocols;
 mod render;
 mod state;
