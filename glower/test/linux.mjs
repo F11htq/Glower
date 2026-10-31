@@ -909,6 +909,9 @@ try {
           const сеанс = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
           const тема = await readFile(join(root, 'panel', 'src', 'theme.rs'), 'utf8');
           const ядро2 = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          check('Свои окна — своей темой GTK: Adwaita задаётся сама, кнопки на основе своих цветов, Adwaita-dark — только если есть на диске',
+            /set_gtk_theme_name\(Some\("Adwaita"\)\)/.test(тема) && /pub const ОСНОВА/.test(тема) && /STYLE_PROVIDER_PRIORITY_SETTINGS \+ 1/.test(тема)
+            && /есть_тёмная/.test(тема));
           check('Тема для чужих программ: color-scheme, gtk-theme, settings.ini, портал и окружение шины',
             /dbus-update-activation-environment/.test(сеанс) && /WAYLAND_DISPLAY/.test(сеанс)
             && /org\.freedesktop\.impl\.portal\.Settings=gtk/.test(сеанс) && /QT_QPA_PLATFORMTHEME=gtk3/.test(сеанс)

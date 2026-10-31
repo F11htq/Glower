@@ -106,6 +106,26 @@ pub fn цвета(светлая: bool, акцент: &(String, String)) -> Stri
     )
 }
 
+/// Основа кнопок и списков — своими цветами, а не цветами темы GTK.
+///
+/// Подписи у нас всегда цвета @glower_fg, а фон кнопки по умолчанию давала
+/// тема GTK. Стоило ей оказаться не той (светлой при тёмной системе) — и
+/// на светлых кнопках белые подписи пропадали: пустые прямоугольники по
+/// всей системе. Источник этот ниже стилей самих программ, так что их
+/// особые кнопки (акцентные, плоские, плитки) остаются как были: приоритет у
+/// него выше темы GTK, но ниже стилей программ
+pub const ОСНОВА: &str = "
+button { background-image: none; background-color: alpha(@glower_fg, 0.08); color: @glower_fg;
+         border: 1px solid alpha(@glower_fg, 0.10); box-shadow: none; text-shadow: none; }
+button:hover { background-color: alpha(@glower_fg, 0.14); }
+button:active, button:checked { background-color: alpha(@glower_fg, 0.20); }
+button:disabled { background-color: alpha(@glower_fg, 0.04); color: alpha(@glower_fg, 0.4); }
+button.flat, button.titlebutton { background-color: transparent; border-color: transparent; }
+button.flat:hover, button.titlebutton:hover { background-color: alpha(@glower_fg, 0.10); }
+row:selected { background-color: alpha(@glower_accent, 0.28); color: @glower_fg; }
+messagedialog, messagedialog .dialog-action-area button { color: @glower_fg; }
+";
+
 fn примени() {
     let s = настройки();
     примени_прозрачность(&s);
@@ -116,6 +136,10 @@ fn примени() {
     }
     БЫЛО.with(|б| *б.borrow_mut() = css.clone());
     if let Some(н) = gtk::Settings::default() {
+        // Тема GTK — своя, а не та, что пришла из системных настроек, от
+        // портала или из окружения: чужая тема (или её светлый запасной
+        // вариант, когда названной на диске нет) перекрашивала наши окна
+        н.set_gtk_theme_name(Some("Adwaita"));
         н.set_gtk_application_prefer_dark_theme(!светлая);
     }
     ИСТОЧНИК.with(|и| {
@@ -147,7 +171,13 @@ fn примени() {
 /// Пишет это только ядро панели, раз при запуске и при каждой смене темы.
 pub fn сообщи_программам(светлая: bool) {
     let схема = if светлая { "prefer-light" } else { "prefer-dark" };
-    let тема = if светлая { "Adwaita" } else { "Adwaita-dark" };
+    // Имя Adwaita-dark — только если такая тема есть на диске: иначе GTK
+    // откатывается на светлую Adwaita, и программа становится светлой при
+    // тёмной системе. Без неё тёмный режим передаёт settings.ini
+    let есть_тёмная = ["/usr/share/themes/Adwaita-dark", "/usr/local/share/themes/Adwaita-dark"]
+        .iter()
+        .any(|п| std::path::Path::new(п).join("gtk-3.0").is_dir());
+    let тема = if !светлая && есть_тёмная { "Adwaita-dark" } else { "Adwaita" };
     if let Some(источник) = gio::SettingsSchemaSource::default() {
         if let Some(схема_) = источник.lookup("org.gnome.desktop.interface", true) {
             let н = gio::Settings::new("org.gnome.desktop.interface");
@@ -194,6 +224,12 @@ pub fn settings_ini(было: &str, тёмная: bool) -> String {
 /// Подключить тему и следить за ней. Звать после gtk::init и до того,
 /// как программа загрузит свой стиль: имена цветов должны быть известны
 pub fn подключи() {
+    if let Some(э) = gtk::gdk::Screen::default() {
+        let основа = gtk::CssProvider::new();
+        if основа.load_from_data(ОСНОВА.as_bytes()).is_ok() {
+            gtk::StyleContext::add_provider_for_screen(&э, &основа, gtk::STYLE_PROVIDER_PRIORITY_SETTINGS + 1);
+        }
+    }
     // Имена нужны даже до первого чтения настроек: стиль с неизвестным
     // именем GTK не примет вовсе
     примени();
