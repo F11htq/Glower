@@ -1003,6 +1003,29 @@ try {
             && /XDG_RUNTIME_DIR/.test(текст) && /закрой\('ключ вынут'\)/.test(текст) && /aes-256-gcm/.test(текст));
         }
         {
+          // Эстафета, настройка с ключа, спасательный ключ
+          const эст = await import(pathToFileURL(join(root, 'agent', 'relay.mjs')).href);
+          const ключ2 = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
+          const мастер2 = await readFile(join(root, 'panel', 'src', 'setup.rs'), 'utf8');
+          const спас = await readFile(join(root, 'linux', 'glower-rescue'), 'utf8');
+          const образ3 = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+          const пакет3 = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
+          // LZ4-блок из одних литералов: токен 0x50 — пять байт как есть
+          const блок = Buffer.concat([Buffer.from([0x50]), Buffer.from('hello')]);
+          const сеанс = { windows:[{ tabs:[{ entries:[{ url:'https://a.ru' }, { url:'https://b.ru' }], index:1 }, { entries:[{ url:'about:blank' }], index:1 }] }] };
+          check('Эстафета: вкладки Firefox из сеанса, файлы программ — только из дома, без скрытых папок и сейфа',
+            эст.lz4_блок(блок, 5).toString() === 'hello' && эст.вкладки_firefox(сеанс).map(в => в.url).join() === 'https://a.ru'
+            && эст.файлы_из_строки(['x', 'a.txt', '/home/u/.config/b', '/etc/passwd', '/run/s/c.txt', '--opt'], '/home/u/Д', '/home/u', ['/run/s']).join() === '/home/u/Д/a.txt');
+          check('Ключ вместо начальной настройки: язык, раскладки, имя, пояс — с ключа, мастер закрывается сам',
+            JSON.stringify(ключ2.только_систему({ язык:'ru', раскладки:['us', 'ru', '../x'], userName:' А ', tz:'Asia/Krasnoyarsk', clock24:true, x:1 }))
+              === '{"язык":"ru","раскладки":["us","ru"],"userName":"А","tz":"Asia/Krasnoyarsk","clock24":true}'
+            && /fn предложи_ключ/.test(мастер2) && /fn настрой_по_ключу/.test(мастер2) && /"key\.pair"/.test(мастер2) && /"setupDone", json!\(true\)/.test(мастер2));
+          check('Спасательный ключ: меню до экрана входа, только для своего ключа, без флешки загрузка не ждёт',
+            /usb-storage/.test(спас) && /grep -qx "\$sum" "\$KEYS"/.test(спас) && /dpkg -i --force-downgrade/.test(спас) && /dpkg --configure -a/.test(спас)
+            && /multi-user\.target\.wants\/glower-rescue\.service/.test(образ3) && /usr\/bin\/glower-rescue/.test(пакет3)
+            && /'key\.rescue\.save'/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

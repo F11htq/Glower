@@ -66,6 +66,7 @@ OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/share/icons/hicolor/64x64/apps/distributor-logo.png usr/share/icons/hicolor/256x256/apps/distributor-logo.png usr/share/icons/hicolor/512x512/apps/distributor-logo.png
             usr/bin/glower-wm usr/bin/glower-paint usr/bin/glower-calendar usr/bin/glower-clock usr/bin/glower-todo usr/bin/glower-props usr/bin/glower-scan
             etc/pam.d/glower-lock usr/bin/врач
+            usr/bin/glower-rescue usr/lib/systemd/system/glower-rescue.service usr/lib/systemd/system/multi-user.target.wants/glower-rescue.service
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
             usr/share/applications/glower-exe.desktop

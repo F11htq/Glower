@@ -1,0 +1,18 @@
+[Unit]
+Description=Спасательный ключ GlowerOS — меню спасения до экрана входа
+# Нет ни одного спасательного ключа — службе нечего делать
+ConditionPathExists=/var/lib/glower/rescue-keys
+After=local-fs.target systemd-udev-trigger.service plymouth-start.service
+Before=greetd.service display-manager.service getty@tty1.service glower.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/glower-rescue
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+# Человек может читать меню сколько угодно — не обрываем
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

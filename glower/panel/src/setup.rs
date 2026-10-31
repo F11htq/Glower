@@ -129,6 +129,10 @@ const РАСКЛАДКИ_ПО_РУССКИ: &[(&str, &str)] = &[
 
 thread_local! {
     static МАСТЕР: RefCell<Option<Rc<RefCell<Мастер>>>> = const { RefCell::new(None) };
+    /// Ключ Glower, который мастер уже предлагал (или от которого отказались)
+    static КЛЮЧ_БЫЛ: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// Идёт отсчёт «настраиваю по ключу»
+    static ОТСЧЁТ: Cell<bool> = const { Cell::new(false) };
 }
 
 fn с_мастером<R>(дело: impl FnOnce(&mut Мастер) -> R) -> Option<R> {
@@ -354,6 +358,8 @@ pub fn покажи() {
     пояснение.style_context().add_class("s-sub");
     пояснение.set_xalign(0.0);
     пояснение.set_line_wrap(true);
+    // Без предела длинное пояснение раздувает карточку вширь
+    пояснение.set_max_width_chars(64);
     let место = gtk::Box::new(gtk::Orientation::Vertical, 10);
     место.set_vexpand(true);
     место.set_margin_top(10);
@@ -406,6 +412,28 @@ pub fn покажи() {
     нарисуй();
     окно.show_all();
 
+    // Ключ Glower с сохранённым профилем — настройка не нужна: вставили
+    // ключ, и система сама берёт с него всё, что спросил бы мастер
+    glib::timeout_add_local(std::time::Duration::from_secs(2), || {
+        if МАСТЕР.with(|м| м.borrow().is_none()) {
+            return glib::ControlFlow::Break;
+        }
+        if !ОТСЧЁТ.with(|о| о.get()) {
+            позови("key.state", json!({ "подключить": true }), |о| {
+                let Ok(с) = о else { return };
+                let Some(ф) = с["флешки"].as_array().and_then(|ф| ф.iter().find(|ф| ф["ключ"].is_object() && ф["профиль"].is_object())).cloned() else { return };
+                let dev = ф["dev"].as_str().unwrap_or("").to_string();
+                let id = ф["ключ"]["id"].as_str().unwrap_or("").to_string();
+                if КЛЮЧ_БЫЛ.with(|б| б.borrow().as_deref() == Some(id.as_str())) || ОТСЧЁТ.with(|о| о.get()) {
+                    return;
+                }
+                КЛЮЧ_БЫЛ.with(|б| *б.borrow_mut() = Some(id));
+                предложи_ключ(&dev, ф["ключ"]["имя"].as_str().unwrap_or("Ключ"));
+            });
+        }
+        glib::ControlFlow::Continue
+    });
+
     // Что выбрано сейчас и что вообще есть — знает система
     позови("sys.kb.list", json!({}), |о| {
         if let Ok(о) = о {
@@ -420,6 +448,143 @@ pub fn покажи() {
                 нарисуй();
             }
         }
+    });
+}
+
+/// Найден ключ: отсчёт пяти секунд и настройка по нему; «Нет» — мастер как был
+fn предложи_ключ(dev: &str, имя: &str) {
+    let Some((место, заголовок, пояснение, назад, далее)) =
+        с_мастером(|м| (м.место.clone(), м.заголовок.clone(), м.пояснение.clone(), м.назад.clone(), м.далее.clone()))
+    else {
+        return;
+    };
+    ОТСЧЁТ.with(|о| о.set(true));
+    назад.hide();
+    далее.hide();
+    заголовок.set_text(&format!("Ключ «{имя}»"));
+    пояснение.set_text("На ключе есть всё, что спрашивает настройка: язык, раскладки, имя, тема, обои, док, виджеты, мышь и программы. Настроить систему как на нём?");
+    очисти(&место);
+    let знак = crate::apps::значок_эмодзи("🔑", 64);
+    знак.set_margin_top(30);
+    место.add(&знак);
+    let счёт = gtk::Label::new(None);
+    счёт.style_context().add_class("s-sub");
+    счёт.set_margin_top(10);
+    место.add(&счёт);
+    let кнопки = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    кнопки.set_halign(gtk::Align::Center);
+    кнопки.set_margin_top(14);
+    let нет = gtk::Button::with_label("Нет, настрою сам");
+    let да = gtk::Button::with_label("Настроить сейчас");
+    да.style_context().add_class("next");
+    кнопки.add(&нет);
+    кнопки.add(&да);
+    место.add(&кнопки);
+    место.show_all();
+
+    let осталось = Rc::new(Cell::new(5u32));
+    let отменено = Rc::new(Cell::new(false));
+    let начато = Rc::new(Cell::new(false));
+    let начать = {
+        let (dev, начато, счёт) = (dev.to_string(), начато.clone(), счёт.clone());
+        Rc::new(move || {
+            if начато.replace(true) {
+                return;
+            }
+            счёт.set_text("Настраиваю…");
+            настрой_по_ключу(&dev);
+        })
+    };
+    {
+        let (отменено, назад, далее) = (отменено.clone(), назад.clone(), далее.clone());
+        нет.connect_clicked(move |_| {
+            отменено.set(true);
+            ОТСЧЁТ.with(|о| о.set(false));
+            назад.show();
+            далее.show();
+            нарисуй();
+        });
+    }
+    {
+        let н = начать.clone();
+        да.connect_clicked(move |_| н());
+    }
+    счёт.set_text("Настрою сам через 5 секунд");
+    glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+        if отменено.get() || начато.get() {
+            return glib::ControlFlow::Break;
+        }
+        let н = осталось.get().saturating_sub(1);
+        осталось.set(н);
+        if н == 0 {
+            начать();
+            return glib::ControlFlow::Break;
+        }
+        счёт.set_text(&format!("Настрою сам через {н} {}", if н == 1 { "секунду" } else if н < 5 { "секунды" } else { "секунд" }));
+        glib::ControlFlow::Continue
+    });
+}
+
+/// Всё, что спросил бы мастер, — с ключа; ключ становится своим, мастер закрывается
+fn настрой_по_ключу(dev: &str) {
+    let dev = dev.to_string();
+    позови("key.profile.read", json!({ "dev": dev }), move |о| {
+        let п = match о {
+            Ok(п) => п,
+            Err(е) => {
+                ОТСЧЁТ.with(|о| о.set(false));
+                с_мастером(|м| { м.назад.show(); м.далее.show(); });
+                нарисуй();
+                crate::notify::покажи("Ключ Glower", &format!("Настроить по ключу не вышло: {е}. Пройдите настройку как обычно"), "⚠️");
+                return;
+            }
+        };
+        if let Some(н) = п["настройки"].as_object() {
+            for (к, в) in н {
+                if crate::glowerkey::СТОЛ.contains(&к.as_str()) {
+                    core::задай(к, в.clone());
+                }
+            }
+        }
+        let с = &п["система"];
+        let имя = с["userName"].as_str().unwrap_or("").trim().to_string();
+        if !имя.is_empty() {
+            core::задай("userName", json!(имя));
+            if core::настройка("userEmoji").as_str().unwrap_or("").is_empty() {
+                core::задай("userEmoji", json!(имя.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default()));
+            }
+        }
+        for к in ["tz", "clock24"] {
+            if !с[к].is_null() {
+                core::задай(к, с[к].clone());
+            }
+        }
+        if let Some(р) = с["раскладки"].as_array().filter(|р| !р.is_empty()) {
+            позови("sys.kb.set", json!({ "раскладки": р }), |_| {});
+        }
+        let язык = с["язык"].as_str().map(String::from).unwrap_or_else(core::язык_сейчас);
+        if язык != core::язык_сейчас() {
+            позови("sys.locale.set", json!({ "язык": язык }), |_| {});
+        }
+        if п["мышь"].is_object() {
+            позови("sys.mouse.set", п["мышь"].clone(), |_| {});
+        }
+        // Ключ — свой и здесь: вход без пароля, эстафета, копия
+        позови("key.pair", json!({ "dev": dev }), |_| {});
+        core::задай("setupDone", json!(true));
+        core::обнови_погоду();
+        if let Some(окно) = с_мастером(|м| м.окно.clone()) {
+            окно.close();
+        }
+        МАСТЕР.with(|м| *м.borrow_mut() = None);
+        ОТСЧЁТ.with(|о| о.set(false));
+        let нет: Vec<Value> = п["нет"].as_array().cloned().unwrap_or_default();
+        if !нет.is_empty() {
+            let сколько = нет.len();
+            crate::notify::покажи_с_делом("Программы с ключа", &format!("Здесь нет {сколько} из ваших программ"), "📦", "Поставить",
+                Box::new(move || crate::glowerkey::поставь_программы(&нет)));
+        }
+        приветствие(&имя, &язык);
     });
 }
 

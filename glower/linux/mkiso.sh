@@ -472,6 +472,13 @@ install -m 755 "$SRC/linux/glower-session" "$ROOTFS/usr/bin/glower-session"
 # установка на диск: сценарий лежит в системе и вызывается оболочкой через sudo
 install -m 755 "$SRC/linux/glower-install" "$ROOTFS/usr/bin/glower-install"
 install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
+# Спасательный ключ: меню спасения до экрана входа, если вставлен ключ.
+# Включена ссылкой из пакета (multi-user.target.wants), а не systemctl
+# enable: так она включится и на машинах, что получат её обновлением
+install -m 755 "$SRC/linux/glower-rescue" "$ROOTFS/usr/bin/glower-rescue"
+install -D -m 644 "$SRC/linux/glower-rescue.service" "$ROOTFS/usr/lib/systemd/system/glower-rescue.service"
+install -d "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants"
+ln -sf ../glower-rescue.service "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/glower-rescue.service"
 # пробный режим с флешки: Esc в установщике снимает маски быстрой загрузки
 install -m 755 "$SRC/linux/glower-try" "$ROOTFS/usr/bin/glower-try"
 # Ярлыки своих программ с типами файлов: по ним Блокнот, Фото, Paint и

@@ -37,6 +37,26 @@ export const СТОЛ = ['accent', 'accentCustom', 'theme', 'transparency', 'wal
   'dockApps', 'deskWidgets', 'showDeskWidgets', 'showDesktopIcons', 'clock24', 'showSeconds',
   'city', 'desks', 'nightLight', 'focusLen', 'userEmoji'];
 
+/* Что ещё спрашивает мастер первичной настройки. Это едет на ключе, но
+   применяется только мастером на свежей системе: на чужом компьютере
+   «Применить мой стол» не меняет ни языка, ни имени хозяина */
+const ЯЗЫКИ = { 'ru_RU.UTF-8':'ru', 'en_US.UTF-8':'en', 'uk_UA.UTF-8':'uk', 'be_BY.UTF-8':'be', 'kk_KZ.UTF-8':'kk', 'de_DE.UTF-8':'de',
+  'fr_FR.UTF-8':'fr', 'es_ES.UTF-8':'es', 'it_IT.UTF-8':'it', 'pt_BR.UTF-8':'pt', 'pl_PL.UTF-8':'pl', 'tr_TR.UTF-8':'tr' };
+
+export function только_систему(с){
+  const итог = {};
+  if (!с || typeof с !== 'object') return итог;
+  if (Object.values(ЯЗЫКИ).includes(с.язык)) итог.язык = с.язык;
+  if (Array.isArray(с.раскладки)){
+    const р = с.раскладки.map(String).filter(x => /^[a-z]{2,8}$/.test(x)).slice(0, 4);
+    if (р.length) итог.раскладки = р;
+  }
+  if (typeof с.userName === 'string' && с.userName.trim()) итог.userName = с.userName.trim().slice(0, 60);
+  if (typeof с.tz === 'string' && /^([A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2})?$/.test(с.tz)) итог.tz = с.tz;
+  if (typeof с.clock24 === 'boolean') итог.clock24 = с.clock24;
+  return итог;
+}
+
 /* Какие папки копировать: здесь — по именам папок человека, на флешке —
    по-английски (флешку вставят и в чужой компьютер, и в Windows) */
 export const ПАПКИ_КОПИИ = [['Документы', 'Documents'], ['Рабочий стол', 'Desktop'], ['Изображения', 'Pictures']];
@@ -146,6 +166,13 @@ export function ходRsync(строка){
   return м ? { байт:Number(м[1].replace(/[,.]/g, '')), процент:Math.min(100, Number(м[2])), скорость:м[3] || null } : null;
 }
 
+/* Спасательные ключи этого компьютера: отпечатки — в /var/lib/glower,
+   их читает меню спасения при загрузке (glower-rescue), ещё до входа */
+const СПАСЕНИЕ = '/var/lib/glower/rescue-keys';
+async function спасательный(тайна){
+  try { return (await readFile(СПАСЕНИЕ, 'utf8')).split('\n').includes(отпечаток(тайна)); } catch(e){ return false; }
+}
+
 export function key({ root, allowLaunch } = {}){
   const ДОМ = root || os.homedir();
   let копия = null;   // { dev, куда, процент, шаг, done, ok, error }
@@ -205,14 +232,16 @@ export function key({ root, allowLaunch } = {}){
         if (подключить) н.где = await подключи(н);
         const к = await ключ_на(н.где);
         const свой = к ? список.find(м => м.id === к.id && тайна_подходит(к.секрет, м.хэш)) : null;
-        let профиль = null, копия_когда = null, эстафета = false;
+        let профиль = null, копия_когда = null, эстафета = false, спасение = null;
         if (к){
           try { const п = JSON.parse(await readFile(join(н.где, ПАПКА, 'profile.json'), 'utf8')); профиль = { когда:п.сохранён || null, откуда:п.компьютер || '', программ:(п.программы && п.программы.flatpak || []).length }; } catch(e){}
           try { копия_когда = (await stat(папка_копии(н.где))).mtimeMs; } catch(e){}
           try { const р = JSON.parse(await readFile(join(н.где, ПАПКА, 'relay', 'relay.json'), 'utf8')); эстафета = р.компьютер !== os.hostname(); } catch(e){}
+          try { спасение = JSON.parse(await readFile(join(н.где, ПАПКА, 'rescue', 'info.json'), 'utf8')); } catch(e){}
         }
         флешки.push({ dev:н.dev, имя:н.метка || н.модель || н.dev, где:н.где, размер:н.размер, толькоЧтение:н.толькоЧтение,
-          ключ:к ? { id:к.id, имя:к.имя || 'Ключ', свой:!!свой } : null, профиль, копия:копия_когда, эстафета });
+          ключ:к ? { id:к.id, имя:к.имя || 'Ключ', свой:!!свой } : null, профиль, копия:копия_когда, эстафета,
+          спасение:спасение ? { версия:String(спасение.версия || ''), когда:спасение.сохранено || null, здесь:к ? await спасательный(к.секрет) : false } : null });
       }
       const вставлены = new Set(флешки.filter(ф => ф.ключ && ф.ключ.свой).map(ф => ф.ключ.id));
       return {
@@ -309,8 +338,12 @@ export function key({ root, allowLaunch } = {}){
         flatpak = (await run('flatpak', ['list', '--app', '--columns=application'], { timeout:20000 })).stdout
           .split('\n').map(с => с.trim()).filter(с => /^[\w.-]+\.[\w.-]+$/.test(с));
       } catch(e){}
+      let язык = null, раскладки = null;
+      try { язык = ЯЗЫКИ[(await readFile(join(os.homedir(), '.config/glower/locale'), 'utf8')).trim()] || null; } catch(e){}
+      try { раскладки = (await readFile(join(os.homedir(), '.config/glower/keyboard'), 'utf8')).trim().split(',').filter(Boolean); } catch(e){}
+      const система = только_систему({ язык, раскладки, userName:настройки.userName, tz:настройки.tz, clock24:настройки.clock24 });
       const профиль = { формат:1, сохранён:new Date().toISOString(), компьютер:os.hostname(),
-        настройки:стол, обои, мышь, программы:{ flatpak:[...new Set(flatpak)] } };
+        настройки:стол, система, обои, мышь, программы:{ flatpak:[...new Set(flatpak)] } };
       await writeFile(join(н.где, ПАПКА, 'profile.json'), JSON.stringify(профиль, null, 2));
       await run('sync', [], { timeout:60000 }).catch(() => {});
       return { ok:true, программ:профиль.программы.flatpak.length };
@@ -337,7 +370,7 @@ export function key({ root, allowLaunch } = {}){
       let стоят = [];
       try { стоят = (await run('flatpak', ['list', '--app', '--columns=application'], { timeout:20000 })).stdout.split('\n').map(с => с.trim()); } catch(e){}
       const все = (п.программы && Array.isArray(п.программы.flatpak) ? п.программы.flatpak : []).filter(с => /^[\w.-]+\.[\w.-]+$/.test(с));
-      return { настройки, мышь:п.мышь && typeof п.мышь === 'object' ? п.мышь : null, когда:п.сохранён || null, откуда:п.компьютер || '',
+      return { настройки, система:только_систему(п.система), мышь:п.мышь && typeof п.мышь === 'object' ? п.мышь : null, когда:п.сохранён || null, откуда:п.компьютер || '',
         программы:все, нет:все.filter(id => !стоят.includes(id)) };
     },
 
@@ -362,6 +395,47 @@ export function key({ root, allowLaunch } = {}){
 
     async 'key.backup.state'(){
       return копия ? { ...копия, идёт:!копия.done } : { идёт:false };
+    },
+
+    /* Сделать ключ спасательным: положить на него пакет нынешней версии
+       GlowerOS и сказать загрузке, что этому ключу можно показать меню */
+    async 'key.rescue.save'({ dev } = {}){
+      const { н, к } = await свой_ключ(dev);
+      const env = { ...process.env, LC_ALL:'C' };
+      const версия = (await run('dpkg-query', ['-W', '-f=${Version}', 'glower'], { env }).catch(() => ({ stdout:'' }))).stdout.trim();
+      if (!/^[0-9][\w.+~-]*$/.test(версия)) throw new Error('не вышло узнать версию GlowerOS');
+      // Пакет: из кэша apt, а нет там — скачиваем ту же версию
+      let пакет = null;
+      for (const и of await readdir('/var/cache/apt/archives').catch(() => []))
+        if (и.startsWith('glower_' + версия.replace(/:/g, '%3a') + '_') && и.endsWith('.deb')) пакет = join('/var/cache/apt/archives', и);
+      const врем = join(os.tmpdir(), 'glower-rescue-' + process.pid);
+      if (!пакет){
+        await mkdir(врем, { recursive:true });
+        try { await run('apt-get', ['download', 'glower=' + версия], { cwd:врем, env, timeout:300000 }); }
+        catch(e){ await rm(врем, { recursive:true, force:true }); throw new Error('пакет GlowerOS ' + версия + ' не скачался — нужна сеть'); }
+        const и = (await readdir(врем)).find(и => и.endsWith('.deb'));
+        if (!и) throw new Error('пакет GlowerOS не скачался');
+        пакет = join(врем, и);
+      }
+      const папка = join(н.где, ПАПКА, 'rescue');
+      await mkdir(папка, { recursive:true });
+      await copyFile(пакет, join(папка, 'glower.deb.new'));
+      await rename(join(папка, 'glower.deb.new'), join(папка, 'glower.deb'));
+      await writeFile(join(папка, 'info.json'), JSON.stringify({ версия, сохранено:new Date().toISOString(), компьютер:os.hostname() }, null, 2));
+      await rm(врем, { recursive:true, force:true });
+      // Отпечаток — в список, что читает загрузка
+      if (!await спасательный(к.секрет)){
+        const п = spawn('sudo', ['-n', 'sh', '-c', 'install -d -m 755 /var/lib/glower && cat >> ' + СПАСЕНИЕ + ' && chmod 644 ' + СПАСЕНИЕ], { stdio:['pipe', 'ignore', 'pipe'] });
+        let жалоба = '';
+        п.stderr.on('data', d => { жалоба += d; });
+        п.on('error', () => {});
+        п.stdin.on('error', () => {});
+        п.stdin.end(отпечаток(к.секрет) + '\n');
+        const код = await new Promise(r => п.on('close', r));
+        if (код !== 0) throw new Error('не вышло записать ключ в список спасательных: ' + (жалоба.trim() || 'код ' + код));
+      }
+      await run('sync', [], { timeout:60000 }).catch(() => {});
+      return { ok:true, версия };
     },
 
     /* Убрать ключ с флешки совсем — сама флешка и её файлы остаются */
