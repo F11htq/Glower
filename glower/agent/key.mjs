@@ -19,7 +19,7 @@
        по желанию сама при каждом подключении, и обратно одной кнопкой.
    ========================================================================== */
 import { execFile, spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir, copyFile, readdir, stat, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, copyFile, readdir, stat, rm, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { promisify } from 'node:util';
@@ -37,8 +37,9 @@ export const СТОЛ = ['accent', 'accentCustom', 'theme', 'transparency', 'wal
   'dockApps', 'deskWidgets', 'showDeskWidgets', 'showDesktopIcons', 'clock24', 'showSeconds',
   'city', 'desks', 'nightLight', 'focusLen', 'userEmoji'];
 
-/* Какие папки копировать — по именам папок человека */
-const ПАПКИ_КОПИИ = ['Документы', 'Рабочий стол', 'Изображения'];
+/* Какие папки копировать: здесь — по именам папок человека, на флешке —
+   по-английски (флешку вставят и в чужой компьютер, и в Windows) */
+export const ПАПКИ_КОПИИ = [['Документы', 'Documents'], ['Рабочий стол', 'Desktop'], ['Изображения', 'Pictures']];
 
 export const отпечаток = тайна => createHash('sha256').update(String(тайна)).digest('hex');
 
@@ -192,7 +193,8 @@ export function key({ root, allowLaunch } = {}){
     return { started:true };
   }
 
-  const папка_копии = (где) => join(где, ПАПКА, 'backup', (os.hostname() || 'компьютер') + '-' + (os.userInfo().username || 'я'));
+  const латиницей = с => String(с || '').replace(/[^A-Za-z0-9._-]/g, '_') || 'pc';
+  const папка_копии = (где) => join(где, ПАПКА, 'backup', латиницей(os.hostname()) + '-' + латиницей(os.userInfo().username));
 
   return {
     /* Ключи этого компьютера и вставленные флешки — с ключами и без */
@@ -203,17 +205,18 @@ export function key({ root, allowLaunch } = {}){
         if (подключить) н.где = await подключи(н);
         const к = await ключ_на(н.где);
         const свой = к ? список.find(м => м.id === к.id && тайна_подходит(к.секрет, м.хэш)) : null;
-        let профиль = null, копия_когда = null;
+        let профиль = null, копия_когда = null, эстафета = false;
         if (к){
           try { const п = JSON.parse(await readFile(join(н.где, ПАПКА, 'profile.json'), 'utf8')); профиль = { когда:п.сохранён || null, откуда:п.компьютер || '', программ:(п.программы && п.программы.flatpak || []).length }; } catch(e){}
           try { копия_когда = (await stat(папка_копии(н.где))).mtimeMs; } catch(e){}
+          try { const р = JSON.parse(await readFile(join(н.где, ПАПКА, 'relay', 'relay.json'), 'utf8')); эстафета = р.компьютер !== os.hostname(); } catch(e){}
         }
         флешки.push({ dev:н.dev, имя:н.метка || н.модель || н.dev, где:н.где, размер:н.размер, толькоЧтение:н.толькоЧтение,
-          ключ:к ? { id:к.id, имя:к.имя || 'Ключ', свой:!!свой } : null, профиль, копия:копия_когда });
+          ключ:к ? { id:к.id, имя:к.имя || 'Ключ', свой:!!свой } : null, профиль, копия:копия_когда, эстафета });
       }
       const вставлены = new Set(флешки.filter(ф => ф.ключ && ф.ключ.свой).map(ф => ф.ключ.id));
       return {
-        ключи:список.map(м => ({ id:м.id, имя:м.имя, вход:!!м.вход, блокировать:!!м.блокировать, копия:!!м.копия, вставлен:вставлены.has(м.id) })),
+        ключи:список.map(м => ({ id:м.id, имя:м.имя, вход:!!м.вход, блокировать:!!м.блокировать, копия:!!м.копия, эстафета:!!м.эстафета, вставлен:вставлены.has(м.id) })),
         флешки, вернуть_стол:existsSync(join(КОНФИГ(), 'before-key.json')), можно:!!allowLaunch,
       };
     },
@@ -245,13 +248,16 @@ export function key({ root, allowLaunch } = {}){
         создан:new Date().toISOString(), секрет:randomBytes(32).toString('hex') };
       await mkdir(join(н.где, ПАПКА), { recursive:true });
       await writeFile(join(н.где, ПАПКА, 'key.json'), JSON.stringify(к, null, 2));
-      await writeFile(join(н.где, ПАПКА, 'ПРОЧТИ.txt'),
-        'Это ключ Glower. Папку .glower-key не удаляйте и не копируйте на чужие флешки:\n'
+      await writeFile(join(н.где, ПАПКА, 'README.txt'),
+        'This is a Glower key. Do not delete the .glower-key folder or copy it to other drives:\n'
+        + 'whoever has its contents can unlock computers where sign-in with this key is on.\n'
+        + 'The file copy in the backup folder is not encrypted.\n\n'
+        + 'Это ключ Glower. Папку .glower-key не удаляйте и не копируйте на чужие флешки:\n'
         + 'кто владеет её содержимым, тот может открыть компьютеры, где для ключа включён вход.\n'
         + 'Копия файлов в папке backup не зашифрована.\n');
       await run('sync', [], { timeout:60000 }).catch(() => {});
       const список = await мои();
-      список.push({ id:к.id, имя:к.имя, хэш:отпечаток(к.секрет), вход:true, блокировать:false, копия:false, добавлен:new Date().toISOString() });
+      список.push({ id:к.id, имя:к.имя, хэш:отпечаток(к.секрет), вход:true, блокировать:false, копия:false, эстафета:true, добавлен:new Date().toISOString() });
       await запомни(список);
       return { ok:true, id:к.id, имя:к.имя };
     },
@@ -260,7 +266,7 @@ export function key({ root, allowLaunch } = {}){
     async 'key.pair'({ dev } = {}){
       const { к } = await свой_ключ(dev);
       const список = (await мои()).filter(м => м.id !== к.id);
-      список.push({ id:к.id, имя:к.имя || 'Ключ', хэш:отпечаток(к.секрет), вход:true, блокировать:false, копия:false, добавлен:new Date().toISOString() });
+      список.push({ id:к.id, имя:к.имя || 'Ключ', хэш:отпечаток(к.секрет), вход:true, блокировать:false, копия:false, эстафета:true, добавлен:new Date().toISOString() });
       await запомни(список);
       return { ok:true, id:к.id };
     },
@@ -270,13 +276,14 @@ export function key({ root, allowLaunch } = {}){
       return { ok:true };
     },
 
-    async 'key.set'({ id, вход, блокировать, копия } = {}){
+    async 'key.set'({ id, вход, блокировать, копия, эстафета } = {}){
       const список = await мои();
       const м = список.find(м => м.id === id);
       if (!м) throw new Error('такого ключа этот компьютер не знает');
       if (вход !== undefined) м.вход = !!вход;
       if (блокировать !== undefined) м.блокировать = !!блокировать;
       if (копия !== undefined) м.копия = !!копия;
+      if (эстафета !== undefined) м.эстафета = !!эстафета;
       await запомни(список);
       return { ok:true };
     },
@@ -338,7 +345,10 @@ export function key({ root, allowLaunch } = {}){
     async 'key.backup'({ dev } = {}){
       const { н } = await свой_ключ(dev);
       const куда = папка_копии(н.где);
-      return перенеси(ПАПКИ_КОПИИ.map(и => [join(ДОМ, и), join(куда, и), 'Копирую «' + и + '»']), 'копия', dev);
+      // Копия прежних версий — с русскими именами папок: переименовываем
+      for (const [здесь, там] of ПАПКИ_КОПИИ)
+        if (existsSync(join(куда, здесь)) && !existsSync(join(куда, там))) await rename(join(куда, здесь), join(куда, там)).catch(() => {});
+      return перенеси(ПАПКИ_КОПИИ.map(([здесь, там]) => [join(ДОМ, здесь), join(куда, там), 'Копирую «' + здесь + '»']), 'копия', dev);
     },
 
     /* Вернуть файлы с ключа: только недостающие и более новые — то, что
@@ -347,7 +357,7 @@ export function key({ root, allowLaunch } = {}){
       const { н } = await свой_ключ(dev);
       const откуда = папка_копии(н.где);
       if (!existsSync(откуда)) throw new Error('копии с этого компьютера на ключе нет');
-      return перенеси(ПАПКИ_КОПИИ.map(и => [join(откуда, и), join(ДОМ, и), 'Возвращаю «' + и + '»']), 'возврат', dev);
+      return перенеси(ПАПКИ_КОПИИ.map(([здесь, там]) => [existsSync(join(откуда, там)) ? join(откуда, там) : join(откуда, здесь), join(ДОМ, здесь), 'Возвращаю «' + здесь + '»']), 'возврат', dev);
     },
 
     async 'key.backup.state'(){

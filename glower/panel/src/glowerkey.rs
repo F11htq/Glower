@@ -164,12 +164,65 @@ fn пришёл_свой(новые: Vec<String>) {
             let Some(ф) = с["флешки"].as_array().and_then(|ф| ф.iter().find(|ф| ф["ключ"]["id"].as_str() == Some(id.as_str()))).cloned() else { continue };
             let имя = к["имя"].as_str().unwrap_or("Ключ").to_string();
             let dev = ф["dev"].as_str().unwrap_or("").to_string();
+            предложи_эстафету(&dev);
             if к["копия"].as_bool() == Some(true) {
                 копируй(&dev, &имя);
             } else {
                 notify::покажи(&format!("Ключ «{имя}» подключён"), "Его возможности — в Параметрах, раздел «Ключ Glower»", "🔑");
             }
         }
+    });
+}
+
+/// На ключе — эстафета с другого компьютера: предложить продолжить
+pub fn предложи_эстафету(dev: &str) {
+    let dev = dev.to_string();
+    позови("relay.state", json!({ "dev": dev }), move |о| {
+        let Ok(с) = о else { return };
+        if с["новая"].as_bool() != Some(true) {
+            return;
+        }
+        let мы = |n: u64, одно: &str, два: &str, много: &str| -> Option<String> {
+            if n == 0 {
+                return None;
+            }
+            let слово = if n % 10 == 1 && n % 100 != 11 { одно } else if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) { два } else { много };
+            Some(format!("{n} {слово}"))
+        };
+        let что: Vec<String> = [
+            мы(с["программ"].as_u64().unwrap_or(0), "программа", "программы", "программ"),
+            мы(с["файлов"].as_u64().unwrap_or(0), "файл", "файла", "файлов"),
+            мы(с["вкладок"].as_u64().unwrap_or(0), "вкладка", "вкладки", "вкладок"),
+            if с["буфер"].as_u64().unwrap_or(0) > 0 { Some("буфер обмена".to_string()) } else { None },
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if что.is_empty() {
+            return;
+        }
+        let откуда = с["компьютер"].as_str().unwrap_or("другого компьютера").to_string();
+        let dev2 = dev.clone();
+        notify::покажи_с_делом(
+            &format!("Продолжить с «{откуда}»?"),
+            &что.join(" · "),
+            "🏃",
+            "Продолжить",
+            Box::new(move || продолжи(&dev2)),
+        );
+    });
+}
+
+/// Продолжить с места: файлы, вкладки и буфер открывает агент, программы — мы
+pub fn продолжи(dev: &str) {
+    позови("relay.continue", json!({ "dev": dev }), |о| match о {
+        Ok(о) => {
+            for ярлык in о["программы"].as_array().cloned().unwrap_or_default() {
+                позови("sys.launch", json!({ "id": ярлык }), |_| {});
+            }
+            notify::покажи("Эстафета принята", "Всё открывается там, где вы остановились. Файлы — в «Документы/Эстафета»", "🏃");
+        }
+        Err(е) => notify::покажи("Эстафета", &format!("Не вышло: {е}"), "⚠️"),
     });
 }
 
