@@ -27,6 +27,7 @@ mod dock;
 mod explorer;
 mod filemanager;
 mod fileops;
+mod glowerkey;
 mod i18n;
 mod icons;
 mod installer;

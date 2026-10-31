@@ -91,6 +91,7 @@ window.lock, window.lock * {
 .lock button.go label { font-size: 19px; }
 .lock .error { min-height: 20px; color: #ffb3c1; opacity: 0.85; }
 .lock .error, .lock .error * { font-size: 13px; }
+.lock .hint { font-size: 13px; color: rgba(255, 255, 255, 0.7); margin-top: 4px; }
 .lock button.person {
   padding: 7px 13px;
   border-radius: 9px;
@@ -488,6 +489,30 @@ fn окно(монитор: &gtk::gdk::Monitor, главное: bool, режим
     беда.set_max_width_chars(40);
     беда.set_justify(gtk::Justification::Center);
     середина.add(&беда);
+
+    // Ключ Glower: вставили свой ключ, которому разрешён вход, — замок
+    // открывается сам. Подсказка — только если такой ключ вообще есть
+    if режим == Режим::Замок {
+        let подсказка = gtk::Label::new(None);
+        подсказка.style_context().add_class("hint");
+        подсказка.set_no_show_all(true);
+        середина.add(&подсказка);
+        glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+            let подсказка = подсказка.clone();
+            позови("key.present", json!({}), move |о| {
+                let Ok(о) = о else { return };
+                if о["вход"].as_bool() == Some(true) {
+                    std::process::exit(0);
+                }
+                let имена: Vec<&str> = о["имена"].as_array().map(|а| а.iter().filter_map(|х| х.as_str()).collect()).unwrap_or_default();
+                if let Some(имя) = имена.first() {
+                    подсказка.set_text(&format!("🔑 Или вставьте ключ «{имя}»"));
+                    подсказка.show();
+                }
+            });
+            glib::ControlFlow::Continue
+        });
+    }
 
     // Проверка пароля. На замке — сами, через PAM, в рабочем потоке: при
     // неверном пароле PAM нарочно медлит пару секунд. На входе — через

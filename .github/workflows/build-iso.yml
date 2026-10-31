@@ -170,6 +170,23 @@ jobs:
 
           cp glower_*.deb /tmp/apt/
 
+          # Опись версий для «Параметры → Обновления → Версии GlowerOS»: что
+          # нового в каждой — текст коммита её метки. Пишется заново целиком
+          # из истории, поэтому есть и у всех прежних версий.
+          node -e '
+            const { execFileSync:x } = require("child_process");
+            const git = (...a) => x("git", a).toString();
+            const лишнее = /^(Co-Authored-By:|Claude-Session:|https:\/\/claude\.ai\/)/i;
+            const метки = git("tag", "-l", "v*").split("\n").filter(Boolean);
+            const опись = метки.map(т => {
+              const строки = git("log", "-1", "--format=%B", т).split("\n").filter(с => !лишнее.test(с.trim()));
+              return { версия:т.replace(/^v/, ""), дата:git("log", "-1", "--format=%cI", т).trim(),
+                       заголовок:(строки.shift() || "").trim(), текст:строки.join("\n").trim() };
+            });
+            require("fs").writeFileSync("/tmp/apt/versions.json", JSON.stringify(опись, null, 1));
+            console.log("версий в описи:", опись.length);
+          '
+
           # Packages — список пакетов с их размерами и суммами, Release —
           # опись самого списка. Обе вещи apt читает при каждом «обновить».
           ( cd /tmp/apt && dpkg-scanpackages --multiversion . > Packages )

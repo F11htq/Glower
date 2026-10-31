@@ -875,8 +875,8 @@ try {
             && /files:'glower-files'/.test(агент2) && /GLOWER_ROOT:ROOT/.test(агент2)
             && родная('glower-files', 'files') && /adwaita-icon-theme/.test(образ2) && /adwaita-icon-theme/.test(пакет));
         const параметры = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
-        check('Параметры на Rust: все двадцать один раздел, системное — у агента, своё — у ядра панели',
-          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 21
+        check('Параметры на Rust: все двадцать два раздела, системное — у агента, своё — у ядра панели',
+          /имя == "glower-settings"/.test(главная) && (параметры.match(/Раздел \{ id:/g) || []).length === 22
             && ['sys.wifi.scan', 'sys.bt', 'sys.printers', 'sys.drives', 'sys.users', 'pkg.upgrade.check', 'sys.firmware', 'sys.firewall', 'sys.screens', 'sys.hardware', 'av.state', 'game.state', 'sys.mouse']
                  .every(м => параметры.includes('"' + м + '"'))
             && /"параметры-дело"/.test(параметры) && /слушай\(&\["параметры"\]/.test(параметры)
@@ -921,8 +921,8 @@ try {
           check('Установка из файла — окошко с ходом, «Скрыть», «Отмена» и «Открыть» по готовности',
             /installwin::покажи\(/.test(ядро2) && /"pkg\.job"/.test(окно_уст) && /"pkg\.cancel"/.test(окно_уст) && /dpkg-query/.test(окно_уст));
           const мастер = await readFile(join(root, 'panel', 'src', 'setup.rs'), 'utf8');
-          check('Мастер настройки — на своём фоне (сияние), а не поверх стола; кадры по монитору, на слабой машине 25',
-            /struct Сияние/.test(мастер) && /add_tick_callback/.test(мастер) && /0\.040/.test(мастер));
+          check('Мастер настройки — на своём фоне (сияние), а не поверх стола; 30 кадров в секунду, на слабой машине 25',
+            /struct Сияние/.test(мастер) && /add_tick_callback/.test(мастер) && /1\.0 \/ 30\.0/.test(мастер) && /1\.0 \/ 25\.0/.test(мастер));
         }
         {
           // Установка рядом с Windows: ничего, кроме отданного места, не стирается
@@ -976,6 +976,31 @@ try {
           check('Видео во весь экран: полоса панели уходит сама при любом оконном сервере и возвращается после',
             /pub fn вовесь_сверху/.test(ядроВ) && /скажи\("вовесь"/.test(ядроВ) && /"вовесь" => \{/.test(главнаяВ)
             && /fn полоса_на_месте/.test(главнаяВ) && /if весь_экран && слой == Layer::Top \{/.test(рисунок));
+        }
+        {
+          // Версии системы: список из apt, описание из описи сборки, возврат с закреплением
+          const пакеты3 = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const пак3 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          const пар3 = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+          const сборка = await readFile(join(root, '..', '.github', 'workflows', 'build-iso.yml'), 'utf8').catch(() => '');
+          const м = пакеты3.разбериMadison('    glower |      11.9 | https://raw x ./ Packages\n    glower |      11.70 | https://raw x ./ Packages\n    glower |      11.10 | https://raw x ./ Packages\n');
+          check('Версии GlowerOS: любая версия из репозитория — обновиться или вернуться, с описанием и закреплением',
+            м.join(',') === '11.70,11.10,11.9' && пакеты3.сравниВерсии('11.10', '11.9') > 0
+            && /'sys\.versions\.install'/.test(пак3) && /--allow-downgrades/.test(пак3) && /'apt-mark', 'hold', 'glower'/.test(пак3)
+            && /fn версии\(/.test(пар3) && /"Вернуться"/.test(пар3) && (сборка === '' || /versions\.json/.test(сборка)));
+        }
+        {
+          // Ключ Glower
+          const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
+          const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');
+          const яд = await readFile(join(root, 'panel', 'src', 'glowerkey.rs'), 'utf8');
+          const х = ключ.отпечаток('тайна');
+          check('Ключ Glower: тайна сверяется по отпечатку, чужое с флешки в настройки не попадает, замок открывается ключом',
+            ключ.тайна_подходит('тайна', х) && !ключ.тайна_подходит('тайнА', х) && !ключ.тайна_подходит('тайна', '')
+            && JSON.stringify(ключ.только_стол({ theme:'light', setupDone:true, tz:'Europe/Moscow', dockApps:[] })) === '{"theme":"light","dockApps":[]}'
+            && ключ.ходRsync('  1,234  45%  1.2MB/s  0:00:01').процент === 45
+            && /"key\.present"/.test(замок) && /std::process::exit\(0\)/.test(замок)
+            && /fn примени_стол/.test(яд) && /fn верни_стол/.test(яд) && /"sys\.power", json!\(\{ "action": "lock" \}\)/.test(яд));
         }
         {
           const мышь = await import(pathToFileURL(join(root, 'agent', 'mouse.mjs')).href);

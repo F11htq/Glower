@@ -359,7 +359,7 @@ test -x /usr/bin/labwc || { echo "основные пакеты не устан�
 # имя Adwaita-dark некуда отдать, и GTK у них откатывался на светлую.
 # gamemode и mangohud — игровой режим и счётчик кадров: вместе меньше
 # десяти мегабайт, и с ними игры готовы сразу после установки.
-for extra in gnome-backgrounds steam-devices clamav clamav-freshclam gamemode mangohud \
+for extra in gnome-backgrounds steam-devices clamav clamav-freshclam gamemode mangohud rsync \
              dconf-gsettings-backend gsettings-desktop-schemas qt5-gtk-platformtheme qt6-gtk-platformtheme \
              gnome-themes-extra dmz-cursor-theme bibata-cursor-theme breeze-cursor-theme; do
   apt-get install -y --no-install-recommends "$extra" >/dev/null 2>&1 \

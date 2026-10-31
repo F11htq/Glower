@@ -99,7 +99,7 @@ ARCH=all
 DEPS_EXTRA=
 if [ -e "$BUILD/usr/bin/glower-panel" ]; then
   ARCH=amd64
-  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, librsvg2-common, wtype, wlsunset, swayidle, wl-clipboard, wf-recorder, libarchive-tools, gvfs-backends, dconf-gsettings-backend | gsettings-backend, gsettings-desktop-schemas, gnome-themes-extra"
+  DEPS_EXTRA=", libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, librsvg2-common, wtype, wlsunset, swayidle, wl-clipboard, wf-recorder, libarchive-tools, gvfs-backends, dconf-gsettings-backend | gsettings-backend, gsettings-desktop-schemas, gnome-themes-extra, rsync, udisks2"
 fi
 # Свой оконный сервер рисует прямо на видеокарте и сам открывает устройства
 if [ -e "$BUILD/usr/bin/glower-wm" ]; then

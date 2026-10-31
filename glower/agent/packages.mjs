@@ -260,6 +260,32 @@ export function словаApt(т){
   return куски.join(' · ');
 }
 
+/* Версии GlowerOS.
+   Все пакеты, что когда-либо выходили, лежат в репозитории обновлений, и
+   apt знает их все: «apt-cache madison glower» отвечает строками
+       glower |      11.70 | https://raw.githubusercontent.com/F11htq/Glower/apt ./ Packages
+   Что нового в каждой — versions.json рядом с пакетами: его пишет сборка
+   из текста метки версии. */
+export function разбериMadison(текст){
+  const версии = [];
+  for (const с of String(текст).split('\n')){
+    const м = с.match(/^\s*glower\s*\|\s*(\S+)\s*\|\s*(.+)$/);
+    if (м && !версии.includes(м[1])) версии.push(м[1]);
+  }
+  return версии.sort((а, б) => сравниВерсии(б, а));
+}
+
+export function сравниВерсии(а, б){
+  const x = String(а).split(/[.~+-]/).map(Number), y = String(б).split(/[.~+-]/).map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++){
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+const ВЕРСИИ_АДРЕС = process.env.GLOWER_VERSIONS_URL || 'https://raw.githubusercontent.com/F11htq/Glower/apt/versions.json';
+
 const ЕДИНИЦЫ = { bytes:1, b:1, kb:1e3, mb:1e6, gb:1e9 };
 export function ходFlatpak(вывод){
   const т = String(вывод).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
@@ -309,6 +335,7 @@ export function packages(allowPackages){
   /* Обновления программ из Flathub — Telegram, Steam, OBS и всё, что человек
      поставил оттуда. Список flatpak берёт из интернета; ответ помним полчаса,
      а одновременные вопросы ждут один и тот же. */
+  let версииПомню = null;   // versions.json сборки — на час
   let flathubПомню = null, flathubИдёт = null;
   const обновленияFlathub = async (заново = false) => {
     if (!заново && flathubПомню && Date.now() - flathubПомню.когда < 30 * 60000) return flathubПомню.список;
@@ -1201,6 +1228,18 @@ export function packages(allowPackages){
 
     /* Что за файл нам дали: имя программы, версия, размер, описание.
        Читает сам dpkg — гадать по имени файла мы не станем. */
+    /* Несколько программ из Flathub одной работой — «Поставить мои
+       программы» с ключа Glower */
+    async 'pkg.install.many'({ flatpak = [] } = {}){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      const ids = [...new Set((Array.isArray(flatpak) ? flatpak : []).map(String))].filter(id => /^[\w.-]+\.[\w.-]+$/.test(id)).slice(0, 200);
+      if (!ids.length) throw new Error('ставить нечего');
+      await этоFlathub();
+      return запустиFlatpak('install', ids.length === 1 ? ids[0] : ids.length + ' программ',
+        ['install', '-y', '--noninteractive', '--system', 'flathub', ...ids]);
+    },
+
     async 'pkg.file.info'({ путь }){
       const файл = проверьФайл(путь, ['.deb', '.flatpakref']);
 
@@ -1445,6 +1484,68 @@ export function packages(allowPackages){
     },
 
     /* Программы Windows: есть ли Wine и можно ли его поставить. */
+    /* Список версий системы: какие можно поставить, что в каждой нового,
+       какая стоит сейчас и закреплена ли она */
+    async 'sys.versions'(){
+      const env = { ...process.env, LC_ALL:'C' };
+      let текущая = null, есть = [], закреплена = false;
+      try { текущая = (await run('dpkg-query', ['-W', '-f=${Version}', 'glower'], { env })).stdout.trim() || null; } catch(e){}
+      try { есть = разбериMadison((await run('apt-cache', ['madison', 'glower'], { env, timeout:20000 })).stdout); } catch(e){}
+      try { закреплена = /^glower$/m.test((await run('apt-mark', ['showhold'], { env, timeout:10000 })).stdout); } catch(e){}
+      // Что нового — из описи сборки; нет связи — список всё равно есть
+      let описи = версииПомню && Date.now() - версииПомню.когда < 3600000 ? версииПомню.данные : null;
+      let ошибка = null;
+      if (!описи){
+        try {
+          const о = await fetch(ВЕРСИИ_АДРЕС, { signal:AbortSignal.timeout(15000) });
+          if (!о.ok) throw new Error('ответ ' + о.status);
+          описи = await о.json();
+          версииПомню = { когда:Date.now(), данные:описи };
+        } catch(e){ ошибка = e.message; описи = версииПомню ? версииПомню.данные : []; }
+      }
+      const по = new Map((Array.isArray(описи) ? описи : []).map(о => [String(о.версия), о]));
+      const все = [...new Set([...есть, ...по.keys()])].sort((а, б) => сравниВерсии(б, а));
+      const новейшая = есть[0] || null;
+      const list = все.map(в => {
+        const о = по.get(в) || {};
+        return { версия:в, дата:о.дата || null, заголовок:о.заголовок || '', текст:о.текст || '',
+          можно:есть.includes(в), текущая:в === текущая,
+          новее:текущая ? сравниВерсии(в, текущая) > 0 : false };
+      });
+      return { текущая, новейшая, закреплена, list, ошибка, можно:!!allowPackages };
+    },
+
+    /* Поставить выбранную версию — новее или старее нынешней. Не новейшая —
+       закрепляем, иначе первое же обновление системы вернуло бы новейшую;
+       новейшая — снимаем закрепление, обновления идут как обычно */
+    async 'sys.versions.install'({ версия } = {}){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      const в = String(версия || '');
+      if (!/^[0-9][0-9A-Za-z.+~-]{0,30}$/.test(в)) throw new Error('непонятная версия');
+      const env = { ...process.env, LC_ALL:'C' };
+      const есть = разбериMadison((await run('apt-cache', ['madison', 'glower'], { env, timeout:20000 })).stdout);
+      if (!есть.includes(в)) throw new Error('версии ' + в + ' нет в репозитории — обновите списки программ');
+      const новейшая = в === есть[0];
+      await run('sudo', ['-n', 'apt-mark', 'unhold', 'glower'], { env }).catch(() => {});
+      const пуск = запусти('install', 'GlowerOS ' + в,
+        ['install', '-y', '--allow-downgrades', '--no-install-recommends', 'glower=' + в]);
+      job.потом = async () => {
+        job.step = новейшая ? 'Готово' : 'Закрепляю версию'; job.слышно = Date.now();
+        if (!новейшая) await run('sudo', ['-n', 'apt-mark', 'hold', 'glower'], { env }).catch(() => {});
+        job.заметка = 'Перезагрузите компьютер — версия ' + в + ' заработает целиком после перезагрузки';
+        job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null;
+      };
+      return пуск;
+    },
+
+    /* Снять или поставить закрепление версии */
+    async 'sys.versions.hold'({ держать } = {}){
+      нужноРазрешение();
+      await run('sudo', ['-n', 'apt-mark', держать ? 'hold' : 'unhold', 'glower'], { env:{ ...process.env, LC_ALL:'C' } });
+      return { закреплена:!!держать };
+    },
+
     async 'pkg.windows'(){
       const в = await естьWine();
       return { ...в, можно:!!allowPackages };

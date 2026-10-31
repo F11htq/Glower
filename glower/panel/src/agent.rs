@@ -82,7 +82,7 @@ fn срок_для(метод: &str) -> u64 {
         "sys.drivers" | "pkg.upgrade.check" | "av.check" | "av.update" | "av.purge" => 150,
         "pkg.upgrade.flathub" => 90,
         "game.state" | "game.fps" => 30,
-        "pkg.category" => 40,
+        "pkg.category" | "sys.versions" | "sys.versions.install" => 40,
         _ => 0,
     }
 }
