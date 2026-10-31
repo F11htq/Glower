@@ -22,7 +22,7 @@ import { join, basename, extname, isAbsolute, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
-import { мои, носители, подключи, ключ_на, ПАПКА, тайна_подходит } from './key.mjs';
+import { мои, носители, подключи, ключ_на, ПАПКА, тайна_подходит, нужен_токен } from './key.mjs';
 
 const run = promisify(execFile);
 const КОНФИГ = () => join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'glower');
@@ -265,10 +265,11 @@ export function relay({ root, allowLaunch, средаЭкрана } = {}){
     /* Продолжить: файлы — в «Документы/Эстафета» и открыть, вкладки — в
        браузер, буфер — назад в историю. Программы запускает панель: ей
        известно, что на этом компьютере установлено */
-    async 'relay.continue'({ dev } = {}){
+    async 'relay.continue'({ dev, токен } = {}){
       if (!allowLaunch) throw new Error('запуск программ выключен');
       const найдено = (await свои()).find(с => с.н.dev === dev);
       if (!найдено) throw new Error('вставьте свой ключ Glower');
+      нужен_токен(токен, найдено.к.id);
       const папка = join(найдено.н.где, ПАПКА, 'relay');
       const опись = JSON.parse(await readFile(join(папка, 'relay.json'), 'utf8'));
       const env = средаЭкрана ? await средаЭкрана() : process.env;

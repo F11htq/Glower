@@ -1026,6 +1026,20 @@ try {
             && /'key\.rescue\.save'/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')));
         }
         {
+          // Хозяин ключа: пароль — отпечатком scrypt на ключе, подтверждение на две минуты
+          const к3 = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
+          const з = await к3.новый_пароль('Кот 2026');
+          const т = к3.выдай_токен('ключ-1');
+          let коротко = false;
+          try { await к3.новый_пароль('123'); } catch(e){ коротко = true; }
+          const спас2 = await readFile(join(root, 'linux', 'glower-rescue'), 'utf8');
+          const сейф3 = await readFile(join(root, 'agent', 'safe.mjs'), 'utf8');
+          check('Хозяин ключа: пароль хранится только отпечатком scrypt, сверяется при каждом важном деле; отпечаток пальца — на своём компьютере',
+            await к3.пароль_подходит('Кот 2026', з) && !await к3.пароль_подходит('кот 2026', з) && !JSON.stringify(з).includes('Кот') && коротко
+            && к3.токен_годен(т, 'ключ-1') && !к3.токен_годен(т, 'ключ-2') && /нужен_токен\(токен, id\)/.test(сейф3)
+            && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

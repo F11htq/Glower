@@ -1018,10 +1018,10 @@ fn параметры_дело(д: &Value) {
     let k = д["k"].as_str().unwrap_or("");
     match д["что"].as_str().unwrap_or("") {
         "set" | "kv" => задай(k, д["v"].clone()),
-        "ключ-стол" => crate::glowerkey::примени_стол(д["dev"].as_str().unwrap_or("")),
+        "ключ-стол" => crate::glowerkey::примени_стол(д["dev"].as_str().unwrap_or(""), д["токен"].as_str().unwrap_or("")),
         "ключ-вернуть" => crate::glowerkey::верни_стол(),
         "ключ-программы" => crate::glowerkey::поставь_программы(д["ids"].as_array().map(|а| а.as_slice()).unwrap_or(&[])),
-        "ключ-эстафета" => crate::glowerkey::продолжи(д["dev"].as_str().unwrap_or("")),
+        "ключ-эстафета" => crate::glowerkey::продолжи(д["dev"].as_str().unwrap_or(""), д["токен"].as_str().unwrap_or("")),
         "ключ-копия" => crate::glowerkey::копируй(д["dev"].as_str().unwrap_or(""), д["имя"].as_str().unwrap_or("Ключ")),
         "список" => переключи_в_списке(k, д["id"].as_str().unwrap_or("")),
         "акцент" => {

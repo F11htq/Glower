@@ -9,10 +9,11 @@
 //! Пропал ключ, для которого включена блокировка, — запираем экран, как
 //! «Динамическая блокировка» в Windows, только по флешке.
 
-use crate::agent::позови;
+use crate::agent::{позови, позови_за};
 use crate::core::{задай, настройка};
 use crate::notify;
 use gtk::glib;
+use gtk::prelude::*;
 use serde_json::{json, Map, Value};
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -33,10 +34,134 @@ fn файл_прежнего() -> PathBuf {
     glib::user_config_dir().join("glower").join("before-key.json")
 }
 
-/// Применить стол с ключа на флешке `dev`
-pub fn примени_стол(dev: &str) {
+/// Окно с полем пароля. None — отказались
+pub fn спроси_пароль(заголовок: &str, текст: &str, беда: &str, дважды: bool) -> Option<String> {
+    let д = gtk::Dialog::with_buttons(Some(заголовок), None::<&gtk::Window>, gtk::DialogFlags::MODAL,
+        &[("Отмена", gtk::ResponseType::Cancel), ("Готово", gtk::ResponseType::Accept)]);
+    д.set_default_response(gtk::ResponseType::Accept);
+    д.set_keep_above(true);
+    д.set_position(gtk::WindowPosition::Center);
+    let место = д.content_area();
+    место.set_spacing(8);
+    место.set_margin_top(14);
+    место.set_margin_bottom(6);
+    место.set_margin_start(18);
+    место.set_margin_end(18);
+    let т = gtk::Label::new(Some(текст));
+    т.set_line_wrap(true);
+    т.set_max_width_chars(48);
+    т.set_xalign(0.0);
+    место.add(&т);
+    let поле = |подсказка: &str| {
+        let п = gtk::Entry::new();
+        п.set_visibility(false);
+        п.set_input_purpose(gtk::InputPurpose::Password);
+        п.set_placeholder_text(Some(подсказка));
+        п.set_activates_default(true);
+        место.add(&п);
+        п
+    };
+    let первое = поле("Пароль ключа");
+    let второе = дважды.then(|| поле("Ещё раз"));
+    let ош = gtk::Label::new(Some(беда));
+    ош.style_context().add_class("error");
+    ош.set_xalign(0.0);
+    ош.set_line_wrap(true);
+    место.add(&ош);
+    д.show_all();
+    loop {
+        if д.run() != gtk::ResponseType::Accept {
+            unsafe { д.destroy() };
+            return None;
+        }
+        let п = первое.text().to_string();
+        if п.chars().count() < 4 {
+            ош.set_text("Не короче четырёх знаков");
+            continue;
+        }
+        if let Some(в) = &второе {
+            if в.text().as_str() != п {
+                ош.set_text("Пароли не совпали");
+                continue;
+            }
+        }
+        unsafe { д.destroy() };
+        return Some(п);
+    }
+}
+
+/// Подтвердить, что вы хозяин ключа на флешке `dev`: отпечатком, если ключ
+/// здесь свой и сканер есть, иначе паролем ключа. Удалось — `дело(токен)`
+pub fn подтверди(dev: &str, дело: Box<dyn Fn(String)>) {
     let dev = dev.to_string();
-    позови("key.profile.read", json!({ "dev": dev }), move |о| {
+    let дело: std::rc::Rc<dyn Fn(String)> = std::rc::Rc::from(дело);
+    позови("key.confirm.ways", json!({ "dev": dev }), move |о| {
+        let с = match о {
+            Ok(с) => с,
+            Err(е) => return notify::покажи("Ключ Glower", &е, "⚠️"),
+        };
+        let имя = с["имя"].as_str().unwrap_or("Ключ").to_string();
+        if с["палец"].as_bool() == Some(true) {
+            палец(&dev, &имя, дело.clone(), с["пароль"].as_bool() == Some(true));
+        } else {
+            пароль(&dev, &имя, дело.clone(), с["пароль"].as_bool() == Some(true), с["свой"].as_bool() == Some(true), "");
+        }
+    });
+}
+
+fn палец(dev: &str, имя: &str, дело: std::rc::Rc<dyn Fn(String)>, есть_пароль: bool) {
+    let д = gtk::MessageDialog::new(None::<&gtk::Window>, gtk::DialogFlags::MODAL, gtk::MessageType::Info, gtk::ButtonsType::None,
+        &format!("Ключ «{имя}»: приложите палец к сканеру"));
+    д.set_secondary_text(Some("Так система убедится, что ключ в руках у хозяина"));
+    д.add_button("Ввести пароль", gtk::ResponseType::Other(1));
+    д.add_button("Отмена", gtk::ResponseType::Cancel);
+    д.set_keep_above(true);
+    let токен = std::rc::Rc::new(std::cell::RefCell::new(None::<String>));
+    {
+        let (д, токен) = (д.clone(), токен.clone());
+        позови_за("key.confirm", json!({ "dev": dev, "палец": true }), 45, move |о| match о {
+            Ok(о) => {
+                *токен.borrow_mut() = о["токен"].as_str().map(String::from);
+                д.response(gtk::ResponseType::Accept);
+            }
+            Err(е) => д.set_secondary_text(Some(&format!("{е}. Можно ввести пароль ключа"))),
+        });
+    }
+    let ответ = д.run();
+    unsafe { д.destroy() };
+    if let Some(т) = токен.borrow_mut().take() {
+        return дело(т);
+    }
+    if ответ == gtk::ResponseType::Other(1) {
+        пароль(dev, имя, дело, есть_пароль, true, "");
+    }
+}
+
+fn пароль(dev: &str, имя: &str, дело: std::rc::Rc<dyn Fn(String)>, есть_пароль: bool, свой: bool, беда: &str) {
+    if !есть_пароль {
+        if !свой {
+            return notify::покажи(&format!("Ключ «{имя}»"), "У ключа ещё нет пароля. Задайте его на компьютере, где ключ свой: Параметры → Ключ Glower", "🔑");
+        }
+        let Some(новый) = спроси_пароль(&format!("Пароль для ключа «{имя}»"), "Ключ сделан до паролей. Задайте пароль: им вы будете подтверждать, что ключ ваш, на других компьютерах и там, где нет сканера отпечатков.", беда, true) else { return };
+        let (dev2, имя2, дело2) = (dev.to_string(), имя.to_string(), дело.clone());
+        позови("key.password.set", json!({ "dev": dev, "новый": новый }), move |о| match о {
+            Ok(о) => дело2(о["токен"].as_str().unwrap_or("").to_string()),
+            Err(е) => пароль(&dev2, &имя2, дело2.clone(), false, true, &е),
+        });
+        return;
+    }
+    let Some(п) = спроси_пароль(&format!("Ключ «{имя}»"), "Введите пароль ключа — так система убедится, что ключ ваш.", беда, false) else { return };
+    let (dev2, имя2, дело2) = (dev.to_string(), имя.to_string(), дело.clone());
+    позови_за("key.confirm", json!({ "dev": dev, "пароль": п }), 20, move |о| match о {
+        Ok(о) => дело2(о["токен"].as_str().unwrap_or("").to_string()),
+        Err(е) => пароль(&dev2, &имя2, дело2.clone(), true, свой, &е),
+    });
+}
+
+/// Применить стол с ключа на флешке `dev`
+pub fn примени_стол(dev: &str, токен: &str) {
+    let dev = dev.to_string();
+    позови("key.profile.read", json!({ "dev": dev, "токен": токен }), move |о| {
         let п = match о {
             Ok(п) => п,
             Err(е) => return notify::покажи("Ключ Glower", &format!("Стол не применён: {е}"), "⚠️"),
@@ -124,7 +249,7 @@ pub fn новая_флешка(dev: &str) {
             "На ключе сохранён стол — тема, обои, док, виджеты и программы",
             "🔑",
             "Применить мой стол",
-            Box::new(move || примени_стол(&dev2)),
+            Box::new(move || подтверди(&dev2, Box::new({ let d = dev2.clone(); move |т| примени_стол(&d, &т) }))),
         );
     });
 }
@@ -208,14 +333,14 @@ pub fn предложи_эстафету(dev: &str) {
             &что.join(" · "),
             "🏃",
             "Продолжить",
-            Box::new(move || продолжи(&dev2)),
+            Box::new(move || подтверди(&dev2, Box::new({ let d = dev2.clone(); move |т| продолжи(&d, &т) }))),
         );
     });
 }
 
 /// Продолжить с места: файлы, вкладки и буфер открывает агент, программы — мы
-pub fn продолжи(dev: &str) {
-    позови("relay.continue", json!({ "dev": dev }), |о| match о {
+pub fn продолжи(dev: &str, токен: &str) {
+    позови("relay.continue", json!({ "dev": dev, "токен": токен }), |о| match о {
         Ok(о) => {
             for ярлык in о["программы"].as_array().cloned().unwrap_or_default() {
                 позови("sys.launch", json!({ "id": ярлык }), |_| {});

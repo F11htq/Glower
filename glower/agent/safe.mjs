@@ -26,7 +26,7 @@ import { join, dirname, relative, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { once } from 'node:events';
 import os from 'node:os';
-import { мои, носители, подключи, ключ_на, ПАПКА, тайна_подходит } from './key.mjs';
+import { мои, носители, подключи, ключ_на, ПАПКА, тайна_подходит, нужен_токен } from './key.mjs';
 
 const МЕТКА = Buffer.from('GLSAFE1');
 const КОНФИГ = () => join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'glower');
@@ -223,7 +223,8 @@ export function safe({ allowLaunch } = {}){
     },
 
     /* Открыть: обе половины на месте — расшифровываем в память */
-    async 'safe.open'({ id } = {}){
+    async 'safe.open'({ id, токен } = {}){
+      нужен_токен(токен, id);
       if (открыт){
         if (открыт.id === id) return { ok:true, где:ОТКРЫТЫЙ(), уже:true };
         await закрой();
@@ -260,7 +261,8 @@ export function safe({ allowLaunch } = {}){
     async 'safe.save'(){ return сохрани(); },
 
     /* Удалить сейф совсем — вместе с файлами в нём */
-    async 'safe.delete'({ id } = {}){
+    async 'safe.delete'({ id, токен } = {}){
+      нужен_токен(токен, id);
       if (!ID.test(String(id))) throw new Error('непонятный ключ');
       if (открыт && открыт.id === id){ clearInterval(открыт.следит); открыт.шифр.fill(0); открыт = null; await rm(ОТКРЫТЫЙ(), { recursive:true, force:true }); }
       await rm(папка_сейфа(id), { recursive:true, force:true });

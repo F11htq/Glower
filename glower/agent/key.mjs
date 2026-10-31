@@ -23,7 +23,7 @@ import { readFile, writeFile, mkdir, copyFile, readdir, stat, rm, rename } from 
 import { existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { promisify } from 'node:util';
-import { randomBytes, createHash, timingSafeEqual, randomUUID } from 'node:crypto';
+import { randomBytes, createHash, timingSafeEqual, randomUUID, scrypt } from 'node:crypto';
 import os from 'node:os';
 
 const run = promisify(execFile);
@@ -67,6 +67,46 @@ export function тайна_подходит(тайна, хэш){
   const а = Buffer.from(отпечаток(тайна), 'hex'), б = Buffer.from(String(хэш || ''), 'hex');
   return а.length === б.length && а.length > 0 && timingSafeEqual(а, б);
 }
+
+/* ---------- Хозяин ли это ключа ----------
+   Ключ можно найти или украсть. Всё, что отдаёт чужому компьютеру ваши
+   данные или права, — признать ключ своим, настроить систему по нему,
+   применить стол, продолжить эстафету, открыть сейф, стереть ключ, —
+   сперва спрашивает подтверждения: отпечатком пальца, если ключ свой на
+   этом компьютере и сканер есть, иначе паролем ключа. Пароль хранится на
+   ключе только отпечатком scrypt — подбирать его долго, а после пяти
+   промахов подряд ключ на полминуты перестаёт принимать пароль. */
+const SCRYPT = { N:32768, r:8, p:1, maxmem:96 * 1024 * 1024 };
+export function хэш_пароля(пароль, соль){
+  return new Promise((готово, беда) => scrypt(String(пароль).normalize('NFC'), Buffer.from(соль, 'hex'), 32, SCRYPT,
+    (е, к) => е ? беда(е) : готово(к.toString('hex'))));
+}
+export async function пароль_подходит(пароль, запись){
+  if (!запись || !/^[0-9a-f]{32}$/.test(запись.соль || '') || !/^[0-9a-f]{64}$/.test(запись.хэш || '')) return false;
+  const а = Buffer.from(await хэш_пароля(пароль, запись.соль), 'hex'), б = Buffer.from(запись.хэш, 'hex');
+  return а.length === б.length && timingSafeEqual(а, б);
+}
+export async function новый_пароль(пароль){
+  if (String(пароль || '').length < 4) throw new Error('пароль ключа — не короче четырёх знаков');
+  const соль = randomBytes(16).toString('hex');
+  return { соль, хэш:await хэш_пароля(пароль, соль), вид:'scrypt-32768-8-1' };
+}
+/* Подтверждение живёт две минуты: за это время успевают и прочитать стол,
+   и признать ключ своим — второй раз не спрашиваем */
+const ТОКЕНЫ = new Map();
+export function выдай_токен(id){
+  const т = randomBytes(24).toString('hex');
+  ТОКЕНЫ.set(т, { id, до:Date.now() + 120000 });
+  return т;
+}
+export function токен_годен(т, id){
+  const з = ТОКЕНЫ.get(String(т || ''));
+  return !!з && з.до > Date.now() && з.id === id;
+}
+export function нужен_токен(т, id){
+  if (!токен_годен(т, id)) throw new Error('нужно подтвердить, что вы хозяин ключа');
+}
+const ПРОМАХИ = new Map();   // id ключа → { сколько, до }
 
 /* Только то, что относится к столу, — и ничего чужого с флешки */
 export function только_стол(настройки){
@@ -240,7 +280,7 @@ export function key({ root, allowLaunch } = {}){
           try { спасение = JSON.parse(await readFile(join(н.где, ПАПКА, 'rescue', 'info.json'), 'utf8')); } catch(e){}
         }
         флешки.push({ dev:н.dev, имя:н.метка || н.модель || н.dev, где:н.где, размер:н.размер, толькоЧтение:н.толькоЧтение,
-          ключ:к ? { id:к.id, имя:к.имя || 'Ключ', свой:!!свой } : null, профиль, копия:копия_когда, эстафета,
+          ключ:к ? { id:к.id, имя:к.имя || 'Ключ', свой:!!свой, пароль:!!(к.пароль && к.пароль.хэш) } : null, профиль, копия:копия_когда, эстафета,
           спасение:спасение ? { версия:String(спасение.версия || ''), когда:спасение.сохранено || null, здесь:к ? await спасательный(к.секрет) : false } : null });
       }
       const вставлены = new Set(флешки.filter(ф => ф.ключ && ф.ключ.свой).map(ф => ф.ключ.id));
@@ -268,13 +308,14 @@ export function key({ root, allowLaunch } = {}){
     },
 
     /* Сделать флешку ключом: папка .glower-key, остальное не трогаем */
-    async 'key.create'({ dev, имя } = {}){
+    async 'key.create'({ dev, имя, пароль } = {}){
       if (!allowLaunch) throw new Error('работа с носителями выключена');
+      const защита = await новый_пароль(пароль);
       const н = await найди(dev);
       if (н.толькоЧтение) throw new Error('флешка защищена от записи');
       if (await ключ_на(н.где)) throw new Error('на этой флешке уже есть ключ Glower');
       const к = { формат:1, id:randomUUID(), имя:String(имя || '').trim().slice(0, 40) || 'Мой ключ',
-        создан:new Date().toISOString(), секрет:randomBytes(32).toString('hex') };
+        создан:new Date().toISOString(), секрет:randomBytes(32).toString('hex'), пароль:защита };
       await mkdir(join(н.где, ПАПКА), { recursive:true });
       await writeFile(join(н.где, ПАПКА, 'key.json'), JSON.stringify(к, null, 2));
       await writeFile(join(н.где, ПАПКА, 'README.txt'),
@@ -292,8 +333,9 @@ export function key({ root, allowLaunch } = {}){
     },
 
     /* Ключ сделан на другом компьютере — признать его своим и здесь */
-    async 'key.pair'({ dev } = {}){
+    async 'key.pair'({ dev, токен } = {}){
       const { к } = await свой_ключ(dev);
+      нужен_токен(токен, к.id);
       const список = (await мои()).filter(м => м.id !== к.id);
       список.push({ id:к.id, имя:к.имя || 'Ключ', хэш:отпечаток(к.секрет), вход:true, блокировать:false, копия:false, эстафета:true, добавлен:new Date().toISOString() });
       await запомни(список);
@@ -351,8 +393,10 @@ export function key({ root, allowLaunch } = {}){
 
     /* Прочитать стол с ключа. Обои кладём рядом с настройками этого
        компьютера: флешку вынут, а стол должен остаться */
-    async 'key.profile.read'({ dev } = {}){
-      const { н } = await свой_ключ(dev);
+    async 'key.profile.read'({ dev, токен } = {}){
+      const { н, к } = await свой_ключ(dev);
+      // Свой ключ на своём компьютере — без вопросов; чужому — подтверждение
+      if (!(await мои()).some(м => м.id === к.id && тайна_подходит(к.секрет, м.хэш))) нужен_токен(токен, к.id);
       let п;
       try { п = JSON.parse(await readFile(join(н.где, ПАПКА, 'profile.json'), 'utf8')); }
       catch(e){ throw new Error('на ключе ещё нет сохранённого стола'); }
@@ -438,9 +482,70 @@ export function key({ root, allowLaunch } = {}){
       return { ok:true, версия };
     },
 
-    /* Убрать ключ с флешки совсем — сама флешка и её файлы остаются */
-    async 'key.erase'({ dev } = {}){
+    /* Как здесь можно подтвердить, что вы хозяин ключа */
+    async 'key.confirm.ways'({ dev } = {}){
+      const { к } = await свой_ключ(dev);
+      const свой = (await мои()).some(м => м.id === к.id && тайна_подходит(к.секрет, м.хэш));
+      let палец = false;
+      if (свой){
+        try {
+          const { stdout } = await run('fprintd-list', [os.userInfo().username], { timeout:8000, env:{ ...process.env, LC_ALL:'C' } });
+          палец = / - #\d+:/.test(stdout);
+        } catch(e){}
+      }
+      return { пароль:!!(к.пароль && к.пароль.хэш), палец, свой, имя:к.имя || 'Ключ' };
+    },
+
+    /* Подтвердить: пароль ключа или отпечаток пальца хозяина этого
+       компьютера (только если ключ здесь свой) */
+    async 'key.confirm'({ dev, пароль, палец } = {}){
+      const { к } = await свой_ключ(dev);
+      const п = ПРОМАХИ.get(к.id);
+      if (п && п.до > Date.now()) throw new Error('слишком много промахов — подождите ' + Math.ceil((п.до - Date.now()) / 1000) + ' с');
+      if (палец){
+        const свой = (await мои()).some(м => м.id === к.id && тайна_подходит(к.секрет, м.хэш));
+        if (!свой) throw new Error('отпечаток подтверждает только свой ключ на своём компьютере');
+        try {
+          const { stdout } = await run('fprintd-verify', [], { timeout:40000, env:{ ...process.env, LC_ALL:'C' } });
+          if (!/verify-match/.test(stdout)) throw new Error('отпечаток не совпал');
+        } catch(e){
+          throw new Error(/no-match|не совпал/.test(String(e.stdout || e.message)) ? 'отпечаток не совпал' : 'сканер не ответил — введите пароль ключа');
+        }
+        ПРОМАХИ.delete(к.id);
+        return { токен:выдай_токен(к.id) };
+      }
+      if (!(к.пароль && к.пароль.хэш)) throw new Error('у ключа ещё нет пароля — задайте его');
+      if (!await пароль_подходит(пароль, к.пароль)){
+        const было = ПРОМАХИ.get(к.id) || { сколько:0, до:0 };
+        было.сколько++;
+        if (было.сколько >= 5){ было.до = Date.now() + 30000; было.сколько = 0; }
+        ПРОМАХИ.set(к.id, было);
+        throw new Error('пароль ключа не подошёл');
+      }
+      ПРОМАХИ.delete(к.id);
+      return { токен:выдай_токен(к.id) };
+    },
+
+    /* Задать или сменить пароль ключа. Пароля ещё нет (ключ сделан до
+       паролей) — задать может тот, у кого ключ свой на этом компьютере */
+    async 'key.password.set'({ dev, старый, новый, токен } = {}){
       const { н, к } = await свой_ключ(dev);
+      if (к.пароль && к.пароль.хэш){
+        if (!токен_годен(токен, к.id) && !await пароль_подходит(старый, к.пароль)) throw new Error('прежний пароль ключа не подошёл');
+      } else if (!(await мои()).some(м => м.id === к.id && тайна_подходит(к.секрет, м.хэш))){
+        throw new Error('пароль задают на компьютере, где ключ свой');
+      }
+      к.пароль = await новый_пароль(новый);
+      await writeFile(join(н.где, ПАПКА, 'key.json.new'), JSON.stringify(к, null, 2));
+      await rename(join(н.где, ПАПКА, 'key.json.new'), join(н.где, ПАПКА, 'key.json'));
+      await run('sync', [], { timeout:60000 }).catch(() => {});
+      return { ok:true, токен:выдай_токен(к.id) };
+    },
+
+    /* Убрать ключ с флешки совсем — сама флешка и её файлы остаются */
+    async 'key.erase'({ dev, токен } = {}){
+      const { н, к } = await свой_ключ(dev);
+      нужен_токен(токен, к.id);
       await rm(join(н.где, ПАПКА), { recursive:true, force:true });
       await запомни((await мои()).filter(м => м.id !== к.id));
       await run('sync', [], { timeout:60000 }).catch(() => {});

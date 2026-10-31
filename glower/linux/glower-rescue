@@ -60,6 +60,37 @@ plymouth hide-splash 2>/dev/null || true
 chvt 1 2>/dev/null || true
 note "ключ вставлен при загрузке, стоит GlowerOS ${NOW:-?}"
 
+# Хозяин ли это: пароль ключа сверяется с его отпечатком scrypt на ключе.
+# Три промаха — обычная загрузка, меню не показываем
+check_pass(){
+  GLOWER_PASS="$1" python3 -I -c '
+import json, sys, os, hashlib, hmac, unicodedata
+p = json.load(open(sys.argv[1])).get("пароль") or {}
+if not p.get("хэш"): sys.exit(0)
+h = hashlib.scrypt(unicodedata.normalize("NFC", os.environ["GLOWER_PASS"]).encode(), salt=bytes.fromhex(p["соль"]), n=32768, r=8, p=1, maxmem=96*1024*1024, dklen=32)
+sys.exit(0 if hmac.compare_digest(h.hex(), p["хэш"]) else 1)' "$MNT/.glower-key/key.json"
+}
+has_pass=$(python3 -I -c 'import json,sys; print(1 if (json.load(open(sys.argv[1])).get("пароль") or {}).get("хэш") else 0)' "$MNT/.glower-key/key.json" 2>/dev/null)
+if [ "$has_pass" = 1 ]; then
+  ok=0
+  for try in 1 2 3; do
+    printf '\033[H\033[2J' > "$TTY"
+    say ""; say "   Спасательный ключ «${NAME}»"; say ""
+    printf '   Пароль ключа (Ввод без пароля — обычная загрузка): ' > "$TTY"
+    pass=""
+    read -r -s -t 60 pass < "$TTYIN" || pass=""
+    say ""
+    [ -n "$pass" ] || break
+    if check_pass "$pass"; then ok=1; break; fi
+    say "   Пароль не подошёл"; sleep 2
+  done
+  unset pass
+  if [ "$ok" != 1 ]; then
+    note "пароль ключа не подтверждён — обычная загрузка"
+    printf '\033[H\033[2J' > "$TTY"; umount "$MNT" 2>/dev/null; plymouth show-splash 2>/dev/null || true; exit 0
+  fi
+fi
+
 menu(){
   printf '\033[H\033[2J' > "$TTY"
   say ""
