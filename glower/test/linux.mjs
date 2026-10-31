@@ -990,6 +990,19 @@ try {
             && /fn версии\(/.test(пар3) && /"Вернуться"/.test(пар3) && (сборка === '' || /versions\.json/.test(сборка)));
         }
         {
+          // Сейф двух половин
+          const сейф = await import(pathToFileURL(join(root, 'agent', 'safe.mjs')).href);
+          const { randomBytes } = await import('node:crypto');
+          const а = randomBytes(32), б = randomBytes(32);
+          const кусок = сейф.зашифруй(сейф.шифр_из(а, б), Buffer.from('банк: 1234'));
+          let чужим = false;
+          try { сейф.расшифруй(сейф.шифр_из(а, randomBytes(32)), кусок); чужим = true; } catch(e){}
+          const текст = await readFile(join(root, 'agent', 'safe.mjs'), 'utf8');
+          check('Сейф двух половин: шифр только из обеих половин, текст не виден, открытое — в памяти, вынули ключ — закрылся',
+            сейф.расшифруй(сейф.шифр_из(а, б), кусок).toString() === 'банк: 1234' && !кусок.includes(Buffer.from('банк')) && !чужим
+            && /XDG_RUNTIME_DIR/.test(текст) && /закрой\('ключ вынут'\)/.test(текст) && /aes-256-gcm/.test(текст));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

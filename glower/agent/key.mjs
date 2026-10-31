@@ -29,7 +29,7 @@ import os from 'node:os';
 const run = promisify(execFile);
 const КОНФИГ = () => join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'glower');
 const МОИ_КЛЮЧИ = () => join(КОНФИГ(), 'keys.json');
-const ПАПКА = '.glower-key';
+export const ПАПКА = '.glower-key';
 
 /* Что из настроек — «мой стол». Остальное (часовой пояс, раскладка значков
    на столе, отметка о пройденном мастере) у каждого компьютера своё */
@@ -54,7 +54,7 @@ export function только_стол(настройки){
   return итог;
 }
 
-async function мои(){
+export async function мои(){
   try { const с = JSON.parse(await readFile(МОИ_КЛЮЧИ(), 'utf8')); return Array.isArray(с) ? с : []; }
   catch(e){ return []; }
 }
@@ -64,7 +64,7 @@ async function запомни(список){
 }
 
 /* Съёмные носители с файловой системой — как в «Носителях» */
-async function носители(){
+export async function носители(){
   let данные;
   try {
     данные = JSON.parse((await run('lsblk', ['-J', '-b', '-o', 'PATH,TYPE,FSTYPE,LABEL,MOUNTPOINT,RM,HOTPLUG,SIZE,MODEL,RO'], { timeout:5000 })).stdout);
@@ -88,7 +88,7 @@ async function носители(){
 /* Подключить, если ещё не подключён. Пробуем один раз на носитель — замок
    спрашивает каждую секунду, и монтировать по кругу незачем */
 const пробовали = new Set();
-async function подключи(н, заново = false){
+export async function подключи(н, заново = false){
   if (н.где) return н.где;
   const метка = н.dev + ':' + н.размер;
   if (!заново && пробовали.has(метка)) return '';
@@ -99,7 +99,7 @@ async function подключи(н, заново = false){
   } catch(e){ return ''; }
 }
 
-async function ключ_на(где){
+export async function ключ_на(где){
   if (!где) return null;
   try {
     const к = JSON.parse(await readFile(join(где, ПАПКА, 'key.json'), 'utf8'));
