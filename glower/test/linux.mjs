@@ -970,6 +970,14 @@ try {
             && словаApt('Retrieving file 3 of 12 (1min 4s remaining)') === 'Скачиваю 3 из 12 · осталось 1 мин 4 с');
         }
         {
+          const ядроВ = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          const главнаяВ = await readFile(join(root, 'panel', 'src', 'main.rs'), 'utf8');
+          const рисунок = await readFile(join(root, 'wm', 'src', 'render.rs'), 'utf8');
+          check('Видео во весь экран: полоса панели уходит сама при любом оконном сервере и возвращается после',
+            /pub fn вовесь_сверху/.test(ядроВ) && /скажи\("вовесь"/.test(ядроВ) && /"вовесь" => \{/.test(главнаяВ)
+            && /fn полоса_на_месте/.test(главнаяВ) && /if весь_экран && слой == Layer::Top \{/.test(рисунок));
+        }
+        {
           const мышь = await import(pathToFileURL(join(root, 'agent', 'mouse.mjs')).href);
           const пар = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
           const wmМышь = await readFile(join(root, 'wm', 'src', 'mouse.rs'), 'utf8');
