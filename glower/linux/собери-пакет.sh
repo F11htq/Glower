@@ -67,7 +67,7 @@ OUR_FILES="usr/bin/glower-session usr/bin/glower-install usr/bin/glower-fix
             usr/bin/glower-wm usr/bin/glower-paint usr/bin/glower-calendar usr/bin/glower-clock usr/bin/glower-todo usr/bin/glower-props usr/bin/glower-scan usr/bin/glower-splash
             usr/lib/systemd/system/plymouth-quit.service.d/glower-retain.conf
             etc/pam.d/glower-lock usr/bin/врач
-            etc/apt/apt.conf.d/80glower-net usr/bin/glower-rescue usr/lib/systemd/system/glower-rescue.service usr/lib/systemd/system/multi-user.target.wants/glower-rescue.service
+            etc/apt/apt.conf.d/80glower-net etc/modprobe.d/glower-wl.conf usr/bin/glower-rescue usr/lib/systemd/system/glower-rescue.service usr/lib/systemd/system/multi-user.target.wants/glower-rescue.service
             usr/bin/vrach usr/bin/dhfx
             usr/share/applications/glower.desktop
             usr/share/applications/glower-exe.desktop

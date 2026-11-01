@@ -1040,6 +1040,13 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          const wl = await readFile(join(root, 'linux', 'modprobe-glower-wl.conf'), 'utf8');
+          check('драйвер Broadcom wl грузится только при карте Broadcom (иначе сбой ядра в журнале)',
+            /^install wl .*0x14e4.*--ignore-install wl/m.test(wl)
+            && /etc\/modprobe\.d\/glower-wl\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8'))
+            && /modprobe-glower-wl\.conf/.test(await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8')));
+        }
+        {
           // apt не виснет на молчащей сети и говорит, какой источник не ответил
           const пк = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
           const настр = await readFile(join(root, 'linux', 'apt-80glower-net'), 'utf8');
