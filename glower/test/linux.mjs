@@ -1067,6 +1067,19 @@ try {
             && /existsSync\(где\)/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')));
         }
         {
+          // Загрузка без чёрных экранов
+          const сеанс3 = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
+          const вход3 = await readFile(join(root, 'linux', 'glower-greeter'), 'utf8');
+          const заставка = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
+          const плим = await readFile(join(root, 'linux', 'greetd-plymouth.conf'), 'utf8');
+          const стол3 = await readFile(join(root, 'panel', 'src', 'desktop.rs'), 'utf8');
+          check('Загрузка как в Windows: заставка держится до экрана входа, после входа — «Добро пожаловать» с точками до самого стола',
+            /Conflicts=plymouth-quit\.service/.test(плим) && /plymouth quit --retain-splash/.test(плим)
+            && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
+            && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
+            && /greetd\.service\.d\/glower-plymouth\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

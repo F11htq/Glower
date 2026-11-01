@@ -47,6 +47,7 @@ mod settings;
 mod setup;
 mod store;
 mod snip;
+mod splash;
 mod taskmgr;
 mod photos;
 mod installwin;
@@ -513,6 +514,7 @@ fn main() {
         "glower-todo" => todo::запусти(std::env::args().skip(1).collect()),
         "glower-props" => props::запусти(std::env::args().skip(1).collect()),
         "glower-scan" => protection::запусти(std::env::args().skip(1).collect()),
+        "glower-splash" => splash::запусти(std::env::args().skip(1).collect()),
         _ => {}
     }
     if имя == "glower-music" {

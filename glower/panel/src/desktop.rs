@@ -297,6 +297,11 @@ pub fn создай() {
             if к.set_source_surface(картинка, 0.0, 0.0).is_ok() {
                 let _ = к.paint();
             }
+            // Первые обои на экране — заставке «Добро пожаловать» пора гаснуть
+            static ГОТОВ: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !ГОТОВ.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                glib::timeout_add_local_once(std::time::Duration::from_millis(250), crate::splash::стол_готов);
+            }
         }
         glib::Propagation::Proceed
     });

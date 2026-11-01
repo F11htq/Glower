@@ -37,11 +37,9 @@ AGENT=$!
 LABWC=""
 trap 'kill $AGENT $LABWC 2>/dev/null' EXIT INT TERM
 
-i=0
-while [ $i -lt 50 ]; do
-  curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
-  i=$((i+1)); sleep 0.2
-done
+# Агента здесь не ждём: оконный сервер поднимается сразу, а под экраном
+# входа, пока тот грузится, — заставка с логотипом (glower-splash --вход).
+# Агента ждёт сценарий запуска. Раньше эти секунды были чёрным экраном
 
 mkdir -p "$HOMEDIR/.local/share/glower"
 # Экран входа живёт, пока человек не вошёл. Упал — поднимаем снова: войти
@@ -52,6 +50,12 @@ cat > "$HOMEDIR/пуск.sh" <<STARTUP
 #!/bin/sh
 command -v wlr-randr >/dev/null && [ -n "\$GLOWER_X_SIZE" ] && \\
   wlr-randr --output X11-1 --custom-mode "\$GLOWER_X_SIZE" >/dev/null 2>&1
+command -v glower-splash >/dev/null 2>&1 && { glower-splash --вход >/dev/null 2>&1 & }
+i=0
+while [ \$i -lt 50 ]; do
+  curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
+  i=\$((i+1)); sleep 0.2
+done
 falls=0
 since=\$(date +%s)
 while :; do

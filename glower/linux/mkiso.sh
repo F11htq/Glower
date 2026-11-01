@@ -477,6 +477,8 @@ install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 # enable: так она включится и на машинах, что получат её обновлением
 install -m 755 "$SRC/linux/glower-rescue" "$ROOTFS/usr/bin/glower-rescue"
 install -D -m 644 "$SRC/linux/apt-80glower-net" "$ROOTFS/etc/apt/apt.conf.d/80glower-net"
+# Заставка загрузки — до самого экрана входа (см. комментарий в файле)
+install -D -m 644 "$SRC/linux/greetd-plymouth.conf" "$ROOTFS/usr/lib/systemd/system/greetd.service.d/glower-plymouth.conf"
 install -D -m 644 "$SRC/linux/glower-rescue.service" "$ROOTFS/usr/lib/systemd/system/glower-rescue.service"
 install -d "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../glower-rescue.service "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants/glower-rescue.service"
@@ -526,7 +528,7 @@ if [ -x "$PANEL_BIN" ]; then
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-files"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-settings"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-store"
-  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props glower-scan; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
+  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props glower-scan glower-splash; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
   echo "  рабочий стол: $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "нет panel/target/release/glower-panel — рабочий стол собрать не из чего"

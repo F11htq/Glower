@@ -203,11 +203,9 @@ node "$UI/agent/server.mjs" --port "$PORT" --root "$ROOT" $FLAGS >>"$LOG" 2>&1 &
 AGENT=$!
 trap 'kill $AGENT 2>/dev/null' EXIT INT TERM
 
-i=0
-while [ $i -lt 50 ]; do
-  curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
-  i=$((i+1)); sleep 0.2
-done
+# Агента здесь не ждём: оконный сервер поднимается сразу, с заставкой
+# «Добро пожаловать», а агента ждёт уже сценарий запуска — перед панелью.
+# Раньше эти секунды были чёрным экраном
 
 HAVE_DRI=no
 ls /dev/dri/card* >/dev/null 2>&1 && HAVE_DRI=yes
@@ -266,6 +264,18 @@ write_start(){
   cat > "$START_SH" <<STARTUP
 #!/bin/sh
 $1
+# Заставка «Добро пожаловать» — сразу, как в Windows: пока грузятся агент и
+# панель, на экране она, а не чернота. Гаснет сама, когда рабочий стол
+# нарисован. С установочной флешки её нет — там сразу установщик
+if ! grep -qwE 'glower\.(install|repair)=1' /proc/cmdline 2>/dev/null && command -v glower-splash >/dev/null 2>&1; then
+  glower-splash >/dev/null 2>&1 &
+fi
+# Агент — мост панели к машине: ждём его до десяти секунд
+i=0
+while [ \$i -lt 50 ]; do
+  curl -sf "http://localhost:$PORT/" >/dev/null 2>&1 && break
+  i=\$((i+1)); sleep 0.2
+done
 # окно с вопросом «разрешить?» показывает он — без него запросы прав
 # проваливаются молча
 [ -n "$POLKIT_AGENT" ] && "$POLKIT_AGENT" >/dev/null 2>&1 &
