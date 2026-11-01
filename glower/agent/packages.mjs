@@ -188,9 +188,41 @@ function разбериAppstream(xml){
     if (!id || !имя) continue;
     все.push({ source:'flatpak', name:id.replace(/\.desktop$/, ''), title:снимай(имя),
       about:снимай((к.match(/<summary>([^<]*)<\/summary>/) || [])[1] || ''),
+      версия:(к.match(/<release[^>]*\bversion="([^"]+)"/) || [])[1] || null,
       категории:[...к.matchAll(/<category>([^<]+)<\/category>/g)].map(х => х[1]) });
   }
   return все.filter(х => APPID.test(х.name));
+}
+
+/* Свой список Flathub на диске — его скачивает flatpak вместе со сводкой */
+async function загрузиМестный(){
+  if (местныйКаталог) return местныйКаталог;
+  const { gunzipSync } = await import('node:zlib');
+  for (const ф of ['/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz',
+                   '/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml']){
+    try {
+      const б = await readFile(ф);
+      местныйКаталог = разбериAppstream((ф.endsWith('.gz') ? gunzipSync(б) : б).toString('utf8'));
+      break;
+    } catch(e){}
+  }
+  return местныйКаталог;
+}
+
+/* Сведения о программе Flathub, когда сам flatpak до Flathub не достучался:
+   сперва свой список на диске, потом сайт flathub.org. null — нигде не
+   нашлось; { нет:true } — сайт прямо ответил, что такой программы нет */
+export async function сведенияFlathub(id, достань = fetch){
+  const свой = ((await загрузиМестный().catch(() => null)) || []).find(х => х.name === id);
+  if (свой) return { title:свой.title, about:свой.about, версия:свой.версия, откуда:'список на диске' };
+  try {
+    const о = await достань('https://flathub.org/api/v2/appstream/' + encodeURIComponent(id), { signal:AbortSignal.timeout(12000) });
+    if (о.status === 404) return { нет:true };
+    if (!о.ok) return null;
+    const д = await о.json();
+    const выпуск = Array.isArray(д.releases) && д.releases[0] ? д.releases[0].version : null;
+    return { title:д.name || '', about:д.summary || '', версия:выпуск, откуда:'flathub.org' };
+  } catch(e){ return null; }
 }
 
 async function категорияFlathub(раздел, страница){
@@ -218,17 +250,7 @@ async function категорияFlathub(раздел, страница){
   }
   if (!итог || !итог.list.length){
     // Сайта нет — свой список Flathub на диске
-    if (!местныйКаталог){
-      const { gunzipSync } = await import('node:zlib');
-      for (const ф of ['/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml.gz',
-                       '/var/lib/flatpak/appstream/flathub/x86_64/active/appstream.xml']){
-        try {
-          const б = await readFile(ф);
-          местныйКаталог = разбериAppstream((ф.endsWith('.gz') ? gunzipSync(б) : б).toString('utf8'));
-          break;
-        } catch(e){}
-      }
-    }
+    await загрузиМестный();
     if (!местныйКаталог) throw new Error('Flathub недоступен: нет связи с сайтом, а свой список Flathub ещё не скачан');
     const свои = местныйКаталог.filter(х => х.категории.includes(кат)).map(({ категории, ...х }) => х);
     итог = { list:свои.slice((страница - 1) * НА_СТРАНИЦЕ, страница * НА_СТРАНИЦЕ),
@@ -293,7 +315,10 @@ const ВЕРСИИ_АДРЕС = process.env.GLOWER_VERSIONS_URL || 'https://raw.
    приём, что уже понадобился погоде. Тот же набор лежит в
    /etc/apt/apt.conf.d/80glower-net — для apt из терминала. */
 export const СЕТЬ_APT = ['-o', 'Acquire::ForceIPv4=true', '-o', 'Acquire::http::Timeout=20',
-  '-o', 'Acquire::https::Timeout=20', '-o', 'Acquire::Retries=2'];
+  '-o', 'Acquire::https::Timeout=20', '-o', 'Acquire::Retries=2',
+  // Занято автообновлением Ubuntu — ждём до двух минут, а не падаем сразу
+  // с «Could not get lock»: у apt-get, в отличие от apt, ожидания нет
+  '-o', 'DPkg::Lock::Timeout=120'];
 
 /* Какие источники не ответили: строки apt «Err:3 https://host/... »,
    «W: Failed to fetch https://host/...», «Could not connect to host» */
@@ -1194,6 +1219,7 @@ export function packages(allowPackages){
           const own = await flatpak(['info', id], 20000);
           установлена = (own.match(/Version:\s*(.+)/) || [])[1] || 'установлена';
         } catch(e){}
+        let ошибка = null;
         try {
           const rem = await flatpak(['remote-info', 'flathub', id], 60000);
           заголовок = (rem.match(/^\s*Name:\s*(.+)$/m) || [])[1] || '';
@@ -1204,7 +1230,20 @@ export function packages(allowPackages){
             const k = { bytes:1, kB:1e3, KB:1024, MB:1048576, GB:1073741824 }[dl[2]] || 1;
             размер = Math.round(parseFloat(dl[1]) * k);
           }
-        } catch(e){}
+        } catch(e){ ошибка = String(e.message || e); }
+        /* flatpak не ответил — это ещё не «такой программы нет»: чаще всего
+           Flathub просто недоступен (сеть, сертификат). Сведения берём из
+           списка на диске или с сайта; «нет» — только если так и сказано */
+        if (!версия && ошибка){
+          const точно_нет = /Nothing matches|not found|No remote refs|No entry for/i.test(ошибка);
+          if (!точно_нет){
+            const с = await сведенияFlathub(id);
+            if (с && с.нет) return { source:'flatpak', name:id, installed:установлена, candidate:null, snap:false };
+            return { source:'flatpak', name:id, title:(с && с.title) || заголовок, installed:установлена,
+              candidate:(с && с.версия) || 'с Flathub', size:размер, about:(с && с.about) || о, snap:false,
+              'flathubНеОтвечает':true, ошибка:ошибка.split('\n').filter(Boolean).pop() };
+          }
+        }
         return { source:'flatpak', name:id, title:заголовок, installed:установлена,
                  candidate:версия, size:размер, about:о, snap:false };
       }

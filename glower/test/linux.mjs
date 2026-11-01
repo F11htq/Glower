@@ -1080,6 +1080,17 @@ try {
             && /greetd\.service\.d\/glower-plymouth\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
         {
+          // Flathub не ответил — это не «такой программы нет»
+          const пк5 = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const есть = await пк5.сведенияFlathub('org.chromium.Chromium', async () => ({ status:200, ok:true, json:async () => ({ name:'Chromium', summary:'Web Browser', releases:[{ version:'142.0' }] }) }));
+          const нет = await пк5.сведенияFlathub('org.x.Нет', async () => ({ status:404, ok:false }));
+          const тек5 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          check('Магазин: Flathub не ответил — сведения из его каталога, «нет на Flathub» только когда это правда; apt ждёт занятый dpkg',
+            есть.версия === '142.0' && есть.title === 'Chromium' && нет.нет === true
+            && /Nothing matches\|not found/.test(тек5) && /'flathubНеОтвечает':true/.test(тек5)
+            && пк5.СЕТЬ_APT.includes('DPkg::Lock::Timeout=120'));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

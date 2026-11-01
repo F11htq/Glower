@@ -5,3 +5,5 @@ Acquire::ForceIPv4 "true";
 Acquire::http::Timeout "20";
 Acquire::https::Timeout "20";
 Acquire::Retries "2";
+// Пока ставит автообновление — ждать до двух минут, а не отказывать сразу
+DPkg::Lock::Timeout "120";
