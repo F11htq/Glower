@@ -19,6 +19,7 @@ async-channel = "2"
 wayland-client = "0.31"
 wayland-backend = { version = "0.3", features = ["client_system"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+pangocairo = "0.18"
 
 [profile.release]
 opt-level = "s"

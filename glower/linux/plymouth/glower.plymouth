@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=GlowerOS
-Description=Заставка загрузки GlowerOS: логотип на тёмном фоне, без анимации
+Description=Заставка загрузки GlowerOS: логотип на тёмном фоне и пять точек по кругу
 ModuleName=script
 
 [script]

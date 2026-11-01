@@ -1079,6 +1079,10 @@ try {
             !/Conflicts=/.test(плим) && /^ExecStart=$/m.test(плим) && /plymouth quit --retain-splash/.test(плим)
             && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
             && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
+            // Точки и разметка — одни и те же у Plymouth и у заставки после входа
+            && /i \* 0\.11\) \/ 2\.4/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            && /i as f64 \* 0\.11\) \/ 2\.4/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            && /pangocairo/.test(заставка) && /add_tick_callback/.test(заставка)
             && /plymouth-quit\.service\.d\/glower-retain\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
         {
@@ -1237,11 +1241,12 @@ try {
       check('заставка: сборка кладёт все картинки темы, а пакет пересобирает initramfs',
         /linux\/plymouth\/\*\.png/.test(образ2) && /\[ -e "\$img" \] \|\| continue/.test(образ2)
           && /activate-noawait update-initramfs/.test(пакет));
-      /* Анимации при включении, выключении и входе убраны по просьбе
-         человека — осталось одно приветствие после первой настройки. */
-      check('заставка загрузки неподвижна: без обновления кадров',
-        !/SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /Plymouth\.GetMode/.test(сцен)
-          && /SetDisplayPasswordFunction/.test(сцен));
+      /* Тяжёлые анимации при включении и выключении человек просил убрать.
+         Потом попросил загрузку «как в Windows» — это логотип и пять бегущих
+         точек, и только они: ни вращения картинок, ни вспышек. */
+      check('заставка загрузки: логотип и пять бегущих точек, как в Windows, — и ничего тяжелее',
+        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /Image\("dot\.png"\)/.test(сцен)
+          && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен));
     }
 
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет
