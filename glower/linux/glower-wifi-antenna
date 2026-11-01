@@ -1,0 +1,45 @@
+#!/bin/bash
+# ==========================================================================
+#  Антенны Wi-Fi
+#
+#  У двухантенных карт драйвер Linux по умолчанию принимает обеими. На
+#  части машин это хуже, чем одной: так было с Realtek RTL8852BE (rtw89) —
+#  на 5 ГГц обеими антеннами 13–18 Мбит/с, одной второй 86, как в Windows.
+#  Windows-драйвер такое обходит сам, rtw89 — нет.
+#
+#  Какой антенной принимать, подбирает агент (Параметры → Сеть → Антенны
+#  Wi-Fi) замером скорости и записывает в /etc/glower/wifi-antenna строкой
+#  «адрес-карты маска». Этот сценарий выбор применяет:
+#    glower-wifi-antenna ИМЯ          — сохранённый выбор (зовёт udev, когда
+#                                       карта появляется: при загрузке и
+#                                       после перезапуска драйвера);
+#    glower-wifi-antenna ИМЯ МАСКА    — маску сейчас (1, 2 или 3 — обе).
+#  Менять антенны ядро даёт только на опущенной карте, поэтому, если она
+#  поднята, опускаем её на миг; NetworkManager подключится заново сам.
+# ==========================================================================
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+CONF=${GLOWER_ANTENNA_CONF:-/etc/glower/wifi-antenna}
+IFACE=${1:-}
+MASK=${2:-}
+
+case "$IFACE" in ''|*/*|.*) exit 0 ;; esac
+[ -e "/sys/class/net/$IFACE/phy80211" ] || exit 0
+PHY=$(basename "$(readlink -f "/sys/class/net/$IFACE/phy80211")")
+
+if [ -z "$MASK" ]; then
+  MAC=$(cat "/sys/class/ieee80211/$PHY/macaddress" 2>/dev/null)
+  [ -n "$MAC" ] && [ -s "$CONF" ] || exit 0
+  MASK=$(awk -v m="$MAC" '$1 == m { k = $2 } END { print k }' "$CONF")
+  [ -n "$MASK" ] || exit 0
+fi
+case "$MASK" in 1|2|3) ;; *) echo "маска антенн — 1, 2 или 3" >&2; exit 2 ;; esac
+
+iw phy "$PHY" set antenna "$MASK" "$MASK" 2>/dev/null && exit 0
+UP=0
+ip link show "$IFACE" 2>/dev/null | head -1 | grep -q '[<,]UP[,>]' && UP=1
+ip link set "$IFACE" down
+iw phy "$PHY" set antenna "$MASK" "$MASK"
+RC=$?
+[ "$UP" = 1 ] && ip link set "$IFACE" up
+exit $RC

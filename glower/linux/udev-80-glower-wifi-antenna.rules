@@ -1,0 +1,2 @@
+# Антенны Wi-Fi: сохранённый выбор (см. /usr/bin/glower-wifi-antenna)
+ACTION=="add", SUBSYSTEM=="net", ENV{DEVTYPE}=="wlan", RUN+="/usr/bin/glower-wifi-antenna $name"

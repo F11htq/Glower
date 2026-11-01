@@ -478,6 +478,8 @@ install -m 755 "$SRC/linux/glower-fix" "$ROOTFS/usr/bin/glower-fix"
 install -m 755 "$SRC/linux/glower-rescue" "$ROOTFS/usr/bin/glower-rescue"
 install -D -m 644 "$SRC/linux/apt-80glower-net" "$ROOTFS/etc/apt/apt.conf.d/80glower-net"
 install -D -m 644 "$SRC/linux/modprobe-glower-wl.conf" "$ROOTFS/etc/modprobe.d/glower-wl.conf"
+install -m 755 "$SRC/linux/glower-wifi-antenna" "$ROOTFS/usr/bin/glower-wifi-antenna"
+install -D -m 644 "$SRC/linux/udev-80-glower-wifi-antenna.rules" "$ROOTFS/usr/lib/udev/rules.d/80-glower-wifi-antenna.rules"
 # Заставка загрузки — до самого экрана входа (см. комментарий в файле)
 install -D -m 644 "$SRC/linux/plymouth-retain.conf" "$ROOTFS/usr/lib/systemd/system/plymouth-quit.service.d/glower-retain.conf"
 rm -f "$ROOTFS/usr/lib/systemd/system/greetd.service.d/glower-plymouth.conf"

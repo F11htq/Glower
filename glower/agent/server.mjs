@@ -168,6 +168,7 @@ if (SYSTEM){
     ...(await import('./safe.mjs')).safe({ allowLaunch:ALLOW_LAUNCH }),
     ...(await import('./relay.mjs')).relay({ root:ROOT, allowLaunch:ALLOW_LAUNCH, средаЭкрана:m.средаЭкрана }),
     ...(await import('./clock.mjs')).clock(),
+    ...(await import('./antenna.mjs')).antenna(),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
   };
   /* Папку Windows готовим заранее — только в настоящем сеансе, где

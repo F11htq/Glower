@@ -7,7 +7,7 @@
    настоящие процессы, программы и возможности машины — и что опасное
    остаётся закрытым, пока его явно не разрешили.
    ========================================================================== */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
 import { tmpdir, hostname, totalmem } from 'node:os';
@@ -1038,6 +1038,31 @@ try {
             await к3.пароль_подходит('Кот 2026', з) && !await к3.пароль_подходит('кот 2026', з) && !JSON.stringify(з).includes('Кот') && коротко
             && к3.токен_годен(т, 'ключ-1') && !к3.токен_годен(т, 'ключ-2') && /нужен_токен\(токен, id\)/.test(сейф3)
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
+        }
+        {
+          // Антенны Wi-Fi: rtw89 принимал обеими вчетверо медленнее, чем одной
+          const а = await import(pathToFileURL(join(root, 'agent', 'antenna.mjs')).href);
+          const р = а.разбери_антенны('\tAvailable Antennas: TX 0x3 RX 0x3\n\tConfigured Antennas: TX 0 RX 0\n');
+          check('антенны: разбирает iw phy info', р.доступно.rx === 3 && р.доступно.tx === 3 && р.настроено.rx === 0);
+          check('антенны: одна берётся, когда заметно лучше обеих (как у человека: 13 → 86)',
+            а.выбери([{ маска:3, скорость:13.4 }, { маска:1, скорость:0 }, { маска:2, скорость:86.5 }]) === 2);
+          check('антенны: разброс замеров — оставляем обе',
+            а.выбери([{ маска:3, скорость:80 }, { маска:1, скорость:70 }, { маска:2, скорость:88 }]) === 3
+            && а.выбери([{ маска:3, скорость:2 }, { маска:2, скорость:4 }]) === 3);
+          const конф = а.собери_конф({ 'aa:bb:cc:dd:ee:ff':2 });
+          check('антенны: выбор пишется и читается обратно, мусор отбрасывается',
+            а.разбери_конф(конф + 'bad line\n11:22:33:44:55:66 7\n')['aa:bb:cc:dd:ee:ff'] === 2
+            && Object.keys(а.разбери_конф(конф)).length === 1);
+          const сц = await readFile(join(root, 'linux', 'glower-wifi-antenna'), 'utf8');
+          const пр = await readFile(join(root, 'linux', 'udev-80-glower-wifi-antenna.rules'), 'utf8');
+          check('антенны: выбор применяется при появлении карты (udev), маска только 1/2/3',
+            /RUN\+="\/usr\/bin\/glower-wifi-antenna \$name"/.test(пр) && /DEVTYPE\}=="wlan"/.test(пр)
+            && /case "\$MASK" in 1\|2\|3\)/.test(сц)
+            && /usr\/bin\/glower-wifi-antenna/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8'))
+            && /80-glower-wifi-antenna\.rules/.test(await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8'))
+            && /antenna\.mjs/.test(await readFile(join(root, 'agent', 'server.mjs'), 'utf8')));
+          const нет = spawnSync('bash', [join(root, 'linux', 'glower-wifi-antenna'), 'нет-такой-карты', '2'], { encoding:'utf8' });
+          check('антенны: сценарий молча выходит, если карты нет', нет.status === 0);
         }
         {
           const wl = await readFile(join(root, 'linux', 'modprobe-glower-wl.conf'), 'utf8');
