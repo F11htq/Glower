@@ -1115,7 +1115,9 @@ try {
           const тек7 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
           check('Steam из файла Valve: 32-битные библиотеки ставятся сразу, без терминала и вопроса пароля при первом запуске',
             /\^steam\(-launcher\|-installer\)\?\$/.test(тек7) && /'steam-libs-amd64:amd64', 'steam-libs-i386:i386'/.test(тек7)
-            && /async function доставьДляSteam/.test(тек7) && /'libc6:i386'/.test(тек7));
+            && /async function доставьДляSteam/.test(тек7) && /'libc6:i386'/.test(тек7)
+            // Клиент Steam 32-битный: с NVIDIA — и 32-битная часть драйвера
+            && (тек7.match(/libnvidia-gl-/g) || []).length >= 3);
         }
         {
           // Ключ Glower

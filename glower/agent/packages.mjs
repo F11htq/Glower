@@ -910,6 +910,15 @@ export function packages(allowPackages){
     const пакеты = (await есть('steam-libs-i386:i386'))
       ? ['steam-libs-amd64:amd64', 'steam-libs-i386:i386']
       : ['libc6:i386', 'libgl1:i386', 'libgl1-mesa-dri:i386', 'libglx-mesa0:i386', 'libvulkan1:i386', 'mesa-vulkan-drivers:i386'];
+    // Клиент Steam — 32-битная программа: с драйвером NVIDIA ему нужна
+    // 32-битная часть драйвера, иначе он не может открыть окно и молча
+    // закрывается. Библиотеки Steam её не тянут
+    try {
+      const { stdout } = await run('dpkg-query', ['-W', '-f=${Package} ${Status}\n', 'nvidia-driver-*']);
+      const ветка = stdout.split('\n').filter(с => / install ok installed$/.test(с))
+        .map(с => (с.match(/^nvidia-driver-(\d+)/) || [])[1]).find(Boolean);
+      if (ветка) пакеты.push(`libnvidia-gl-${ветка}:i386`);
+    } catch(e){}
     начни('install', 'библиотеки для Steam', ['install', '-y', '--no-install-recommends', ...пакеты]);
     job.потом = async () => {
       if (дальше) return дальше();
@@ -1769,6 +1778,13 @@ export function packages(allowPackages){
         const м = stdout.split('\n').find(с => с.startsWith(пакет + ','))?.match(/provided by (linux-modules-nvidia-\S+?)\)/);
         if (м && NAME.test(м[1])) пакеты.push(м[1]);
       } catch(e){ /* обойдёмся dkms */ }
+      // Включена 32-битная поддержка (Steam, Wine) — и 32-битная часть
+      // драйвера: без неё клиент Steam и 32-битные игры не открывают окно
+      try {
+        const { stdout } = await run('dpkg', ['--print-foreign-architectures']);
+        const имя = 'libnvidia-gl-' + ветка.replace(/-open$/, '') + ':i386';
+        if (/\bi386\b/.test(stdout) && /^[\w.+-]+:i386$/.test(имя)) пакеты.push(имя);
+      } catch(e){}
       const пуск = запусти('install', пакет, ['install', '-y', ...пакеты]);
       /* Под Wayland драйверу нужен modeset — иначе оконный сервер не увидит
          экран. В свежих ветках он включён сам, в старых — нет */
