@@ -332,17 +332,31 @@ export function недоступные_источники(лог){
   return [...хосты];
 }
 
-/* Сколько секунд часы компьютера впереди сети (минус — отстают). Берём
-   заголовок Date простого http-ответа: ему, в отличие от https, сбитые
-   часы не помеха. null — сеть не ответила */
-export async function сдвиг_часов(){
-  for (const адрес of ['http://archive.ubuntu.com/ubuntu/', 'http://connectivitycheck.gstatic.com/generate_204', 'http://ya.ru/']){
+/* Сколько секунд часы компьютера впереди сети (минус — отстают).
+   Сверяемся с заголовком Date нескольких сайтов, сначала по HTTPS: обычный
+   HTTP может ответить из кэша провайдера, сохранённого несколько часов
+   назад, — и показалось бы, что часы спешат, хотя они верны. Вывод — только
+   если хотя бы два ответа согласны между собой (в пределах пяти минут);
+   иначе null — «не знаем», и про часы человеку не говорим */
+export async function сдвиг_часов(достань = fetch){
+  const адреса = ['https://www.google.com/generate_204', 'https://github.com/', 'https://ya.ru/',
+                  'http://archive.ubuntu.com/ubuntu/', 'http://connectivitycheck.gstatic.com/generate_204'];
+  const сдвиги = [];
+  for (const адрес of адреса){
     try {
-      const о = await fetch(адрес, { method:'HEAD', redirect:'manual', signal:AbortSignal.timeout(8000) });
+      const о = await достань(адрес, { method:'HEAD', redirect:'manual', cache:'no-store', headers:{ 'Cache-Control':'no-cache' }, signal:AbortSignal.timeout(8000) });
       const д = Date.parse(о.headers.get('date') || '');
-      if (д) return Math.round((Date.now() - д) / 1000);
+      if (д) сдвиги.push(Math.round((Date.now() - д) / 1000));
     } catch(e){}
+    if (сдвиги.length >= 3) break;
   }
+  return сдвиг_по_ответам(сдвиги);
+}
+
+export function сдвиг_по_ответам(сдвиги){
+  for (let i = 0; i < сдвиги.length; i++)
+    for (let j = i + 1; j < сдвиги.length; j++)
+      if (Math.abs(сдвиги[i] - сдвиги[j]) < 300) return Math.round((сдвиги[i] + сдвиги[j]) / 2);
   return null;
 }
 
