@@ -889,6 +889,34 @@ export function packages(allowPackages){
     };
   }
 
+  /* 32-битное для Steam из файла Valve: его помощник steamdeps при первом
+     запуске проверяет steam-libs-amd64 и steam-libs-i386 (они в репозитории
+     Valve, который подключает сам пакет steam) и, не найдя, открывает
+     терминал с вопросом пароля. Ставим их заранее; репозитория Valve нет —
+     основные 32-битные библиотеки из Ubuntu */
+  async function доставьДляSteam(дальше){
+    job.step = 'Готовлю библиотеки для Steam'; job.слышно = Date.now(); job.done = false;
+    try {
+      const { stdout } = await run('dpkg', ['--print-foreign-architectures']).catch(() => ({ stdout:'' }));
+      if (!/\bi386\b/.test(stdout))
+        await run('sudo', ['-n', 'dpkg', '--add-architecture', 'i386'], { timeout:60000, env:СРЕДА_APT() });
+      job.step = 'Обновляю списки пакетов'; job.слышно = Date.now();
+      await run('sudo', ['-n', 'apt-get', ...СЕТЬ_APT, 'update'], { timeout:600000, env:СРЕДА_APT() }).catch(() => {});
+    } catch(e){}
+    const есть = async п => {
+      try { return /Candidate:\s*[0-9]/.test((await run('apt-cache', ['policy', п], { env:{ ...process.env, LC_ALL:'C' } })).stdout); }
+      catch(e){ return false; }
+    };
+    const пакеты = (await есть('steam-libs-i386:i386'))
+      ? ['steam-libs-amd64:amd64', 'steam-libs-i386:i386']
+      : ['libc6:i386', 'libgl1:i386', 'libgl1-mesa-dri:i386', 'libglx-mesa0:i386', 'libvulkan1:i386', 'mesa-vulkan-drivers:i386'];
+    начни('install', 'библиотеки для Steam', ['install', '-y', '--no-install-recommends', ...пакеты]);
+    job.потом = async () => {
+      if (дальше) return дальше();
+      job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null;
+    };
+  }
+
   const запустиFlatpak = (action, name, args, свой = false, повтор = false) => {
     flathubПомню = null;   // поставили, убрали или обновили — прежний список устарел
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
@@ -1548,8 +1576,13 @@ export function packages(allowPackages){
         throw new Error('этот пакет собран для другого железа (' + про.железо +
           '), а машина — ' + своё[0]);
 
-      return запусти('install', про.имя || про.файл,
+      const пуск = запусти('install', про.имя || про.файл,
         ['install', '-y', '--no-install-recommends', про.файл]);
+      // Steam из файла Valve при первом запуске сам ставит 32-битные
+      // библиотеки — открывает терминал и спрашивает пароль. Ставим их сразу
+      if (/^steam(-launcher|-installer)?$/.test(String(про.имя || '')))
+        job.потом = () => доставьДляSteam(null);
+      return пуск;
     },
 
     /* ---------- обновления системы ----------
@@ -1854,6 +1887,13 @@ export function packages(allowPackages){
         }
         const пакеты = ['gamemode', 'mangohud', 'vulkan-tools', 'steam-devices',
           'libvulkan1:i386', 'mesa-vulkan-drivers:i386', 'libgl1-mesa-dri:i386', 'libglx-mesa0:i386'];
+        // Steam поставлен файлом Valve — его 32-битные библиотеки тоже, иначе
+        // при запуске он сам спросит пароль в терминале
+        try {
+          const { stdout } = await run('dpkg-query', ['-W', '-f=${Status}', 'steam-launcher'], { env:{ ...process.env, LC_ALL:'C' } });
+          const valve = (await run('apt-cache', ['policy', 'steam-libs-i386:i386'], { env:{ ...process.env, LC_ALL:'C' } }).catch(() => ({ stdout:'' }))).stdout;
+          if (/install ok installed/.test(stdout) && /Candidate:\s*[0-9]/.test(valve)) пакеты.push('steam-libs-amd64:amd64', 'steam-libs-i386:i386');
+        } catch(e){}
         // Стоит драйвер NVIDIA — нужна и его 32-битная часть, иначе Wine
         // с 32-битной игрой на такой машине уходит на программную отрисовку
         try {

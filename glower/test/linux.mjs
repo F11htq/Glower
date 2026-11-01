@@ -1112,6 +1112,12 @@ try {
             && /if \(прямо\) return ставьПрямо\(прямо, следом\)/.test(тек6) && /'sys\.glower\.update'/.test(тек6) && /showhold/.test(тек6));
         }
         {
+          const тек7 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          check('Steam из файла Valve: 32-битные библиотеки ставятся сразу, без терминала и вопроса пароля при первом запуске',
+            /\^steam\(-launcher\|-installer\)\?\$/.test(тек7) && /'steam-libs-amd64:amd64', 'steam-libs-i386:i386'/.test(тек7)
+            && /async function доставьДляSteam/.test(тек7) && /'libc6:i386'/.test(тек7));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');
