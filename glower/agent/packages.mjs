@@ -12,9 +12,9 @@
      — идёт ровно одна работа за раз, её ход виден оболочке построчно.
    ========================================================================== */
 import { spawn, execFile } from 'node:child_process';
-import { homedir } from 'node:os';
+import os, { homedir } from 'node:os';
 import { promisify } from 'node:util';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 
 const run = promisify(execFile);
@@ -370,6 +370,29 @@ export function словами_сдвиг(сек){
   return (сек > 0 ? 'спешат на ' : 'отстают на ') + сколько;
 }
 
+/* ---------- GlowerOS прямо с GitHub ----------
+   Репозиторий apt (raw.githubusercontent.com) доступен не из любой сети, а
+   apt на сломанном IPv6 может висеть минутами. Тот же пакет лежит в каждом
+   выпуске на GitHub — его система и берёт сама, как человек скачал бы его
+   руками: смотрит последний выпуск, качает glower_*.deb и ставит через apt
+   (зависимости apt докачает из Ubuntu). Доверие то же, что у репозитория:
+   он [trusted=yes], а здесь — HTTPS самого GitHub */
+export const ВЫПУСКИ = 'https://api.github.com/repos/F11htq/Glower/releases?per_page=15';
+
+export function последний_выпуск(релизы, архитектура = 'amd64'){
+  let лучший = null;
+  for (const р of Array.isArray(релизы) ? релизы : []){
+    if (!р || р.draft || р.prerelease) continue;
+    const версия = String(р.tag_name || '').replace(/^v/, '');
+    if (!/^[0-9][\w.+~-]{0,30}$/.test(версия)) continue;
+    const файл = (р.assets || []).find(а => а && а.name === `glower_${версия}_${архитектура}.deb`);
+    if (!файл || !/^https:\/\/github\.com\//.test(файл.browser_download_url || '')) continue;
+    if (!лучший || сравниВерсии(версия, лучший.версия) > 0)
+      лучший = { версия, url:файл.browser_download_url, размер:Number(файл.size) || 0 };
+  }
+  return лучший;
+}
+
 const ЕДИНИЦЫ = { bytes:1, b:1, kb:1e3, mb:1e6, gb:1e9 };
 export function ходFlatpak(вывод){
   const т = String(вывод).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
@@ -420,6 +443,7 @@ export function packages(allowPackages){
      поставил оттуда. Список flatpak берёт из интернета; ответ помним полчаса,
      а одновременные вопросы ждут один и тот же. */
   let версииПомню = null;
+  let выпускПомню = null;  // последний выпуск GlowerOS на GitHub — на 20 минут
   let сбоиСети = [];      // какие источники apt не ответили в последний раз   // versions.json сборки — на час
   let flathubПомню = null, flathubИдёт = null;
   const обновленияFlathub = async (заново = false) => {
@@ -770,6 +794,87 @@ export function packages(allowPackages){
   /* свой — программа стоит у человека, а не в системе: тогда flatpak
      зовём от его имени, без sudo. Через sudo он смотрел бы в дом root и
      честно отвечал бы, что такой программы нет. */
+  /* Последний выпуск GlowerOS на GitHub — через API, а нет его — по
+     переадресации страницы «последний выпуск» */
+  async function выпускGitHub(){
+    if (выпускПомню && Date.now() - выпускПомню.когда < 20 * 60000) return выпускПомню.выпуск;
+    let архитектура = 'amd64';
+    try { архитектура = (await run('dpkg', ['--print-architecture'])).stdout.trim() || 'amd64'; } catch(e){}
+    let выпуск = null;
+    try {
+      const о = await fetch(ВЫПУСКИ, { headers:{ 'User-Agent':'GlowerOS', 'Accept':'application/vnd.github+json' }, signal:AbortSignal.timeout(15000) });
+      if (о.ok) выпуск = последний_выпуск(await о.json(), архитектура);
+    } catch(e){}
+    if (!выпуск){
+      try {
+        const о = await fetch('https://github.com/F11htq/Glower/releases/latest', { redirect:'manual', signal:AbortSignal.timeout(15000) });
+        const версия = ((о.headers.get('location') || '').match(/\/tag\/v?([0-9][\w.+~-]{0,30})$/) || [])[1];
+        if (версия) выпуск = { версия, url:`https://github.com/F11htq/Glower/releases/download/v${версия}/glower_${версия}_${архитектура}.deb`, размер:0 };
+      } catch(e){}
+    }
+    if (выпуск) выпускПомню = { когда:Date.now(), выпуск };
+    return выпуск;
+  }
+
+  /* Новее ли выпуск на GitHub того, что стоит, и того, что даст apt.
+     Закреплённую версию не трогаем — человек выбрал её сам */
+  async function прямоНадо(){
+    const env = { ...process.env, LC_ALL:'C' };
+    let стоит = null, кандидат = null, закреплена = false;
+    try {
+      const { stdout } = await run('apt-cache', ['policy', 'glower'], { timeout:15000, env });
+      стоит = (stdout.match(/Installed:\s*(\S+)/) || [])[1] || null;
+      кандидат = (stdout.match(/Candidate:\s*(\S+)/) || [])[1] || null;
+    } catch(e){}
+    if (!стоит || стоит === '(none)') return null;
+    try { закреплена = /^glower$/m.test((await run('apt-mark', ['showhold'], { timeout:10000, env })).stdout); } catch(e){}
+    if (закреплена) return null;
+    const выпуск = await выпускGitHub();
+    if (!выпуск || сравниВерсии(выпуск.версия, стоит) <= 0) return null;
+    if (кандидат && кандидат !== '(none)' && сравниВерсии(кандидат, выпуск.версия) >= 0) return null;
+    return { ...выпуск, стоит };
+  }
+
+  /* Скачать пакет выпуска с ходом и поставить его через apt; дальше — что
+     шло следом в общей работе (дальше === null — закончить самим) */
+  async function ставьПрямо(выпуск, дальше){
+    job = { name:'GlowerOS ' + выпуск.версия, action:'install', percent:2, step:'Скачиваю GlowerOS ' + выпуск.версия,
+            done:false, ok:false, error:null, log:'', слышно:Date.now(), pid:null };
+    const это = job;
+    const папка = join(os.tmpdir(), 'glower-update');
+    const путь = join(папка, `glower_${выпуск.версия}.deb`);
+    try {
+      await mkdir(папка, { recursive:true });
+      const о = await fetch(выпуск.url, { signal:AbortSignal.timeout(15 * 60000) });
+      if (!о.ok) throw new Error('GitHub ответил ' + о.status);
+      const всего = Number(о.headers.get('content-length')) || выпуск.размер || 0;
+      const { createWriteStream } = await import('node:fs');
+      const выход = createWriteStream(путь + '.part');
+      let скачано = 0;
+      for await (const кусок of о.body){
+        скачано += кусок.length;
+        if (!выход.write(кусок)) await new Promise(r => выход.once('drain', r));
+        это.слышно = Date.now();
+        if (всего) это.percent = Math.min(49, 2 + Math.round(47 * скачано / всего));
+        это.step = 'Скачиваю GlowerOS ' + выпуск.версия + ' · ' + Math.round(скачано / 1048576) + (всего ? ' из ' + Math.round(всего / 1048576) : '') + ' МБ';
+      }
+      await new Promise((r, б) => выход.end(е => е ? б(е) : r()));
+      if (всего && скачано !== всего) throw new Error('скачалось не всё');
+      const { rename } = await import('node:fs/promises');
+      await rename(путь + '.part', путь);
+    } catch(e){
+      Object.assign(это, { done:true, ok:false, error:'GlowerOS ' + выпуск.версия + ' не скачалась: ' + e.message });
+      return;
+    }
+    запусти('install', 'GlowerOS ' + выпуск.версия, ['install', '-y', '--no-install-recommends', путь]);
+    job.потом = async () => {
+      await rm(путь, { force:true }).catch(() => {});
+      if (дальше) return дальше();
+      job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null;
+      job.заметка = 'Перезагрузите компьютер — GlowerOS ' + выпуск.версия + ' заработает целиком после перезагрузки';
+    };
+  }
+
   const запустиFlatpak = (action, name, args, свой = false, повтор = false) => {
     flathubПомню = null;   // поставили, убрали или обновили — прежний список устарел
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
@@ -1512,7 +1617,11 @@ export function packages(allowPackages){
         const { stdout } = await run('apt-cache', ['policy', 'glower'], { timeout:15000, env:{ ...process.env, LC_ALL:'C' } });
         glower = { стоит:(stdout.match(/Installed:\s*(\S+)/) || [])[1] || null, есть:(stdout.match(/Candidate:\s*(\S+)/) || [])[1] || null };
       } catch(e){}
-      return { list, всего:list.length, когда, 'удержано':удержано, можно:!!allowPackages, недоступны:сбоиСети, glower };
+      // Новая GlowerOS есть на GitHub, а apt её не видит (репозиторий не
+      // ответил) — она всё равно в списке: обновление возьмёт её прямо оттуда
+      const прямо = await прямоНадо().catch(() => null);
+      if (прямо && !list.some(х => х.name === 'glower')) list.push({ name:'glower', было:прямо.стоит, станет:прямо.версия, прямо:true });
+      return { list, всего:list.length, когда, 'удержано':удержано, можно:!!allowPackages, недоступны:сбоиСети, glower, прямо };
     },
 
     /* Поставить обновления — тем же способом, что и установку программ. */
@@ -1545,7 +1654,13 @@ export function packages(allowPackages){
       const нуженWine = !толькоОбновления && !(await естьWine()).полный;
       const пуск = запусти('upgrade', 'система', ['upgrade', '-y', '--with-new-pkgs', '--no-install-recommends']);
       const конец = () => { job.done = true; job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null; };
-      job.потом = () => убериСтарыйДвижок(нуженWine ? () => доставьWine(true) : конец);
+      // После обновлений Ubuntu — GlowerOS прямо с GitHub, если apt её не дал
+      const следом = нуженWine ? () => доставьWine(true) : конец;
+      job.потом = () => убериСтарыйДвижок(async () => {
+        const прямо = await прямоНадо().catch(() => null);
+        if (прямо) return ставьПрямо(прямо, следом);
+        return следом();
+      });
       return пуск;
     },
 
@@ -1680,6 +1795,16 @@ export function packages(allowPackages){
       нужноРазрешение();
       await run('sudo', ['-n', 'apt-mark', держать ? 'hold' : 'unhold', 'glower'], { env:{ ...process.env, LC_ALL:'C' } });
       return { закреплена:!!держать };
+    },
+
+    /* Поставить новую GlowerOS прямо с GitHub — одной работой */
+    async 'sys.glower.update'(){
+      нужноРазрешение();
+      if (job && !job.done) throw new Error('уже идёт другая работа');
+      const прямо = await прямоНадо();
+      if (!прямо) return { ok:true, нечего:true };
+      ставьПрямо(прямо, null);
+      return { started:true, версия:прямо.версия };
     },
 
     async 'pkg.windows'(){

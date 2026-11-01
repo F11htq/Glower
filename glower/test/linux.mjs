@@ -1071,13 +1071,15 @@ try {
           const сеанс3 = await readFile(join(root, 'linux', 'glower-session'), 'utf8');
           const вход3 = await readFile(join(root, 'linux', 'glower-greeter'), 'utf8');
           const заставка = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
-          const плим = await readFile(join(root, 'linux', 'greetd-plymouth.conf'), 'utf8');
+          const плим = await readFile(join(root, 'linux', 'plymouth-retain.conf'), 'utf8');
           const стол3 = await readFile(join(root, 'panel', 'src', 'desktop.rs'), 'utf8');
           check('Загрузка как в Windows: заставка держится до экрана входа, после входа — «Добро пожаловать» с точками до самого стола',
-            /Conflicts=plymouth-quit\.service/.test(плим) && /plymouth quit --retain-splash/.test(плим)
+            // Порядок загрузки не трогаем: greetd ждёт plymouth-quit-wait, и
+            // запрет plymouth-quit вешал загрузку на логотипе
+            !/Conflicts=/.test(плим) && /^ExecStart=$/m.test(плим) && /plymouth quit --retain-splash/.test(плим)
             && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
             && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
-            && /greetd\.service\.d\/glower-plymouth\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
+            && /plymouth-quit\.service\.d\/glower-retain\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
         {
           // Flathub не ответил — это не «такой программы нет»
@@ -1089,6 +1091,19 @@ try {
             есть.версия === '142.0' && есть.title === 'Chromium' && нет.нет === true
             && /Nothing matches\|not found/.test(тек5) && /'flathubНеОтвечает':true/.test(тек5)
             && пк5.СЕТЬ_APT.includes('DPkg::Lock::Timeout=120'));
+        }
+        {
+          // GlowerOS прямо с GitHub, когда apt до репозитория не достучался
+          const пк6 = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const тек6 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          const в = пк6.последний_выпуск([
+            { tag_name:'v11.9', assets:[{ name:'glower_11.9_amd64.deb', browser_download_url:'https://github.com/F11htq/Glower/releases/download/v11.9/glower_11.9_amd64.deb' }] },
+            { tag_name:'v11.80', assets:[{ name:'glower_11.80_amd64.deb', browser_download_url:'https://github.com/F11htq/Glower/releases/download/v11.80/glower_11.80_amd64.deb', size:8e6 }] },
+            { tag_name:'v11.99', draft:true, assets:[{ name:'glower_11.99_amd64.deb', browser_download_url:'https://github.com/x' }] },
+            { tag_name:'v11.98', assets:[{ name:'glower.iso', browser_download_url:'https://github.com/x' }] }]);
+          check('Обновление GlowerOS: последний выпуск с GitHub — когда apt не видит репозиторий, пакет берётся прямо оттуда',
+            в && в.версия === '11.80' && /releases\/download\/v11\.80\//.test(в.url)
+            && /if \(прямо\) return ставьПрямо\(прямо, следом\)/.test(тек6) && /'sys\.glower\.update'/.test(тек6) && /showhold/.test(тек6));
         }
         {
           // Ключ Glower
