@@ -149,15 +149,38 @@ export async function носители(){
 /* Подключить, если ещё не подключён. Пробуем один раз на носитель — замок
    спрашивает каждую секунду, и монтировать по кругу незачем */
 const пробовали = new Set();
+/* Путь из ответа udisksctl: «Mounted /dev/sdc1 at /media/glower/NEW VOLUME»
+   (в метке бывают пробелы) или «…is already mounted at `/media/…'» */
+export function путь_udisks(текст){
+  const т = String(текст);
+  const уже = т.match(/already mounted at [`'‘"]([^'’"`]+)[`'’"]/);
+  if (уже) return уже[1];
+  const м = т.match(/\bat (\/.+?)\.?\s*$/m);
+  return м ? м[1] : '';
+}
+
+/* lsblk пишет пробел в пути как \x20 */
+const без_экранов = п => String(п || '').replace(/\\x([0-9a-f]{2})/gi, (_, к) => String.fromCharCode(parseInt(к, 16)));
+
 export async function подключи(н, заново = false){
-  if (н.где) return н.где;
+  // Точка из lsblk бывает устаревшей: флешку вынули без извлечения и
+  // вставили снова — запись осталась, а папки уже нет. Верим только
+  // существующей папке
+  const где = без_экранов(н.где);
+  if (где && existsSync(где)) return где;
   const метка = н.dev + ':' + н.размер;
-  if (!заново && пробовали.has(метка)) return '';
+  if (!заново && !где && пробовали.has(метка)) return '';
   пробовали.add(метка);
-  try {
-    const { stdout } = await run('udisksctl', ['mount', '-b', н.dev, '--no-user-interaction'], { timeout:15000 });
-    return ((String(stdout).match(/at (\S+)/) || [])[1] || '').replace(/\.$/, '');
-  } catch(e){ return ''; }
+  const udisks = async что => {
+    try { return путь_udisks((await run('udisksctl', [что, '-b', н.dev, '--no-user-interaction'], { timeout:15000 })).stdout); }
+    catch(e){ return что === 'mount' ? путь_udisks(String(e.stderr || '') + String(e.stdout || '')) : ''; }
+  };
+  let путь = await udisks('mount');
+  if (путь && existsSync(путь)) return путь;
+  // Подключена «по записям», а папки нет — переподключаем
+  await udisks('unmount');
+  путь = await udisks('mount');
+  return путь && existsSync(путь) ? путь : '';
 }
 
 export async function ключ_на(где){

@@ -1059,6 +1059,14 @@ try {
             && /запустиFlatpak\(action, name, args, свой, true\)/.test(текст2));
         }
         {
+          const к4 = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
+          check('Флешка: путь из udisks — целиком, с пробелами и при «уже подключена»; устаревшая точка из lsblk не используется',
+            к4.путь_udisks('Mounted /dev/sdc1 at /media/glower/NEW VOLUME') === '/media/glower/NEW VOLUME'
+            && к4.путь_udisks('Mounted /dev/sdc1 at /media/glower/7815-1D21.') === '/media/glower/7815-1D21'
+            && к4.путь_udisks("Error: Device /dev/sdc1 is already mounted at `/media/glower/My Key'.") === '/media/glower/My Key'
+            && /existsSync\(где\)/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

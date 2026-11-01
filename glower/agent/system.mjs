@@ -1567,7 +1567,7 @@ export function apps(allowLaunch){
         if (!где){
           const ответ = await call('udisksctl', ['mount', '-b', dev, '--no-user-interaction'])
             .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
-          где = ((String(ответ).match(/at (\S+)/) || [])[1] || '').replace(/\.$/, '');
+          где = (await import('./key.mjs')).путь_udisks(ответ);
         }
         if (!где) throw new Error('носитель подключён, но система не сказала, куда');
         if (!await has('xdg-open')) throw new Error('на машине нет xdg-open — открывать нечем');
@@ -1579,8 +1579,8 @@ export function apps(allowLaunch){
 
       const ответ = await call('udisksctl', [что, '-b', dev, '--no-user-interaction'])
         .catch(e => { throw new Error(String(e.stderr || e.message).trim().split('\n')[0]); });
-      const где = (String(ответ).match(/at (\S+)/) || [])[1] || '';
-      return { ok:true, action:что, dev, где:где.replace(/\.$/, '') };
+      const где = (await import('./key.mjs')).путь_udisks(ответ);
+      return { ok:true, action:что, dev, где };
     },
 
     /* ---------- Bluetooth ----------
