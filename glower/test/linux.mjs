@@ -1050,6 +1050,15 @@ try {
             && /Не ответили: /.test(стр) && /etc\/apt\/apt\.conf\.d\/80glower-net/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
         {
+          // Flathub с подменённым сертификатом: сперва часы, потом рабочее зеркало и повтор
+          const пк2 = await import(pathToFileURL(join(root, 'agent', 'packages.mjs')).href);
+          const текст2 = await readFile(join(root, 'agent', 'packages.mjs'), 'utf8');
+          check('Flathub «не тот сертификат»: часы сверяются с сетью, при подмене — рабочее зеркало и повтор установки',
+            пк2.ОШИБКА_СЕРТИФИКАТА.test('[60] SSL peer certificate or SSH remote key was not OK') && пк2.словами_сдвиг(-25200) === 'отстают на 7 ч'
+            && пк2.ЗЕРКАЛА_FLATHUB[0] === 'https://dl.flathub.org/repo/' && /remote-modify', '--system', '--url=' \+ зеркало/.test(текст2)
+            && /запустиFlatpak\(action, name, args, свой, true\)/.test(текст2));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

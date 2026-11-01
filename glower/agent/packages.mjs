@@ -307,6 +307,44 @@ export function недоступные_источники(лог){
   return [...хосты];
 }
 
+/* Сколько секунд часы компьютера впереди сети (минус — отстают). Берём
+   заголовок Date простого http-ответа: ему, в отличие от https, сбитые
+   часы не помеха. null — сеть не ответила */
+export async function сдвиг_часов(){
+  for (const адрес of ['http://archive.ubuntu.com/ubuntu/', 'http://connectivitycheck.gstatic.com/generate_204', 'http://ya.ru/']){
+    try {
+      const о = await fetch(адрес, { method:'HEAD', redirect:'manual', signal:AbortSignal.timeout(8000) });
+      const д = Date.parse(о.headers.get('date') || '');
+      if (д) return Math.round((Date.now() - д) / 1000);
+    } catch(e){}
+  }
+  return null;
+}
+
+/* Flathub и его зеркала. Подлинность пакетов flatpak проверяет подписью
+   Flathub, а не адресом, — поэтому зеркалу можно доверять так же, как
+   основному адресу. Какое отвечает с настоящим сертификатом — проверяем
+   на месте, ничего не берём на веру */
+export const ЗЕРКАЛА_FLATHUB = ['https://dl.flathub.org/repo/', 'https://mirror.sjtu.edu.cn/flathub/', 'https://mirrors.ustc.edu.cn/flathub/'];
+async function рабочее_зеркало(кроме){
+  for (const з of ЗЕРКАЛА_FLATHUB){
+    if (з === кроме) continue;
+    try {
+      const о = await fetch(з + 'summary.idx', { method:'HEAD', signal:AbortSignal.timeout(12000) });
+      if (о.ok) return з;
+    } catch(e){}
+  }
+  return null;
+}
+
+export const ОШИБКА_СЕРТИФИКАТА = /SSL peer certificate|certificate verify failed|server certificate|SSL certificate problem|unable to get local issuer/i;
+
+export function словами_сдвиг(сек){
+  const а = Math.abs(сек);
+  const сколько = а >= 86400 ? Math.round(а / 86400) + ' дн.' : а >= 3600 ? Math.round(а / 3600) + ' ч' : Math.round(а / 60) + ' мин';
+  return (сек > 0 ? 'спешат на ' : 'отстают на ') + сколько;
+}
+
 const ЕДИНИЦЫ = { bytes:1, b:1, kb:1e3, mb:1e6, gb:1e9 };
 export function ходFlatpak(вывод){
   const т = String(вывод).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
@@ -707,7 +745,7 @@ export function packages(allowPackages){
   /* свой — программа стоит у человека, а не в системе: тогда flatpak
      зовём от его имени, без sudo. Через sudo он смотрел бы в дом root и
      честно отвечал бы, что такой программы нет. */
-  const запустиFlatpak = (action, name, args, свой = false) => {
+  const запустиFlatpak = (action, name, args, свой = false, повтор = false) => {
     flathubПомню = null;   // поставили, убрали или обновили — прежний список устарел
     job = { name, action, source:'flatpak', percent:2, step:'Начинаю', done:false, ok:false,
             error:null, log:'', начало:'', слышно:Date.now(), pid:null };
@@ -750,7 +788,33 @@ export function packages(allowPackages){
     };
     p.stdout.on('data', принять);
     p.stderr.on('data', d => { принять(d); const t = String(d).trim(); if (t) job.error = t.split('\n').pop(); });
-    p.on('exit', code => {
+    p.on('exit', async code => {
+      /* Сертификат Flathub «не тот»: либо часы сбиты, либо соединение
+         подменено по дороге (так у многих провайдеров выглядит блокировка).
+         Разбираемся сами и, если есть рабочее зеркало, повторяем через него */
+      if (code !== 0 && !повтор && ОШИБКА_СЕРТИФИКАТА.test(job.log)){
+        const это = job;
+        это.step = 'Flathub не подтвердил подлинность — выясняю почему';
+        это.слышно = Date.now();
+        const сдвиг = await сдвиг_часов();
+        if (сдвиг !== null && Math.abs(сдвиг) > 300){
+          Object.assign(это, { done:true, ok:false, error:'Часы компьютера ' + словами_сдвиг(сдвиг) + ' — из-за этого настоящие сайты кажутся поддельными. Поставьте верное время (Параметры → Время и язык) и повторите' });
+          return;
+        }
+        let сейчас = null;
+        try { сейчас = ((await flatpak(['remotes', '--system', '--columns=name,url'], 15000)).split('\n').find(с => /^flathub\s/.test(с)) || '').split(/\s+/)[1] || null; } catch(e){}
+        const зеркало = await рабочее_зеркало(сейчас);
+        if (зеркало){
+          try {
+            await run('sudo', ['-n', 'flatpak', 'remote-modify', '--system', '--url=' + зеркало, 'flathub'], { timeout:30000 });
+            запустиFlatpak(action, name, args, свой, true);
+            job.заметка = 'Flathub напрямую недоступен — работаю через ' + new URL(зеркало).host;
+            return;
+          } catch(e){}
+        }
+        Object.assign(это, { done:true, ok:false, error:'Flathub не подтвердил подлинность: похоже, соединение с ним подменяется по дороге — так выглядит блокировка у провайдера. Зеркала Flathub тоже не ответили. Помогает другое подключение или VPN' });
+        return;
+      }
       job.done = true;
       if (code === 0){ job.percent = 100; job.step = 'Готово'; job.ok = true; job.error = null; }
       else if (!job.error){
