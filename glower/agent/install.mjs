@@ -125,6 +125,13 @@ export function install(allowInstall){
       if (crypt) args.push('--crypt');
       if (crypt && cryptPassword) args.push('--crypt-pass', String(cryptPassword));
       if (hostname) args.push('--hostname', String(hostname).replace(/[^\w.-]/g, '') || 'GlowerOS');
+      /* Пояса в настройках нет — определяем сами (по городу погоды, по
+         адресу в сети). Без пояса система рядом с Windows живёт на
+         несколько часов не в том времени: сертификаты «недействительны» */
+      if (!tz){
+        const часы = await import('./clock.mjs');
+        tz = await часы.определи_пояс(await часы.город_погоды()).catch(() => null);
+      }
       if (tz) args.push('--tz', String(tz).replace(/[^\w/+-]/g, ''));
 
       job = { disk, percent:0, step:'Начинаю', done:false, error:null, log:'' };

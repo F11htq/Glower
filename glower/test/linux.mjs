@@ -1120,6 +1120,27 @@ try {
             && (тек7.match(/libnvidia-gl-/g) || []).length >= 3);
         }
         {
+          // Часы: рядом с Windows без пояса система живёт на 7 часов в будущем
+          const ч = await import(pathToFileURL(join(root, 'agent', 'clock.mjs')).href);
+          const с = ч.разбери_timedatectl('Timezone=Etc/UTC\nLocalRTC=yes\nCanNTP=no\nNTP=no\nNTPSynchronized=no\n');
+          check('часы: разбирает timedatectl show', с.пояс === 'Etc/UTC' && с.местные && !с.служба && !с.ntp);
+          check('часы: пояс проверяется по базе поясов, мусор не проходит',
+            ч.годный_пояс('Asia/Krasnoyarsk') && !ч.годный_пояс('../../etc/passwd') && !ч.годный_пояс('Asia/Krasnoyarsk; rm'));
+          const ответ = тело => ({ ok:true, json:async () => тело, text:async () => String(тело) });
+          const адреса = [];
+          const достань = async а => { адреса.push(а); return а.includes('open-meteo') ? ответ({ results:[{ timezone:'Asia/Krasnoyarsk' }] }) : ответ('Europe/Moscow'); };
+          check('часы: пояс — по городу погоды', await ч.определи_пояс('Красноярск', достань) === 'Asia/Krasnoyarsk');
+          check('часы: города нет — по адресу в сети', await ч.определи_пояс('', достань) === 'Europe/Moscow');
+          const плохо = async а => а.includes('ip-api') ? ответ('<html>') : ответ('Asia/Tokyo');
+          check('часы: негодный ответ — следующий источник', await ч.определи_пояс('', плохо) === 'Asia/Tokyo');
+          const уст = await readFile(join(root, 'agent', 'install.mjs'), 'utf8');
+          check('установщик сам определяет пояс, если в настройках пусто', /определи_пояс/.test(уст));
+          check('в системе есть служба сверки времени',
+            /systemd-timesyncd/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8'))
+            && /wireless-regdb systemd-timesyncd/.test(await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8')));
+          check('агент чинит часы при запуске', /clock\.mjs/.test(await readFile(join(root, 'agent', 'server.mjs'), 'utf8')));
+        }
+        {
           // Ключ Glower
           const ключ = await import(pathToFileURL(join(root, 'agent', 'key.mjs')).href);
           const замок = await readFile(join(root, 'panel', 'src', 'lock.rs'), 'utf8');

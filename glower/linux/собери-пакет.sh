@@ -120,7 +120,7 @@ Priority: optional
 Architecture: $ARCH
 Maintainer: GlowerOS <noreply@glower.local>
 Installed-Size: $SIZE
-Depends: python3, nodejs, labwc$DEPS_EXTRA
+Depends: python3, nodejs, labwc, systemd-timesyncd | time-daemon$DEPS_EXTRA
 Description: GlowerOS — оболочка, агент и сценарии системы
  Всё, что делает из Ubuntu систему GlowerOS: рабочий стол и панель,
  агент, экран входа, установщик, приёмник лотка и вспомогательные
