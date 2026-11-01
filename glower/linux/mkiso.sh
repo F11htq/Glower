@@ -324,7 +324,7 @@ timeout 2400 apt-get install -y --no-install-recommends -o Dpkg::Progress-Fancy=
   flatpak bubblewrap apparmor \
   grub-pc-bin grub-efi-amd64-bin grub2-common efibootmgr \
   network-manager iproute2 alsa-utils pipewire wireplumber pipewire-pulse \
-  wpasupplicant iw rfkill wireless-regdb systemd-timesyncd \
+  wpasupplicant iw rfkill wireless-regdb systemd-timesyncd iputils-ping \
   polkitd mate-polkit dbus dbus-daemon \
   brightnessctl xdg-utils libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
   libcups2t64 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
