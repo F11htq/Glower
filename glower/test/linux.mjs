@@ -1040,6 +1040,15 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // Игры X11 растягивают окно на весь экран сами — раньше размер
+          // выполнялся, а место нет, и окно уезжало вправо-вниз за край
+          const ху = await readFile(join(root, 'wm', 'src', 'xwayland.rs'), 'utf8');
+          const запрос = ху.slice(ху.indexOf('fn configure_request'), ху.indexOf('fn configure_notify'));
+          check('glower-wm: окно размером с экран — во весь экран, вылезшее за край — обратно на экран',
+            /во_весь_экран\(&окно, true\)/.test(запрос) && /space\.map_element\(окно\.clone\(\), место, false\)/.test(запрос)
+            && /is_fullscreen\(\)/.test(ху));
+        }
+        {
           // Видеокарта для программ: без «основного устройства» в dmabuf Mesa и
           // Xwayland рисуют процессором (Minecraft — 8 кадров вместо 200)
           const уд = await readFile(join(root, 'wm', 'src', 'udev.rs'), 'utf8');

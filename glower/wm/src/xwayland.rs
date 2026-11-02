@@ -189,6 +189,12 @@ impl XwmHandler for Glower {
         self.анимации.появилось(&окно);
         self.foreign_toplevel_state.новое(&self.display_handle, &окно);
         self.дай_фокус(Some(&окно));
+        // Просится во весь экран с самого начала или размером с экран — во весь экран
+        let экран = self.главный_экран().and_then(|э| self.space.output_geometry(&э));
+        let x = окно.x11_surface().cloned();
+        if x.as_ref().is_some_and(|x| x.is_fullscreen()) || экран.is_some_and(|э| гео.size.w >= э.size.w && гео.size.h >= э.size.h) {
+            self.во_весь_экран(&окно, true);
+        }
     }
 
     fn mapped_override_redirect_window(&mut self, _xwm: XwmId, window: X11Surface) {
@@ -217,8 +223,7 @@ impl XwmHandler for Glower {
 
     fn destroyed_window(&mut self, _xwm: XwmId, _window: X11Surface) {}
 
-    fn configure_request(&mut self, _xwm: XwmId, window: X11Surface, _x: Option<i32>, _y: Option<i32>, w: Option<u32>, h: Option<u32>, _reorder: Option<Reorder>) {
-        // Место окну даёт сервер, а размер — пусть просит какой хочет
+    fn configure_request(&mut self, _xwm: XwmId, window: X11Surface, x: Option<i32>, y: Option<i32>, w: Option<u32>, h: Option<u32>, _reorder: Option<Reorder>) {
         let mut гео = window.geometry();
         if let Some(w) = w {
             гео.size.w = w as i32;
@@ -226,7 +231,72 @@ impl XwmHandler for Glower {
         if let Some(h) = h {
             гео.size.h = h as i32;
         }
+        let Some(окно) = self.окно_x11(&window) else {
+            // Окно ещё не показано — просьбу выполняем как есть, место
+            // всё равно назначим при показе
+            if let Some(x) = x {
+                гео.loc.x = x;
+            }
+            if let Some(y) = y {
+                гео.loc.y = y;
+            }
+            let _ = window.configure(гео);
+            return;
+        };
+        let экран = self.главный_экран().and_then(|э| self.space.output_geometry(&э));
+        // Во весь экран размер и место держит сервер
+        if self.запись(&окно).is_some_and(|з| з.во_весь_экран) {
+            if let Some(э) = экран {
+                let _ = window.configure(э);
+            }
+            return;
+        }
+        // Игра растянула окно на весь экран сама (так делают CS:GO и многие
+        // другие: сначала маленькое окно, потом размер экрана и место 0,0) —
+        // значит, ей нужен весь экран. Раньше размер выполнялся, а место —
+        // нет, и окно во весь экран уезжало вправо-вниз за край
+        if let Some(э) = экран {
+            if гео.size.w >= э.size.w && гео.size.h >= э.size.h {
+                self.во_весь_экран(&окно, true);
+                return;
+            }
+        }
+        let было = self.space.element_location(&окно).unwrap_or(гео.loc);
+        let mut место = было;
+        // Окну без нашей рамки (игры, заставки) место, о котором оно
+        // просит, и даём; обычные окна ставит сервер
+        if !с_рамкой(&window) {
+            if let Some(x) = x {
+                место.x = x;
+            }
+            if let Some(y) = y {
+                место.y = y;
+            }
+        }
+        // Окно выросло и вылезло за край — ставим так, чтобы было видно целиком
+        if let Some(э) = self.главный_экран() {
+            let о = self.рабочая_область(&э);
+            let верх = if с_рамкой(&window) { ЗАГОЛОВОК } else { 0 };
+            if место.x + гео.size.w > о.loc.x + о.size.w || место.y + гео.size.h > о.loc.y + о.size.h || место.x < о.loc.x || место.y < о.loc.y + верх {
+                место = if с_рамкой(&window) {
+                    self.место_для_x11(гео.size)
+                } else {
+                    Point::from((
+                        место.x.min(о.loc.x + о.size.w - гео.size.w).max(о.loc.x),
+                        место.y.min(о.loc.y + о.size.h - гео.size.h).max(о.loc.y),
+                    ))
+                };
+            }
+        }
+        гео.loc = место;
         let _ = window.configure(гео);
+        if место != было {
+            self.space.map_element(окно.clone(), место, false);
+            if let Some(з) = self.запись_мут(&окно) {
+                з.место = место;
+            }
+        }
+        self.нужен_кадр = true;
     }
 
     fn configure_notify(&mut self, _xwm: XwmId, window: X11Surface, geometry: Rectangle<i32, Logical>, _above: Option<u32>) {
