@@ -624,9 +624,9 @@ install -d "$ROOTFS/usr/share/plymouth/themes/glower"
 install -m 644 "$SRC/linux/plymouth/glower.plymouth" "$ROOTFS/usr/share/plymouth/themes/glower/"
 install -m 644 "$SRC/linux/plymouth/glower.script"   "$ROOTFS/usr/share/plymouth/themes/glower/"
 # Все картинки темы разом: добавленная картинка не должна теряться оттого,
-# что её забыли вписать сюда руками. Сейчас их нет вовсе — заставка
-# неподвижна, ей хватает логотипа, — и пустой шаблон пропускаем: иначе
-# install получил бы саму строку «*.png» и остановил сборку.
+# что её забыли вписать сюда руками (кадры кометы spin-*.png). Пустой
+# шаблон пропускаем: иначе install получил бы саму строку «*.png» и
+# остановил сборку.
 for img in "$SRC"/linux/plymouth/*.png; do
   [ -e "$img" ] || continue
   install -m 644 "$img" "$ROOTFS/usr/share/plymouth/themes/glower/"

@@ -1,11 +1,16 @@
-# Заставка загрузки GlowerOS — неподвижная.
+# Заставка загрузки GlowerOS: логотип и комета на орбите.
 #
-# Прежде здесь крутился вихрь, вокруг ходил рой частиц, дышало свечение и
-# бежал блик по полосе хода. Человек попросил убрать анимации при включении
-# и выключении: осталось одно приветствие после первой настройки. Теперь
-# здесь логотип на тёмном фоне, а при выключении и перезагрузке — ещё и
-# слово о том, что происходит. Ничего не движется, и каждый кадр ничего не
-# пересчитывает — машине в эту секунду и без нас есть чем заняться.
+# Комета — та же, что в знаке системы: светлая голова с тёплым ореолом
+# бежит по едва видному кольцу, хвост тает из тёплого белого в голубой.
+# Сверху она разгоняется, снизу притормаживает, и хвост то вытягивается,
+# то подбирается.
+#
+# Каждый кадр нарисован заранее (spin-0.png … spin-99.png, их рисует
+# glower-splash --кадры той же функцией, что и заставку после входа):
+# Plymouth перерисовывает экран 50 раз в секунду, и на каждый его кадр —
+# свой рисунок. Раньше точки двигались по экрану сами и вставали только на
+# целые пиксели — отсюда и подёргивание. Теперь картинка стоит на месте, а
+# меняется только её содержимое, сглаженное при рисовании.
 #
 # Язык заставки понимает только латинские имена — поясняем по-русски.
 
@@ -37,60 +42,48 @@ word.SetX(cx - word_img.GetWidth() / 2);
 word_y = cy + size / 2 + size * 0.22;
 word.SetY(word_y);
 word.SetZ(20);
-# Пять точек по кругу, как в Windows. Та же разметка и та же формула, что
-# у заставки после входа (panel/src/splash.rs): от включения до стола экран
-# не меняется, только бегут точки
-ring_r = Math.Int(size * 0.15);
-if (ring_r < 14) ring_r = 14;
-ring_y = word_y + word_img.GetHeight() + size * 0.42 + ring_r;
-dot_r = ring_r * 0.12;
-if (dot_r < 2.5) dot_r = 2.5;
-dot_d = Math.Int(dot_r * 2 + 0.5);
-dot_src = Image("dot.png");
-i = 0;
-while (i < 5){
-  dots[i] = Sprite();
-  if (dot_src) dots[i].SetImage(dot_src.Scale(dot_d, dot_d));
-  dots[i].SetOpacity(0);
-  dots[i].SetZ(30);
-  i = i + 1;
+# Комета: та же разметка, что у заставки после входа (panel/src/splash.rs)
+spin_r = Math.Int(size * 0.17);
+if (spin_r < 16) spin_r = 16;
+ring_y = word_y + word_img.GetHeight() + size * 0.42 + spin_r;
+# Кадры нарисованы на холсте 208 точек с орбитой радиуса 72
+spin_d = Math.Int(208 * spin_r / 72 + 0.5);
+# Кадров нет (тему собрали без них) — комету не показываем
+spin_n = 0;
+spin_more = 1;
+while (spin_more && spin_n < 100){
+  src = Image("spin-" + spin_n + ".png");
+  if (src){
+    frames[spin_n] = src.Scale(spin_d, spin_d);
+    spin_n = spin_n + 1;
+  } else {
+    spin_more = 0;
+  }
 }
-spin_t = 0;
+spin = Sprite();
+spin.SetX(Math.Int(cx - spin_d / 2));
+spin.SetY(Math.Int(ring_y - spin_d / 2));
+spin.SetZ(30);
+spin.SetOpacity(0);
+spin_k = 0;
 spin_on = 1;
 
-fun dot_angle(t, i){
-  p = (t - i * 0.11) / 2.4;
-  p = p - Math.Int(p);
-  if (p < 0) p = p + 1;
-  if (p > 0.88) return -1000;
-  q = p / 0.88;
-  path = q - Math.Sin(2 * Math.Pi * q) / (2 * Math.Pi) * 0.75;
-  return Math.Pi / 2 + path * 2 * Math.Pi * 1.25;
-}
-
-# Plymouth зовёт это 50 раз в секунду
+# Plymouth зовёт это 50 раз в секунду: один вызов — один кадр
 fun refresh_callback(){
-  global.spin_t = global.spin_t + 1 / 50;
-  # Первые полсекунды точки проявляются
-  fade = global.spin_t / 0.5;
+  if (global.spin_n == 0) return;
+  global.spin_k = global.spin_k + 1;
+  f = global.spin_k - Math.Int(global.spin_k / global.spin_n) * global.spin_n;
+  global.spin.SetImage(global.frames[f]);
+  # Первые полсекунды комета проявляется
+  fade = global.spin_k / 25;
   if (fade > 1) fade = 1;
-  local.i = 0;
-  while (local.i < 5){
-    a = dot_angle(global.spin_t, local.i);
-    if (a < -100 || global.spin_on == 0){
-      global.dots[local.i].SetOpacity(0);
-    } else {
-      global.dots[local.i].SetX(cx + ring_r * Math.Cos(a) - dot_d / 2);
-      global.dots[local.i].SetY(ring_y + ring_r * Math.Sin(a) - dot_d / 2);
-      global.dots[local.i].SetOpacity(0.95 * fade);
-    }
-    local.i = local.i + 1;
-  }
+  if (global.spin_on == 0) fade = 0;
+  global.spin.SetOpacity(fade);
 }
 Plymouth.SetRefreshFunction(refresh_callback);
 
-# Надписи («Выключение…», пароль диска) — под точками
-text_y = ring_y + ring_r + size * 0.2;
+# Надписи («Выключение…», пароль диска) — под кометой
+text_y = ring_y + spin_r + size * 0.2;
 
 # Что сейчас: загрузка, выключение или перезагрузка
 mode = Plymouth.GetMode();
@@ -108,7 +101,7 @@ if (mode == "shutdown" || mode == "reboot"){
 #
 # Спрайты заводим заранее и один раз. Каждое нажатие клавиши — это новый
 # вызов сюда, и если создавать спрайт на каждый вызов, старые остаются
-# лежать на экране: подсказка расплывается в кашу, а точки множатся.
+# лежать на экране: подсказка расплывается в кашу, а точки пароля множатся.
 prompt_sprite = Sprite();
 prompt_sprite.SetOpacity(0);
 prompt_sprite.SetZ(40);

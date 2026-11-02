@@ -1107,15 +1107,15 @@ try {
           const заставка = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
           const плим = await readFile(join(root, 'linux', 'plymouth-retain.conf'), 'utf8');
           const стол3 = await readFile(join(root, 'panel', 'src', 'desktop.rs'), 'utf8');
-          check('Загрузка как в Windows: заставка держится до экрана входа, после входа — «Добро пожаловать» с точками до самого стола',
+          check('Загрузка как в Windows: заставка держится до экрана входа, после входа — «Добро пожаловать» с кометой до самого стола',
             // Порядок загрузки не трогаем: greetd ждёт plymouth-quit-wait, и
             // запрет plymouth-quit вешал загрузку на логотипе
             !/Conflicts=/.test(плим) && /^ExecStart=$/m.test(плим) && /plymouth quit --retain-splash/.test(плим)
             && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
             && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
-            // Точки и разметка — одни и те же у Plymouth и у заставки после входа
-            && /i \* 0\.11\) \/ 2\.4/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
-            && /i as f64 \* 0\.11\) \/ 2\.4/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            // Комета и разметка — одни и те же у Plymouth и у заставки после входа
+            && /size \* 0\.17/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            && /знак \* 0\.17/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
             && /pangocairo/.test(заставка) && /add_tick_callback/.test(заставка)
             && /plymouth-quit\.service\.d\/glower-retain\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
@@ -1304,12 +1304,17 @@ try {
       check('заставка: сборка кладёт все картинки темы, а пакет пересобирает initramfs',
         /linux\/plymouth\/\*\.png/.test(образ2) && /\[ -e "\$img" \] \|\| continue/.test(образ2)
           && /activate-noawait update-initramfs/.test(пакет));
-      /* Тяжёлые анимации при включении и выключении человек просил убрать.
-         Потом попросил загрузку «как в Windows» — это логотип и пять бегущих
-         точек, и только они: ни вращения картинок, ни вспышек. */
-      check('заставка загрузки: логотип и пять бегущих точек, как в Windows, — и ничего тяжелее',
-        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /Image\("dot\.png"\)/.test(сцен)
-          && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен));
+      /* Тяжёлые анимации при включении и выключении человек когда-то просил
+         убрать, потом — загрузку «как в Windows», а потом — красивую, но не
+         детскую. Это логотип и комета на орбите: заранее нарисованные кадры,
+         которые Plymouth только сменяет, — без вращения картинок на ходу
+         (оно дорогое и дёргается) и без вспышек. */
+      const кадры = есть.filter(ф => /^spin-\d+\.png$/.test(ф));
+      check('заставка загрузки: логотип и комета — сто готовых кадров, ничего не вращается на ходу',
+        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /Image\("spin-" \+ spin_n \+ "\.png"\)/.test(сцен)
+          && кадры.length === 100 && [...Array(100).keys()].every(i => есть.includes('spin-' + i + '.png'))
+          && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен),
+        'кадров: ' + кадры.length);
     }
 
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет
