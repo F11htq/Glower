@@ -15,7 +15,7 @@ use smithay::{
         drm::{
             compositor::{DrmCompositor, FrameFlags},
             exporter::gbm::GbmFramebufferExporter,
-            DrmDevice, DrmDeviceFd, DrmEvent,
+            DrmDevice, DrmDeviceFd, DrmEvent, DrmNode, NodeType,
         },
         egl::{EGLContext, EGLDisplay},
         input::InputEvent,
@@ -36,7 +36,7 @@ use smithay::{
         rustix::fs::OFlags,
     },
     utils::{DeviceFd, Transform},
-    wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
+    wayland::dmabuf::{DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
 };
 
 use crate::{
@@ -261,9 +261,28 @@ pub fn запусти(цикл: &mut EventLoop<'static, Glower>, с: &mut Glower
     let дисплей = unsafe { EGLDisplay::new(gbm.clone())? };
     let контекст = EGLContext::new(&дисплей)?;
     let mut renderer = unsafe { GlesRenderer::new(контекст)? };
-    // Программы с аппаратным ускорением отдают кадры прямо в видеопамяти
+    // Программы с аппаратным ускорением отдают кадры прямо в видеопамяти.
+    //
+    // Вместе с форматами говорим, на какой видеокарте рисовать (dmabuf v4,
+    // «основное устройство»). Без этого Mesa и Xwayland не находят карту и
+    // молча рисуют процессором: у человека Minecraft шёл 8 кадров в секунду
+    // вместо двухсот в Windows, и так же медленно — всё с OpenGL и Vulkan.
     let mut dmabuf_state = DmabufState::new();
-    let dmabuf_global = dmabuf_state.create_global::<Glower>(&с.display_handle, renderer.dmabuf_formats());
+    let форматы_dmabuf: Vec<_> = renderer.dmabuf_formats().into_iter().collect();
+    let узел = DrmNode::from_file(fd.device_fd())
+        .ok()
+        .map(|у| у.node_with_type(NodeType::Render).and_then(Result::ok).unwrap_or(у));
+    let отзыв = узел.and_then(|у| DmabufFeedbackBuilder::new(у.dev_id(), форматы_dmabuf.clone()).build().ok());
+    let dmabuf_global = match &отзыв {
+        Some(о) => {
+            tracing::info!("видеокарта для программ: {:?}", узел.and_then(|у| у.dev_path()));
+            dmabuf_state.create_global_with_default_feedback::<Glower>(&с.display_handle, о)
+        }
+        None => {
+            tracing::warn!("не узнать узел видеокарты — программы могут рисовать процессором");
+            dmabuf_state.create_global::<Glower>(&с.display_handle, форматы_dmabuf)
+        }
+    };
 
     let размыватель = if std::env::var_os("GLOWER_WM_NO_BLUR").is_some() {
         None

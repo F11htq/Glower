@@ -1040,6 +1040,13 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // Видеокарта для программ: без «основного устройства» в dmabuf Mesa и
+          // Xwayland рисуют процессором (Minecraft — 8 кадров вместо 200)
+          const уд = await readFile(join(root, 'wm', 'src', 'udev.rs'), 'utf8');
+          check('glower-wm сообщает программам, на какой видеокарте рисовать (dmabuf v4)',
+            /create_global_with_default_feedback/.test(уд) && /NodeType::Render/.test(уд) && /DmabufFeedbackBuilder::new/.test(уд));
+        }
+        {
           // Антенны Wi-Fi: rtw89 принимал обеими вчетверо медленнее, чем одной
           const а = await import(pathToFileURL(join(root, 'agent', 'antenna.mjs')).href);
           const р = а.разбери_антенны('\tAvailable Antennas: TX 0x3 RX 0x3\n\tConfigured Antennas: TX 0 RX 0\n');
