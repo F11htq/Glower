@@ -173,6 +173,13 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
             ц.to_physical_precise_round(масштаб)
         };
         let сдвиг: Point<i32, Physical> = вид.сдвиг.to_physical_precise_round(масштаб);
+        // Программа не отвечает — окно бледнеет, как в Windows (цвет — с
+        // уже умноженной прозрачностью: 1,1,1 при 0,32 залило бы белым)
+        if состояние.окна.iter().any(|з| &з.окно == о && з.не_отвечает) {
+            let г = о.geometry();
+            let где = Rectangle::new(место - гео.loc, г.size).to_physical_precise_round(масштаб);
+            окна_эл.push(Элемент::Сплошной(SolidColorRenderElement::new(Id::new(), где, 0usize, Color32F::new(0.32, 0.32, 0.32, 0.32), Kind::Unspecified)));
+        }
         окна_эл.extend(элементы.into_iter().map(|э| {
             Элемент::Окно(RelocateRenderElement::from_element(
                 RescaleRenderElement::from_element(э, центр, вид.масштаб),

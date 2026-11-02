@@ -28,6 +28,7 @@ mod state;
 mod udev;
 mod winit;
 mod xwayland;
+mod hang;
 
 use std::path::PathBuf;
 
@@ -90,6 +91,15 @@ fn main() {
             _ => с.loop_signal.stop(),
         });
     }
+
+    // Раз в секунду — не зависли ли программы (hang.rs)
+    let _ = цикл.handle().insert_source(
+        calloop::timer::Timer::from_duration(std::time::Duration::from_secs(1)),
+        |_, _, с| {
+            с.проверь_зависания();
+            calloop::timer::TimeoutAction::ToDuration(std::time::Duration::from_secs(1))
+        },
+    );
 
     if let Some(команда) = запуск {
         input::запусти(&команда);

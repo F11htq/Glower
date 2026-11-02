@@ -28,6 +28,7 @@ mod explorer;
 mod filemanager;
 mod fileops;
 mod glowerkey;
+mod hang;
 mod i18n;
 mod icons;
 mod installer;
@@ -515,6 +516,7 @@ fn main() {
         "glower-props" => props::запусти(std::env::args().skip(1).collect()),
         "glower-scan" => protection::запусти(std::env::args().skip(1).collect()),
         "glower-splash" => splash::запусти(std::env::args().skip(1).collect()),
+        "glower-hang" => hang::запусти(std::env::args().skip(1).collect()),
         _ => {}
     }
     if имя == "glower-music" {

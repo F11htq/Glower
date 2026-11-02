@@ -54,6 +54,8 @@ fn сведения(окно: &Window, space: &Space<Window>, записи: &[З
         Default::default()
     };
     let з = записи.iter().find(|з| &з.окно == окно);
+    // Как в Windows: «Блокнот (не отвечает)»
+    let заголовок = if з.is_some_and(|з| з.не_отвечает) { format!("{заголовок} (не отвечает)") } else { заголовок };
     let mut состояния = vec![];
     if з.map(|з| з.развёрнуто).unwrap_or(false) {
         состояния.push(zwlr_foreign_toplevel_handle_v1::State::Maximized as u32);

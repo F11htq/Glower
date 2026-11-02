@@ -209,6 +209,10 @@ impl XdgShellHandler for Glower {
         &mut self.xdg_shell_state
     }
 
+    fn client_pong(&mut self, client: smithay::wayland::shell::xdg::ShellClient) {
+        self.ответ_на_оклик(&client);
+    }
+
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let окно = Window::new_wayland_window(surface);
         self.ждут.push(окно);

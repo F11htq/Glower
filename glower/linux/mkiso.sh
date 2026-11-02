@@ -532,7 +532,7 @@ if [ -x "$PANEL_BIN" ]; then
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-files"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-settings"
   ln -sf glower-panel "$ROOTFS/usr/bin/glower-store"
-  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props glower-scan glower-splash; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
+  for prog in glower-taskmgr glower-photos glower-snip glower-installer glower-music glower-paint glower-calendar glower-clock glower-todo glower-props glower-scan glower-splash glower-hang; do ln -sf glower-panel "$ROOTFS/usr/bin/$prog"; done
   echo "  рабочий стол: $(du -k "$PANEL_BIN" | cut -f1) КБ"
 else
   echo "нет panel/target/release/glower-panel — рабочий стол собрать не из чего"

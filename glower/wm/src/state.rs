@@ -72,6 +72,8 @@ pub struct Запись {
     /// Прилипло к половине экрана (мышью к краю или Win+стрелка)
     pub прилипло: bool,
     pub во_весь_экран: bool,
+    /// Программа не отвечает (см. hang.rs)
+    pub не_отвечает: bool,
 }
 
 pub struct Замок {
@@ -148,6 +150,7 @@ pub struct Glower {
     pub изменяемые: Vec<(Window, crate::grabs::Края, Rectangle<i32, Logical>)>,
     pub анимации: Анимации,
     pub бэкенд: Option<crate::backend::Бэкенд>,
+    pub зависания: crate::hang::Зависания,
     /// Клавиши, нажатие которых забрал сервер: их отпускание программам не шлём
     pub подавлены: Vec<smithay::input::keyboard::Keycode>,
     /// Сколько кадров подряд надо перерисовать: анимации, новые окна
@@ -260,6 +263,7 @@ impl Glower {
             изменяемые: vec![],
             анимации: Анимации::default(),
             бэкенд: None,
+            зависания: Default::default(),
             подавлены: vec![],
             нужен_кадр: true,
         };
@@ -499,6 +503,7 @@ impl Glower {
             развёрнуто: развёрнуто && !весь,
             прилипло: false,
             во_весь_экран: весь,
+            не_отвечает: false,
         });
         if весь || развёрнуто {
             if let Some(t) = окно.toplevel() {
@@ -628,6 +633,7 @@ impl Glower {
         } else if let Some(x) = окно.x11_surface() {
             let _ = x.close();
         }
+        self.следи_за_закрытием(окно);
     }
 
     pub fn сверни(&mut self, окно: &Window) {

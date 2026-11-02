@@ -1040,6 +1040,21 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // Зависшие программы — как в Windows: оклик, «(не отвечает)», бледное
+          // окно и вопрос при закрытии; закрывает панель сигналом KILL
+          const зв = await readFile(join(root, 'wm', 'src', 'hang.rs'), 'utf8');
+          const зп = await readFile(join(root, 'panel', 'src', 'hang.rs'), 'utf8');
+          const фт = await readFile(join(root, 'wm', 'src', 'protocols', 'foreign_toplevel.rs'), 'utf8');
+          const сз = await readFile(join(root, 'wm', 'src', 'state.rs'), 'utf8');
+          check('зависшие программы: окликаем, отмечаем «(не отвечает)», спрашиваем при закрытии',
+            /send_ping/.test(зв) && /fn client_pong/.test(await readFile(join(root, 'wm', 'src', 'handlers.rs'), 'utf8'))
+            && /\(не отвечает\)/.test(фт) && /следи_за_закрытием\(окно\)/.test(сз)
+            && /Command::new\("glower-hang"\)/.test(зв)
+            && /kill\(pid as i32, 9\)/.test(зп) && /можно_закрыть/.test(зп) && /"glower-wm"/.test(зп)
+            && /usr\/bin\/glower-hang/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8'))
+            && /glower-splash glower-hang; do/.test(await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8')));
+        }
+        {
           // Частота экрана: оконный сервер называет режимы и меняет их, выбор
           // запоминается; Параметры спрашивают «Оставить?» и сами возвращают прежний
           const уд = await readFile(join(root, 'wm', 'src', 'udev.rs'), 'utf8');

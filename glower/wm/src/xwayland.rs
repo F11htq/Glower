@@ -184,6 +184,7 @@ impl XwmHandler for Glower {
             развёрнуто: false,
             прилипло: false,
             во_весь_экран: false,
+            не_отвечает: false,
         });
         self.space.map_element(окно.clone(), место, true);
         self.анимации.появилось(&окно);
