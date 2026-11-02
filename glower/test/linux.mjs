@@ -1058,6 +1058,8 @@ try {
           const запрос = ху.slice(ху.indexOf('fn configure_request'), ху.indexOf('fn configure_notify'));
           check('glower-wm: окно размером с экран — во весь экран, вылезшее за край — обратно на экран',
             /во_весь_экран\(&окно, true\)/.test(запрос) && /space\.map_element\(окно\.clone\(\), место, false\)/.test(запрос)
+            // а из полного экрана в оконный режим (1366×768 в CS:GO) — выпускаем
+            && /_ => self\.во_весь_экран\(&окно, false\)/.test(запрос)
             && /is_fullscreen\(\)/.test(ху));
         }
         {
