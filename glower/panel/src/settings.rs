@@ -964,7 +964,109 @@ fn дисплей(п: &П) {
     }
 }
 
+/// «1920x1080@74973» → «1920×1080 · 75 Гц» (дробную частоту — с сотыми)
+fn режим_словами(режим: &str) -> String {
+    let Some((размер, мгц)) = режим.split_once('@') else { return режим.to_string() };
+    let гц = мгц.parse::<f64>().unwrap_or(0.0) / 1000.0;
+    let частота = if (гц - гц.round()).abs() < 0.01 { format!("{:.0}", гц) } else { format!("{:.2}", гц).replace('.', ",") };
+    format!("{} · {частота} Гц", размер.replace('x', "×"))
+}
+
+fn ключ_режима(режим: &str) -> (i64, i64) {
+    let (размер, мгц) = режим.split_once('@').unwrap_or((режим, "0"));
+    let (w, h) = размер.split_once('x').unwrap_or(("0", "0"));
+    (w.parse::<i64>().unwrap_or(0) * h.parse::<i64>().unwrap_or(0), мгц.parse::<i64>().unwrap_or(0))
+}
+
+/// Новый режим экрана: «Оставить?» — и сами возвращаем прежний через 15
+/// секунд, если ответа нет (экран мог погаснуть: режим ему не по силам)
+fn подтверди_режим(п: &П) -> bool {
+    let д = gtk::MessageDialog::new(Some(&п.окно), gtk::DialogFlags::MODAL, gtk::MessageType::Question, gtk::ButtonsType::None, "Оставить этот режим экрана?");
+    д.add_button("Вернуть прежний", gtk::ResponseType::Cancel);
+    д.add_button("Оставить", gtk::ResponseType::Accept);
+    let осталось = Rc::new(Cell::new(15));
+    д.set_secondary_text(Some("Прежний вернётся сам через 15 с"));
+    let (д2, осталось2) = (д.clone(), осталось.clone());
+    let таймер = glib::timeout_add_local(Duration::from_secs(1), move || {
+        let с = осталось2.get() - 1;
+        осталось2.set(с);
+        if с <= 0 {
+            д2.response(gtk::ResponseType::Cancel);
+            return glib::ControlFlow::Break;
+        }
+        д2.set_secondary_text(Some(&format!("Прежний вернётся сам через {с} с")));
+        glib::ControlFlow::Continue
+    });
+    let ответ = д.run();
+    if осталось.get() > 0 {
+        таймер.remove();
+    }
+    unsafe { д.destroy() };
+    ответ == gtk::ResponseType::Accept
+}
+
+/// Экраны под своим оконным сервером: режим (частота и разрешение) и масштаб
+fn экраны_сервера(п: &П, место: &gtk::Box, ответ: &str) {
+    очисти(место);
+    for строка_экрана in ответ.lines() {
+        let поля: Vec<&str> = строка_экрана.split('\t').collect();
+        if поля.len() < 5 {
+            continue;
+        }
+        let (имя, модель, сейчас) = (поля[0].to_string(), поля[1], поля[2].to_string());
+        let масштаб = поля[3].parse::<f64>().unwrap_or(1.0);
+        let mut режимы: Vec<&str> = поля[4].split(',').filter(|р| !р.is_empty()).collect();
+        режимы.sort_by(|а, б| ключ_режима(б).cmp(&ключ_режима(а)));
+
+        let выбор = gtk::ComboBoxText::new();
+        for р in &режимы {
+            выбор.append(Some(р), &режим_словами(р));
+        }
+        выбор.set_active_id(Some(&сейчас));
+        let (п1, место1, имя1, прежний) = (п.clone(), место.clone(), имя.clone(), сейчас.clone());
+        выбор.connect_changed(move |в| {
+            let Some(новый) = в.active_id().map(|н| н.to_string()) else { return };
+            if новый == прежний {
+                return;
+            }
+            let ответ = crate::core::скажи_серверу(&format!("mode {имя1} {новый}")).unwrap_or_else(|| "оконный сервер не ответил".into());
+            if ответ != "ok" {
+                сообщи(&п1, "Не вышло сменить режим экрана", &ответ);
+            } else if !подтверди_режим(&п1) {
+                let _ = crate::core::скажи_серверу(&format!("mode {имя1} {прежний}"));
+            }
+            let (п2, место2) = (п1.clone(), место1.clone());
+            glib::idle_add_local_once(move || экраны(&п2, &место2));
+        });
+        let заголовок = if модель.is_empty() || модель == имя { имя.clone() } else { format!("{модель} ({имя})") };
+        добавь(место, "🖥️", &заголовок, "Разрешение и частота обновления. Чем выше частота, тем плавнее движение — если монитор её умеет", Some(выбор.upcast_ref()));
+
+        let (п1, место1, имя1) = (п.clone(), место.clone(), имя.clone());
+        let масштабы = сегменты(
+            &[("100%", json!(1)), ("125%", json!(1.25)), ("150%", json!(1.5)), ("175%", json!(1.75)), ("200%", json!(2))],
+            &json!(масштаб),
+            move |v| {
+                let ответ = crate::core::скажи_серверу(&format!("scale {имя1} {}", v.as_f64().unwrap_or(1.0))).unwrap_or_default();
+                if ответ != "ok" {
+                    сообщи(&п1, "Не вышло изменить масштаб", &ответ);
+                }
+                let (п2, место2) = (п1.clone(), место1.clone());
+                glib::timeout_add_local_once(Duration::from_millis(400), move || экраны(&п2, &место2));
+            },
+        );
+        добавь(место, "🔍", "Масштаб", &format!("Сейчас {}%", (масштаб * 100.0).round()), Some(&масштабы));
+    }
+    if место.children().is_empty() {
+        добавь(место, "🖥️", "Оконный сервер не назвал ни одного экрана", "", None);
+    }
+    место.show_all();
+}
+
 fn экраны(п: &П, место: &gtk::Box) {
+    // Свой оконный сервер отвечает про экраны сам — и умеет менять режим
+    if let Some(ответ) = crate::core::скажи_серверу("outputs").filter(|о| !о.is_empty() && !о.starts_with("не понимаю")) {
+        return экраны_сервера(п, место, &ответ);
+    }
     ждём(место, "Спрашиваю систему об экранах…");
     let (место2, п1) = (место.clone(), п.clone());
     спроси(п, "sys.screens", json!({}), move |о| {
@@ -3827,6 +3929,15 @@ pub fn запусти(доводы: Vec<String>) -> ! {
 
 #[cfg(test)]
 mod проверки {
+    #[test]
+    fn режимы_экрана_словами() {
+        assert_eq!(super::режим_словами("1920x1080@75000"), "1920×1080 · 75 Гц");
+        assert_eq!(super::режим_словами("1920x1080@59940"), "1920×1080 · 59,94 Гц");
+        assert_eq!(super::режим_словами("2560x1440@143998"), "2560×1440 · 144 Гц");
+        assert!(super::ключ_режима("1920x1080@75000") > super::ключ_режима("1920x1080@60000"));
+        assert!(super::ключ_режима("1920x1080@60000") > super::ключ_режима("1280x720@75000"));
+    }
+
     use super::*;
 
     #[test]

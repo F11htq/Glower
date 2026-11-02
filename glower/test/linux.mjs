@@ -1040,6 +1040,18 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // Частота экрана: оконный сервер называет режимы и меняет их, выбор
+          // запоминается; Параметры спрашивают «Оставить?» и сами возвращают прежний
+          const уд = await readFile(join(root, 'wm', 'src', 'udev.rs'), 'utf8');
+          const ipc = await readFile(join(root, 'wm', 'src', 'ipc.rs'), 'utf8');
+          const пар = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+          check('частота экрана: выбор режима в Параметрах, с откатом через 15 секунд и запоминанием',
+            /use_mode\(режим\)/.test(уд) && /fn запомни/.test(уд) && /сохранённые_экраны\(\)/.test(уд)
+            && /\("outputs", _\)/.test(ipc) && /\("mode", _\)/.test(ipc)
+            && /matches!\(с\.бэкенд, Some\(crate::backend::Бэкенд::Udev/.test(ipc)
+            && /fn подтверди_режим/.test(пар) && /скажи_серверу\(&format!\("mode \{имя1\} \{прежний\}"\)\)/.test(пар));
+        }
+        {
           // Игры X11 растягивают окно на весь экран сами — раньше размер
           // выполнялся, а место нет, и окно уезжало вправо-вниз за край
           const ху = await readFile(join(root, 'wm', 'src', 'xwayland.rs'), 'utf8');

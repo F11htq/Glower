@@ -53,6 +53,9 @@ pub struct Экран {
     pub вывод: Output,
     pub crtc: crtc::Handle,
     pub разъём: connector::Handle,
+    /// Имя разъёма («HDMI-A-1») и все режимы, которые назвал экран
+    имя: String,
+    режимы: Vec<smithay::reexports::drm::control::Mode>,
     компоновщик: Компоновщик,
     /// Кадр ушёл на экран, ждём, когда его покажут (vblank)
     ждёт: bool,
@@ -178,13 +181,20 @@ fn подними_экраны(с: &mut Glower, u: &mut Udev) {
             continue;
         }
         let имя = format!("{}-{}", инфо.interface().as_str(), инфо.interface_id());
+        // Режим и масштаб, выбранные человеком в Параметрах, — если экран их ещё умеет
+        let сохранено = сохранённые_экраны().into_iter().find(|з| з.имя == имя);
+        let режим = сохранено
+            .as_ref()
+            .and_then(|з| з.режим)
+            .and_then(|(w, h, mhz)| инфо.modes().iter().copied().find(|м| совпадает(м, w, h, mhz)))
+            .unwrap_or(режим);
         let (ш, в) = инфо.size().unwrap_or((0, 0));
         let вывод = Output::new(
             имя.clone(),
             PhysicalProperties { size: (ш as i32, в as i32).into(), subpixel: Subpixel::Unknown, make: "GlowerOS".into(), model: имя.clone() },
         );
         let режим_вывода = Mode::from(режим);
-        let масштаб = подбери_масштаб(режим_вывода.size.w, ш);
+        let масштаб = сохранено.as_ref().and_then(|з| з.масштаб).unwrap_or_else(|| подбери_масштаб(режим_вывода.size.w, ш));
         вывод.change_current_state(
             Some(режим_вывода),
             Some(Transform::Normal),
@@ -225,12 +235,144 @@ fn подними_экраны(с: &mut Glower, u: &mut Udev) {
         с.space.map_output(&вывод, (x, 0));
         x += логическая;
         tracing::info!("экран {имя}: {}x{} @{}, масштаб {масштаб}", режим_вывода.size.w, режим_вывода.size.h, режим_вывода.refresh);
-        u.экраны.push(Экран { вывод, crtc, разъём, компоновщик, ждёт: false, гамма });
+        u.экраны.push(Экран { вывод, crtc, разъём, имя: имя.clone(), режимы: инфо.modes().to_vec(), компоновщик, ждёт: false, гамма });
     }
     for э in &u.экраны {
         smithay::desktop::layer_map_for_output(&э.вывод).arrange();
     }
     с.нужен_кадр = true;
+}
+
+/// Выбор человека: экран, режим (ширина, высота, частота в мГц) и масштаб.
+/// Хранится строками «HDMI-A-1 1920x1080@75000 1» в ~/.config/glower/screens
+pub struct Сохранённый {
+    pub имя: String,
+    pub режим: Option<(u16, u16, i32)>,
+    pub масштаб: Option<f64>,
+}
+
+fn файл_экранов() -> Option<PathBuf> {
+    let папка = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|д| PathBuf::from(д).join(".config")))?;
+    Some(папка.join("glower").join("screens"))
+}
+
+pub fn разбери_режим(текст: &str) -> Option<(u16, u16, i32)> {
+    let (размер, частота) = текст.split_once('@')?;
+    let (w, h) = размер.split_once('x')?;
+    Some((w.parse().ok()?, h.parse().ok()?, частота.parse().ok()?))
+}
+
+pub fn разбери_экраны(текст: &str) -> Vec<Сохранённый> {
+    текст
+        .lines()
+        .filter_map(|с| {
+            let mut ч = с.split_whitespace();
+            let имя = ч.next()?.to_string();
+            let режим = ч.next().and_then(разбери_режим);
+            let масштаб = ч.next().and_then(|м| м.parse::<f64>().ok()).filter(|м| (0.5..=4.0).contains(м));
+            Some(Сохранённый { имя, режим, масштаб })
+        })
+        .collect()
+}
+
+fn сохранённые_экраны() -> Vec<Сохранённый> {
+    файл_экранов().and_then(|ф| std::fs::read_to_string(ф).ok()).map(|т| разбери_экраны(&т)).unwrap_or_default()
+}
+
+fn частота_мгц(м: &smithay::reexports::drm::control::Mode) -> i32 {
+    Mode::from(*м).refresh
+}
+
+/// Тот же режим: размер точно, частота — с точностью до полугерца
+fn совпадает(м: &smithay::reexports::drm::control::Mode, w: u16, h: u16, mhz: i32) -> bool {
+    let (мш, мв) = м.size();
+    мш == w && мв == h && (частота_мгц(м) - mhz).abs() <= 500
+}
+
+impl Udev {
+    /// Экраны словами для Параметров: имя, режим сейчас, масштаб и все режимы
+    /// через запятую; строка на экран, поля через табуляцию
+    pub fn экраны_словами(&self) -> String {
+        self.экраны
+            .iter()
+            .map(|э| {
+                let сейчас = э.вывод.current_mode().map(|м| format!("{}x{}@{}", м.size.w, м.size.h, м.refresh)).unwrap_or_default();
+                let масштаб = э.вывод.current_scale().fractional_scale();
+                let mut все: Vec<String> = Vec::new();
+                for м in &э.режимы {
+                    let (w, h) = м.size();
+                    let т = format!("{w}x{h}@{}", частота_мгц(м));
+                    if !все.contains(&т) {
+                        все.push(т);
+                    }
+                }
+                let модель = э.вывод.physical_properties().model;
+                format!("{}\t{}\t{}\t{}\t{}", э.имя, модель, сейчас, масштаб, все.join(","))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Сменить режим экрана (размер и частоту) и запомнить выбор
+    pub fn смени_режим(&mut self, с: &mut Glower, имя: &str, w: u16, h: u16, mhz: i32) -> Result<(), String> {
+        let э = self.экраны.iter_mut().find(|э| э.имя == имя).ok_or("нет такого экрана")?;
+        let режим = э.режимы.iter().copied().find(|м| совпадает(м, w, h, mhz)).ok_or("экран такого режима не умеет")?;
+        э.компоновщик.use_mode(режим).map_err(|е| format!("{е:?}"))?;
+        let новый = Mode::from(режим);
+        э.вывод.change_current_state(Some(новый), None, None, None);
+        э.вывод.set_preferred(новый);
+        разложи(с, self);
+        запомни(self);
+        Ok(())
+    }
+
+    /// Сменить масштаб экрана и запомнить выбор
+    pub fn смени_масштаб(&mut self, с: &mut Glower, имя: &str, масштаб: f64) -> Result<(), String> {
+        if !(0.5..=4.0).contains(&масштаб) {
+            return Err("такой масштаб не годится".into());
+        }
+        let э = self.экраны.iter_mut().find(|э| э.имя == имя).ok_or("нет такого экрана")?;
+        э.вывод.change_current_state(None, None, Some(smithay::output::Scale::Fractional(масштаб)), None);
+        разложи(с, self);
+        запомни(self);
+        Ok(())
+    }
+}
+
+/// Экраны в ряд слева направо — после смены режима или масштаба ширина меняется
+fn разложи(с: &mut Glower, u: &Udev) {
+    let mut x = 0;
+    for э in &u.экраны {
+        с.space.map_output(&э.вывод, (x, 0));
+        let ширина = э.вывод.current_mode().map(|м| м.size.w).unwrap_or(0);
+        x += (ширина as f64 / э.вывод.current_scale().fractional_scale()).round() as i32;
+        smithay::desktop::layer_map_for_output(&э.вывод).arrange();
+    }
+    с.нужен_кадр = true;
+}
+
+fn запомни(u: &Udev) {
+    let Some(файл) = файл_экранов() else { return };
+    let mut строки: Vec<Сохранённый> = сохранённые_экраны();
+    for э in &u.экраны {
+        let режим = э.вывод.current_mode().map(|м| (м.size.w as u16, м.size.h as u16, м.refresh));
+        let масштаб = Some(э.вывод.current_scale().fractional_scale());
+        строки.retain(|з| з.имя != э.имя);
+        строки.push(Сохранённый { имя: э.имя.clone(), режим, масштаб });
+    }
+    let текст: String = строки
+        .iter()
+        .map(|з| {
+            let р = з.режим.map(|(w, h, f)| format!("{w}x{h}@{f}")).unwrap_or_else(|| "-".into());
+            format!("{} {} {}\n", з.имя, р, з.масштаб.unwrap_or(1.0))
+        })
+        .collect();
+    if let Some(папка) = файл.parent() {
+        let _ = std::fs::create_dir_all(папка);
+    }
+    let _ = std::fs::write(файл, текст);
 }
 
 /// Мелкий текст на маленьком экране с высоким разрешением не прочесть:
@@ -484,3 +626,19 @@ impl DmabufHandler for Glower {
 }
 
 delegate_dmabuf!(Glower);
+
+#[cfg(test)]
+mod проверки {
+    #[test]
+    fn выбор_экранов_читается() {
+        let с = super::разбери_экраны("HDMI-A-1 1920x1080@75000 1\nDP-1 - 1.5\nмусор\nDP-2 2560x1440@144001 9\n");
+        assert_eq!(с.len(), 4);
+        assert_eq!(с[0].режим, Some((1920, 1080, 75000)));
+        assert_eq!(с[0].масштаб, Some(1.0));
+        assert_eq!(с[1].режим, None);
+        assert_eq!(с[1].масштаб, Some(1.5));
+        assert_eq!(с[3].масштаб, None);
+        assert_eq!(super::разбери_режим("1920x1080@60000"), Some((1920, 1080, 60000)));
+        assert_eq!(super::разбери_режим("1920x1080"), None);
+    }
+}

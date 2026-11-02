@@ -14,6 +14,9 @@
 //!                 виртуальной клавиатуры до программы не доходили
 //!     snap left|right — окно в фокусе — в левую/правую половину экрана
 //!                 (Проводник по F3 ставит так два окна рядом)
+//!     outputs   — экраны: имя, модель, режим, масштаб, все режимы (таб)
+//!     mode ИМЯ ШxВ@мГц — сменить режим экрана (частоту, размер)
+//!     scale ИМЯ М — сменить масштаб экрана
 //!     reload    — перечитать rc.xml и environment
 //!     quit      — завершить сеанс
 
@@ -109,6 +112,42 @@ pub fn выполни(с: &mut Glower, команда: &str) -> String {
         ("paste", _) => {
             вставь(с);
             "ok".into()
+        }
+        ("outputs", _) => match с.бэкенд.as_ref() {
+            Some(crate::backend::Бэкенд::Udev(u)) => u.экраны_словами(),
+            _ => с
+                .space
+                .outputs()
+                .map(|о| {
+                    let м = о.current_mode().map(|м| format!("{}x{}@{}", м.size.w, м.size.h, м.refresh)).unwrap_or_default();
+                    format!("{}\t{}\t{м}\t{}\t{м}", о.name(), о.physical_properties().model, о.current_scale().fractional_scale())
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        },
+        ("mode", _) | ("scale", _) => {
+            let mut ч = команда.split_whitespace().skip(1);
+            let (Some(имя), Some(значение)) = (ч.next(), ч.next()) else { return "mode ИМЯ ШxВ@мГц | scale ИМЯ М".into() };
+            if !matches!(с.бэкенд, Some(crate::backend::Бэкенд::Udev(_))) {
+                return "в окне режим экрана не меняется".into();
+            }
+            let Some(crate::backend::Бэкенд::Udev(mut u)) = с.бэкенд.take() else { unreachable!() };
+            let итог = if что == "mode" {
+                match crate::udev::разбери_режим(значение) {
+                    Some((w, h, f)) => u.смени_режим(с, имя, w, h, f),
+                    None => Err("режим пишется как 1920x1080@75000".into()),
+                }
+            } else {
+                match значение.parse::<f64>() {
+                    Ok(м) => u.смени_масштаб(с, имя, м),
+                    Err(_) => Err("масштаб — число".into()),
+                }
+            };
+            с.бэкенд = Some(crate::backend::Бэкенд::Udev(u));
+            match итог {
+                Ok(()) => "ok".into(),
+                Err(е) => е,
+            }
         }
         ("reload", _) => {
             с.перечитай_настройки();
