@@ -70,7 +70,7 @@ pub fn с_рамкой(x: &X11Surface) -> bool {
 
 /// Рамка окна X11: полоса заголовка и три кнопки, простыми прямоугольниками
 pub fn рамка(x: &X11Surface, где: Point<i32, Physical>, масштаб: Scale<f64>, активно: bool) -> Vec<SolidColorRenderElement> {
-    if !с_рамкой(x) {
+    if !с_рамкой(x) || x.is_fullscreen() {
         return vec![];
     }
     let гео = x.geometry();
@@ -118,7 +118,7 @@ impl Glower {
     pub fn рамка_под(&self, точка: Point<f64, Logical>) -> Option<(Window, Кнопка)> {
         for о in self.space.elements().rev() {
             let Some(x) = о.x11_surface() else { continue };
-            if !с_рамкой(x) {
+            if !с_рамкой(x) || x.is_fullscreen() {
                 continue;
             }
             let Some(гео) = self.space.element_geometry(о) else { continue };
@@ -185,6 +185,7 @@ impl XwmHandler for Glower {
             прилипло: false,
             во_весь_экран: false,
             не_отвечает: false,
+            по_просьбе: false,
         });
         self.space.map_element(окно.clone(), место, true);
         self.анимации.появилось(&окно);
@@ -193,7 +194,11 @@ impl XwmHandler for Glower {
         // Просится во весь экран с самого начала или размером с экран — во весь экран
         let экран = self.главный_экран().and_then(|э| self.space.output_geometry(&э));
         let x = окно.x11_surface().cloned();
-        if x.as_ref().is_some_and(|x| x.is_fullscreen()) || экран.is_some_and(|э| гео.size.w >= э.size.w && гео.size.h >= э.size.h) {
+        let просит = x.as_ref().is_some_and(|x| x.is_fullscreen());
+        if просит || экран.is_some_and(|э| гео.size.w >= э.size.w && гео.size.h >= э.size.h) {
+            if let Some(з) = self.запись_мут(&окно) {
+                з.по_просьбе = просит;
+            }
             self.во_весь_экран(&окно, true);
         }
     }
@@ -246,10 +251,19 @@ impl XwmHandler for Glower {
         };
         let экран = self.главный_экран().and_then(|э| self.space.output_geometry(&э));
         if self.запись(&окно).is_some_and(|з| з.во_весь_экран) {
+            let по_просьбе = self.запись(&окно).is_some_and(|з| з.по_просьбе);
             match экран {
                 // Просит размер экрана — остаётся во весь экран
                 Some(э) if гео.size.w >= э.size.w && гео.size.h >= э.size.h => {
                     let _ = window.configure(э);
+                    return;
+                }
+                // Игра во весь экран по своей просьбе меняет разрешение —
+                // остаётся во весь экран со своим размером, растягивает Xwayland
+                Some(э) if по_просьбе => {
+                    let _ = window.configure(Rectangle::new(э.loc, гео.size));
+                    self.space.map_element(окно.clone(), э.loc, false);
+                    self.нужен_кадр = true;
                     return;
                 }
                 // Просит меньше — игра перешла в оконный режим (в CS:GO —
@@ -333,12 +347,18 @@ impl XwmHandler for Glower {
 
     fn fullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
         if let Some(о) = self.окно_x11(&window) {
+            if let Some(з) = self.запись_мут(&о) {
+                з.по_просьбе = true;
+            }
             self.во_весь_экран(&о, true);
         }
     }
 
     fn unfullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
         if let Some(о) = self.окно_x11(&window) {
+            if let Some(з) = self.запись_мут(&о) {
+                з.по_просьбе = false;
+            }
             self.во_весь_экран(&о, false);
         }
     }

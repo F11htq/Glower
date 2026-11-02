@@ -190,6 +190,12 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
         if let Some(x) = о.x11_surface() {
             окна_эл.extend(crate::xwayland::рамка(x, физ, масштаб, crate::state::активно(о)).into_iter().map(Элемент::Сплошной));
         }
+        // Под окном во весь экран — чёрное: если игра меньше экрана и
+        // растягивать её некому, по краям не видно рабочего стола
+        if состояние.окна.iter().any(|з| &з.окно == о && з.во_весь_экран && !з.свёрнуто) {
+            let весь = Rectangle::new(Point::from((0, 0)), гео.size).to_physical_precise_round(масштаб);
+            окна_эл.push(Элемент::Сплошной(SolidColorRenderElement::new(Id::new(), весь, 0usize, Color32F::new(0.0, 0.0, 0.0, 1.0), Kind::Unspecified)));
+        }
     }
 
     // Размытие под слоями: из всего, что ниже слоя

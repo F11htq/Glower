@@ -74,6 +74,10 @@ pub struct Запись {
     pub во_весь_экран: bool,
     /// Программа не отвечает (см. hang.rs)
     pub не_отвечает: bool,
+    /// Во весь экран попросила сама программа (а не сервер решил за неё):
+    /// игра с меньшим разрешением держит свой размер, а растягивает её
+    /// Xwayland — как в Windows, на весь экран
+    pub по_просьбе: bool,
 }
 
 pub struct Замок {
@@ -504,6 +508,7 @@ impl Glower {
             прилипло: false,
             во_весь_экран: весь,
             не_отвечает: false,
+            по_просьбе: false,
         });
         if весь || развёрнуто {
             if let Some(t) = окно.toplevel() {
@@ -785,7 +790,21 @@ impl Glower {
             t.send_pending_configure();
         } else if let Some(x) = окно.x11_surface() {
             let _ = x.set_fullscreen(да);
-            let _ = x.configure(if да { гео } else { прежнее.unwrap_or(гео) });
+            // Игра сама попросила весь экран и меньший размер (разрешение
+            // 1366×768 на экране 1920×1080) — оставляем её размер в углу
+            // экрана: Xwayland сам растянет картинку на весь экран и сам
+            // пересчитает мышь. Растянуть окно до экрана значило бы, что
+            // игра рисует в угол, а щелчки уходят мимо
+            let свой = x.geometry().size;
+            let по_просьбе = self.запись(окно).is_some_and(|з| з.по_просьбе);
+            let куда = if да && по_просьбе && (свой.w < гео.size.w || свой.h < гео.size.h) && свой.w > 1 && свой.h > 1 {
+                Rectangle::new(гео.loc, свой)
+            } else if да {
+                гео
+            } else {
+                прежнее.unwrap_or(гео)
+            };
+            let _ = x.configure(куда);
         }
         let место = if да { гео.loc } else { прежнее.map(|п| п.loc).unwrap_or(гео.loc) };
         self.space.map_element(окно.clone(), место, true);
@@ -930,6 +949,19 @@ impl Glower {
         // Меню стола рисуется над окнами — и мышь в нём раньше окон
         if let Some(п) = self.меню_низа_под(точка) {
             return Some(п);
+        }
+        // Игра во весь экран со своим меньшим разрешением: её окно меньше
+        // экрана, а картинку Xwayland растянул — мышь по всему экрану её
+        if let Some(о) = self.space.elements().last() {
+            if let (Some(x), Some(з)) = (о.x11_surface(), self.запись(о)) {
+                if з.во_весь_экран && !з.свёрнуто {
+                    if let Some(экран) = self.space.outputs_for_element(о).first().and_then(|э| self.space.output_geometry(э)) {
+                        if экран.to_f64().contains(точка) {
+                            return Some((Фокус::X11(x.clone()), экран.loc.to_f64()));
+                        }
+                    }
+                }
+            }
         }
         if let Some((окно, место)) = self.space.element_under(точка) {
             if let Some((с, м)) = окно.surface_under(точка - место.to_f64(), WindowSurfaceType::ALL) {
