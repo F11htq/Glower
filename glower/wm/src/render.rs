@@ -173,6 +173,20 @@ pub fn элементы(состояние: &mut Glower, renderer: &mut GlesRend
             ц.to_physical_precise_round(масштаб)
         };
         let сдвиг: Point<i32, Physical> = вид.сдвиг.to_physical_precise_round(масштаб);
+        // Растянутая игра: картинка — на весь экран, от угла окна
+        if let Some((р, (sx, sy))) = состояние.растяжка(о) {
+            let угол: Point<i32, Physical> = (р.loc - гео.loc).to_physical_precise_round(масштаб);
+            окна_эл.extend(элементы.into_iter().map(|э| {
+                Элемент::Окно(RelocateRenderElement::from_element(
+                    RescaleRenderElement::from_element(э, угол, Scale::from((sx, sy))),
+                    Point::<i32, Physical>::from((0, 0)),
+                    Relocate::Relative,
+                ))
+            }));
+            let весь = Rectangle::new(Point::from((0, 0)), гео.size).to_physical_precise_round(масштаб);
+            окна_эл.push(Элемент::Сплошной(SolidColorRenderElement::new(Id::new(), весь, 0usize, Color32F::new(0.0, 0.0, 0.0, 1.0), Kind::Unspecified)));
+            continue;
+        }
         // Программа не отвечает — окно бледнеет, как в Windows (цвет — с
         // уже умноженной прозрачностью: 1,1,1 при 0,32 залило бы белым)
         if состояние.окна.iter().any(|з| &з.окно == о && з.не_отвечает) {

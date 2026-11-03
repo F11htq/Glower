@@ -1040,6 +1040,17 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // Игра с меньшим разрешением во весь экран: картинку растягивает
+          // сервер, мышь пересчитывается обратно в разрешение игры
+          const ст = await readFile(join(root, 'wm', 'src', 'state.rs'), 'utf8');
+          const рн = await readFile(join(root, 'wm', 'src', 'render.rs'), 'utf8');
+          const xw = await readFile(join(root, 'wm', 'src', 'xwayland.rs'), 'utf8');
+          check('растянутая игра: картинка на весь экран, мышь — в разрешении игры',
+            /pub fn растяжка\(&self/.test(ст) && /\(точка\.x - р\.loc\.x as f64\) \/ sx/.test(ст)
+            && /bbox_from_surface_tree/.test(ст) && /RescaleRenderElement::from_element\(э, угол, Scale::from\(\(sx, sy\)\)\)/.test(рн)
+            && /pub fn неизменный/.test(xw) && /неизменный\(x\)\.is_some\(\)/.test(xw));
+        }
+        {
           // Мощность в играх: ядро как в SteamOS, ntsync, glthread, игровой режим
           const сп = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
           const ми = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');

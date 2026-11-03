@@ -796,7 +796,7 @@ impl Glower {
             // пересчитает мышь. Растянуть окно до экрана значило бы, что
             // игра рисует в угол, а щелчки уходят мимо
             let свой = x.geometry().size;
-            let по_просьбе = self.запись(окно).is_some_and(|з| з.по_просьбе);
+            let по_просьбе = self.запись(окно).is_some_and(|з| з.по_просьбе) || crate::xwayland::неизменный(x).is_some();
             let куда = if да && по_просьбе && (свой.w < гео.size.w || свой.h < гео.size.h) && свой.w > 1 && свой.h > 1 {
                 Rectangle::new(гео.loc, свой)
             } else if да {
@@ -936,6 +936,31 @@ impl Glower {
         }
     }
 
+    /// Растянутое окно игры: прямоугольник экрана, на который сервер растягивает
+    /// его картинку, и во сколько раз. Как в Windows: игра с разрешением
+    /// 1366×768 во весь экран 1920×1080 — картинка на весь экран, а мышь
+    /// пересчитывается обратно в разрешение игры.
+    ///
+    /// Если картинку уже растянул сам Xwayland (игра сменила режим экрана
+    /// через RandR), поверхность и так размером с экран — растягивать нечего.
+    pub fn растяжка(&self, окно: &Window) -> Option<(Rectangle<i32, Logical>, (f64, f64))> {
+        let з = self.запись(окно)?;
+        if !з.во_весь_экран || з.свёрнуто {
+            return None;
+        }
+        let x = окно.x11_surface()?;
+        let экран = self
+            .space
+            .outputs_for_element(окно)
+            .first()
+            .cloned()
+            .or_else(|| self.главный_экран())
+            .and_then(|э| self.space.output_geometry(&э))?;
+        let пов = x.wl_surface()?;
+        let размер = smithay::desktop::utils::bbox_from_surface_tree(&пов, (0, 0)).size;
+        растяжка_для(экран, размер)
+    }
+
     pub fn под_мышью(&self, точка: Point<f64, Logical>) -> Option<(Фокус, Point<f64, Logical>)> {
         if let Some(з) = self.замок.as_ref() {
             let экран = self.space.output_under(точка).next()?;
@@ -957,6 +982,13 @@ impl Glower {
                 if з.во_весь_экран && !з.свёрнуто {
                     if let Some(экран) = self.space.outputs_for_element(о).first().and_then(|э| self.space.output_geometry(э)) {
                         if экран.to_f64().contains(точка) {
+                            // Растянутая игра: мышь — в её разрешение. Место
+                            // фокуса выбираем так, чтобы «точка − место» было
+                            // точкой в координатах игры
+                            if let Some((р, (sx, sy))) = self.растяжка(о) {
+                                let у_игры = Point::<f64, Logical>::from(((точка.x - р.loc.x as f64) / sx, (точка.y - р.loc.y as f64) / sy));
+                                return Some((Фокус::X11(x.clone()), точка - у_игры));
+                            }
                             return Some((Фокус::X11(x.clone()), экран.loc.to_f64()));
                         }
                     }
@@ -1071,4 +1103,31 @@ pub fn половина(область: Rectangle<i32, Logical>, влево: boo
         Point::from((if влево { область.loc.x } else { область.loc.x + пол }, область.loc.y)),
         Size::from((if влево { пол } else { область.size.w - пол }, область.size.h)),
     )
+}
+
+/// Во сколько раз растянуть картинку размером «размер» на «экран»; почти
+/// без растяжения (до 1 %) — не растягиваем вовсе
+pub fn растяжка_для(экран: Rectangle<i32, Logical>, размер: Size<i32, Logical>) -> Option<(Rectangle<i32, Logical>, (f64, f64))> {
+    if размер.w <= 1 || размер.h <= 1 {
+        return None;
+    }
+    let sx = экран.size.w as f64 / размер.w as f64;
+    let sy = экран.size.h as f64 / размер.h as f64;
+    if (sx - 1.0).abs() < 0.01 && (sy - 1.0).abs() < 0.01 {
+        return None;
+    }
+    Some((экран, (sx, sy)))
+}
+
+#[cfg(test)]
+mod проверки_растяжки {
+    use smithay::utils::{Rectangle, Size};
+    #[test]
+    fn игра_1366_растягивается_на_1920() {
+        let экран = Rectangle::new((0, 0).into(), (1920, 1080).into());
+        let (_, (sx, sy)) = super::растяжка_для(экран, Size::from((1366, 768))).unwrap();
+        assert!((sx - 1920.0 / 1366.0).abs() < 1e-9 && (sy - 1080.0 / 768.0).abs() < 1e-9);
+        assert!(super::растяжка_для(экран, Size::from((1920, 1080))).is_none());
+        assert!(super::растяжка_для(экран, Size::from((0, 0))).is_none());
+    }
 }
