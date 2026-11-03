@@ -1048,7 +1048,11 @@ try {
           check('растянутая игра: картинка на весь экран, мышь — в разрешении игры',
             /pub fn растяжка\(&self/.test(ст) && /\(точка\.x - р\.loc\.x as f64\) \/ sx/.test(ст)
             && /bbox_from_surface_tree/.test(ст) && /RescaleRenderElement::from_element\(э, угол, Scale::from\(\(sx, sy\)\)\)/.test(рн)
-            && /pub fn неизменный/.test(xw) && /неизменный\(x\)\.is_some\(\)/.test(xw));
+            && /pub fn неизменный/.test(xw) && /неизменный\(x\)\.is_some\(\)/.test(xw)
+            // Minecraft просит весь экран, не меняя разрешение: не растянул
+            // Xwayland за полсекунды — окно получает размер экрана
+            && /pub fn проверь_растяжки/.test(ст) && /ждёт_растяжки = Some/.test(ст)
+            && /с\.проверь_растяжки\(\)/.test(await readFile(join(root, 'wm', 'src', 'main.rs'), 'utf8')));
         }
         {
           // Мощность в играх: ядро как в SteamOS, ntsync, glthread, игровой режим

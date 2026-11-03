@@ -196,6 +196,7 @@ impl XwmHandler for Glower {
             во_весь_экран: false,
             не_отвечает: false,
             по_просьбе: false,
+            ждёт_растяжки: None,
         });
         self.space.map_element(окно.clone(), место, true);
         self.анимации.появилось(&окно);
@@ -261,7 +262,8 @@ impl XwmHandler for Glower {
         };
         let экран = self.главный_экран().and_then(|э| self.space.output_geometry(&э));
         if self.запись(&окно).is_some_and(|з| з.во_весь_экран) {
-            let по_просьбе = self.запись(&окно).is_some_and(|з| з.по_просьбе);
+            let просила = self.запись(&окно).is_some_and(|з| з.по_просьбе);
+            let по_просьбе = просила;
             match экран {
                 // Просит размер экрана — остаётся во весь экран
                 Some(э) if гео.size.w >= э.size.w && гео.size.h >= э.size.h => {
@@ -271,6 +273,11 @@ impl XwmHandler for Glower {
                 // Игра во весь экран по своей просьбе меняет разрешение —
                 // остаётся во весь экран со своим размером, растягивает Xwayland
                 Some(э) if по_просьбе => {
+                    if неизменный(&window).is_none() {
+                        if let Some(з) = self.запись_мут(&окно) {
+                            з.ждёт_растяжки = Some(std::time::Instant::now());
+                        }
+                    }
                     let _ = window.configure(Rectangle::new(э.loc, гео.size));
                     self.space.map_element(окно.clone(), э.loc, false);
                     self.нужен_кадр = true;

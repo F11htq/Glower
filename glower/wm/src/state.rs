@@ -78,6 +78,9 @@ pub struct Запись {
     /// игра с меньшим разрешением держит свой размер, а растягивает её
     /// Xwayland — как в Windows, на весь экран
     pub по_просьбе: bool,
+    /// Во весь экран со своим меньшим размером — ждём, растянет ли его
+    /// Xwayland (игра сменила режим экрана). Не растянул — даём размер экрана
+    pub ждёт_растяжки: Option<std::time::Instant>,
 }
 
 pub struct Замок {
@@ -509,6 +512,7 @@ impl Glower {
             во_весь_экран: весь,
             не_отвечает: false,
             по_просьбе: false,
+            ждёт_растяжки: None,
         });
         if весь || развёрнуто {
             if let Some(t) = окно.toplevel() {
@@ -796,8 +800,21 @@ impl Glower {
             // пересчитает мышь. Растянуть окно до экрана значило бы, что
             // игра рисует в угол, а щелчки уходят мимо
             let свой = x.geometry().size;
-            let по_просьбе = self.запись(окно).is_some_and(|з| з.по_просьбе) || crate::xwayland::неизменный(x).is_some();
-            let куда = if да && по_просьбе && (свой.w < гео.size.w || свой.h < гео.size.h) && свой.w > 1 && свой.h > 1 {
+            // Свой размер держат только окна, размер которых менять нельзя
+            // (CS:GO и подобные): их картинку растягивает Xwayland или сервер.
+            // Обычные окна (Minecraft) просят весь экран и ждут размер экрана —
+            // иначе картинка в углу, а щелчок мимо окна сворачивает игру
+            let неизменный = crate::xwayland::неизменный(x).is_some();
+            let по_просьбе = неизменный || self.запись(окно).is_some_and(|з| з.по_просьбе);
+            let меньше = (свой.w < гео.size.w || свой.h < гео.size.h) && свой.w > 1 && свой.h > 1;
+            let куда = if да && по_просьбе && меньше {
+                // Окно, которому размер менять можно, — пробуем на полсекунды:
+                // не растянет Xwayland — значит, ему просто нужен весь экран
+                if !неизменный {
+                    if let Some(з) = self.запись_мут(окно) {
+                        з.ждёт_растяжки = Some(std::time::Instant::now());
+                    }
+                }
                 Rectangle::new(гео.loc, свой)
             } else if да {
                 гео
@@ -961,6 +978,33 @@ impl Glower {
         растяжка_для(экран, размер)
     }
 
+    /// Полсекунды прошло, а Xwayland картинку не растянул: игра не меняла
+    /// режим экрана, ей просто нужен весь экран — даём размер экрана
+    pub fn проверь_растяжки(&mut self) {
+        let сейчас = std::time::Instant::now();
+        let ждут: Vec<Window> = self
+            .окна
+            .iter()
+            .filter(|з| з.ждёт_растяжки.is_some_and(|т| сейчас - т >= Duration::from_millis(500)))
+            .map(|з| з.окно.clone())
+            .collect();
+        for о in ждут {
+            if let Some(з) = self.запись_мут(&о) {
+                з.ждёт_растяжки = None;
+            }
+            let Some(з) = self.запись(&о) else { continue };
+            if !з.во_весь_экран {
+                continue;
+            }
+            let (Some(x), Some(экран)) = (о.x11_surface().cloned(), self.главный_экран().and_then(|э| self.space.output_geometry(&э))) else { continue };
+            let размер = x.wl_surface().map(|п| smithay::desktop::utils::bbox_from_surface_tree(&п, (0, 0)).size).unwrap_or_default();
+            if размер.w < экран.size.w || размер.h < экран.size.h {
+                let _ = x.configure(экран);
+                self.нужен_кадр = true;
+            }
+        }
+    }
+
     pub fn под_мышью(&self, точка: Point<f64, Logical>) -> Option<(Фокус, Point<f64, Logical>)> {
         if let Some(з) = self.замок.as_ref() {
             let экран = self.space.output_under(точка).next()?;
@@ -989,7 +1033,12 @@ impl Glower {
                                 let у_игры = Point::<f64, Logical>::from(((точка.x - р.loc.x as f64) / sx, (точка.y - р.loc.y as f64) / sy));
                                 return Some((Фокус::X11(x.clone()), точка - у_игры));
                             }
-                            return Some((Фокус::X11(x.clone()), экран.loc.to_f64()));
+                            // Окно размером с экран (или растянутое Xwayland) — всё
+                            // его; меньшее и не растянутое — дальше, как обычно
+                            let размер = x.wl_surface().map(|п| smithay::desktop::utils::bbox_from_surface_tree(&п, (0, 0)).size).unwrap_or_default();
+                            if размер.w >= экран.size.w && размер.h >= экран.size.h {
+                                return Some((Фокус::X11(x.clone()), экран.loc.to_f64()));
+                            }
                         }
                     }
                 }

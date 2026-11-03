@@ -97,7 +97,8 @@ fn main() {
         calloop::timer::Timer::from_duration(std::time::Duration::from_secs(1)),
         |_, _, с| {
             с.проверь_зависания();
-            calloop::timer::TimeoutAction::ToDuration(std::time::Duration::from_secs(1))
+            с.проверь_растяжки();
+            calloop::timer::TimeoutAction::ToDuration(std::time::Duration::from_millis(250))
         },
     );
 

@@ -17,6 +17,8 @@
 //!     outputs   — экраны: имя, модель, режим, масштаб, все режимы (таб)
 //!     mode ИМЯ ШxВ@мГц — сменить режим экрана (частоту, размер)
 //!     scale ИМЯ М — сменить масштаб экрана
+//!     windows   — окна: заголовок, место и размер, размер картинки,
+//!                 во весь экран, растяжка (для разбора неполадок)
 //!     reload    — перечитать rc.xml и environment
 //!     quit      — завершить сеанс
 
@@ -113,6 +115,27 @@ pub fn выполни(с: &mut Glower, команда: &str) -> String {
             вставь(с);
             "ok".into()
         }
+        ("windows", _) => с
+            .окна
+            .iter()
+            .map(|з| {
+                let о = &з.окно;
+                let (имя, гео, пов) = match о.x11_surface() {
+                    Some(x) => (
+                        format!("x11 {}", x.title()),
+                        x.geometry(),
+                        x.wl_surface().map(|п| smithay::desktop::utils::bbox_from_surface_tree(&п, (0, 0)).size),
+                    ),
+                    None => ("wayland".to_string(), о.geometry(), None),
+                };
+                format!(
+                    "{имя}\tгео {}x{}+{}+{}\tкартинка {:?}\tвесь {}\tпросил {}\tрастяжка {:?}",
+                    гео.size.w, гео.size.h, гео.loc.x, гео.loc.y, пов.map(|р| (р.w, р.h)), з.во_весь_экран, з.по_просьбе,
+                    с.растяжка(о).map(|(_, к)| к)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
         ("outputs", _) => match с.бэкенд.as_ref() {
             Some(crate::backend::Бэкенд::Udev(u)) => u.экраны_словами(),
             _ => с
