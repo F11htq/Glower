@@ -1223,7 +1223,10 @@ const НЕ_ИГРЫ: &[&str] = &[
 
 pub fn это_игра(w: &Value) -> bool {
     let id = w["appId"].as_str().unwrap_or("").to_lowercase();
-    if id.starts_with("steam_app_") || id.ends_with(".exe") || id == "gamescope" || id.contains("minecraft") {
+    // Известные игры узнаём и в окне, не только во весь экран: Minecraft и
+    // CS:GO часто играют в окне, а игровой режим нужен и им
+    const ИГРЫ: &[&str] = &["minecraft", "csgo", "cs2", "hl2_linux", "dota", "portal2", "factorio", "terraria", "stardew", "valheim", "rocketleague", "supertux", "0ad", "openttd", "xonotic"];
+    if id.starts_with("steam_app_") || id.ends_with(".exe") || id == "gamescope" || ИГРЫ.iter().any(|и| id.contains(и)) {
         return true;
     }
     let вовесь = w["состояние"]["вовесь"].as_bool() == Some(true);

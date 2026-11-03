@@ -1040,6 +1040,25 @@ try {
             && /fprintd-verify/.test(await readFile(join(root, 'agent', 'key.mjs'), 'utf8')) && /hashlib\.scrypt/.test(спас2));
         }
         {
+          // Мощность в играх: ядро как в SteamOS, ntsync, glthread, игровой режим
+          const сп = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
+          const ми = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+          const ядро = await readFile(join(root, 'linux', 'sysctl-80-glower-perf.conf'), 'utf8');
+          const dri = await readFile(join(root, 'linux', 'drirc-glower-games.conf'), 'utf8');
+          const gm = await readFile(join(root, 'agent', 'gamemode.ini'), 'utf8');
+          const иг = await readFile(join(root, 'agent', 'games.mjs'), 'utf8');
+          check('игры: split lock без торможения, ntsync, glthread для Minecraft, приоритет и частота встройки',
+            /kernel\.split_lock_mitigate = 0/.test(ядро) && /vm\.max_map_count = 2147483642/.test(ядро)
+            && /^ntsync$/m.test(await readFile(join(root, 'linux', 'modules-glower-ntsync.conf'), 'utf8'))
+            && /TAG\+="uaccess"/.test(await readFile(join(root, 'linux', 'udev-70-glower-ntsync.rules'), 'utf8'))
+            && /executable="java"[\s\S]*mesa_glthread" value="true"/.test(dri)
+            && /renice=10/.test(gm) && /igpu_desiredgov=performance/.test(gm)
+            && /--env=mesa_glthread=true/.test(иг) && /'usermod', '-aG', 'gamemode'/.test(иг)
+            && ['usr/lib/sysctl.d/80-glower-perf.conf', 'usr/lib/modules-load.d/glower-ntsync.conf', 'usr/lib/udev/rules.d/70-glower-ntsync.rules', 'usr/share/drirc.d/50-glower-games.conf']
+                 .every(ф => сп.includes(ф) && ми.includes(ф))
+            && /usermod -aG gamemode glower/.test(ми));
+        }
+        {
           // Зависшие программы — как в Windows: оклик, «(не отвечает)», бледное
           // окно и вопрос при закрытии; закрывает панель сигналом KILL
           const зв = await readFile(join(root, 'wm', 'src', 'hang.rs'), 'utf8');

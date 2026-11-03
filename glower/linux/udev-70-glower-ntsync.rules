@@ -1,0 +1,2 @@
+# ntsync — человеку за компьютером (Wine и Proton открывают его сами)
+KERNEL=="ntsync", MODE="0644", TAG+="uaccess"

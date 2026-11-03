@@ -69,9 +69,50 @@ async function переменная_сеанса(имя, значение){
   await writeFile(СРЕДА_СЕАНСА, строки.join('\n') + (строки.length ? '\n' : ''));
 }
 
+/* Всё, что ускоряет игры, кроме самого игрового режима, — один раз при
+   запуске агента, тихо и без вопросов:
+     — свой gamemode.ini: игре приоритет выше остальных программ, встроенной
+       видеокарте — полная частота, пока идёт игра;
+     — человек — в группе gamemode: без неё поднять приоритет нельзя
+       (заработает со следующего входа);
+     — Prism Launcher из Flathub: OpenGL в отдельном потоке (glthread).
+       Системным играм это даёт /usr/share/drirc.d/50-glower-games.conf, а
+       Mesa внутри Flatpak этот файл не видит. */
+const GAMEMODE_INI = join(ДОМ, '.config/gamemode.ini');
+const PRISM = 'org.prismlauncher.PrismLauncher';
+export async function подготовь_ускорение({ запусти = run } = {}){
+  const сделано = [];
+  if (!existsSync(GAMEMODE_INI)){
+    try {
+      await mkdir(dirname(GAMEMODE_INI), { recursive:true });
+      await writeFile(GAMEMODE_INI, await readFile(new URL('./gamemode.ini', import.meta.url), 'utf8'));
+      сделано.push('gamemode.ini');
+    } catch(e){}
+  }
+  try {
+    const группы = await readFile('/etc/group', 'utf8');
+    const строка = группы.split('\n').find(с => с.startsWith('gamemode:'));
+    const я = os.userInfo().username;
+    if (строка && !строка.split(':')[3].split(',').includes(я)){
+      await запусти('sudo', ['-n', 'usermod', '-aG', 'gamemode', я], { timeout:15000 });
+      сделано.push('группа gamemode');
+    }
+  } catch(e){}
+  try {
+    const { stdout } = await запусти('flatpak', ['list', '--app', '--columns=application'], { timeout:15000 });
+    if (String(stdout).split('\n').includes(PRISM)){
+      await запусти('flatpak', ['override', '--user', '--env=mesa_glthread=true', PRISM], { timeout:15000 });
+      сделано.push('glthread для Prism Launcher');
+    }
+  } catch(e){}
+  return сделано;
+}
+
 export function games(){
   // Агент перезапустился посреди игры — gamemode не должен остаться включённым навсегда
   process.on('exit', () => { if (держит) try { process.kill(-держит.pid, 'SIGTERM'); } catch(e){} });
+  const т = setTimeout(() => { подготовь_ускорение().catch(() => {}); }, 20000);
+  if (т.unref) т.unref();
   return {
     async 'game.mode'({ вкл }){
       await режим(вкл);

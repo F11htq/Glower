@@ -479,6 +479,13 @@ install -m 755 "$SRC/linux/glower-rescue" "$ROOTFS/usr/bin/glower-rescue"
 install -D -m 644 "$SRC/linux/apt-80glower-net" "$ROOTFS/etc/apt/apt.conf.d/80glower-net"
 install -D -m 644 "$SRC/linux/modprobe-glower-wl.conf" "$ROOTFS/etc/modprobe.d/glower-wl.conf"
 install -m 755 "$SRC/linux/glower-wifi-antenna" "$ROOTFS/usr/bin/glower-wifi-antenna"
+# Игры: настройки ядра как в SteamOS, ntsync для Wine/Proton, glthread для
+# Minecraft (см. комментарии в самих файлах). Приоритет игре и полную
+# частоту встройке настраивает агент (agent/games.mjs, ~/.config/gamemode.ini)
+install -D -m 644 "$SRC/linux/sysctl-80-glower-perf.conf" "$ROOTFS/usr/lib/sysctl.d/80-glower-perf.conf"
+install -D -m 644 "$SRC/linux/modules-glower-ntsync.conf" "$ROOTFS/usr/lib/modules-load.d/glower-ntsync.conf"
+install -D -m 644 "$SRC/linux/udev-70-glower-ntsync.rules" "$ROOTFS/usr/lib/udev/rules.d/70-glower-ntsync.rules"
+install -D -m 644 "$SRC/linux/drirc-glower-games.conf" "$ROOTFS/usr/share/drirc.d/50-glower-games.conf"
 install -D -m 644 "$SRC/linux/udev-80-glower-wifi-antenna.rules" "$ROOTFS/usr/lib/udev/rules.d/80-glower-wifi-antenna.rules"
 # Заставка загрузки — до самого экрана входа (см. комментарий в файле)
 install -D -m 644 "$SRC/linux/plymouth-retain.conf" "$ROOTFS/usr/lib/systemd/system/plymouth-quit.service.d/glower-retain.conf"
@@ -799,6 +806,8 @@ usermod -aG video,audio,input,render,tty,adm,systemd-journal,lpadmin,lp glower
 passwd -d glower
 # как в любой живой системе: разбор на месте без пароля
 usermod -aG sudo glower 2>/dev/null || true
+# Игровой режим поднимает приоритет игры только тем, кто в группе gamemode
+usermod -aG gamemode glower 2>/dev/null || true
 echo 'glower ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/glower
 chmod 440 /etc/sudoers.d/glower
 # Ubuntu настраивает NetworkManager так, что он ведёт только Wi-Fi и модемы,
