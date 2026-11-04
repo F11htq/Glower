@@ -79,6 +79,10 @@ async function переменная_сеанса(имя, значение){
        Системным играм это даёт /usr/share/drirc.d/50-glower-games.conf, а
        Mesa внутри Flatpak этот файл не видит. */
 const GAMEMODE_INI = join(ДОМ, '.config/gamemode.ini');
+export const GRUB_PERF = '/etc/default/grub.d/90-glower-perf.cfg';
+export const МИТИГАЦИИ = '# GlowerOS: защиты процессора от Spectre и подобных выключены по просьбе человека\n'
+  + '# (Параметры → Игры). Удалить файл и выполнить update-grub — вернуть как было\n'
+  + 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT mitigations=off"\n';
 const PRISM = 'org.prismlauncher.PrismLauncher';
 export async function подготовь_ускорение({ запусти = run } = {}){
   const сделано = [];
@@ -137,6 +141,41 @@ export function games(){
       const готово = gamemode && mangohud && vulkan32 && карта >= 1048576;
       return { игра, gamemode, mangohud, vulkaninfo, vulkan32, nvidia, steam, карта, готово,
         fps:await fps_вкл() };
+    },
+
+    /* Максимум для игр: состояние и защиты процессора.
+
+       Защиты ядра от Spectre, Meltdown и родни на Intel до 11-го поколения
+       отнимают у программ, упирающихся в процессор, от 5 до 15 % (а то и
+       больше): каждое переключение в ядро и обратно дороже. Отключить —
+       выбор человека, только по его просьбе: в обмен вредоносная программа
+       или страница теоретически сможет читать чужую память. Ключ ядра
+       mitigations=off пишем отдельным файлом в /etc/default/grub.d —
+       убрать его значит удалить файл. Работает после перезагрузки. */
+    async 'game.perf'(){
+      const ядро = await readFile('/proc/cmdline', 'utf8').catch(() => '');
+      const сейчас_выкл = /(^|\s)mitigations=off(\s|$)/.test(ядро);
+      const файл = existsSync(GRUB_PERF);
+      let режим = '';
+      try { режим = (await run('gamemoded', ['-s'], { timeout:5000 })).stdout.trim(); } catch(e){ режим = String(e.stdout || '').trim(); }
+      const частота = await readFile('/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor', 'utf8').then(т => т.trim()).catch(() => '');
+      return { защиты_выкл:сейчас_выкл, защиты_выкл_после_перезагрузки:файл,
+        перезагрузка:сейчас_выкл !== файл, игровой_режим:/is active/.test(режим), частота, игра };
+    },
+
+    async 'game.perf.mitigations'({ выкл }){
+      if (выкл){
+        await run('sudo', ['-n', 'mkdir', '-p', dirname(GRUB_PERF)], { timeout:15000 });
+        const п = spawn('sudo', ['-n', 'tee', GRUB_PERF], { stdio:['pipe', 'ignore', 'pipe'] });
+        п.stdin.end(МИТИГАЦИИ);
+        const код = await new Promise(r => п.on('close', r));
+        if (код !== 0) throw new Error('не вышло записать настройку загрузки');
+      } else {
+        await run('sudo', ['-n', 'rm', '-f', GRUB_PERF], { timeout:15000 });
+      }
+      await run('sudo', ['-n', 'update-grub'], { timeout:180000 })
+        .catch(e => { throw new Error('update-grub: ' + String(e.stderr || e.message).trim().split('\n').pop()); });
+      return await this['game.perf']();
     },
 
     /* Счётчик кадров во всех играх */

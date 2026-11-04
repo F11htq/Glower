@@ -1055,6 +1055,16 @@ try {
             && /с\.проверь_растяжки\(\)/.test(await readFile(join(root, 'wm', 'src', 'main.rs'), 'utf8')));
         }
         {
+          // Защиты процессора — по выбору человека, отдельным файлом GRUB
+          const иг2 = await import(pathToFileURL(join(root, 'agent', 'games.mjs')).href);
+          const пар2 = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+          check('игры: защиты процессора отключаются только по просьбе, с предупреждением и возвратом',
+            иг2.GRUB_PERF === '/etc/default/grub.d/90-glower-perf.cfg'
+            && /^GRUB_CMDLINE_LINUX_DEFAULT="\$GRUB_CMDLINE_LINUX_DEFAULT mitigations=off"$/m.test(иг2.МИТИГАЦИИ)
+            && /fn игры_максимум/.test(пар2) && /Отключить защиты процессора\?/.test(пар2)
+            && !/mitigations=off/.test(await readFile(join(root, 'linux', 'glower-install'), 'utf8')));
+        }
+        {
           // Мощность в играх: ядро как в SteamOS, ntsync, glthread, игровой режим
           const сп = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
           const ми = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
