@@ -463,7 +463,9 @@ export const procs = {
 };
 
 /* ---------- установленные программы: читаем .desktop ---------- */
-const APP_DIRS = ['/usr/share/applications', '/usr/local/share/applications',
+/* GLOWER_APP_DIRS — только для стенда: показать меню с ярлыками образа, а
+   не той машины, на которой стенд запущен */
+const APP_DIRS = process.env.GLOWER_APP_DIRS ? process.env.GLOWER_APP_DIRS.split(':').filter(Boolean) : ['/usr/share/applications', '/usr/local/share/applications',
   join(os.homedir(), '.local/share/applications'),
   /* программы из Flathub кладут свои ярлыки сюда */
   join(os.homedir(), '.local/share/flatpak/exports/share/applications'),

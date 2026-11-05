@@ -32,7 +32,14 @@ const ЧАСТОТА: i32 = 60_000;
 pub fn запусти(цикл: &mut EventLoop<'static, Glower>, состояние: &mut Glower) -> Result<(), Box<dyn std::error::Error>> {
     let атрибуты = smithay::reexports::winit::window::Window::default_attributes()
         .with_title("GlowerOS")
-        .with_inner_size(smithay::reexports::winit::dpi::LogicalSize::new(1280.0, 800.0));
+        .with_inner_size({
+            // Размер окна стенда: GLOWER_WM_SIZE=1920x1080, иначе 1280×800
+            let (ш, в) = std::env::var("GLOWER_WM_SIZE")
+                .ok()
+                .and_then(|р| р.split_once('x').and_then(|(ш, в)| Some((ш.parse::<f64>().ok()?, в.parse::<f64>().ok()?))))
+                .unwrap_or((1280.0, 800.0));
+            smithay::reexports::winit::dpi::LogicalSize::new(ш, в)
+        });
     let (mut backend, источник) = winit::init_from_attributes::<GlesRenderer>(атрибуты)?;
     // Свой указатель рисуем сами — указатель хозяина прячем
     backend.window().set_cursor_visible(false);

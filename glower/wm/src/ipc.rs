@@ -126,7 +126,13 @@ pub fn выполни(с: &mut Glower, команда: &str) -> String {
                         x.geometry(),
                         x.wl_surface().map(|п| smithay::desktop::utils::bbox_from_surface_tree(&п, (0, 0)).size),
                     ),
-                    None => ("wayland".to_string(), о.geometry(), None),
+                    None => {
+                        let mut г = о.geometry();
+                        if let Some(м) = с.space.element_location(о) {
+                            г.loc = м;
+                        }
+                        ("wayland".to_string(), г, None)
+                    }
                 };
                 format!(
                     "{имя}\tгео {}x{}+{}+{}\tкартинка {:?}\tвесь {}\tпросил {}\tрастяжка {:?}",
