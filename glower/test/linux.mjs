@@ -1201,15 +1201,15 @@ try {
           const заставка = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
           const плим = await readFile(join(root, 'linux', 'plymouth-retain.conf'), 'utf8');
           const стол3 = await readFile(join(root, 'panel', 'src', 'desktop.rs'), 'utf8');
-          check('Загрузка как в Windows: заставка держится до экрана входа, после входа — «Добро пожаловать» с кометой до самого стола',
+          check('Загрузка как в Windows: заставка держится до экрана входа, после входа — «Добро пожаловать» с той же картинкой до самого стола',
             // Порядок загрузки не трогаем: greetd ждёт plymouth-quit-wait, и
             // запрет plymouth-quit вешал загрузку на логотипе
             !/Conflicts=/.test(плим) && /^ExecStart=$/m.test(плим) && /plymouth quit --retain-splash/.test(плим)
             && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
             && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
-            // Комета и разметка — одни и те же у Plymouth и у заставки после входа
-            && /size \* 0\.17/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
-            && /знак \* 0\.17/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            // Сценарий и разметка — одни и те же у Plymouth и у заставки после входа
+            && /size \* 0\.34/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            && /знак \* 0\.34/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
             && /pangocairo/.test(заставка) && /add_tick_callback/.test(заставка)
             && /plymouth-quit\.service\.d\/glower-retain\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
@@ -1399,16 +1399,22 @@ try {
         /linux\/plymouth\/\*\.png/.test(образ2) && /\[ -e "\$img" \] \|\| continue/.test(образ2)
           && /activate-noawait update-initramfs/.test(пакет));
       /* Тяжёлые анимации при включении и выключении человек когда-то просил
-         убрать, потом — загрузку «как в Windows», а потом — красивую, но не
-         детскую. Это логотип и комета на орбите: заранее нарисованные кадры,
-         которые Plymouth только сменяет, — без вращения картинок на ходу
-         (оно дорогое и дёргается) и без вспышек. */
-      const кадры = есть.filter(ф => /^spin-\d+\.png$/.test(ф));
-      check('заставка загрузки: логотип и комета — сто готовых кадров, ничего не вращается на ходу',
-        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /Image\("spin-" \+ spin_n \+ "\.png"\)/.test(сцен)
-          && кадры.length === 100 && [...Array(100).keys()].every(i => есть.includes('spin-' + i + '.png'))
+         убрать, потом — загрузку «как в Windows», потом — красивую, но не
+         детскую, а потом — «появление логотипа в бегущих строках». Логотип
+         режется на полосы, полосы прилетают вместе с лучами и встают на
+         место. Сценарий общий с заставкой после входа: тот же генератор
+         чисел, те же числа сборки. Ничего не вращается на ходу. */
+      const свет = ['streak-0.png', 'streak-1.png', 'streak-2.png', 'streak-3.png', 'streak-4.png', 'streak-5.png',
+        'smear-0.png', 'smear-1.png', 'glint.png', 'line.png', 'seg.png'];
+      const рс = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
+      const числа = [/20251107/, /16807/, /2147483647/, /0\.30, 0\.85, 0\.75, 1\.2, 4\.0, 1\.45/, /1\.05, 0\.45, 0\.60, 0\.8, 2\.4, 1\.75/];
+      check('заставка загрузки: логотип собирается из бегущих строк — сценарий общий с заставкой после входа',
+        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /\.Crop\(/.test(сцен)
+          && свет.every(ф => есть.includes(ф)) && !есть.some(ф => /^spin-/.test(ф))
+          && числа.every(р => р.test(сцен) && р.test(рс))
+          && /logo_n = 24;/.test(сцен) && /ПОЛОС_ЗНАКА: usize = 24/.test(рс)
           && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен),
-        'кадров: ' + кадры.length);
+        JSON.stringify(свет.filter(ф => !есть.includes(ф))));
     }
 
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет

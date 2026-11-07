@@ -1,16 +1,20 @@
-# Заставка загрузки GlowerOS: логотип и комета на орбите.
+# Заставка загрузки GlowerOS: логотип собирается из бегущих строк.
 #
-# Комета — та же, что в знаке системы: светлая голова с тёплым ореолом
-# бежит по едва видному кольцу, хвост тает из тёплого белого в голубой.
-# Сверху она разгоняется, снизу притормаживает, и хвост то вытягивается,
-# то подбирается.
+# Знак и надпись разрезаны на полосы. Полосы прилетают с обеих сторон
+# экрана, оставляя за собой светлый след, вместе с тонкими лучами —
+# голубыми, белыми и тёплыми, как цвета знака. Встав на место, пара полос
+# на миг сбивается, как помеха в сигнале; по собранному знаку сверху вниз
+# проходит блик, и под надписью появляется черта загрузки с бегунком.
+# Дальше, пока система грузится, по экрану изредка проходят тихие лучи.
 #
-# Каждый кадр нарисован заранее (spin-0.png … spin-99.png, их рисует
-# glower-splash --кадры той же функцией, что и заставку после входа):
-# Plymouth перерисовывает экран 50 раз в секунду, и на каждый его кадр —
-# свой рисунок. Раньше точки двигались по экрану сами и вставали только на
-# целые пиксели — отсюда и подёргивание. Теперь картинка стоит на месте, а
-# меняется только её содержимое, сглаженное при рисовании.
+# Сценарий — тот же, что у заставки после входа (panel/src/splash.rs):
+# те же разметка, генератор случайных чисел и порядок чисел, поэтому
+# после входа экран продолжает ту же картинку. Картинки света (лучи,
+# следы, блик, черта) рисует glower-splash --кадры; логотип и надпись
+# режутся на полосы здесь же, по размеру экрана.
+#
+# Plymouth зовёт refresh_callback 50 раз в секунду: один вызов — один
+# кадр, и время считается по кадрам.
 #
 # Язык заставки понимает только латинские имена — поясняем по-русски.
 
@@ -24,10 +28,8 @@ cy = screen_h / 2 - screen_h / 22;
 
 size = Math.Int(screen_h / 5.2);
 logo_img = Image("logo.png").Scale(size, size);
-logo = Sprite(logo_img);
-logo.SetX(cx - size / 2);
-logo.SetY(cy - size / 2);
-logo.SetZ(20);
+logo_x = Math.Int(cx - size / 2 + 0.5);
+logo_y = Math.Int(cy - size / 2 + 0.5);
 
 # Надпись — та же, что в логотипе (word.png); нет файла — словами
 word_src = Image("word.png");
@@ -37,53 +39,221 @@ if (word_src){
 } else {
   word_img = Image.Text("GlowerOS", 1, 1, 1, 1, "Sans Bold " + Math.Int(size / 6.5));
 }
-word = Sprite(word_img);
-word.SetX(cx - word_img.GetWidth() / 2);
+word_w = word_img.GetWidth();
+word_h = word_img.GetHeight();
 word_y = cy + size / 2 + size * 0.22;
-word.SetY(word_y);
-word.SetZ(20);
-# Комета: та же разметка, что у заставки после входа (panel/src/splash.rs)
-spin_r = Math.Int(size * 0.17);
-if (spin_r < 16) spin_r = 16;
-ring_y = word_y + word_img.GetHeight() + size * 0.42 + spin_r;
-# Кадры нарисованы на холсте 208 точек с орбитой радиуса 72
-spin_d = Math.Int(208 * spin_r / 72 + 0.5);
-# Кадров нет (тему собрали без них) — комету не показываем
-spin_n = 0;
-spin_more = 1;
-while (spin_more && spin_n < 100){
-  src = Image("spin-" + spin_n + ".png");
-  if (src){
-    frames[spin_n] = src.Scale(spin_d, spin_d);
-    spin_n = spin_n + 1;
-  } else {
-    spin_more = 0;
+word_x = Math.Int(cx - word_w / 2 + 0.5);
+word_top = Math.Int(word_y + 0.5);
+
+# Черта загрузки и подписи — та же разметка, что в splash.rs
+line_y = Math.Int(word_y + word_h + size * 0.34);
+line_h = Math.Int(size / 207 * 2);
+if (line_h < 1) line_h = 1;
+text_y = line_y + size * 0.2;
+band_top = cy - size * 0.75;
+band_bottom = word_y + word_h + size * 0.15;
+
+# ---------- общий сценарий ----------
+# Генератор Лемера: s = s·16807 mod (2³¹−1) — точно такой же в splash.rs
+seed = 20251107;
+fun rnd(){
+  global.seed = global.seed * 16807;
+  global.seed = global.seed - Math.Int(global.seed / 2147483647) * 2147483647;
+  return global.seed / 2147483647;
+}
+
+intro = 2.6;
+fon_period = 4.0;
+seg_period = 1.7;
+
+# Полосы: n полос картинки img (ширина w, высота h) с левым верхним углом
+# x, y. Пять чисел на полосу в том же порядке, что в splash.rs: задержка,
+# дальность, сторона, время сбоя, сбой
+fun make_strips(img, n, w, h, x, y, start, spread, dur, dmin, dmax, glitch0, z){
+  smear_w = Math.Int(global.size * 0.9);
+  for (i = 0; i < n; i++){
+    r0 = rnd(); r1 = rnd(); r2 = rnd(); r3 = rnd(); r4 = rnd();
+    side = 1;
+    if (r2 < 0.5) side = -1;
+    y0 = Math.Int(i * h / n);
+    y1 = Math.Int((i + 1) * h / n);
+    list[i].delay = start + spread * r0;
+    list[i].dur = dur;
+    list[i].off = side * (dmin + (dmax - dmin) * r1) * global.size;
+    list[i].gt = glitch0 + 0.5 * r3;
+    list[i].gdx = 0;
+    if (Math.Abs(r4 - 0.5) > 0.25) list[i].gdx = (r4 - 0.5) * 0.12 * global.size;
+    list[i].x = x;
+    list[i].w = w;
+    list[i].sprite = Sprite(img.Crop(0, y0, w, y1 - y0));
+    list[i].sprite.SetY(y + y0);
+    list[i].sprite.SetZ(z);
+    list[i].sprite.SetOpacity(0);
+    # След: светлый у полосы, тает назад — со стороны, откуда она летит
+    if (side < 0) list[i].smear = Sprite(Image("smear-0.png").Scale(smear_w, y1 - y0));
+    else list[i].smear = Sprite(Image("smear-1.png").Scale(smear_w, y1 - y0));
+    list[i].smear_w = smear_w;
+    list[i].smear.SetY(y + y0);
+    list[i].smear.SetZ(z - 1);
+    list[i].smear.SetOpacity(0);
+  }
+  return list;
+}
+
+logo_n = 24;
+word_n = 8;
+logo_strips = make_strips(logo_img, logo_n, size, size, logo_x, logo_y, 0.30, 0.85, 0.75, 1.2, 4.0, 1.45, 20);
+word_strips = make_strips(word_img, word_n, word_w, word_h, word_x, word_top, 1.05, 0.45, 0.60, 0.8, 2.4, 1.75, 20);
+
+# Лучи: пять чисел — высота, длина, цвет, начало, длительность
+fun make_rays(n, fon){
+  for (k = 0; k < n; k++){
+    r0 = rnd(); r1 = rnd(); r2 = rnd(); r3 = rnd(); r4 = rnd();
+    len = Math.Int(global.size * (0.4 + 2.2 * r1) + 0.5);
+    list[k].len = len;
+    col = 0;
+    if (r2 >= 0.55) col = 1;
+    if (r2 >= 0.8) col = 2;
+    if (fon){
+      list[k].start = r3 * global.fon_period;
+      list[k].dur = 0.9 + 0.6 * r4;
+    } else {
+      list[k].start = 0.05 + 1.4 * r3;
+      list[k].dur = 0.5 + 0.6 * r4;
+    }
+    dir = 1;
+    if (k - Math.Int(k / 2) * 2 == 1) dir = -1;
+    list[k].dir = dir;
+    th = Math.Int(global.size * 0.010);
+    if (k - Math.Int(k / 3) * 3 == 0) th = Math.Int(global.size * 0.016);
+    if (th < 1) th = 1;
+    if (dir < 0) col = col + 3;
+    list[k].sprite = Sprite(Image("streak-" + col + ".png").Scale(len, th));
+    list[k].sprite.SetY(Math.Int(global.band_top + r0 * (global.band_bottom - global.band_top)));
+    list[k].sprite.SetZ(10);
+    list[k].sprite.SetOpacity(0);
+  }
+  return list;
+}
+
+ray_n = 30;
+fon_n = 8;
+rays = make_rays(ray_n, 0);
+fons = make_rays(fon_n, 1);
+
+# Блик по собранному знаку
+glint_h = Math.Int(size * 0.035);
+if (glint_h < 2) glint_h = 2;
+glint_w = Math.Int(size * 1.6);
+glint = Sprite(Image("glint.png").Scale(glint_w, glint_h));
+glint.SetX(Math.Int(cx - glint_w / 2));
+glint.SetZ(30);
+glint.SetOpacity(0);
+
+# Черта загрузки и бегунок. Обрезать бегунок по краям черты нечем —
+# поэтому он гаснет к её концам
+line = Sprite(Image("line.png").Scale(word_w, line_h));
+line.SetX(word_x);
+line.SetY(line_y);
+line.SetZ(20);
+line.SetOpacity(0);
+seg_w = Math.Int(word_w * 0.3);
+seg = Sprite(Image("seg.png").Scale(seg_w, line_h));
+seg.SetY(line_y);
+seg.SetZ(21);
+seg.SetOpacity(0);
+
+frame = 0;
+spin_on = 1;
+
+fun move_strips(list, n, t){
+  for (i = 0; i < n; i++){
+    if (t < list[i].delay){
+      list[i].sprite.SetOpacity(0);
+      list[i].smear.SetOpacity(0);
+    } else {
+      p = (t - list[i].delay) / list[i].dur;
+      if (p > 1) p = 1;
+      e = 1 - (1 - p) * (1 - p) * (1 - p);
+      dx = list[i].off * (1 - e);
+      if (list[i].gdx != 0 && t >= list[i].gt && t < list[i].gt + 0.08) dx = dx + list[i].gdx;
+      a = p * 2.5;
+      if (a > 1) a = 1;
+      x = Math.Int(list[i].x + dx + 0.5);
+      list[i].sprite.SetX(x);
+      list[i].sprite.SetOpacity(a);
+      tr = p * 4;
+      if (tr > 1) tr = 1;
+      tr = (1 - e) * tr;
+      if (list[i].off < 0) list[i].smear.SetX(x - list[i].smear_w);
+      else list[i].smear.SetX(x + list[i].w);
+      list[i].smear.SetOpacity(0.7 * tr);
+    }
   }
 }
-spin = Sprite();
-spin.SetX(Math.Int(cx - spin_d / 2));
-spin.SetY(Math.Int(ring_y - spin_d / 2));
-spin.SetZ(30);
-spin.SetOpacity(0);
-spin_k = 0;
-spin_on = 1;
+
+fun move_rays(list, n, t, fon){
+  for (k = 0; k < n; k++){
+    q = -1;
+    if (fon){
+      if (t >= global.intro && global.spin_on){
+        m = t - global.intro + global.fon_period - list[k].start;
+        m = m - Math.Int(m / global.fon_period) * global.fon_period;
+        q = m / list[k].dur;
+      }
+    } else {
+      q = (t - list[k].start) / list[k].dur;
+    }
+    if (q >= 0 && q < 1){
+      path = q * (global.screen_w + list[k].len);
+      if (list[k].dir > 0) x = path - list[k].len;
+      else x = global.screen_w - path;
+      a = 4 * q * (1 - q);
+      if (fon) a = 4 * q * (1 - q) * 0.3;
+      list[k].sprite.SetX(Math.Int(x));
+      list[k].sprite.SetOpacity(a);
+    } else {
+      list[k].sprite.SetOpacity(0);
+    }
+  }
+}
 
 # Plymouth зовёт это 50 раз в секунду: один вызов — один кадр
 fun refresh_callback(){
-  if (global.spin_n == 0) return;
-  global.spin_k = global.spin_k + 1;
-  f = global.spin_k - Math.Int(global.spin_k / global.spin_n) * global.spin_n;
-  global.spin.SetImage(global.frames[f]);
-  # Первые полсекунды комета проявляется
-  fade = global.spin_k / 25;
-  if (fade > 1) fade = 1;
-  if (global.spin_on == 0) fade = 0;
-  global.spin.SetOpacity(fade);
+  global.frame = global.frame + 1;
+  t = global.frame / 50;
+  # Сборка закончилась — полосы и лучи сборки больше не трогаем
+  if (t <= global.intro + 0.1){
+    move_strips(global.logo_strips, global.logo_n, t);
+    move_strips(global.word_strips, global.word_n, t);
+    move_rays(global.rays, global.ray_n, t, 0);
+  }
+  move_rays(global.fons, global.fon_n, t, 1);
+
+  g = (t - 1.95) / 0.5;
+  if (g >= 0 && g < 1){
+    top = global.logo_y - global.glint_h;
+    global.glint.SetY(Math.Int(top + g * (global.word_y + global.word_h - top)));
+    global.glint.SetOpacity(4 * g * (1 - g) * 0.7);
+  } else {
+    global.glint.SetOpacity(0);
+  }
+
+  # Черта загрузки и бегунок; на время вопроса о пароле прячутся
+  v = (t - 2.2) / 0.4;
+  if (v < 0) v = 0;
+  if (v > 1) v = 1;
+  if (global.spin_on == 0) v = 0;
+  global.line.SetOpacity(0.12 * v);
+  q = (t - 2.2) / global.seg_period;
+  if (q < 0) q = 0;
+  q = q - Math.Int(q);
+  global.seg.SetX(Math.Int(global.word_x - global.seg_w + q * (global.word_w + global.seg_w)));
+  a = 3 * 4 * q * (1 - q);
+  if (a > 1) a = 1;
+  global.seg.SetOpacity(v * a);
 }
 Plymouth.SetRefreshFunction(refresh_callback);
-
-# Надписи («Выключение…», пароль диска) — под кометой
-text_y = ring_y + spin_r + size * 0.2;
 
 # Что сейчас: загрузка, выключение или перезагрузка
 mode = Plymouth.GetMode();

@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=GlowerOS
-Description=Заставка загрузки GlowerOS: логотип на тёмном фоне и комета на орбите
+Description=Заставка загрузки GlowerOS: логотип собирается из бегущих строк
 ModuleName=script
 
 [script]
