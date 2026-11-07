@@ -28,6 +28,7 @@ const СТИЛЬ: &str = r#"
 .settings .h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
 .settings .card { background-color: alpha(@glower_fg, 0.045); border-radius: 14px; padding: 6px 0; }
 .settings .card-t { font-size: 12px; opacity: 0.6; margin: 14px 4px 6px; }
+.settings .card.solo { margin-top: 14px; }
 .settings .sub { font-size: 13px; font-weight: 600; opacity: 0.8; margin: 8px 18px 2px; }
 .settings .row { padding: 9px 16px; }
 .settings .row + .row { border-top: 1px solid alpha(@glower_fg, 0.05); }
@@ -168,6 +169,11 @@ fn карта(п: &П, заголовок: &str) -> gtk::Box {
     }
     let к = gtk::Box::new(gtk::Orientation::Vertical, 0);
     к.style_context().add_class("card");
+    // Без заголовка отступ сверху давать некому — карточка прилипала к
+    // соседней
+    if заголовок.is_empty() {
+        к.style_context().add_class("solo");
+    }
     п.страница.add(&к);
     к
 }
@@ -198,7 +204,23 @@ fn ряд(значок: &str, текст: &str, подпись: &str, управ
 fn добавь(к: &gtk::Box, значок: &str, текст: &str, подпись: &str, управление: Option<&gtk::Widget>) -> gtk::Box {
     let р = ряд(значок, текст, подпись, управление);
     к.add(&р);
+    пересчитай_вверх(к);
     р
+}
+
+/// GTK3 оставляет у карточки старую высоту, когда строки дописали во
+/// вложенный в неё контейнер уже после показа (ответ агента пришёл позже):
+/// длинная подпись вылезала из карточки на соседнюю. Просим пересчитать
+/// размер всех, кто выше, — уже после того, как строки встанут
+fn пересчитай_вверх(в: &impl IsA<gtk::Widget>) {
+    let в = в.clone().upcast::<gtk::Widget>();
+    glib::idle_add_local_once(move || {
+        let mut т = Some(в);
+        while let Some(в) = т {
+            в.queue_resize();
+            т = в.parent();
+        }
+    });
 }
 
 fn значение(текст: &str) -> gtk::Widget {
@@ -213,6 +235,7 @@ fn значение(текст: &str) -> gtk::Widget {
 fn заметка(к: &gtk::Box, текст: &str) -> gtk::Label {
     let л = ярлык(текст, "note");
     к.add(&л);
+    пересчитай_вверх(к);
     л
 }
 
