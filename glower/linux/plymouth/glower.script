@@ -1,20 +1,10 @@
-# Заставка загрузки GlowerOS: логотип из строк кода, белым по чёрному.
+# Заставка загрузки GlowerOS: чёрный экран и мигающий курсор терминала.
 #
-# 1. Посреди чёрного экрана дважды мигает курсор терминала.
-# 2. Курсор вытягивается в линию через весь экран, линия гаснет.
-# 3. Строки — настоящий код GlowerOS — несутся с обеих сторон волной от
-#    середины к краям, последние знакоместа проходят рывками, как бегущая
-#    строка, и встают так, что яркие знаки складываются в логотип.
-# 4. Лишний код гаснет, под знаком печатается GlowerOS, мигает курсор.
-#
-# Plymouth не умеет рисовать текст по знакам, поэтому строки нарисованы
-# заранее (glower-splash --кадры) под экраны высотой 768, 1080, 1440 и
-# 2160 точек; берём ближайшую высоту и, если надо, чуть масштабируем.
-# Каждая строка — две картинки: тусклый код (c<высота>-<ряд>.png) и знаки
-# логотипа в ней (l<высота>-<ряд>.png). Здесь они только едут и гаснут.
-#
-# Plymouth зовёт refresh_callback 50 раз в секунду: один вызов — один
-# кадр, и время считается по кадрам.
+# Сама анимация — знак из строк кода — идёт дальше, под экраном входа
+# (glower-splash --вход): курсор вытягивается в линию, строки кода
+# собираются в логотип. Здесь только курсор, на том же месте и того же
+# размера: на многих машинах Plymouth видно секунду-две, и анимация здесь
+# просто не успевала показаться — человек видел чёрный экран.
 #
 # Язык заставки понимает только латинские имена — поясняем по-русски.
 
@@ -26,178 +16,34 @@ screen_h = Window.GetHeight();
 cx = screen_w / 2;
 cy = screen_h / 2 - screen_h / 22;
 
-# Разметка — та же, что в panel/src/splash.rs (модуль «строки»)
-rows = 40;
-extra = 6;
+# Разметка — та же, что в panel/src/splash.rs (модуль «код»): знак из кода
+# в полтора раза крупнее обычного, сорок рядов на его высоту; знакоместо
+# моноширинного шрифта — шесть десятых высоты ряда
 size = Math.Int(screen_h / 5.2 * 1.5);
-row_h = size / rows;
+row_h = size / 40;
+cell = Math.Int(row_h * 0.59 + 0.5);
+if (cell < 1) cell = 1;
 
-# Ближайшая высота, под которую нарисованы строки
-set = 768;
-if (screen_h > 924) set = 1080;
-if (screen_h > 1260) set = 1440;
-if (screen_h > 1800) set = 2160;
-set_size = Math.Int(set / 5.2 * 1.5);
-k = size / set_size;
-
-fun fit(img){
-  if (global.k == 1) return img;
-  w = Math.Int(img.GetWidth() * global.k + 0.5);
-  h = Math.Int(img.GetHeight() * global.k + 0.5);
-  if (w < 1) w = 1;
-  if (h < 1) h = 1;
-  return img.Scale(w, h);
-}
-
-cell = Image("cell" + set + ".png").GetWidth() * k;
-dot = Image("dot.png");
-
-# Генератор Лемера: s = s·16807 mod (2³¹−1) — такой же в splash.rs
-seed = 20251107;
-fun rnd(){
-  global.seed = global.seed * 16807;
-  global.seed = global.seed - Math.Int(global.seed / 2147483647) * 2147483647;
-  return global.seed / 2147483647;
-}
-
-fun smooth(x){
-  if (x < 0) x = 0;
-  if (x > 1) x = 1;
-  return x * x * (3 - 2 * x);
-}
-
-# Строки: волна от середины к краям с разбросом; дальность — в знакоместах
-total = rows + 2 * extra;
-mid = (rows - 1) / 2;
-for (i = 0; i < total; i++){
-  r0 = rnd(); r1 = rnd(); r2 = rnd(); r3 = rnd();
-  side = 1;
-  if (r2 < 0.5) side = -1;
-  far = Math.Abs(i - extra - mid) / (mid + extra);
-  if (far > 1) far = 1;
-  line[i].delay = 0.85 + 1.0 * far + 0.3 * r0;
-  line[i].dur = 0.8 + 0.5 * r3;
-  line[i].off = side * Math.Int((2.5 + 6 * r1) * size / cell + 0.5);
-  y = Math.Int(cy - size / 2 + (i - extra) * row_h + 0.5);
-  img = fit(Image("c" + set + "-" + i + ".png"));
-  line[i].dim = Sprite(img);
-  line[i].dim_x = Math.Int(cx - img.GetWidth() / 2);
-  line[i].dim.SetY(y);
-  line[i].dim.SetZ(10);
-  line[i].dim.SetOpacity(0);
-  line[i].has_logo = 0;
-  if (i >= extra && i < extra + rows){
-    img = fit(Image("l" + set + "-" + i + ".png"));
-    line[i].logo = Sprite(img);
-    line[i].logo_x = Math.Int(cx - img.GetWidth() / 2);
-    line[i].logo.SetY(y);
-    line[i].logo.SetZ(20);
-    line[i].logo.SetOpacity(0);
-    line[i].has_logo = 1;
-  }
-}
-
-# Курсор посреди экрана и линия, в которую он вытягивается
-cursor = Sprite(dot.Scale(Math.Int(cell + 0.5), Math.Int(row_h * 2 + 0.5)));
-cursor.SetX(Math.Int(cx - cell / 2));
-cursor.SetY(Math.Int(cy - row_h));
+cursor = Sprite(Image("dot.png").Scale(cell, Math.Int(row_h * 2 + 0.5)));
+cursor.SetX(Math.Int(cx - cell / 2 + 0.5));
+cursor.SetY(Math.Int(cy - row_h + 0.5));
 cursor.SetZ(30);
-cursor.SetOpacity(0);
-beam = Sprite();
-beam.SetZ(30);
-beam.SetOpacity(0);
-
-# «GlowerOS» под знаком — по буквам, с курсором
-for (n = 0; n <= 8; n++){
-  name_img[n] = fit(Image("n" + set + "-" + n + ".png"));
-}
-name_w = name_img[0].GetWidth();
-name_cell = name_w / 9;
-name_size = Math.Int(set_size * 0.14 + 0.5) * k;
-name_x = Math.Int(cx - name_w / 2);
-name_y = Math.Int(cy + size / 2 + size * 0.16);
-name = Sprite(name_img[0]);
-name.SetX(name_x);
-name.SetY(name_y);
-name.SetZ(20);
-name.SetOpacity(0);
-caret = Sprite(dot.Scale(Math.Int(name_cell * 0.8 + 0.5), Math.Int(name_size + 0.5)));
-caret.SetY(Math.Int(name_y + name_size * 0.1));
-caret.SetZ(20);
-caret.SetOpacity(0);
-typed = -1;
-
-# Надписи («Выключение…», пароль диска) — под названием
-text_y = name_y + name_size * 1.8;
 
 frame = 0;
 spin_on = 1;
 
-# Plymouth зовёт это 50 раз в секунду: один вызов — один кадр
+# Plymouth зовёт это 50 раз в секунду. Курсор мигает, как в терминале:
+# полсекунды горит, полсекунды нет; на время вопроса о пароле прячется
 fun refresh_callback(){
   global.frame = global.frame + 1;
-  t = global.frame / 50;
-
-  # 1. Курсор мигает дважды
-  if (t < 0.62 && Math.Int(t / 0.16) - Math.Int(t / 0.32) * 2 == 0) global.cursor.SetOpacity(1);
+  b = Math.Int(global.frame / 25);
+  if (global.spin_on && b - Math.Int(b / 2) * 2 == 0) global.cursor.SetOpacity(1);
   else global.cursor.SetOpacity(0);
-
-  # 2. Курсор вытягивается в линию через весь экран, линия гаснет
-  if (t >= 0.62 && t < 1.25){
-    u = smooth((t - 0.62) / 0.28);
-    w = global.cell + u * (global.screen_w - global.cell);
-    h = global.row_h * 2 * (1 - u) + 2 * u;
-    if (h < 1) h = 1;
-    global.beam.SetImage(global.dot.Scale(Math.Int(w + 0.5), Math.Int(h + 0.5)));
-    global.beam.SetX(Math.Int(global.cx - w / 2));
-    global.beam.SetY(Math.Int(global.cy - h / 2));
-    global.beam.SetOpacity(1 - smooth((t - 0.95) / 0.3));
-  } else {
-    global.beam.SetOpacity(0);
-  }
-
-  # 3. Строки; 4. лишний код гаснет. Встало и погасло — не трогаем
-  if (t < 4){
-    dim = 0.3 - 0.25 * smooth((t - 2.9) / 0.8);
-    for (i = 0; i < global.total; i++){
-      L = global.line[i];
-      if (t >= L.delay){
-        p = (t - L.delay) / L.dur;
-        if (p > 1) p = 1;
-        q = (1 - p) * (1 - p);
-        dx = L.off * q * q;
-        if (dx >= 0 && dx < 8) dx = Math.Int(dx + 0.5);
-        if (dx < 0 && dx > -8) dx = 0 - Math.Int(0.5 - dx);
-        seen = p * 3;
-        if (seen > 1) seen = 1;
-        shift = Math.Int(dx * global.cell);
-        L.dim.SetX(L.dim_x + shift);
-        L.dim.SetOpacity(seen * dim);
-        if (L.has_logo){
-          L.logo.SetX(L.logo_x + shift);
-          L.logo.SetOpacity(seen);
-        }
-      }
-    }
-  }
-
-  # 4. Название печатается по букве, курсор мигает
-  if (t > 3.35){
-    n = Math.Int((t - 3.5) / 0.08);
-    if (n < 0) n = 0;
-    if (n > 8) n = 8;
-    if (n != global.typed){
-      global.name.SetImage(global.name_img[n]);
-      global.name.SetOpacity(1);
-      global.caret.SetX(Math.Int(global.name_x + n * global.name_cell + global.name_cell * 0.1));
-      global.typed = n;
-    }
-    b = Math.Int((t - 3.5) / 0.5);
-    if (global.spin_on && (n < 8 || b - Math.Int(b / 2) * 2 == 0)) global.caret.SetOpacity(1);
-    else global.caret.SetOpacity(0);
-  }
 }
 Plymouth.SetRefreshFunction(refresh_callback);
+
+# Надписи («Выключение…», пароль диска) — под курсором
+text_y = cy + size * 0.3;
 
 # Что сейчас: загрузка, выключение или перезагрузка
 mode = Plymouth.GetMode();
@@ -224,7 +70,6 @@ bullet_sprite.SetOpacity(0);
 bullet_sprite.SetZ(40);
 
 fun display_password_callback(prompt, bullets){
-  # Мигающий курсор на время вопроса прячется
   global.spin_on = 0;
   # Вопрос приходит из недр начальной загрузки и всегда по-английски:
   # «Please unlock disk glower». Человеку, который включил свою машину,

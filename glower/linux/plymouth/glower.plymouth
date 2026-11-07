@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=GlowerOS
-Description=Заставка загрузки GlowerOS: логотип из строк кода, белым по чёрному
+Description=Заставка загрузки GlowerOS: мигающий курсор на чёрном, дальше — знак из строк кода
 ModuleName=script
 
 [script]

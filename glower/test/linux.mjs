@@ -1207,7 +1207,7 @@ try {
             !/Conflicts=/.test(плим) && /^ExecStart=$/m.test(плим) && /plymouth quit --retain-splash/.test(плим)
             && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
             && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
-            // Разметка строк одна у Plymouth и у того, кто строки рисует
+            // Курсор Plymouth стоит там же, где начинается знак из кода
             && /screen_h \/ 5\.2 \* 1\.5/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
             && /h \/ 5\.2 \* КРУПНЕЕ/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
             && /pangocairo/.test(заставка) && /add_tick_callback/.test(заставка)
@@ -1399,24 +1399,20 @@ try {
         /linux\/plymouth\/\*\.png/.test(образ2) && /\[ -e "\$img" \] \|\| continue/.test(образ2)
           && /activate-noawait update-initramfs/.test(пакет));
       /* Тяжёлые анимации при включении и выключении человек когда-то просил
-         убрать, потом — загрузку «как в Windows», потом — красивую, но не
-         детскую, а потом — логотип из строк кода, белым по чёрному, и
-         попроще. Строки нарисованы заранее под четыре высоты экрана;
-         сценарий их только двигает и гасит — ничего не вращается на ходу. */
+         убрать, потом — загрузку «как в Windows», потом — логотип из строк
+         кода, белым по чёрному. Plymouth на многих машинах видно секунду-две,
+         и анимация там не успевала показаться: теперь он держит только
+         курсор, а знак из кода собирает заставка под экраном входа — и
+         экран входа ждёт её (не дольше шести секунд). Время анимаций —
+         от первого кадра на экране, а не от запуска программы. */
       const рс = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
-      const высоты = [768, 1080, 1440, 2160];
-      const нет_строк = высоты.flatMap(h => [
-        ...[...Array(52).keys()].map(i => 'c' + h + '-' + i + '.png'),
-        ...[...Array(40).keys()].map(i => 'l' + h + '-' + (i + 6) + '.png'),
-        ...[...Array(9).keys()].map(n => 'n' + h + '-' + n + '.png'),
-        'cell' + h + '.png']).filter(ф => !есть.includes(ф));
-      check('заставка загрузки: логотип из строк кода — строки под все высоты экрана на месте',
-        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && есть.includes('dot.png') && !нет_строк.length
-          && /ВЫСОТЫ: \[i32; 4\] = \[768, 1080, 1440, 2160\]/.test(рс) && /РЯДОВ: usize = 40/.test(рс) && /ЛИШНИХ: usize = 6/.test(рс)
-          && /rows = 40;/.test(сцен) && /extra = 6;/.test(сцен)
-          && !/SetBackgroundTopColor\(0\.0/.test(сцен) && /SetBackgroundTopColor\(0, 0, 0\)/.test(сцен)
-          && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен),
-        JSON.stringify(нет_строк.slice(0, 5)));
+      const вход4 = await readFile(join(root, 'linux', 'glower-greeter'), 'utf8');
+      check('заставка: курсор при загрузке, знак из кода под экраном входа, блик после входа — с первого кадра',
+        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && есть.includes('dot.png') && есть.filter(ф => ф.endsWith('.png')).length === 1
+          && /SetBackgroundTopColor\(0, 0, 0\)/.test(сцен) && /row_h \* 0\.59/.test(сцен)
+          && /fn собери_код/.test(рс) && /fn рисуй_код/.test(рс) && /fn блик/.test(рс) && /include_str!\("\.\.\/\.\.\/wm\/src\/hang\.rs"\)/.test(рс)
+          && /первый\.set\(Some\(Instant::now\(\)\)\)/.test(рс) && /glower-splash-shown/.test(рс) && /glower-splash-shown/.test(вход4)
+          && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен));
     }
 
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет
