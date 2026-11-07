@@ -1,21 +1,18 @@
 //! Заставка между загрузкой и рабочим столом — как в Windows.
 //!
-//! Тот же вид, что у заставки загрузки (Plymouth, linux/plymouth): те же
-//! цвета фона, логотип и надпись на тех же местах. При включении логотип
-//! собирается из полос: они прилетают с обеих сторон экрана вместе с
-//! тонкими светлыми лучами, на миг сбиваются, как помеха в сигнале, и
-//! встают на место; по собранному знаку проходит блик, и под надписью
-//! появляется черта загрузки с бегунком. Сценарий сборки один на двоих
-//! (`сценарий()` здесь и такой же в glower.script), поэтому после входа
-//! экран продолжает ту же картинку — уже без сборки, с чертой и редкими
-//! тихими лучами.
+//! Заставка загрузки (Plymouth, linux/plymouth) собирает логотип из строк
+//! кода белым по чёрному; строки для неё рисует `--кадры` (модуль
+//! `строки`). После входа, на том же чёрном фоне, — настоящий логотип:
+//! он собирается из полос вместе с тонкими лучами (с `--показ`), а
+//! обычно сразу стоит собранным, под надписью бежит черта загрузки.
 //!
 //!   glower-splash          — после входа: «Добро пожаловать», поверх всего;
 //!                            гаснет, когда рабочий стол нарисован
 //!                            ($XDG_RUNTIME_DIR/glower-desktop-ready);
 //!   glower-splash --вход   — под экраном входа, пока тот загружается;
 //!   glower-splash --показ  — сборка целиком, посмотреть;
-//!   glower-splash --кадры П — картинки света для Plymouth.
+//!   glower-splash --кадры ПАПКА ЛОГОТИП КОД… — строки кода для заставки
+//!                            загрузки (Plymouth рисует логотип из них).
 //! Сама уходит через 40 секунд, что бы ни случилось.
 
 use gtk::glib;
@@ -51,8 +48,7 @@ pub const ЦВЕТА: [(f64, f64, f64); 3] = [(0.36, 0.76, 1.0), (1.0, 1.0, 1.0)
 const ХВОСТ: (f64, f64, f64) = (0.25, 0.45, 0.85);
 
 /// Случайные, но всегда одинаковые числа (генератор Лемера). Такой же
-/// считает linux/plymouth/glower.script — порядок чисел общий, и сборка
-/// при включении и после входа одна и та же
+/// считает linux/plymouth/glower.script для строк кода
 pub struct Случай(u64);
 impl Случай {
     pub fn new() -> Self {
@@ -217,20 +213,6 @@ fn сохрани(п: &mut gtk::cairo::ImageSurface, путь: &str) -> Result<(
     пб.savev(путь, "png", &[]).map_err(|е| е.to_string())
 }
 
-/// Мягкий край поперёк строки — чтобы тонкий луч не был ступенькой
-fn поперёк(к: &gtk::cairo::Context, ш: f64, в: f64) {
-    let г = gtk::cairo::LinearGradient::new(0.0, 0.0, 0.0, в);
-    г.add_color_stop_rgba(0.0, 0.0, 0.0, 0.0, 0.0);
-    г.add_color_stop_rgba(0.35, 0.0, 0.0, 0.0, 1.0);
-    г.add_color_stop_rgba(0.65, 0.0, 0.0, 0.0, 1.0);
-    г.add_color_stop_rgba(1.0, 0.0, 0.0, 0.0, 0.0);
-    к.set_operator(gtk::cairo::Operator::DestIn);
-    let _ = к.set_source(&г);
-    к.rectangle(0.0, 0.0, ш, в);
-    let _ = к.fill();
-    к.set_operator(gtk::cairo::Operator::Over);
-}
-
 /// Градиент луча: хвост тает в голубую темноту, голова — своего цвета.
 /// напр 1 — голова справа
 fn градиент_луча(x: f64, длина: f64, напр: f64, цвет: (f64, f64, f64), а: f64) -> gtk::cairo::LinearGradient {
@@ -244,71 +226,173 @@ fn градиент_луча(x: f64, длина: f64, напр: f64, цвет: (
     г
 }
 
-/// Картинки для Plymouth: `glower-splash --кадры ПАПКА`. Логотип и надпись
-/// Plymouth режет сам (Image.Crop) — здесь только свет: лучи в три цвета
-/// и в обе стороны, след полосы, блик и черта загрузки
-fn нарисуй_кадры(папка: &str) -> Result<(), String> {
-    use gtk::cairo::{Context, Format, ImageSurface};
+/// Заставка загрузки (Plymouth): логотип из строк кода, белым по чёрному.
+/// Plymouth не умеет рисовать текст по знакам — строки рисуются здесь
+/// заранее, под несколько высот экрана, а сценарий в glower.script их
+/// только двигает. Разметка — как в glower.script
+pub mod строки {
+    /// Высоты экрана, под которые нарисованы строки; Plymouth берёт ближайшую
+    pub const ВЫСОТЫ: [i32; 4] = [768, 1080, 1440, 2160];
+    /// Рядов на высоту знака, ещё по стольку сверху и снизу — просто код
+    pub const РЯДОВ: usize = 40;
+    pub const ЛИШНИХ: usize = 6;
+    /// Знак из кода крупнее обычного — иначе мелкие детали теряются
+    pub const КРУПНЕЕ: f64 = 1.5;
+    /// Ширина строки — в размерах знака: хватает и широкому экрану
+    pub const ШИРИНА: f64 = 16.0;
+    pub const ИМЯ: &str = "GlowerOS";
+
+    pub fn знак(h: f64) -> f64 {
+        (h / 5.2 * КРУПНЕЕ).floor()
+    }
+}
+
+/// Картинки для Plymouth: `glower-splash --кадры ПАПКА ЛОГОТИП КОД…`.
+/// Для каждой высоты экрана H: c{H}-{ряд}.png — тусклый код ряда,
+/// l{H}-{ряд}.png — знаки логотипа в ряду (яркость — по светлоте
+/// логотипа под знаком), n{H}-{0..8}.png — набранное «GlowerOS» по буквам,
+/// cell{H}.png — ширина знакоместа. И dot.png — белая точка для курсора
+fn нарисуй_кадры(папка: &str, логотип: &str, код: &[String]) -> Result<(), String> {
+    use gtk::cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
+    use строки::*;
     std::fs::create_dir_all(папка).map_err(|е| е.to_string())?;
-    let новая = |ш: i32, в: i32| ImageSurface::create(Format::ARgb32, ш, в).map_err(|е| е.to_string());
-    let (дл, тл) = (512.0, 8.0);
-    for (i, &цвет) in ЦВЕТА.iter().enumerate() {
-        for (j, напр) in [1.0, -1.0].into_iter().enumerate() {
-            let mut п = новая(дл as i32, тл as i32)?;
-            {
-                let к = Context::new(&п).map_err(|е| е.to_string())?;
-                let _ = к.set_source(&градиент_луча(0.0, дл, напр, цвет, 1.0));
-                let _ = к.paint();
-                поперёк(&к, дл, тл);
+    let е = |е: gtk::cairo::Error| е.to_string();
+
+    // Строки кода подряд, через два пробела
+    let mut текст_кода: Vec<String> = vec![];
+    for путь in код {
+        let т = std::fs::read_to_string(путь).map_err(|е| format!("{путь}: {е}"))?;
+        for с in т.lines() {
+            let с = с.trim();
+            if с.chars().count() >= 12 && !["//", "/*", "*", "#"].iter().any(|н| с.starts_with(н)) {
+                текст_кода.push(с.to_string());
             }
-            сохрани(&mut п, &format!("{папка}/streak-{}.png", i + 3 * j))?;
         }
     }
-    // След полосы: светлый у самой полосы, тает назад
-    for (j, напр) in [1.0, -1.0].into_iter().enumerate() {
-        let mut п = новая(256, 4)?;
-        {
-            let к = Context::new(&п).map_err(|е| е.to_string())?;
-            let _ = к.set_source(&градиент_луча(0.0, 256.0, напр, (0.8, 0.9, 1.0), 1.0));
-            let _ = к.paint();
-        }
-        сохрани(&mut п, &format!("{папка}/smear-{j}.png"))?;
+    if текст_кода.is_empty() {
+        return Err("нет строк кода".into());
     }
-    // Блик: мягкая белая строка, гаснущая к краям
-    {
-        let mut п = новая(512, 16)?;
+
+    let исходный = gtk::gdk_pixbuf::Pixbuf::from_file(логотип).map_err(|е| е.to_string())?;
+    let белая = |ш: i32, в: i32, путь: String| -> Result<(), String> {
+        let mut п = ImageSurface::create(Format::ARgb32, ш, в).map_err(е)?;
         {
-            let к = Context::new(&п).map_err(|е| е.to_string())?;
-            let г = gtk::cairo::LinearGradient::new(0.0, 0.0, 512.0, 0.0);
-            г.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.0);
-            г.add_color_stop_rgba(0.5, 1.0, 1.0, 1.0, 1.0);
-            г.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.0);
-            let _ = к.set_source(&г);
-            let _ = к.paint();
-            поперёк(&к, 512.0, 16.0);
-        }
-        сохрани(&mut п, &format!("{папка}/glint.png"))?;
-    }
-    // Черта и бегунок по ней
-    {
-        let mut п = новая(8, 2)?;
-        {
-            let к = Context::new(&п).map_err(|е| е.to_string())?;
+            let к = Context::new(&п).map_err(е)?;
             к.set_source_rgba(1.0, 1.0, 1.0, 1.0);
             let _ = к.paint();
         }
-        сохрани(&mut п, &format!("{папка}/line.png"))?;
-        let mut п = новая(256, 2)?;
-        {
-            let к = Context::new(&п).map_err(|е| е.to_string())?;
-            let г = gtk::cairo::LinearGradient::new(0.0, 0.0, 256.0, 0.0);
-            г.add_color_stop_rgba(0.0, 0.36, 0.76, 1.0, 0.0);
-            г.add_color_stop_rgba(0.5, 0.85, 0.95, 1.0, 1.0);
-            г.add_color_stop_rgba(1.0, 0.36, 0.76, 1.0, 0.0);
-            let _ = к.set_source(&г);
-            let _ = к.paint();
+        сохрани(&mut п, &путь)
+    };
+    белая(4, 4, format!("{папка}/dot.png"))?;
+
+    for h in ВЫСОТЫ {
+        let знак = строки::знак(h as f64);
+        let ряд = знак / РЯДОВ as f64;
+        let шрифт = ряд * 0.98;
+        let выбери = |к: &Context, жирный: bool, размер: f64| {
+            к.select_font_face("DejaVu Sans Mono", FontSlant::Normal, if жирный { FontWeight::Bold } else { FontWeight::Normal });
+            к.set_font_size(размер);
+        };
+        // Знакоместо — целое число точек: так строки встают ровно
+        let пробная = ImageSurface::create(Format::ARgb32, 8, 8).map_err(е)?;
+        let кп = Context::new(&пробная).map_err(е)?;
+        выбери(&кп, true, шрифт);
+        let клетка = кп.text_extents("M").map_err(е)?.x_advance().round().max(1.0) as usize;
+        let fe = кп.font_extents().map_err(е)?;
+        let столбцов = (знак / клетка as f64).ceil() as usize;
+        let mut всего = (ШИРИНА * знак / клетка as f64).ceil() as usize;
+        if (всего - столбцов) % 2 == 1 {
+            всего += 1;
         }
-        сохрани(&mut п, &format!("{папка}/seg.png"))?;
+        let лево = (всего - столбцов) / 2;
+        let в = ряд.ceil() as i32;
+        let базовая = в as f64 / 2.0 + (fe.ascent() - fe.descent()) / 2.0;
+        белая(клетка as i32, 1, format!("{папка}/cell{h}.png"))?;
+
+        // Светлота и прозрачность логотипа по клеткам: уменьшаем хорошо, потом
+        // усредняем по четыре точки
+        let м = исходный
+            .scale_simple((столбцов * 4) as i32, (РЯДОВ * 4) as i32, gtk::gdk_pixbuf::InterpType::Hyper)
+            .ok_or("логотип не уменьшился")?;
+        let (пикс, шаг, n) = (м.read_pixel_bytes(), м.rowstride() as usize, м.n_channels() as usize);
+        let клетка_лого = |r: usize, c: usize| -> (f64, f64) {
+            let (mut а, mut свет) = (0.0, 0.0);
+            for y in r * 4..r * 4 + 4 {
+                for x in c * 4..c * 4 + 4 {
+                    let о = y * шаг + x * n;
+                    let ал = if n == 4 { пикс[о + 3] as f64 / 255.0 } else { 1.0 };
+                    а += ал;
+                    свет += ал * (0.3 * пикс[о] as f64 + 0.59 * пикс[о + 1] as f64 + 0.11 * пикс[о + 2] as f64) / 255.0;
+                }
+            }
+            (а / 16.0, if а > 0.0 { свет / а } else { 0.0 })
+        };
+
+        let mut с = Случай::new();
+        let mut номер = (с.next() * текст_кода.len() as f64) as usize;
+        for i in 0..РЯДОВ + 2 * ЛИШНИХ {
+            let mut знаки: Vec<char> = vec![];
+            while знаки.len() < всего {
+                знаки.extend(текст_кода[номер % текст_кода.len()].chars());
+                знаки.extend("  ".chars());
+                номер += 1;
+            }
+            знаки.truncate(всего);
+            let ряд_лого = i.checked_sub(ЛИШНИХ).filter(|r| *r < РЯДОВ);
+            let mut тусклый = ImageSurface::create(Format::ARgb32, (всего * клетка) as i32, в).map_err(е)?;
+            let mut лого = ImageSurface::create(Format::ARgb32, (столбцов * клетка) as i32, в).map_err(е)?;
+            {
+                let т = Context::new(&тусклый).map_err(е)?;
+                let л = Context::new(&лого).map_err(е)?;
+                выбери(&т, false, шрифт);
+                выбери(&л, true, шрифт);
+                т.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+                for (j, ch) in знаки.iter().enumerate() {
+                    if *ch == ' ' {
+                        continue;
+                    }
+                    let c = j as isize - лево as isize;
+                    let (а, свет) = match ряд_лого {
+                        Some(r) if c >= 0 && (c as usize) < столбцов => клетка_лого(r, c as usize),
+                        _ => (0.0, 0.0),
+                    };
+                    let s = ch.to_string();
+                    if а > 0.3 {
+                        л.set_source_rgba(1.0, 1.0, 1.0, (а * (0.3 + 0.95 * свет.powf(1.3))).min(1.0));
+                        л.move_to((c as usize * клетка) as f64, базовая);
+                        let _ = л.show_text(&s);
+                    } else {
+                        т.move_to((j * клетка) as f64, базовая);
+                        let _ = т.show_text(&s);
+                    }
+                }
+            }
+            сохрани(&mut тусклый, &format!("{папка}/c{h}-{i}.png"))?;
+            if ряд_лого.is_some() {
+                сохрани(&mut лого, &format!("{папка}/l{h}-{i}.png"))?;
+            }
+        }
+
+        // «GlowerOS» по буквам: картинки одной ширины, буквы — слева
+        let кегль = (знак * 0.14).round();
+        выбери(&кп, true, кегль);
+        let кл_имени = кп.text_extents("M").map_err(е)?.x_advance().round().max(1.0) as usize;
+        let fe = кп.font_extents().map_err(е)?;
+        let вн = (кегль * 1.25).ceil() as i32;
+        let всего_имени = ИМЯ.chars().count() + 1;
+        for набрано in 0..=ИМЯ.chars().count() {
+            let mut п = ImageSurface::create(Format::ARgb32, (всего_имени * кл_имени) as i32, вн).map_err(е)?;
+            {
+                let к = Context::new(&п).map_err(е)?;
+                выбери(&к, true, кегль);
+                к.set_source_rgba(1.0, 1.0, 1.0, 1.0);
+                for (j, ch) in ИМЯ.chars().take(набрано).enumerate() {
+                    к.move_to((j * кл_имени) as f64, fe.ascent());
+                    let _ = к.show_text(&ch.to_string());
+                }
+            }
+            сохрани(&mut п, &format!("{папка}/n{h}-{набрано}.png"))?;
+        }
     }
     Ok(())
 }
@@ -458,7 +542,8 @@ struct Картинки {
 pub fn запусти(доводы: Vec<String>) -> ! {
     if let Some(i) = доводы.iter().position(|д| д == "--кадры") {
         let папка = доводы.get(i + 1).cloned().unwrap_or_else(|| ".".into());
-        match нарисуй_кадры(&папка) {
+        let логотип = доводы.get(i + 2).cloned().unwrap_or_else(|| "assets/logo-dark.png".into());
+        match нарисуй_кадры(&папка, &логотип, доводы.get(i + 3..).unwrap_or(&[])) {
             Ok(()) => std::process::exit(0),
             Err(е) => {
                 eprintln!("кадры заставки: {е}");
@@ -525,10 +610,10 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             к.set_operator(gtk::cairo::Operator::Over);
             let _ = к.push_group();
 
-            // Фон — как у заставки загрузки
+            // Фон — чёрный, как у заставки загрузки
             let г = gtk::cairo::LinearGradient::new(0.0, 0.0, 0.0, h);
-            г.add_color_stop_rgb(0.0, 0.035, 0.04, 0.085);
-            г.add_color_stop_rgb(1.0, 0.01, 0.01, 0.03);
+            г.add_color_stop_rgb(0.0, 0.0, 0.0, 0.0);
+            г.add_color_stop_rgb(1.0, 0.0, 0.0, 0.0);
             let _ = к.set_source(&г);
             let _ = к.paint();
 

@@ -1207,9 +1207,9 @@ try {
             !/Conflicts=/.test(плим) && /^ExecStart=$/m.test(плим) && /plymouth quit --retain-splash/.test(плим)
             && /glower-splash >\/dev\/null 2>&1 &/.test(сеанс3) && /glower-splash --вход/.test(вход3)
             && /Добро пожаловать/.test(заставка) && /glower-desktop-ready/.test(заставка) && /splash::стол_готов/.test(стол3)
-            // Сценарий и разметка — одни и те же у Plymouth и у заставки после входа
-            && /size \* 0\.34/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
-            && /знак \* 0\.34/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            // Разметка строк одна у Plymouth и у того, кто строки рисует
+            && /screen_h \/ 5\.2 \* 1\.5/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
+            && /h \/ 5\.2 \* КРУПНЕЕ/.test(заставка) && /SetRefreshFunction/.test(await readFile(join(root, 'linux', 'plymouth', 'glower.script'), 'utf8'))
             && /pangocairo/.test(заставка) && /add_tick_callback/.test(заставка)
             && /plymouth-quit\.service\.d\/glower-retain\.conf/.test(await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8')));
         }
@@ -1393,28 +1393,30 @@ try {
       const нет = зовёт.filter(ф => изАссетов[ф]
         ? !(мкисо.includes(изАссетов[ф]) && мкисо.includes('themes/glower/' + ф))
         : !есть.includes(ф));
-      check('заставка: все картинки сценария есть в теме', зовёт.includes('logo.png') && !нет.length,
+      check('заставка: все картинки сценария есть в теме', зовёт.includes('dot.png') && !нет.length,
         JSON.stringify({ зовёт, нет }));
       check('заставка: сборка кладёт все картинки темы, а пакет пересобирает initramfs',
         /linux\/plymouth\/\*\.png/.test(образ2) && /\[ -e "\$img" \] \|\| continue/.test(образ2)
           && /activate-noawait update-initramfs/.test(пакет));
       /* Тяжёлые анимации при включении и выключении человек когда-то просил
          убрать, потом — загрузку «как в Windows», потом — красивую, но не
-         детскую, а потом — «появление логотипа в бегущих строках». Логотип
-         режется на полосы, полосы прилетают вместе с лучами и встают на
-         место. Сценарий общий с заставкой после входа: тот же генератор
-         чисел, те же числа сборки. Ничего не вращается на ходу. */
-      const свет = ['streak-0.png', 'streak-1.png', 'streak-2.png', 'streak-3.png', 'streak-4.png', 'streak-5.png',
-        'smear-0.png', 'smear-1.png', 'glint.png', 'line.png', 'seg.png'];
+         детскую, а потом — логотип из строк кода, белым по чёрному, и
+         попроще. Строки нарисованы заранее под четыре высоты экрана;
+         сценарий их только двигает и гасит — ничего не вращается на ходу. */
       const рс = await readFile(join(root, 'panel', 'src', 'splash.rs'), 'utf8');
-      const числа = [/20251107/, /16807/, /2147483647/, /0\.30, 0\.85, 0\.75, 1\.2, 4\.0, 1\.45/, /1\.05, 0\.45, 0\.60, 0\.8, 2\.4, 1\.75/];
-      check('заставка загрузки: логотип собирается из бегущих строк — сценарий общий с заставкой после входа',
-        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && /\.Crop\(/.test(сцен)
-          && свет.every(ф => есть.includes(ф)) && !есть.some(ф => /^spin-/.test(ф))
-          && числа.every(р => р.test(сцен) && р.test(рс))
-          && /logo_n = 24;/.test(сцен) && /ПОЛОС_ЗНАКА: usize = 24/.test(рс)
+      const высоты = [768, 1080, 1440, 2160];
+      const нет_строк = высоты.flatMap(h => [
+        ...[...Array(52).keys()].map(i => 'c' + h + '-' + i + '.png'),
+        ...[...Array(40).keys()].map(i => 'l' + h + '-' + (i + 6) + '.png'),
+        ...[...Array(9).keys()].map(n => 'n' + h + '-' + n + '.png'),
+        'cell' + h + '.png']).filter(ф => !есть.includes(ф));
+      check('заставка загрузки: логотип из строк кода — строки под все высоты экрана на месте',
+        /SetRefreshFunction/.test(сцен) && !/Rotate\(/.test(сцен) && есть.includes('dot.png') && !нет_строк.length
+          && /ВЫСОТЫ: \[i32; 4\] = \[768, 1080, 1440, 2160\]/.test(рс) && /РЯДОВ: usize = 40/.test(рс) && /ЛИШНИХ: usize = 6/.test(рс)
+          && /rows = 40;/.test(сцен) && /extra = 6;/.test(сцен)
+          && !/SetBackgroundTopColor\(0\.0/.test(сцен) && /SetBackgroundTopColor\(0, 0, 0\)/.test(сцен)
           && /Plymouth\.GetMode/.test(сцен) && /SetDisplayPasswordFunction/.test(сцен) && /global\.spin_on = 0/.test(сцен),
-        JSON.stringify(свет.filter(ф => !есть.includes(ф))));
+        JSON.stringify(нет_строк.slice(0, 5)));
     }
 
     /* Программы Windows: glower-exe и его ярлык едут и в образ, и в пакет
