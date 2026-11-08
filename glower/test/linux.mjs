@@ -1396,6 +1396,8 @@ try {
           && э.собери_общий(экраны) === 'HDMI-A-1 1920x1080@74973 1\nDP-2 2560x1440@143912 1.25\n'
           && /glower-wm -C "\$LABWC_CFG" -s "\$HOMEDIR\/пуск\.sh"/.test(вход5) && /glower-wm -e >\/dev\/null 2>&1 \|\| labwc -e/.test(вход5)
           && /current_encoder\(\)/.test(удев) && /\/etc\/glower\/screens/.test(удев) && /fn выбор_для/.test(удев)
+          // экраны при запуске не выключаем — иначе монитор гаснет при каждом запуске
+          && /DrmDevice::new\(fd\.clone\(\), false\)/.test(удев) && !/DrmDevice::new\(fd\.clone\(\), true\)/.test(удев)
           && /screens\.mjs/.test(сервер),
         JSON.stringify(экраны));
     }

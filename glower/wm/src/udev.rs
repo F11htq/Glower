@@ -432,7 +432,12 @@ pub fn запусти(цикл: &mut EventLoop<'static, Glower>, с: &mut Glower
     let (mut сессия, вести_сессии) = LibSeatSession::new().map_err(|е| format!("libseat: {е} (нужен seatd или logind)"))?;
     let (путь, fd) = открой_видеокарту(&mut сессия)?;
     tracing::info!("видеокарта: {}", путь.display());
-    let (drm, вести_drm) = DrmDevice::new(fd.clone(), true)?;
+    // Экраны не выключаем: их уже включили заставка загрузки или экран
+    // входа. С «выключить всё при запуске» (true) монитор гас и заново ловил
+    // сигнал при каждом запуске glower-wm — и на экране входа, и после
+    // пароля, — даже когда режим тот же. Без этого первый кадр ложится на
+    // уже включённый экран тем же режимом, и мигания нет
+    let (drm, вести_drm) = DrmDevice::new(fd.clone(), false)?;
     let gbm = GbmDevice::new(fd.clone())?;
     let дисплей = unsafe { EGLDisplay::new(gbm.clone())? };
     let контекст = EGLContext::new(&дисплей)?;
