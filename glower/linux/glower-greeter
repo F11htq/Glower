@@ -57,9 +57,10 @@ while [ \$i -lt 50 ]; do
   i=\$((i+1)); sleep 0.2
 done
 # Экран входа — когда знак из кода собрался (glower-splash отмечает это
-# файлом), но не позже чем через шесть секунд: войти важнее красоты
+# файлом; сначала он полторы секунды ждёт, пока проснётся монитор), но не
+# позже чем через восемь секунд: войти важнее красоты
 i=0
-while command -v glower-splash >/dev/null 2>&1 && [ ! -e "\${XDG_RUNTIME_DIR:-/tmp}/glower-splash-shown" ] && [ \$i -lt 30 ]; do
+while command -v glower-splash >/dev/null 2>&1 && [ ! -e "\${XDG_RUNTIME_DIR:-/tmp}/glower-splash-shown" ] && [ \$i -lt 40 ]; do
   i=\$((i+1)); sleep 0.2
 done
 falls=0
