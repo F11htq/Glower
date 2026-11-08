@@ -1190,13 +1190,13 @@ Package: glower
 Version: 12.0
 Architecture: amd64
 Maintainer: GlowerOS <noreply@glower.local>
-Installed-Size: 28872
+Installed-Size: 20948
 Depends: python3, nodejs, labwc, systemd-timesyncd | time-daemon, iputils-ping, libgtk-3-0t64 | libgtk-3-0, libgtk-layer-shell0, libpam0g, adwaita-icon-theme, librsvg2-common, wtype, wlsunset, swayidle, wl-clipboard, wf-recorder, libarchive-tools, gvfs-backends, dconf-gsettings-backend | gsettings-backend, gsettings-desktop-schemas, gnome-themes-extra, rsync, udisks2, libseat1, libinput10, libgbm1, libxkbcommon0, libegl1, xwayland
 Filename: ./glower_12.0_amd64.deb
-Size: 12006416
-MD5sum: eab607efe10ec2c1f0a3065e16670178
-SHA1: 17faeda91e2f40d738135a5c691883216c96e04e
-SHA256: db704c35b2b4ad23d490ebec382e122b6d2bcbd358c15571fe0c7bd8fe35fe52
+Size: 8429358
+MD5sum: 7b2a5775995c96b74f6fb2a42f95d3c2
+SHA1: 8b69e8daade67306c1ed27ebcf0a73d37a690291
+SHA256: 4c824ea50b65fe5404872a2d2f3dfa7530a5dc56f1364dca82cd54ed844d3616
 Section: misc
 Priority: optional
 Description: GlowerOS — оболочка, агент и сценарии системы
