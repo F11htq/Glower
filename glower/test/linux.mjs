@@ -1379,6 +1379,27 @@ try {
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
+    /* Монитор мигал при включении дважды: загрузка и экран входа брали
+       «предпочтительный» режим монитора, рабочий стол — выбранный в
+       Параметрах. Теперь режим один на всех: экран входа под тем же
+       glower-wm, он держит уже стоящий режим и канал, а выбор человека
+       агент передаёт экрану входа и ядру (video=). */
+    {
+      const э = await import(join(root, 'agent', 'screens.mjs'));
+      const экраны = э.разбери('HDMI-A-1 1920x1080@74973 1\neDP-1 - 1\nмусор\nDP-2 2560x1440@143912 1.25\n');
+      const вход5 = await readFile(join(root, 'linux', 'glower-greeter'), 'utf8');
+      const удев = await readFile(join(root, 'wm', 'src', 'udev.rs'), 'utf8');
+      const сервер = await readFile(join(root, 'agent', 'server.mjs'), 'utf8');
+      check('один режим экрана от включения до стола: монитор не мигает',
+        экраны.length === 2 && э.ключи_ядра(экраны) === 'video=HDMI-A-1:1920x1080@75 video=DP-2:2560x1440@144'
+          && /GRUB_CMDLINE_LINUX_DEFAULT="\$GRUB_CMDLINE_LINUX_DEFAULT video=HDMI-A-1:1920x1080@75/.test(э.собери_grub(экраны))
+          && э.собери_общий(экраны) === 'HDMI-A-1 1920x1080@74973 1\nDP-2 2560x1440@143912 1.25\n'
+          && /glower-wm -C "\$LABWC_CFG" -s "\$HOMEDIR\/пуск\.sh"/.test(вход5) && /glower-wm -e >\/dev\/null 2>&1 \|\| labwc -e/.test(вход5)
+          && /current_encoder\(\)/.test(удев) && /\/etc\/glower\/screens/.test(удев) && /fn выбор_для/.test(удев)
+          && /screens\.mjs/.test(сервер),
+        JSON.stringify(экраны));
+    }
+
     /* Заставка загрузки: каждая картинка, которую зовёт сценарий, едет в
        образ (logo.png и word.png кладёт сборка из assets — и проверяем, что
        кладёт), а пакет просит пересобрать

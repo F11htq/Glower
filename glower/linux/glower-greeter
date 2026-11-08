@@ -35,7 +35,7 @@ mkdir -p "$HOMEDIR" 2>/dev/null || true
 node "$UI/agent/server.mjs" --port "$PORT" --root "$HOMEDIR" --allow-power >>"$LOG" 2>&1 &
 AGENT=$!
 LABWC=""
-trap 'kill $AGENT $LABWC 2>/dev/null' EXIT INT TERM
+trap 'STOP=1; kill $AGENT $LABWC 2>/dev/null' EXIT INT TERM
 
 # Агента здесь не ждём: оконный сервер поднимается сразу, а под экраном
 # входа, пока тот грузится, — заставка с логотипом (glower-splash --вход).
@@ -73,7 +73,7 @@ while :; do
   [ \$falls -ge 5 ] && break
   sleep 1
 done
-labwc -e >/dev/null 2>&1 || true
+glower-wm -e >/dev/null 2>&1 || labwc -e >/dev/null 2>&1 || true
 STARTUP
 chmod +x "$HOMEDIR/пуск.sh"
 
@@ -92,6 +92,28 @@ export WLR_RENDERER_ALLOW_SOFTWARE=1
 # поднимется: ему нужен узел /dev/dri, а его там нет. Тогда тот же labwc
 # идёт внутри X-сервера, который рисует простым способом.
 LABWC_CFG="${GLOWER_LABWC:-/usr/share/glower/labwc-вход}"
+# Свой оконный сервер (glower-wm) — тот же, что на рабочем столе. Монитор
+# гаснет и заново ловит сигнал при каждой смене режима экрана; labwc брал
+# «предпочтительный» режим монитора, рабочий стол — выбранный человеком,
+# и экран мигал. glower-wm держит режим, уже выставленный при загрузке, а
+# выбор человека знает из /etc/glower/screens (agent/screens.mjs). Не
+# поднялся за десять секунд — labwc, как раньше: войти важнее
+STOP=""
+if ls /dev/dri/card* >/dev/null 2>&1 && command -v glower-wm >/dev/null 2>&1 \
+   && ! grep -qw 'glower.wm=labwc' /proc/cmdline 2>/dev/null; then
+  started=$(date +%s)
+  HOME="$HOMEDIR" glower-wm -C "$LABWC_CFG" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
+  LABWC=$!
+  wait $LABWC
+  code=$?
+  if [ -z "$STOP" ] && [ "$code" != 0 ] && [ $(( $(date +%s) - started )) -lt 10 ]; then
+    echo "glower-wm не поднялся (код $code) — экран входа под labwc" >>"$LOG"
+    HOME="$HOMEDIR" labwc -C "$LABWC_CFG" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
+    LABWC=$!
+    wait $LABWC
+  fi
+  exit 0
+fi
 if ls /dev/dri/card* >/dev/null 2>&1; then
   HOME="$HOMEDIR" labwc -C "$LABWC_CFG" -s "$HOMEDIR/пуск.sh" >>"$LOG" 2>&1 &
 else

@@ -136,7 +136,15 @@ fn открой_видеокарту(сессия: &mut LibSeatSession) -> Resul
 
 type Найденный = (connector::Handle, crtc::Handle, smithay::reexports::drm::control::Mode, connector::Info);
 
-/// Подключённые экраны: разъём, свободный CRTC и лучший режим
+/// Подключённые экраны: разъём, CRTC и режим.
+///
+/// Монитор гаснет и заново ловит сигнал всякий раз, когда меняется режим
+/// или канал (CRTC), через который он показывает. Поэтому, если экран уже
+/// включён — заставкой загрузки или экраном входа, — берём тот же канал и
+/// тот же режим: тогда переход от загрузки к экрану входа и от него к
+/// рабочему столу проходит без мигания. Режим, выбранный человеком, — выше
+/// (подними_экраны), а чтобы и загрузка шла в нём, система передаёт его
+/// ядру (agent/screens.mjs)
 fn найди_экраны(drm: &DrmDevice) -> Vec<Найденный> {
     let Ok(ресурсы) = drm.resource_handles() else { return vec![] };
     let mut занято: Vec<crtc::Handle> = vec![];
@@ -146,18 +154,30 @@ fn найди_экраны(drm: &DrmDevice) -> Vec<Найденный> {
         if инфо.state() != connector::State::Connected || инфо.modes().is_empty() {
             continue;
         }
-        let режим = инфо
-            .modes()
-            .iter()
-            .find(|р| р.mode_type().contains(ModeTypeFlags::PREFERRED))
-            .copied()
-            .unwrap_or(инфо.modes()[0]);
-        let crtc = инфо
-            .encoders()
-            .iter()
-            .filter_map(|&к| drm.get_encoder(к).ok())
-            .flat_map(|к| ресурсы.filter_crtcs(к.possible_crtcs()))
-            .find(|c| !занято.contains(c));
+        // Чем экран показывает сейчас: канал и режим
+        let нынешний = инфо
+            .current_encoder()
+            .and_then(|к| drm.get_encoder(к).ok())
+            .and_then(|к| к.crtc())
+            .filter(|c| !занято.contains(c));
+        let нынешний_режим = нынешний
+            .and_then(|c| drm.get_crtc(c).ok())
+            .and_then(|и| и.mode())
+            .filter(|м| инфо.modes().contains(м));
+        let режим = нынешний_режим.unwrap_or_else(|| {
+            инфо.modes()
+                .iter()
+                .find(|р| р.mode_type().contains(ModeTypeFlags::PREFERRED))
+                .copied()
+                .unwrap_or(инфо.modes()[0])
+        });
+        let crtc = нынешний.or_else(|| {
+            инфо.encoders()
+                .iter()
+                .filter_map(|&к| drm.get_encoder(к).ok())
+                .flat_map(|к| ресурсы.filter_crtcs(к.possible_crtcs()))
+                .find(|c| !занято.contains(c))
+        });
         if let Some(c) = crtc {
             занято.push(c);
             итог.push((разъём, c, режим, инфо));
@@ -182,7 +202,7 @@ fn подними_экраны(с: &mut Glower, u: &mut Udev) {
         }
         let имя = format!("{}-{}", инфо.interface().as_str(), инфо.interface_id());
         // Режим и масштаб, выбранные человеком в Параметрах, — если экран их ещё умеет
-        let сохранено = сохранённые_экраны().into_iter().find(|з| з.имя == имя);
+        let сохранено = выбор_для(&имя);
         let режим = сохранено
             .as_ref()
             .and_then(|з| з.режим)
@@ -279,6 +299,20 @@ pub fn разбери_экраны(текст: &str) -> Vec<Сохранённы
 
 fn сохранённые_экраны() -> Vec<Сохранённый> {
     файл_экранов().and_then(|ф| std::fs::read_to_string(ф).ok()).map(|т| разбери_экраны(&т)).unwrap_or_default()
+}
+
+/// Выбор человека, которым система делится со всеми: с экраном входа (у
+/// него нет доступа к домашней папке) и с загрузкой. Пишет его агент
+/// (agent/screens.mjs) из того же ~/.config/glower/screens
+fn общий_файл_экранов() -> PathBuf {
+    std::env::var_os("GLOWER_SCREENS_SYS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/etc/glower/screens"))
+}
+
+/// Свой выбор — главнее; нет своего — общий
+fn выбор_для(имя: &str) -> Option<Сохранённый> {
+    сохранённые_экраны().into_iter().find(|з| з.имя == имя).or_else(|| {
+        std::fs::read_to_string(общий_файл_экранов()).ok().and_then(|т| разбери_экраны(&т).into_iter().find(|з| з.имя == имя))
+    })
 }
 
 fn частота_мгц(м: &smithay::reexports::drm::control::Mode) -> i32 {
