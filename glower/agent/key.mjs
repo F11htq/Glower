@@ -21,10 +21,11 @@
 import { execFile, spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, copyFile, readdir, stat, rm, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, basename } from 'node:path';
 import { promisify } from 'node:util';
 import { randomBytes, createHash, timingSafeEqual, randomUUID, scrypt } from 'node:crypto';
 import os from 'node:os';
+import { особая } from './folders.mjs';
 
 const run = promisify(execFile);
 const КОНФИГ = () => join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'glower');
@@ -59,7 +60,7 @@ export function только_систему(с){
 
 /* Какие папки копировать: здесь — по именам папок человека, на флешке —
    по-английски (флешку вставят и в чужой компьютер, и в Windows) */
-export const ПАПКИ_КОПИИ = [['Документы', 'Documents'], ['Рабочий стол', 'Desktop'], ['Изображения', 'Pictures']];
+export const ПАПКИ_КОПИИ = [['Документы', 'Documents', 'DOCUMENTS'], ['Рабочий стол', 'Desktop', 'DESKTOP'], ['Изображения', 'Pictures', 'PICTURES']];
 
 export const отпечаток = тайна => createHash('sha256').update(String(тайна)).digest('hex');
 
@@ -453,7 +454,8 @@ export function key({ root, allowLaunch } = {}){
       // Копия прежних версий — с русскими именами папок: переименовываем
       for (const [здесь, там] of ПАПКИ_КОПИИ)
         if (existsSync(join(куда, здесь)) && !existsSync(join(куда, там))) await rename(join(куда, здесь), join(куда, там)).catch(() => {});
-      return перенеси(ПАПКИ_КОПИИ.map(([здесь, там]) => [join(ДОМ, здесь), join(куда, там), 'Копирую «' + здесь + '»']), 'копия', dev);
+      // Здесь папки — на языке человека (agent/folders.mjs), там — по-английски
+      return перенеси(ПАПКИ_КОПИИ.map(([, там, вид]) => { const п = особая(вид, ДОМ); return [п, join(куда, там), 'Копирую «' + basename(п) + '»']; }), 'копия', dev);
     },
 
     /* Вернуть файлы с ключа: только недостающие и более новые — то, что
@@ -462,7 +464,8 @@ export function key({ root, allowLaunch } = {}){
       const { н } = await свой_ключ(dev);
       const откуда = папка_копии(н.где);
       if (!existsSync(откуда)) throw new Error('копии с этого компьютера на ключе нет');
-      return перенеси(ПАПКИ_КОПИИ.map(([здесь, там]) => [existsSync(join(откуда, там)) ? join(откуда, там) : join(откуда, здесь), join(ДОМ, здесь), 'Возвращаю «' + здесь + '»']), 'возврат', dev);
+      return перенеси(ПАПКИ_КОПИИ.map(([здесь, там, вид]) => { const п = особая(вид, ДОМ);
+        return [existsSync(join(откуда, там)) ? join(откуда, там) : join(откуда, здесь), п, 'Возвращаю «' + basename(п) + '»']; }), 'возврат', dev);
     },
 
     async 'key.backup.state'(){

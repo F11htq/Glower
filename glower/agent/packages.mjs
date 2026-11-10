@@ -16,6 +16,7 @@ import os, { homedir } from 'node:os';
 import { promisify } from 'node:util';
 import { readFile, mkdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
+import { особая } from './folders.mjs';
 
 const run = promisify(execFile);
 
@@ -1173,8 +1174,7 @@ export function packages(allowPackages){
       await обойди(своя);
       await rmdir(своя).catch(() => {});
     } else await убери(файл);
-    for (const стол of ['Desktop', 'Рабочий стол']){
-      const д = join(домой(), стол);
+    for (const д of new Set([особая('DESKTOP', join(домой(), 'GlowerOS')), join(домой(), 'Desktop'), join(домой(), 'Рабочий стол')])){
       for (const з of await readdir(д).catch(() => [])){
         if (!з.endsWith('.desktop')) continue;
         try {

@@ -29,6 +29,7 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import os from 'node:os';
+import { особая } from './folders.mjs';
 
 const run = promisify(execFile);
 const ДОМ = os.homedir();
@@ -274,7 +275,8 @@ export function разбери_строку(стр){
 }
 
 const ПРОГРАММЫ_БЫСТРОЙ = () => {
-  const п = [join(ДОМ, 'Загрузки'), join(ДОМ, 'Downloads'), join(ДОМ, 'Рабочий стол'), join(ДОМ, 'Desktop'),
+  const п = [...new Set([особая('DOWNLOAD', join(ДОМ, 'GlowerOS')), особая('DESKTOP', join(ДОМ, 'GlowerOS')),
+    join(ДОМ, 'Загрузки'), join(ДОМ, 'Downloads'), join(ДОМ, 'Рабочий стол'), join(ДОМ, 'Desktop')]),
     join(ДОМ, '.config/autostart'), join(ДОМ, '.local/bin'), join(ДОМ, '.local/share/applications'),
     join(ДОМ, '.wine/drive_c/users'), '/tmp', '/var/tmp'];
   return п.filter(х => existsSync(х));

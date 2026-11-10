@@ -23,6 +23,7 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import { мои, носители, подключи, ключ_на, ПАПКА, тайна_подходит, нужен_токен } from './key.mjs';
+import { особая, подпапка } from './folders.mjs';
 
 const run = promisify(execFile);
 const КОНФИГ = () => join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'glower');
@@ -161,7 +162,8 @@ async function открытые_файлы(нельзя){
 }
 
 export function relay({ root, allowLaunch, средаЭкрана } = {}){
-  const ДОКУМЕНТЫ = join(root || os.homedir(), 'Документы');
+  // Документы — на языке человека (agent/folders.mjs)
+  const ДОКУМЕНТЫ = () => особая('DOCUMENTS', root || os.homedir());
   let пишем = false, прошлое = new Map();   // id ключа → отпечаток записанного
 
   /* Что сейчас открыто — для записи на ключ */
@@ -277,7 +279,8 @@ export function relay({ root, allowLaunch, средаЭкрана } = {}){
       // обработчика оно роняет весь агент
       const открой = (что, доводы) => { try { const п = spawn(что, доводы, { env, detached:true, stdio:'ignore' }); п.on('error', () => {}); п.unref(); } catch(e){} };
 
-      const куда = join(ДОКУМЕНТЫ, 'Эстафета');
+      // Уже заведённая «Эстафета» остаётся, новая — на языке человека
+      const куда = existsSync(join(ДОКУМЕНТЫ(), 'Эстафета')) ? join(ДОКУМЕНТЫ(), 'Эстафета') : join(ДОКУМЕНТЫ(), подпапка('Эстафета'));
       await mkdir(куда, { recursive:true });
       const открыто = [];
       for (const ф of опись.файлы || []){

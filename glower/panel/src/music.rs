@@ -43,14 +43,7 @@ fn звук_ли(п: &Path) -> bool {
 
 /// Где лежит музыка: «Музыка» системы, а нет её — привычные папки
 fn папка_музыки() -> PathBuf {
-    let дом = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
-    let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| дом.join("GlowerOS"));
-    for п in [корень.join("Музыка"), glib::user_special_dir(glib::UserDirectory::Music).unwrap_or_default(), дом.join("Музыка"), дом.join("Music")] {
-        if !п.as_os_str().is_empty() && п.is_dir() {
-            return п;
-        }
-    }
-    корень.join("Музыка")
+    crate::core::особая("MUSIC")
 }
 
 fn собери(папка: &Path, куда: &mut Vec<PathBuf>, глубина: u8) {

@@ -301,12 +301,7 @@ fn метка_записи() -> PathBuf {
 }
 
 fn папка_записей() -> PathBuf {
-    let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| glib::home_dir().join("GlowerOS"));
-    let видео = [корень.join("Видео"), glib::home_dir().join("Видео"), glib::home_dir().join("Videos")]
-        .into_iter()
-        .find(|п| п.is_dir())
-        .unwrap_or_else(|| корень.join("Видео"));
-    видео.join("Записи экрана")
+    crate::core::подпапка(&crate::core::особая("VIDEOS"), "Записи экрана")
 }
 
 /// Идёт запись — остановить. false — записи не было
@@ -514,12 +509,7 @@ fn новый_кадр(н: &Н, кадр: Pixbuf) {
 }
 
 fn папка_снимков() -> PathBuf {
-    let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| glib::home_dir().join("GlowerOS"));
-    let изображения = [корень.join("Изображения"), glib::home_dir().join("Изображения"), glib::home_dir().join("Pictures")]
-        .into_iter()
-        .find(|п| п.is_dir())
-        .unwrap_or_else(|| корень.join("Изображения"));
-    изображения.join("Снимки")
+    crate::core::подпапка(&crate::core::особая("PICTURES"), "Снимки")
 }
 
 fn сохрани(н: &Н, спросить: bool) {

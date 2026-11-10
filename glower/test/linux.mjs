@@ -1379,6 +1379,37 @@ try {
     }
     check('столы переключаются с клавиатуры', /glower-desk/.test(rc));
 
+    /* Папки человека — на его языке: новые заводятся на языке системы и
+       записываются в user-dirs.dirs, старые русские с файлами остаются,
+       пустые переименовываются при смене языка. Таблица имён в панели и в
+       агенте одна и та же. */
+    {
+      const { mkdtemp, mkdir: md, writeFile: wf, readdir: rd2, readFile: rf } = await import('node:fs/promises');
+      const п = await import(join(root, 'agent', 'folders.mjs'));
+      const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+      const из_rust = Object.fromEntries([...ядро.matchAll(/\("([a-z]{2})", \[("[^\]]+")\]\)/g)].map(м => [м[1], JSON.parse('[' + м[2] + ']')]));
+      const таблицы = JSON.stringify(из_rust) === JSON.stringify(п.ИМЕНА);
+      const было = { HOME:process.env.HOME, X:process.env.XDG_CONFIG_HOME };
+      const дом = await mkdtemp(join((await import('node:os')).tmpdir(), 'glower-папки-'));
+      process.env.HOME = дом; process.env.XDG_CONFIG_HOME = join(дом, '.config');
+      await md(join(дом, '.config/glower'), { recursive:true });
+      await wf(join(дом, '.config/glower/locale'), 'en_US.UTF-8\n');
+      await md(join(дом, 'GlowerOS/Документы'), { recursive:true });
+      await wf(join(дом, 'GlowerOS/Документы/мой.txt'), 'x');
+      const р = await п.подготовь_папки({ root:join(дом, 'GlowerOS'), дом });
+      const есть = (await rd2(join(дом, 'GlowerOS'))).sort();
+      const дирс = await rf(join(дом, '.config/user-dirs.dirs'), 'utf8');
+      process.env.HOME = было.HOME; if (было.X === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = было.X;
+      check('папки человека — на языке системы, старые с файлами не трогаем',
+        таблицы && Object.keys(из_rust).length === 12
+          && есть.join('|') === 'Desktop|Downloads|Music|Pictures|Videos|Документы'
+          && р.DOCUMENTS.endsWith('/Документы') && /XDG_DESKTOP_DIR="\$HOME\/GlowerOS\/Desktop"/.test(дирс)
+          && /XDG_DOCUMENTS_DIR="\$HOME\/GlowerOS\/Документы"/.test(дирс)
+          && !/join\(ROOT, 'Документы'\)/.test(await readFile(join(root, 'agent', 'server.mjs'), 'utf8'))
+          && !/корень\(\)\.join\("Рабочий стол"\)/.test(ядро),
+        JSON.stringify({ таблицы, есть }));
+    }
+
     /* Монитор мигал при включении дважды: загрузка и экран входа брали
        «предпочтительный» режим монитора, рабочий стол — выбранный в
        Параметрах. Теперь режим один на всех: экран входа под тем же

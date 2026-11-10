@@ -413,16 +413,17 @@ const server = createServer(async (req, res) => {
   send(res, 404, 'not found');
 });
 
-await mkdir(ROOT, { recursive:true });
-if (!existsSync(join(ROOT, 'Документы'))){
-  await mkdir(join(ROOT, 'Документы'), { recursive:true });
-  await mkdir(join(ROOT, 'Рабочий стол'), { recursive:true });
-  await mkdir(join(ROOT, 'Изображения'), { recursive:true });
-  await mkdir(join(ROOT, 'Загрузки'), { recursive:true });
-  /* Встречающего файла на столе больше нет. Он появился, когда надо было
-     показать, что диск настоящий, — а теперь это и так очевидно, и первое,
-     что видит человек на своём рабочем столе, не должно быть нашей
-     запиской. Пустой стол честнее: пусть кладёт своё. */
+/* Папки человека — на его языке; где какая, пишем в user-dirs.dirs, чтобы
+   их находили все программы (agent/folders.mjs). Файл — только в настоящем
+   сеансе, когда корень лежит в домашней папке, а не в проверках.
+   Встречающего файла на столе нет: первое, что видит человек на своём
+   рабочем столе, не должно быть нашей запиской. */
+{
+  const п = await import('./folders.mjs');
+  const дом = homedir();
+  const свой = ROOT.startsWith(дом + '/');
+  await п.подготовь_папки({ root:ROOT, писать:свой }).catch(e => console.error('папки:', e.message));
+  if (свой) п.следи_за_языком(ROOT);
 }
 
 startWatch();

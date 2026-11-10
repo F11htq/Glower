@@ -438,11 +438,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
 
     // Что открыть: файл или папку из доводов, иначе — Изображения
     let путь = доводы.first().map(PathBuf::from).filter(|п| п.exists()).unwrap_or_else(|| {
-        let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| glib::home_dir().join("GlowerOS"));
-        [корень.join("Изображения"), glib::home_dir().join("Изображения"), glib::home_dir().join("Pictures")]
-            .into_iter()
-            .find(|п| п.is_dir())
-            .unwrap_or_else(glib::home_dir)
+        Some(crate::core::особая("PICTURES")).filter(|п| п.is_dir()).unwrap_or_else(glib::home_dir)
     });
     открой_путь(&ф, &путь);
     gtk::main();

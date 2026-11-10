@@ -239,18 +239,18 @@ fn запасной_значок(папка: bool, размер: i32) -> Option<
     gtk::gdk::pixbuf_get_from_surface(&п, 0, 0, размер, размер)
 }
 
+/// Значок особой папки: какая она — по user-dirs.dirs (имена на языке человека)
 fn особая_папка(пр: &Проводник, путь: &Path) -> Option<&'static str> {
     if путь.parent()? != пр.корень {
         return None;
     }
-    Some(match путь.file_name()?.to_str()? {
-        "Рабочий стол" => "user-desktop",
-        "Документы" => "folder-documents",
-        "Изображения" => "folder-pictures",
-        "Музыка" => "folder-music",
-        "Загрузки" => "folder-download",
-        "Видео" => "folder-videos",
-        _ => return None,
+    Some(match crate::core::вид_папки(путь)? {
+        "DESKTOP" => "user-desktop",
+        "DOCUMENTS" => "folder-documents",
+        "PICTURES" => "folder-pictures",
+        "MUSIC" => "folder-music",
+        "DOWNLOAD" => "folder-download",
+        _ => "folder-videos",
     })
 }
 
@@ -1442,8 +1442,9 @@ fn собери_места(п: &П) {
         цели.len() - 1
     };
     ряд("💻", "Этот компьютер", Место::Папка(п.корень.clone()));
-    for (знак, имя) in [("🖥️", "Рабочий стол"), ("📄", "Документы"), ("🖼️", "Изображения"), ("🎵", "Музыка"), ("⬇️", "Загрузки")] {
-        let путь = п.корень.join(имя);
+    // Подпись — по-русски, её переводит словарь языка; путь — настоящий
+    for (знак, имя, вид) in [("🖥️", "Рабочий стол", "DESKTOP"), ("📄", "Документы", "DOCUMENTS"), ("🖼️", "Изображения", "PICTURES"), ("🎵", "Музыка", "MUSIC"), ("⬇️", "Загрузки", "DOWNLOAD")] {
+        let путь = crate::core::особая(вид);
         if путь.is_dir() {
             ряд(знак, имя, Место::Папка(путь));
         }

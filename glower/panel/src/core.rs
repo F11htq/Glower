@@ -153,7 +153,100 @@ pub fn корень() -> PathBuf {
 }
 
 pub fn папка_стола() -> PathBuf {
-    корень().join("Рабочий стол")
+    особая("DESKTOP")
+}
+
+/* ---------- папки человека на его языке ----------
+   Рабочий стол, Документы и прочие живут в ~/GlowerOS и называются на
+   языке системы; где какая — записано в ~/.config/user-dirs.dirs (пишет
+   агент, agent/folders.mjs), и по нему их находят все программы. Таблица
+   имён — та же, что в agent/folders.mjs (их сверяет test/linux.mjs) */
+pub const ВИДЫ_ПАПОК: [&str; 6] = ["DESKTOP", "DOCUMENTS", "PICTURES", "MUSIC", "DOWNLOAD", "VIDEOS"];
+pub const ИМЕНА_ПАПОК: &[(&str, [&str; 6])] = &[
+    ("ru", ["Рабочий стол", "Документы", "Изображения", "Музыка", "Загрузки", "Видео"]),
+    ("en", ["Desktop", "Documents", "Pictures", "Music", "Downloads", "Videos"]),
+    ("uk", ["Стільниця", "Документи", "Зображення", "Музика", "Завантаження", "Відео"]),
+    ("be", ["Працоўны стол", "Дакументы", "Відарысы", "Музыка", "Сцягнутае", "Відэа"]),
+    ("kk", ["Жұмыс үстелі", "Құжаттар", "Суреттер", "Музыка", "Жүктемелер", "Бейнелер"]),
+    ("de", ["Schreibtisch", "Dokumente", "Bilder", "Musik", "Downloads", "Videos"]),
+    ("fr", ["Bureau", "Documents", "Images", "Musique", "Téléchargements", "Vidéos"]),
+    ("es", ["Escritorio", "Documentos", "Imágenes", "Música", "Descargas", "Vídeos"]),
+    ("it", ["Scrivania", "Documenti", "Immagini", "Musica", "Scaricati", "Video"]),
+    ("pt", ["Área de trabalho", "Documentos", "Imagens", "Música", "Downloads", "Vídeos"]),
+    ("pl", ["Pulpit", "Dokumenty", "Obrazy", "Muzyka", "Pobrane", "Wideo"]),
+    ("tr", ["Masaüstü", "Belgeler", "Resimler", "Müzik", "İndirilenler", "Videolar"]),
+];
+
+/// Папки, которые заводят сами наши программы, — тоже на языке человека
+const ПОДПАПКИ: &[(&str, &[(&str, &str)])] = &[
+    ("Снимки", &[("en", "Screenshots"), ("uk", "Знімки"), ("be", "Здымкі"), ("kk", "Скриншоттар"), ("de", "Bildschirmfotos"),
+        ("fr", "Captures d'écran"), ("es", "Capturas de pantalla"), ("it", "Schermate"), ("pt", "Capturas de tela"),
+        ("pl", "Zrzuty ekranu"), ("tr", "Ekran Görüntüleri")]),
+    ("Записи экрана", &[("en", "Screen recordings"), ("uk", "Записи екрана"), ("be", "Запісы экрана"), ("kk", "Экран жазбалары"),
+        ("de", "Bildschirmaufnahmen"), ("fr", "Enregistrements d'écran"), ("es", "Grabaciones de pantalla"),
+        ("it", "Registrazioni dello schermo"), ("pt", "Gravações de tela"), ("pl", "Nagrania ekranu"), ("tr", "Ekran Kayıtları")]),
+];
+
+fn имена_папок(язык: &str) -> &'static [&'static str; 6] {
+    ИМЕНА_ПАПОК.iter().find(|(к, _)| *к == язык).map(|(_, и)| и).unwrap_or(&ИМЕНА_ПАПОК[0].1)
+}
+
+/// XDG_DOCUMENTS_DIR="$HOME/GlowerOS/Документы" → путь
+pub fn из_user_dirs(текст: &str, вид: &str, дом: &std::path::Path) -> Option<PathBuf> {
+    let ключ = format!("XDG_{вид}_DIR");
+    текст.lines().find_map(|с| {
+        let (к, з) = с.trim().split_once('=')?;
+        if к.trim() != ключ {
+            return None;
+        }
+        let з = з.trim().trim_matches('"').replace("\\\"", "\"");
+        Some(match з.strip_prefix("$HOME") {
+            Some(ост) => PathBuf::from(format!("{}{}", дом.display(), ост)),
+            None => PathBuf::from(з),
+        })
+    })
+}
+
+/// Где папка этого вида: из user-dirs.dirs, иначе старое русское имя (так
+/// их заводили прежние версии), иначе имя на языке системы
+pub fn особая(вид: &str) -> PathBuf {
+    let дом = glib::home_dir();
+    let корень = корень();
+    if let Some(п) = std::fs::read_to_string(glib::user_config_dir().join("user-dirs.dirs"))
+        .ok()
+        .and_then(|т| из_user_dirs(&т, вид, &дом))
+        .filter(|п| п.is_dir() && *п != дом)
+    {
+        return п;
+    }
+    let i = ВИДЫ_ПАПОК.iter().position(|в| *в == вид).unwrap_or(1);
+    let русская = корень.join(ИМЕНА_ПАПОК[0].1[i]);
+    if русская.is_dir() {
+        return русская;
+    }
+    корень.join(имена_папок(&язык_сейчас())[i])
+}
+
+/// Вид особой папки по пути — для значков и подписей
+pub fn вид_папки(путь: &std::path::Path) -> Option<&'static str> {
+    ВИДЫ_ПАПОК.iter().copied().find(|в| особая(в) == путь)
+}
+
+/// Подпапка, которую заводит наша программа: уже заведённая по-русски
+/// остаётся, новая — на языке человека
+pub fn подпапка(база: &std::path::Path, русское: &str) -> PathBuf {
+    let старая = база.join(русское);
+    if старая.is_dir() {
+        return старая;
+    }
+    let язык = язык_сейчас();
+    let имя = ПОДПАПКИ
+        .iter()
+        .find(|(р, _)| *р == русское)
+        .and_then(|(_, п)| п.iter().find(|(я, _)| *я == язык))
+        .map(|(_, и)| *и)
+        .unwrap_or(русское);
+    база.join(имя)
 }
 
 fn загрузи() -> Value {

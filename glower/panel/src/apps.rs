@@ -597,13 +597,8 @@ pub fn знак_кнопки(б: &gtk::Button, текст: &str) {
 /// Где по умолчанию открывать и сохранять: документы системы
 /// (~/GlowerOS/Документы), а нет их — дом.
 pub fn папка_документов() -> PathBuf {
-    let дом = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
-    for п in [дом.join("GlowerOS").join("Документы"), дом.join("Документы"), дом.join("Documents")] {
-        if п.is_dir() {
-            return п;
-        }
-    }
-    дом
+    let п = crate::core::особая("DOCUMENTS");
+    if п.is_dir() { п } else { glib::home_dir() }
 }
 
 /// Данные программ — файлом в ~/.config/glower: календарь, будильники,
@@ -631,14 +626,7 @@ pub fn пиши_данные(имя: &str, что: &serde_json::Value) {
 
 /// Папка «Изображения» системы
 pub fn папка_изображений() -> PathBuf {
-    let дом = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
-    let корень = std::env::var("GLOWER_ROOT").map(PathBuf::from).unwrap_or_else(|_| дом.join("GlowerOS"));
-    for п in [корень.join("Изображения"), дом.join("Изображения"), дом.join("Pictures")] {
-        if п.is_dir() {
-            return п;
-        }
-    }
-    корень.join("Изображения")
+    crate::core::особая("PICTURES")
 }
 
 #[cfg(test)]
