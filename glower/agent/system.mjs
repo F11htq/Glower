@@ -166,12 +166,29 @@ export function power(allowPower){
         ['sudo', ['-n', 'systemctl', a]],
         ['loginctl', [a === 'poweroff' ? 'poweroff' : a === 'reboot' ? 'reboot' : 'suspend']]
       ];
-      const errors = [];
-      for (const [cmd, args] of tries){
-        if (!await has(cmd)) { errors.push(cmd + ': нет на машине'); continue; }
-        try { await call(cmd, args); return { ok:true, via:cmd + ' ' + args.join(' ') }; }
-        catch(e){ errors.push(cmd + ': ' + String(e.message || e).split('\n')[0]); }
+      const исполни = async () => {
+        const errors = [];
+        for (const [cmd, args] of tries){
+          if (!await has(cmd)) { errors.push(cmd + ': нет на машине'); continue; }
+          try { await call(cmd, args); return { ok:true, via:cmd + ' ' + args.join(' ') }; }
+          catch(e){ errors.push(cmd + ': ' + String(e.message || e).split('\n')[0]); }
+        }
+        return { errors };
+      };
+      /* Сон проверяем: уснула ли машина и не разбудил ли её кто-то сразу
+         же (agent/sleep.mjs). Снимок счётчиков — до просьбы: systemctl
+         может вернуться, когда машина уже проснулась */
+      const сон = a === 'suspend' ? await import('./sleep.mjs') : null;
+      const до = сон ? await сон.снимок().catch(() => null) : null;
+      const итог = await исполни();
+      if (итог.ok){
+        if (до) сон.следи(до, {
+          можно:true,
+          усыпить:async () => { const и = await исполни(); if (!и.ok) throw new Error(и.errors.join(' · ')); }
+        }).catch(e => console.error('сон:', e.message));
+        return итог;
       }
+      const errors = итог.errors;
       throw new Error('машину не удалось ' +
         (a === 'poweroff' ? 'выключить' : a === 'reboot' ? 'перезагрузить' : 'усыпить') +
         ' — ' + errors.join(' · '));

@@ -100,7 +100,7 @@ pub fn умолчания() -> Value {
         "deskWidgets": [{ "t": "clock" }, { "t": "weather" }],
         "deskApps": [], "deskNative": [], "iconPos": {},
         "dnd": false, "gameMode": true, "notif": true, "soundNotif": true, "nightLight": false,
-        "autoLock": 0, "lockOnWake": true, "autostart": [], "focusLen": "25",
+        "autoLock": 0, "sleepAfter": 0, "lockOnWake": true, "autostart": [], "focusLen": "25",
         "userName": "", "userEmoji": "", "desks": 2, "note": "",
         "setupDone": false, "updatesAsked": 0
     })
@@ -321,7 +321,7 @@ fn после(k: &str) {
             // Файл настроек уже записан — знак берёт вариант по нему
             crate::обнови_знак_пуска();
         }
-        "autoLock" => авто_замок(),
+        "autoLock" | "sleepAfter" => авто_замок(),
         "desks" => {}
         _ => {}
     }
@@ -519,7 +519,7 @@ fn расскажи_всё() {
     // Параметрам — в том виде, в каком им рассказывала страница
     let осталось = фокус.map(|до| ((до - glib::real_time() / 1_000_000).max(0)) as u64).unwrap_or(0);
     let mut kv = Map::new();
-    for к in ["notif", "autoLock", "focusLen"] {
+    for к in ["notif", "autoLock", "sleepAfter", "focusLen"] {
         kv.insert(к.into(), s[к].clone());
     }
     скажи(
@@ -1232,13 +1232,27 @@ fn ночной_свет() {
     }
 }
 
-/// Замок после N минут без дела. Бездействие видит оконный сервер, а не
-/// мы: swayidle спрашивает его и сам зовёт замок, когда время вышло
+fn минуты(ключ: &str) -> u64 {
+    настройка(ключ).as_u64().or_else(|| настройка(ключ).as_str().and_then(|т| т.parse().ok())).unwrap_or(0)
+}
+
+/// Замок и сон после N минут без дела. Бездействие видит оконный сервер, а
+/// не мы: swayidle спрашивает его и сам зовёт замок или сон, когда время
+/// вышло. Пока идёт видео или игра, программа держит запрет простоя
+/// (idle-inhibit) — и машина не уснёт посреди фильма
 fn авто_замок() {
     let _ = std::process::Command::new("pkill").args(["-x", "swayidle"]).status();
-    let минут = настройка("autoLock").as_u64().or_else(|| настройка("autoLock").as_str().and_then(|т| т.parse().ok())).unwrap_or(0);
-    if минут > 0 {
-        запусти_команду("swayidle", &["-w", "timeout", &(минут * 60).to_string(), "glower-menu замок"]);
+    let (замок, сон) = (минуты("autoLock"), минуты("sleepAfter"));
+    let mut доводы: Vec<String> = vec!["-w".into()];
+    if замок > 0 {
+        доводы.extend(["timeout".into(), (замок * 60).to_string(), "glower-menu замок".into()]);
+    }
+    if сон > 0 {
+        доводы.extend(["timeout".into(), (сон * 60).to_string(), "glower-menu сон".into()]);
+    }
+    if доводы.len() > 1 {
+        let д: Vec<&str> = доводы.iter().map(String::as_str).collect();
+        запусти_команду("swayidle", &д);
     }
 }
 
@@ -1903,7 +1917,7 @@ pub fn начни() {
         &[],
         &[
             "обзор-дело", "обзор-дай", "значки-дело", "параметры-дело", "дай-док", "открой", "настройка", "клавиша", "стол",
-            "пробуждение", "уведомление", "уведомление-закрыть", "файл-установщик", "windows", "снимок", "покажи", "медиа", "питание",
+            "пробуждение", "сон", "уведомление", "уведомление-закрыть", "файл-установщик", "windows", "снимок", "покажи", "медиа", "питание",
         ],
     );
     glib::MainContext::default().spawn_local(async move {
@@ -1973,6 +1987,12 @@ pub fn начни() {
                     if настройка("lockOnWake").as_bool() != Some(false) {
                         позови("sys.power", json!({ "action": "lock" }), |_| {});
                     }
+                }
+                // Сон сорвался: агент нашёл, кто будил машину (agent/sleep.mjs)
+                "сон" => {
+                    let з = что["заголовок"].as_str().unwrap_or("Сон");
+                    let т = что["текст"].as_str().unwrap_or("");
+                    notify::покажи(з, т, "🌙");
                 }
                 "уведомление" => notify::из_шины(что),
                 "уведомление-закрыть" => notify::закрой_номер(что["номер"].as_u64().unwrap_or(0) as u32),

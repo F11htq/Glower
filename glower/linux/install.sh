@@ -60,6 +60,10 @@ done
 [ -x "$SRC/wm/target/release/glower-wm" ] && install -m 755 "$SRC/wm/target/release/glower-wm" "$PREFIX/bin/glower-wm"
 install -m 644 "$SRC/linux/labwc/rc.xml" "$PREFIX/share/glower/labwc/rc.xml"
 say "рабочий стол: $PREFIX/bin/glower-panel"
+# Сон: агент зовёт помощника по точному пути через sudo, а systemd берёт
+# хуки только из своей папки — поэтому мимо $PREFIX
+install -m 755 "$SRC/linux/glower-sleep" /usr/bin/glower-sleep
+install -D -m 755 "$SRC/linux/glower-sleep-hook" /usr/lib/systemd/system-sleep/glower-sleep
 
 # --- сеанс ---
 install -m 755 "$SRC/linux/glower-session" "$PREFIX/bin/glower-session"

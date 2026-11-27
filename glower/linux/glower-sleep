@@ -1,0 +1,74 @@
+#!/bin/bash
+# ==========================================================================
+#  Кому можно будить машину
+#
+#  Частая беда сна на Linux: машина гаснет и через секунду включается
+#  обратно. Будит её не человек, а устройство — контроллер USB, сетевая
+#  карта, порт PCIe, — которому прошивка разрешила будить и которое шумит
+#  сразу после засыпания. Windows такое тоже знает и лечит тем же:
+#  отнимает у устройства право будить («Разрешить этому устройству выводить
+#  компьютер из ждущего режима» в Диспетчере устройств).
+#
+#  Кто разбудил, узнаёт агент (agent/sleep.mjs) по счётчикам ядра. Этот
+#  сценарий только исполняет и помнит решение в /etc/glower/wake-off —
+#  строками-путями устройств в /sys:
+#    glower-sleep off /devices/pci0000:00/0000:00:14.0   — больше не будит
+#    glower-sleep on  /devices/pci0000:00/0000:00:14.0   — снова будит
+#    glower-sleep apply                                  — применить список
+#  Список применяется перед каждым сном (хук systemd-sleep), поэтому
+#  переживает и перезагрузку, и заново воткнутое устройство.
+# ==========================================================================
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+CONF=${GLOWER_WAKE_CONF:-/etc/glower/wake-off}
+SYS=${GLOWER_SYSFS:-/sys}
+WHAT=${1:-}
+DEV=${2:-}
+
+# Путь — только устройство в /sys/devices, без «..» и чужих символов:
+# сценарий идёт через sudo, и писать он должен ровно в power/wakeup
+valid(){
+  case "$1" in
+    /devices/*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *..*|*//*|*[!A-Za-z0-9:._/+-]*) return 1 ;;
+  esac
+  [ -w "$SYS$1/power/wakeup" ]
+}
+
+put(){
+  [ -e "$SYS$1/power/wakeup" ] || return 0
+  echo "$2" > "$SYS$1/power/wakeup" 2>/dev/null
+}
+
+case "$WHAT" in
+  off|on)
+    valid "$DEV" || { echo "не устройство, которое может будить: $DEV" >&2; exit 2; }
+    mkdir -p "$(dirname "$CONF")"
+    touch "$CONF"
+    TMP="$CONF.new.$$"
+    grep -vxF -- "$DEV" "$CONF" > "$TMP" 2>/dev/null || true
+    if [ "$WHAT" = off ]; then
+      echo "$DEV" >> "$TMP"
+      put "$DEV" disabled
+    else
+      put "$DEV" enabled
+    fi
+    chmod 644 "$TMP"
+    mv -f "$TMP" "$CONF"
+    ;;
+  apply)
+    [ -s "$CONF" ] || exit 0
+    while IFS= read -r LINE; do
+      case "$LINE" in ''|'#'*) continue ;; esac
+      valid "$LINE" && put "$LINE" disabled
+    done < "$CONF"
+    ;;
+  *)
+    echo "glower-sleep off|on ПУТЬ | apply" >&2
+    exit 2
+    ;;
+esac
+exit 0

@@ -169,6 +169,7 @@ if (SYSTEM){
     ...(await import('./relay.mjs')).relay({ root:ROOT, allowLaunch:ALLOW_LAUNCH, средаЭкрана:m.средаЭкрана }),
     ...(await import('./clock.mjs')).clock(),
     ...(await import('./antenna.mjs')).antenna(),
+    ...(await import('./sleep.mjs')).sleep({ allowPower:ALLOW_POWER }),
     ...(await import('./screens.mjs')).screens(),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
   };
@@ -427,6 +428,15 @@ const server = createServer(async (req, res) => {
 }
 
 startWatch();
+
+/* Сон сорвался — сказать человеку: иначе он видит только, что машина
+   погасла и включилась, и думает, что сна в системе нет (agent/sleep.mjs) */
+if (SYSTEM){
+  const { события } = await import('./sleep.mjs');
+  события.on('итог', р => {
+    BUS['ui.say']({ 'тема':'сон', что:{ заголовок:р.заголовок, текст:р.текст, исход:р.исход } }).catch(() => {});
+  });
+}
 
 /* ---------- пробуждение машины ----------
 

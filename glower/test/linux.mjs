@@ -1159,6 +1159,92 @@ try {
           check('антенны: сценарий молча выходит, если карты нет', нет.status === 0);
         }
         {
+          // Сон: машина гасла и сразу включалась — находим, кто будил
+          const { mkdir, writeFile:пиши, symlink, rm } = await import('node:fs/promises');
+          const с = await import(pathToFileURL(join(root, 'agent', 'sleep.mjs')).href);
+          const фс = await mkdtemp(join(tmpdir(), 'glower-sysfs-'));
+          const устройство = async (путь, номер, файлы = {}) => {
+            await mkdir(join(фс, путь, 'power'), { recursive:true });
+            await пиши(join(фс, путь, 'power', 'wakeup'), 'enabled\n');
+            for (const [ф, т] of Object.entries(файлы)) await пиши(join(фс, путь, ф), т + '\n');
+            const и = join(фс, путь, 'wakeup', 'wakeup' + номер);
+            await mkdir(и, { recursive:true });
+            await пиши(join(и, 'name'), путь.split('/').pop() + '\n');
+            await пиши(join(и, 'wakeup_count'), '0\n');
+            await пиши(join(и, 'event_count'), '0\n');
+            await mkdir(join(фс, 'class', 'wakeup'), { recursive:true });
+            await symlink(join('..', '..', путь.slice(1), 'wakeup', 'wakeup' + номер), join(фс, 'class', 'wakeup', 'wakeup' + номер));
+          };
+          const ХОСТ = '/devices/pci0000:00/0000:00:14.0', МЫШЬ = ХОСТ + '/usb1/1-3', КРЫШКА = '/devices/LNXSYSTM:00/LNXSYBUS:00/PNP0C0D:00';
+          await устройство(ХОСТ, 3, { class:'0x0c0330' });
+          await устройство(МЫШЬ, 5, { idVendor:'046d', product:'USB Receiver' });
+          await устройство(КРЫШКА, 1);
+          await mkdir(join(фс, 'devices', 'virtual', 'wakeup', 'wakeup9'), { recursive:true });
+          await symlink('../../devices/virtual/wakeup/wakeup9', join(фс, 'class', 'wakeup', 'wakeup9'));
+          await mkdir(join(фс, 'power', 'suspend_stats'), { recursive:true });
+          for (const [ф, т] of [['success', '4'], ['fail', '0'], ['last_failed_dev', ''], ['last_failed_step', ''], ['last_failed_errno', '0']])
+            await пиши(join(фс, 'power', 'suspend_stats', ф), т + '\n');
+          const до = await с.снимок(фс);
+          check('сон: снимок видит, кто может будить, и пропускает будильники без устройства',
+            Object.keys(до.источники).sort().join() === [КРЫШКА, ХОСТ, МЫШЬ].sort().join() && до.ст.success === '4',
+            JSON.stringify(Object.keys(до.источники)));
+          const после = (сек, сдвиг) => {
+            const п = structuredClone(до);
+            п.стена += сек * 1000 + 500; п.ход += 500;
+            for (const [путь, на] of Object.entries(сдвиг.будил || {})) п.источники[путь].wakeup += на;
+            п.ст.success = String(4 + (сдвиг.удался ?? 1));
+            if (сдвиг.отказ){ п.ст.success = '4'; п.ст.fail = '1'; п.ст.last_failed_dev = '0000:00:14.0'; п.ст.last_failed_step = 'suspend'; }
+            return п;
+          };
+          const мышь = с.разбери(до, после(2, { будил:{ [ХОСТ]:1, [МЫШЬ]:1 } }));
+          check('сон: проснулась через 2 с — виноват приёмник мыши, а не весь контроллер USB',
+            мышь.исход === 'разбудили' && мышь.виновник.путь === МЫШЬ && мышь.точно && мышь.спала === 2, JSON.stringify(мышь));
+          const крышка = с.разбери(до, после(3, { будил:{ [КРЫШКА]:1 } }));
+          check('сон: крышку и кнопку питания не винит никогда — ими будит человек', крышка.исход === 'человек', JSON.stringify(крышка));
+          check('сон: долгий сон — это сон', с.разбери(до, после(3600, { будил:{ [ХОСТ]:1 } })).исход === 'спала');
+          const отказ = с.разбери(до, после(0, { отказ:true }));
+          check('сон: устройство отказалось засыпать — так и говорим',
+            отказ.исход === 'отказ' && отказ.отказ.устройство === '0000:00:14.0' && отказ.отказ.шаг === 'suspend');
+          check('сон: не уснула вовсе — молчим', с.разбери(до, после(0, { удался:0 })).исход === 'не-было');
+          const о1 = await с.опиши(МЫШЬ, фс), о2 = await с.опиши(ХОСТ, фс);
+          check('сон: устройство называется человеческим словом',
+            о1.подпись === 'устройство USB «USB Receiver»' && о2.вид === 'контроллер USB', о1.подпись + ' · ' + о2.подпись);
+
+          const конф = join(фс, 'wake-off');
+          const сц = (...д) => spawnSync('bash', [join(root, 'linux', 'glower-sleep'), ...д],
+            { encoding:'utf8', env:{ ...process.env, GLOWER_SYSFS:фс, GLOWER_WAKE_CONF:конф } });
+          const пробуди = () => readFile(join(фс, ХОСТ, 'power', 'wakeup'), 'utf8').then(т => т.trim());
+          const r1 = сц('off', ХОСТ);
+          const запрет = (await readFile(конф, 'utf8')).trim() === ХОСТ && await пробуди() === 'disabled';
+          await пиши(join(фс, ХОСТ, 'power', 'wakeup'), 'enabled\n');   // перезагрузка: прошивка разрешила снова
+          сц('apply');
+          const снова = await пробуди() === 'disabled';
+          сц('on', ХОСТ);
+          const вернули = await пробуди() === 'enabled' && (await readFile(конф, 'utf8')).trim() === '';
+          const чужое = [сц('off', '/devices/../../etc/passwd'), сц('off', '/etc/shadow'), сц('off', '/devices/нет-такого')];
+          check('сон: glower-sleep запрещает будить, помнит запрет, применяет его снова и снимает',
+            r1.status === 0 && запрет && снова && вернули, r1.stderr);
+          check('сон: glower-sleep не пишет никуда, кроме power/wakeup устройства', чужое.every(р => р.status === 2));
+
+          const хук = await readFile(join(root, 'linux', 'glower-sleep-hook'), 'utf8');
+          const образ = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+          const пакет = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
+          check('сон: хук перед сном применяет запреты и выгружает wl, помощник и хук попадают в образ и пакет',
+            /pre\)[\s\S]*glower-sleep apply/.test(хук) && /modprobe -r wl/.test(хук) && /post\)[\s\S]*modprobe wl/.test(хук)
+            && /usr\/lib\/systemd\/system-sleep\/glower-sleep/.test(образ) && /usr\/bin\/glower-sleep"/.test(образ)
+            && /usr\/bin\/glower-sleep /.test(пакет) && /usr\/lib\/systemd\/system-sleep\/glower-sleep/.test(пакет));
+          const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          const меню = await readFile(join(root, 'linux', 'glower-menu'), 'utf8');
+          check('сон: засыпание при бездействии — swayidle зовёт glower-menu сон, тот просит агент усыпить',
+            /"glower-menu сон"/.test(ядро) && /"sleepAfter"/.test(ядро) && /"сон"\s*=>/.test(ядро)
+            && /"action":"suspend"/.test(меню));
+          const сведения = await Platform.rpc('sys.sleep', {});
+          check('сон: агент рассказывает о сне без прав и не даёт вернуть право будить без --allow-power',
+            typeof сведения.можно === 'boolean' && Array.isArray(сведения.запрещены) && сведения.управление === false
+            && await Platform.rpc('sys.sleep.allow', { путь:ХОСТ }).then(() => false, () => true));
+          await rm(фс, { recursive:true, force:true });
+        }
+        {
           const wl = await readFile(join(root, 'linux', 'modprobe-glower-wl.conf'), 'utf8');
           check('драйвер Broadcom wl грузится только при карте Broadcom (иначе сбой ядра в журнале)',
             /^install wl .*0x14e4.*--ignore-install wl/m.test(wl)

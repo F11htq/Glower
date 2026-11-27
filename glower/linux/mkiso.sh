@@ -479,6 +479,10 @@ install -m 755 "$SRC/linux/glower-rescue" "$ROOTFS/usr/bin/glower-rescue"
 install -D -m 644 "$SRC/linux/apt-80glower-net" "$ROOTFS/etc/apt/apt.conf.d/80glower-net"
 install -D -m 644 "$SRC/linux/modprobe-glower-wl.conf" "$ROOTFS/etc/modprobe.d/glower-wl.conf"
 install -m 755 "$SRC/linux/glower-wifi-antenna" "$ROOTFS/usr/bin/glower-wifi-antenna"
+# Сон: кому нельзя будить машину (agent/sleep.mjs находит, кто будит её
+# сразу после засыпания) — и хук, который перед сном применяет запреты
+install -m 755 "$SRC/linux/glower-sleep" "$ROOTFS/usr/bin/glower-sleep"
+install -D -m 755 "$SRC/linux/glower-sleep-hook" "$ROOTFS/usr/lib/systemd/system-sleep/glower-sleep"
 # Игры: настройки ядра как в SteamOS, ntsync для Wine/Proton, glthread для
 # Minecraft (см. комментарии в самих файлах). Приоритет игре и полную
 # частоту встройке настраивает агент (agent/games.mjs, ~/.config/gamemode.ini)
