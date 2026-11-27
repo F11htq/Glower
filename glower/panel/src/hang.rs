@@ -29,7 +29,11 @@ pub fn можно_закрыть(pid: u32, мой_uid: u32) -> Result<(), String
     if pid <= 1 || pid == std::process::id() {
         return Err("это часть системы".into());
     }
-    let статус = std::fs::read_to_string(format!("/proc/{pid}/status")).map_err(|_| "программы уже нет".to_string())?;
+    // Байтами, а не строкой: ядро обрезает имя процесса до 15 байт, и
+    // кириллическое имя рвётся посреди буквы — файл перестаёт быть UTF-8,
+    // и раньше такую программу мы считали «уже закрытой»
+    let статус = std::fs::read(format!("/proc/{pid}/status")).map_err(|_| "программы уже нет".to_string())?;
+    let статус = String::from_utf8_lossy(&статус);
     let uid = статус
         .lines()
         .find_map(|с| с.strip_prefix("Uid:"))
@@ -39,7 +43,7 @@ pub fn можно_закрыть(pid: u32, мой_uid: u32) -> Result<(), String
     if uid != мой_uid {
         return Err("программа запущена не вами".into());
     }
-    let имя = std::fs::read_to_string(format!("/proc/{pid}/comm")).unwrap_or_default();
+    let имя = String::from_utf8_lossy(&std::fs::read(format!("/proc/{pid}/comm")).unwrap_or_default()).to_string();
     if СВОИ.iter().any(|с| имя.trim() == *с) {
         return Err("это часть системы".into());
     }

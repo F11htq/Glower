@@ -1159,6 +1159,45 @@ try {
           check('антенны: сценарий молча выходит, если карты нет', нет.status === 0);
         }
         {
+          // Магазин: всё, что видно о программе, — с Flathub и ODRS, без выдумок
+          const м = await import(pathToFileURL(join(root, 'agent', 'store.mjs')).href);
+          check('Магазин: описание из разметки appstream — абзацами и списком',
+            м.текст_из_html('<p>GIMP &amp; co.</p><ul><li>слои</li><li>кисти</li></ul>') === 'GIMP & co.\n\n• слои\n• кисти');
+          const снимки = м.скриншоты([{ sizes:[{ src:'https://dl.flathub.org/a_224.png', width:'224' }, { src:'https://dl.flathub.org/a_752.png', width:'752' }, { src:'https://dl.flathub.org/a_orig.png', width:'1920' }] },
+            { sizes:[{ src:'https://evil.example/x.png', width:'752' }] }]);
+          check('Магазин: скриншот берётся нужного размера и только с dl.flathub.org',
+            снимки.length === 1 && снимки[0].адрес.endsWith('a_752.png'));
+          const о = м.оценка({ star0:0, star1:137, star2:47, star3:38, star4:77, star5:445, total:744 });
+          check('Магазин: средняя оценка из звёзд ODRS, малые выборки весят меньше',
+            о.средняя === 3.9 && о.всего === 744 && о.звёзды[4] === 445
+            && м.вес_оценки({ средняя:4.7, всего:1000 }) > м.вес_оценки({ средняя:5, всего:3 }) && м.оценка({ total:0 }) === null);
+          const все = { 'org.mozilla.Firefox':{ star1:1, star2:0, star3:0, star4:0, star5:9, total:10 }, 'firefox.desktop':{ star5:2, total:2 } };
+          check('Магазин: оценку ODRS находит без учёта регистра и по имени ярлыка',
+            м.найди_оценку(все, 'org.mozilla.firefox').всего === 10 && м.найди_оценку(все, 'firefox').всего === 2 && м.найди_оценку(все, 'нет') === null);
+          const св = м.из_сведений({ id:'org.gimp.GIMP', name:'GIMP', summary:'Редактор', description:'<p>Текст</p>', developer_name:'The GIMP team',
+            project_license:'GPL-3.0+', is_free_license:true, urls:{ homepage:'https://www.gimp.org/' }, categories:['Graphics'],
+            content_rating_details:{ en_US:{ minimumAge:3 } }, metadata:{ 'flathub::verification::verified':true },
+            releases:[{ version:'3.2.8', timestamp:'1793577600', description:'<p>Исправления</p>' }], screenshots:[] },
+            { installs_total:3966300, installs_last_month:52953 });
+          check('Магазин: страница программы — разработчик, лицензия, возраст, что нового, загрузки',
+            св.разработчик === 'The GIMP team' && св.возраст === 3 && св.выпуск.версия === '3.2.8' && св.выпуск.что === 'Исправления'
+            && св.загрузок === 3966300 && св.за_месяц === 52953 && св.проверено && св.сайт === 'https://www.gimp.org/');
+          const от = м.из_отзыва({ user_display:null, rating:80, summary:'Хорошо', description:'Работает', date_created:1 });
+          check('Магазин: отзыв ODRS — звёзды из сотни, безымянный автор', от.оценка === 4 && от.кто === 'Без имени' && от.текст === 'Работает');
+          const ст = м.store();
+          const отказы = await Promise.all([ст['store.details']({ ид:'../../etc' }), ст['store.collection']({ вид:'всё' }), ст['store.shot']({ адрес:'https://evil.example/a.png' })]
+            .map(п => п.then(() => false, () => true)));
+          check('Магазин: агент не ходит по чужим адресам и не берёт странных имён', отказы.every(Boolean));
+          const маг = await readFile(join(root, 'panel', 'src', 'store.rs'), 'utf8');
+          const пар = await readFile(join(root, 'panel', 'src', 'settings.rs'), 'utf8');
+          check('Магазин: витрина, топ по загрузкам, лучшие по оценкам, библиотека, загрузки, желаемое, подсказки, строка команды',
+            ['"store.details"', '"store.reviews"', '"store.collection"', '"store.ratings"', '"store.shot"', 'Топ по загрузкам', 'Лучшие по оценкам',
+             'fn библиотека', 'fn загрузки', 'fn желаемое', 'fn подскажи', 'fn команда', 'магазин-желаемое.json', 'магазин-история.json']
+              .every(с => маг.includes(с)) && /'\.\/store\.mjs'/.test(await readFile(join(root, 'agent', 'server.mjs'), 'utf8')));
+          check('Магазин: источник и «только свободные» — из Параметров, и Магазин следит за ними',
+            /"storeSource"/.test(пар) && /"storeFreeOnly"/.test(пар) && /storeSource/.test(маг) && /storeFreeOnly/.test(маг) && /monitor_file/.test(маг));
+        }
+        {
           // Сон: машина гасла и сразу включалась — находим, кто будил
           const { mkdir, writeFile:пиши, symlink, rm } = await import('node:fs/promises');
           const с = await import(pathToFileURL(join(root, 'agent', 'sleep.mjs')).href);

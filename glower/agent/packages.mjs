@@ -1681,11 +1681,16 @@ export function packages(allowPackages){
     },
 
     /* Поставить обновления — тем же способом, что и установку программ. */
-    async 'pkg.upgrade.run'({ source, толькоОбновления } = {}){
+    async 'pkg.upgrade.run'({ source, толькоОбновления, ид } = {}){
       нужноРазрешение();
       if (job && !job.done) throw new Error('уже идёт другая работа');
       if (source === 'flatpak'){
         await этоFlathub();
+        /* Одну программу — кнопкой «Обновить» у неё в Магазине */
+        if (ид){
+          const id = проверьId(ид);
+          return запустиFlatpak('update', id, ['update', '-y', '--noninteractive', '--system', id]);
+        }
         return запустиFlatpak('update', '', ['update', '-y', '--noninteractive', '--system']);
       }
       /* --with-new-pkgs — ради ядра, и это не мелочь.

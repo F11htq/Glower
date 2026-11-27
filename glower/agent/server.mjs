@@ -170,6 +170,7 @@ if (SYSTEM){
     ...(await import('./clock.mjs')).clock(),
     ...(await import('./antenna.mjs')).antenna(),
     ...(await import('./sleep.mjs')).sleep({ allowPower:ALLOW_POWER }),
+    ...(await import('./store.mjs')).store(),
     ...(await import('./screens.mjs')).screens(),
     async 'sys.caps'(){ return m.capabilities({ power:ALLOW_POWER, launch:ALLOW_LAUNCH, open:ALLOW_OPEN, install:ALLOW_INSTALL, net:ALLOW_NET, packages:ALLOW_PKG }); }
   };

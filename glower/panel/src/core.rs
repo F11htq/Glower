@@ -100,7 +100,7 @@ pub fn умолчания() -> Value {
         "deskWidgets": [{ "t": "clock" }, { "t": "weather" }],
         "deskApps": [], "deskNative": [], "iconPos": {},
         "dnd": false, "gameMode": true, "notif": true, "soundNotif": true, "nightLight": false,
-        "autoLock": 0, "sleepAfter": 0, "lockOnWake": true, "autostart": [], "focusLen": "25",
+        "autoLock": 0, "sleepAfter": 0, "lockOnWake": true, "storeSource": "all", "storeFreeOnly": false, "autostart": [], "focusLen": "25",
         "userName": "", "userEmoji": "", "desks": 2, "note": "",
         "setupDone": false, "updatesAsked": 0
     })
