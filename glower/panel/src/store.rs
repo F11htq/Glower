@@ -46,6 +46,7 @@ const СТИЛЬ: &str = r#"
 .store .side button.nav label { font-size: 13px; }
 .store .side.narrow button.nav { padding: 8px; }
 .store .side.narrow .brand { padding: 4px 0 12px; }
+.store .brand button.toggle { padding: 6px; }
 .store .side button.nav:hover { background-color: alpha(@glower_fg, 0.07); }
 .store .side button.nav.on { background-color: @glower_accent; }
 .store .side button.nav.on label, .store .side button.nav.on image { color: #ffffff; }
@@ -219,8 +220,26 @@ const УЖЕ: i32 = 60;
 /// Окно уже этого — полоса сворачивается до значков
 const ПОРОГ_ОКНА: i32 = 1000;
 
+/// Свёрнута ли полоса сейчас
+fn свёрнуто() -> bool {
+    РУКОЙ.with(|р| р.get()).unwrap_or_else(|| УЗКО.with(|у| у.get()))
+}
+
+/// Кнопка ☰ — свернуть или развернуть; выбор помнится между запусками
+fn переключи_полосу(п: &П) {
+    let стало = !свёрнуто();
+    РУКОЙ.with(|р| р.set(Some(стало)));
+    crate::apps::пиши_данные(ВИД, &json!({ "свёрнуто": стало }));
+    рисуй_бок(п);
+}
+
+const ВИД: &str = "магазин-вид.json";
+
 thread_local! {
+    /// Окно узкое — полоса свёрнута сама
     static УЗКО: Cell<bool> = const { Cell::new(false) };
+    /// Свернул или развернул человек — это сильнее ширины окна
+    static РУКОЙ: Cell<Option<bool>> = const { Cell::new(None) };
     /// Источник, выбранный здесь, — пока ядро панели не записало его в файл
     static ВЫБРАН: RefCell<Option<String>> = const { RefCell::new(None) };
 }
@@ -1323,7 +1342,7 @@ fn пункт(п: &П, значок: &str, имя: &str, значок_число
     if на_нём {
         б.style_context().add_class("on");
     }
-    let узко = УЗКО.with(|у| у.get());
+    let узко = свёрнуто();
     let р = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     if узко {
         р.set_halign(gtk::Align::Center);
@@ -1363,22 +1382,33 @@ fn пункт(п: &П, значок: &str, имя: &str, значок_число
 
 fn рисуй_бок(п: &П) {
     очисти(&п.бок);
-    let узко = УЗКО.with(|у| у.get());
+    let узко = свёрнуто();
     if узко { п.бок.style_context().add_class("narrow") } else { п.бок.style_context().remove_class("narrow") }
     if let Some(о) = п.бок.parent().and_then(|в| в.parent()) {
         о.set_size_request(if узко { УЖЕ } else { ШИРЕ }, -1);
     }
     let экран = п.экран.borrow().clone();
     // Знак системы — тот же, что в панели и меню программ
-    let бренд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let бренд = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     бренд.style_context().add_class("brand");
-    if let Some(з) = crate::apps::картинка_системы("logo-64.png", 24, 24) {
-        бренд.add(&gtk::Image::from_pixbuf(Some(&з)));
-    }
+    let ручка = gtk::Button::new();
+    ручка.style_context().add_class("nav");
+    ручка.style_context().add_class("toggle");
+    let знак = gtk::Image::from_icon_name(Some("open-menu-symbolic"), gtk::IconSize::Menu);
+    знак.set_pixel_size(18);
+    ручка.add(&знак);
+    ручка.set_tooltip_text(Some(&crate::i18n::tr(if узко { "Развернуть панель" } else { "Свернуть панель" })));
+    let п2 = п.clone();
+    ручка.connect_clicked(move |_| переключи_полосу(&п2));
+    бренд.add(&ручка);
     if узко {
         бренд.set_halign(gtk::Align::Center);
     } else {
-        бренд.add(&gtk::Label::new(Some("Магазин")));
+        if let Some(з) = crate::apps::картинка_системы("logo-64.png", 24, 24) {
+            бренд.add(&gtk::Image::from_pixbuf(Some(&з)));
+        }
+        let и = gtk::Label::new(Some("Магазин"));
+        бренд.add(&и);
     }
     п.бок.add(&бренд);
 
@@ -2838,6 +2868,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
             первый = Экран::Библиотека;
         }
     }
+    РУКОЙ.with(|р| р.set(crate::apps::читай_данные(ВИД)["свёрнуто"].as_bool()));
     let желаемое: Vec<Прога> = crate::apps::читай_данные(ЖЕЛАЕМОЕ).as_array().cloned().unwrap_or_default().iter().map(из_записи).collect();
     let история: Vec<Value> = crate::apps::читай_данные(ИСТОРИЯ).as_array().cloned().unwrap_or_default();
     let п: П = Rc::new(Окно {
@@ -2973,7 +3004,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         let п1 = Rc::downgrade(&п);
         окно.connect_size_allocate(move |о, _| {
             let узко = о.allocated_width() < ПОРОГ_ОКНА;
-            if УЗКО.with(|у| у.replace(узко)) != узко {
+            if УЗКО.with(|у| у.replace(узко)) != узко && РУКОЙ.with(|р| р.get()).is_none() {
                 let п2 = п1.clone();
                 // Не посреди раскладки — следующим шагом
                 glib::idle_add_local_once(move || {
