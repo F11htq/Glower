@@ -39,17 +39,20 @@ const ИСТОРИЯ: &str = "магазин-история.json";
    акцент из Параметров меняют Магазин вместе со всеми окнами. Анимаций
    почти нет: витрина сменяется плавным переходом, и только */
 const СТИЛЬ: &str = r#"
-.store .side { background-color: @glower_bg2; border-right: 1px solid alpha(@glower_fg, 0.07); padding: 12px 10px; }
-.store .brand { padding: 6px 12px 14px; }
-.store .brand label { font-size: 18px; font-weight: 700; }
-.store .side button.nav { padding: 8px 12px; border-radius: 10px; background: none; box-shadow: none; border: none; }
+.store .side { background-color: @glower_bg2; border-right: 1px solid alpha(@glower_fg, 0.07); padding: 10px 8px; }
+.store .brand { padding: 4px 10px 12px; }
+.store .brand label { font-size: 16px; font-weight: 700; }
+.store .side button.nav { padding: 6px 10px; border-radius: 9px; background: none; box-shadow: none; border: none; }
+.store .side button.nav label { font-size: 13px; }
+.store .side.narrow button.nav { padding: 8px; }
+.store .side.narrow .brand { padding: 4px 0 12px; }
 .store .side button.nav:hover { background-color: alpha(@glower_fg, 0.07); }
 .store .side button.nav.on { background-color: @glower_accent; }
 .store .side button.nav.on label, .store .side button.nav.on image { color: #ffffff; }
 .store .side button.nav.on .badge { background-color: #ffffff; color: @glower_accent; }
-.store .side .group { font-size: 12px; opacity: 0.6; margin: 14px 12px 4px; }
+.store .side .group { font-size: 11px; opacity: 0.6; margin: 12px 10px 3px; }
 .store .badge { background-color: @glower_accent2; color: #ffffff; border-radius: 10px; font-size: 11px; font-weight: 600; padding: 0 7px; }
-.store .plate { margin: 14px 2px 0; padding: 14px; border-radius: 16px; background-image: linear-gradient(135deg, @glower_accent, @glower_accent2); color: #ffffff; }
+.store .plate { margin: 12px 2px 0; padding: 12px; border-radius: 14px; background-image: linear-gradient(135deg, @glower_accent, @glower_accent2); color: #ffffff; }
 .store .plate .n { font-weight: 700; font-size: 14px; }
 .store .plate button { background-color: #ffffff; border-radius: 17px; border: none; box-shadow: none; margin-top: 8px; }
 .store .plate button label { color: #1d1836; font-weight: 600; }
@@ -209,7 +212,15 @@ fn настройки() -> Value {
         .unwrap_or(Value::Null)
 }
 
+/// Боковая полоса: шире — со словами, в узком окне — одни значки, как
+/// в макете на телефоне. Слова тогда — в подсказке под мышью
+const ШИРЕ: i32 = 210;
+const УЖЕ: i32 = 60;
+/// Окно уже этого — полоса сворачивается до значков
+const ПОРОГ_ОКНА: i32 = 1000;
+
 thread_local! {
+    static УЗКО: Cell<bool> = const { Cell::new(false) };
     /// Источник, выбранный здесь, — пока ядро панели не записало его в файл
     static ВЫБРАН: RefCell<Option<String>> = const { RefCell::new(None) };
 }
@@ -1312,7 +1323,12 @@ fn пункт(п: &П, значок: &str, имя: &str, значок_число
     if на_нём {
         б.style_context().add_class("on");
     }
-    let р = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    let узко = УЗКО.with(|у| у.get());
+    let р = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    if узко {
+        р.set_halign(gtk::Align::Center);
+        б.set_tooltip_text(Some(&if значок_число > 0 { format!("{} · {значок_число}", crate::i18n::tr(имя)) } else { crate::i18n::tr(имя) }));
+    }
     let з: gtk::Widget = if значок.is_ascii() {
         let и = gtk::Image::from_icon_name(Some(значок), gtk::IconSize::Menu);
         и.set_pixel_size(18);
@@ -1321,11 +1337,14 @@ fn пункт(п: &П, значок: &str, имя: &str, значок_число
         crate::apps::значок_эмодзи(значок, 18)
     };
     р.add(&з);
-    let л = gtk::Label::new(Some(имя));
-    л.set_xalign(0.0);
-    л.set_hexpand(true);
-    р.add(&л);
-    if значок_число > 0 {
+    if !узко {
+        let л = gtk::Label::new(Some(имя));
+        л.set_xalign(0.0);
+        л.set_hexpand(true);
+        л.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        р.add(&л);
+    }
+    if значок_число > 0 && !узко {
         let н = gtk::Label::new(Some(&значок_число.to_string()));
         н.style_context().add_class("badge");
         н.set_valign(gtk::Align::Center);
@@ -1344,32 +1363,47 @@ fn пункт(п: &П, значок: &str, имя: &str, значок_число
 
 fn рисуй_бок(п: &П) {
     очисти(&п.бок);
+    let узко = УЗКО.with(|у| у.get());
+    if узко { п.бок.style_context().add_class("narrow") } else { п.бок.style_context().remove_class("narrow") }
+    if let Some(о) = п.бок.parent().and_then(|в| в.parent()) {
+        о.set_size_request(if узко { УЖЕ } else { ШИРЕ }, -1);
+    }
     let экран = п.экран.borrow().clone();
     // Знак системы — тот же, что в панели и меню программ
-    let бренд = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    let бренд = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     бренд.style_context().add_class("brand");
-    if let Some(з) = crate::apps::картинка_системы("logo-64.png", 28, 28) {
+    if let Some(з) = crate::apps::картинка_системы("logo-64.png", 24, 24) {
         бренд.add(&gtk::Image::from_pixbuf(Some(&з)));
     }
-    бренд.add(&gtk::Label::new(Some("Магазин")));
+    if узко {
+        бренд.set_halign(gtk::Align::Center);
+    } else {
+        бренд.add(&gtk::Label::new(Some("Магазин")));
+    }
     п.бок.add(&бренд);
 
     let обновлений = п.обновления.borrow().len();
     let желаемого = п.желаемое.borrow().len();
     п.бок.add(&пункт(п, "go-home-symbolic", "Главная", 0, matches!(экран, Экран::Обзор), Экран::Обзор));
     п.бок.add(&пункт(п, "view-grid-symbolic", "Библиотека", 0, matches!(экран, Экран::Библиотека), Экран::Библиотека));
-    п.бок.add(&пункт(п, "folder-download-symbolic", "Загрузки и обновления", обновлений, matches!(экран, Экран::Загрузки), Экран::Загрузки));
+    п.бок.add(&пункт(п, "folder-download-symbolic", "Загрузки", обновлений, matches!(экран, Экран::Загрузки), Экран::Загрузки));
     п.бок.add(&пункт(п, "emblem-favorite-symbolic", "Желаемое", желаемого, matches!(экран, Экран::Желаемое), Экран::Желаемое));
 
-    let г = ярлык("Категории", "group");
-    п.бок.add(&г);
+    if узко {
+        let ч = gtk::Separator::new(gtk::Orientation::Horizontal);
+        ч.set_margin_top(8);
+        ч.set_margin_bottom(8);
+        п.бок.add(&ч);
+    } else {
+        п.бок.add(&ярлык("Категории", "group"));
+    }
     for р in п.каталог["разделы"].as_array().cloned().unwrap_or_default() {
         let id = строка(&р, "id");
         let на_нём = matches!(&экран, Экран::Раздел(а) if *а == id);
         п.бок.add(&пункт(п, &строка(&р, "знак"), &строка(&р, "имя"), 0, на_нём, Экран::Раздел(id)));
     }
 
-    if обновлений > 0 {
+    if обновлений > 0 && !узко {
         let плашка = gtk::Box::new(gtk::Orientation::Vertical, 2);
         плашка.style_context().add_class("plate");
         плашка.add(&ярлык(&format!("Обновлений: {обновлений}"), "n"));
@@ -1385,7 +1419,12 @@ fn рисуй_бок(п: &П) {
         п.бок.add(&плашка);
     }
 
-    // Источник — та же настройка, что в Параметрах → Приложения → Магазин
+    // Источник — та же настройка, что в Параметрах → Приложения → Магазин.
+    // В узкой полосе ему не место: он есть в Параметрах
+    if узко {
+        п.бок.show_all();
+        return;
+    }
     let низ = gtk::Box::new(gtk::Orientation::Vertical, 6);
     низ.set_vexpand(true);
     низ.set_valign(gtk::Align::End);
@@ -2718,7 +2757,7 @@ pub fn запусти(доводы: Vec<String>) -> ! {
     слои.add(&середина);
     let бок_прокрутка = gtk::ScrolledWindow::new(None::<&gtk::Adjustment>, None::<&gtk::Adjustment>);
     бок_прокрутка.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
-    бок_прокрутка.set_size_request(250, -1);
+    бок_прокрутка.set_size_request(ШИРЕ, -1);
     // Пункты полосы растягиваются внутри неё — но сама она ширины не берёт
     бок_прокрутка.set_hexpand(false);
     let бок = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -2930,6 +2969,21 @@ pub fn запусти(доводы: Vec<String>) -> ! {
         gtk::main_quit();
         glib::Propagation::Proceed
     });
+    {
+        let п1 = Rc::downgrade(&п);
+        окно.connect_size_allocate(move |о, _| {
+            let узко = о.allocated_width() < ПОРОГ_ОКНА;
+            if УЗКО.with(|у| у.replace(узко)) != узко {
+                let п2 = п1.clone();
+                // Не посреди раскладки — следующим шагом
+                glib::idle_add_local_once(move || {
+                    if let Some(п) = п2.upgrade() {
+                        рисуй_бок(&п);
+                    }
+                });
+            }
+        });
+    }
     окно.show_all();
     рисуй(&п);
     проверь_сеть(&п);
