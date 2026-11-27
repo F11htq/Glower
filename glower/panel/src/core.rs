@@ -46,6 +46,8 @@ pub const НАШИ: &[Наша] = &[
     Наша { id: "term", имя: "Терминал", знак: "⌨️", фон: "linear-gradient(140deg,#334155,#0f172a)", окно: "foot", одна: false },
     Наша { id: "calc", имя: "Калькулятор", знак: "🧮", фон: "linear-gradient(140deg,#a5b4fc,#6366f1)", окно: "glower-calc", одна: true },
     Наша { id: "photos", имя: "Фотографии", знак: "🖼️", фон: "linear-gradient(140deg,#6ee7b7,#0ea5e9)", окно: "glower-photos", одна: false },
+    Наша { id: "control", имя: "Панель управления", знак: "🎛", фон: "linear-gradient(140deg,#93c5fd,#1e40af)", окно: "glower-control", одна: true },
+    Наша { id: "run", имя: "Выполнить", знак: "🚀", фон: "linear-gradient(140deg,#cbd5e1,#334155)", окно: "glower-run", одна: true },
     Наша { id: "taskmgr", имя: "Диспетчер задач", знак: "📊", фон: "linear-gradient(140deg,#cbd5e1,#475569)", окно: "glower-taskmgr", одна: true },
     Наша { id: "snip", имя: "Ножницы", знак: "✂️", фон: "linear-gradient(140deg,#7dd3fc,#0ea5e9)", окно: "glower-snip", одна: true },
     Наша { id: "paint", имя: "Paint", знак: "🎨", фон: "linear-gradient(140deg,#f9a8d4,#a855f7)", окно: "glower-paint", одна: false },

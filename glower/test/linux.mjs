@@ -1159,6 +1159,27 @@ try {
           check('антенны: сценарий молча выходит, если карты нет', нет.status === 0);
         }
         {
+          // «Выполнить» (Win+R) и Панель управления — частью системы
+          const гл = await readFile(join(root, 'panel', 'src', 'main.rs'), 'utf8');
+          const вып = await readFile(join(root, 'panel', 'src', 'run.rs'), 'utf8');
+          const пу = await readFile(join(root, 'panel', 'src', 'control.rs'), 'utf8');
+          const rc = await readFile(join(root, 'linux', 'labwc', 'rc.xml'), 'utf8');
+          const образ = await readFile(join(root, 'linux', 'mkiso.sh'), 'utf8');
+          const пакет = await readFile(join(root, 'linux', 'собери-пакет.sh'), 'utf8');
+          const уст = await readFile(join(root, 'linux', 'install.sh'), 'utf8');
+          const ядро = await readFile(join(root, 'panel', 'src', 'core.rs'), 'utf8');
+          check('«Выполнить»: Win+R, без оболочки, с историей и правами администратора через pkexec',
+            /имя == "glower-run"/.test(гл) && /<keybind key="W-r">[\s\S]*?glower-run/.test(rc)
+            && /shell_parse_argv/.test(вып) && !/"sh", "-c"/.test(вып) && /"pkexec"/.test(вып) && /выполнить\.json/.test(вып));
+          check('Панель управления: категории как в Windows, значки, поиск — пункты ведут в настоящие места',
+            /имя == "glower-control"/.test(гл) && /Система и безопасность/.test(пу) && /Администрирование/.test(пу)
+            && /"glower-settings", "update"/.test(пу) && /"glower-store", "installed"/.test(пу) && /fn найди/.test(пу));
+          check('«Выполнить» и Панель управления — в меню программ, образе, пакете и установке',
+            /id: "run"/.test(ядро) && /id: "control"/.test(ядро)
+            && /glower-run glower-control glower-splash glower-hang; do ln -sf/.test(образ) && пакет.includes('usr/bin/glower-run') && пакет.includes('usr/bin/glower-control')
+            && /glower-run glower-control; do/.test(уст));
+        }
+        {
           // Магазин: всё, что видно о программе, — с Flathub и ODRS, без выдумок
           const м = await import(pathToFileURL(join(root, 'agent', 'store.mjs')).href);
           check('Магазин: описание из разметки appstream — абзацами и списком',

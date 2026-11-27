@@ -492,6 +492,8 @@ pub fn имя_значка(знак: &str) -> Option<&'static str> {
         "🎯" => "find-location-symbolic",
         "📝" => "accessories-text-editor-symbolic",
         "⚙" => "emblem-system-symbolic",
+        "🎛" => "preferences-system-symbolic",
+        "🖱" => "input-mouse-symbolic",
         "🧮" => "accessories-calculator-symbolic",
         "📊" | "🧠" => "view-continuous-symbolic",
         "🎉" => "emblem-ok-symbolic",

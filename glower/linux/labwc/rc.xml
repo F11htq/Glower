@@ -64,6 +64,11 @@
       <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="glower-files" />
     </keybind>
+    <!-- Выполнить — как Win+R в Windows -->
+    <keybind key="W-r">
+      <action name="Execute" command="glower-menu отмени" />
+      <action name="Execute" command="glower-run" />
+    </keybind>
     <keybind key="W-i">
       <action name="Execute" command="glower-menu отмени" />
       <action name="Execute" command="glower-settings" />

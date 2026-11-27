@@ -21,6 +21,7 @@ mod calc;
 mod calendar;
 mod cliphist;
 mod clock;
+mod control;
 mod core;
 mod desktop;
 mod dock;
@@ -44,6 +45,7 @@ mod overview;
 mod paint;
 mod popup;
 mod props;
+mod run;
 mod settings;
 mod setup;
 mod store;
@@ -518,6 +520,13 @@ fn main() {
         "glower-splash" => splash::запусти(std::env::args().skip(1).collect()),
         "glower-hang" => hang::запусти(std::env::args().skip(1).collect()),
         _ => {}
+    }
+    // «Выполнить» (Win+R) и Панель управления
+    if имя == "glower-run" {
+        run::запусти(std::env::args().skip(1).collect());
+    }
+    if имя == "glower-control" {
+        control::запусти(std::env::args().skip(1).collect());
     }
     if имя == "glower-music" {
         music::запусти(std::env::args().skip(1).collect());
